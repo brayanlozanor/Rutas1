@@ -1905,6 +1905,9 @@ function orderHasViewableReport(order) {
 async function openOrderTechnicianReport(orderId) {
   let order = (state.workOrders || []).find(item => item.id === orderId && !item.deletedAt);
   if (!order) return notify('No se encontro el detalle solicitado.', 'err');
+  if (typeof markNotificationReadByOrderId === 'function') {
+    markNotificationReadByOrderId(orderId);
+  }
   await markWOViewedOnOpen(order);
   order = (state.workOrders || []).find(item => item.id === orderId && !item.deletedAt) || order;
   currentOrderReportId = order.id;
@@ -2185,6 +2188,9 @@ async function handleNetresEvidenceFile(event) {
 function openResolveNetworkModal(id) {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle de red.', 'err');
+  if (typeof markNotificationReadByOrderId === 'function') {
+    markNotificationReadByOrderId(id);
+  }
 
   const currentUser = getCurrentUser();
   const userName = currentUser.name || currentUser.username || 'Soporte';
@@ -2360,6 +2366,9 @@ async function submitNetworkResolution() {
 async function startAttendingNetworkOrder(id) {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle de red.', 'err');
+  if (typeof markNotificationReadByOrderId === 'function') {
+    markNotificationReadByOrderId(id);
+  }
 
   const currentUser = getCurrentUser();
   const userName = currentUser.name || currentUser.username || 'Soporte';
@@ -2452,6 +2461,9 @@ async function takeOverNetworkOrder(id) {
 function openReturnNetworkModal(id) {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle.', 'err');
+  if (typeof markNotificationReadByOrderId === 'function') {
+    markNotificationReadByOrderId(id);
+  }
 
   document.getElementById('netret-order-id').value = order.id;
   document.getElementById('netret-reason').value = '';

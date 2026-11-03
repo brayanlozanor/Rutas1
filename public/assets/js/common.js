@@ -1097,6 +1097,22 @@ function addNotificationToInbox({ id, title, message, type, orderId = '', url = 
   renderNotificationCenter();
 }
 
+function markNotificationReadByOrderId(orderId) {
+  if (!orderId) return;
+  const inbox = getStoredNotificationsInbox();
+  let changed = false;
+  inbox.forEach(x => {
+    if (x.orderId === orderId && x.unread) {
+      x.unread = false;
+      changed = true;
+    }
+  });
+  if (changed) {
+    setStoredNotificationsInbox(inbox);
+    renderNotificationCenter();
+  }
+}
+
 function markNotificationAsRead(id, targetUrl = '') {
   const inbox = getStoredNotificationsInbox();
   const item = inbox.find(x => x.id === id);
@@ -1104,6 +1120,11 @@ function markNotificationAsRead(id, targetUrl = '') {
     item.unread = false;
     setStoredNotificationsInbox(inbox);
     renderNotificationCenter();
+  }
+  if (item?.orderId && window.location.pathname.includes('ordenes') && typeof openOrderTechnicianReport === 'function') {
+    CM('notification-panel-mo');
+    openOrderTechnicianReport(item.orderId);
+    return;
   }
   if (targetUrl) {
     window.location.href = targetUrl;
@@ -1176,6 +1197,7 @@ function renderNotificationCenter() {
 
     if (count) {
         count.textContent = totalUnread > 9 ? '+9' : String(totalUnread);
+        count.style.display = totalUnread > 0 ? 'grid' : 'none';
     }
     bell.classList.toggle('has-items', totalUnread > 0);
 
@@ -1645,6 +1667,9 @@ function _injectNetworkNotificationStyles() {
     .netops-toast-new_order { border-left-color: #2563eb; }
     .netops-toast-new_order .netops-toast-icon { background: #eff6ff; color: #2563eb; }
 
+    .netops-toast-attending { border-left-color: #f59e0b; }
+    .netops-toast-attending .netops-toast-icon { background: #fffbeb; color: #f59e0b; }
+
     .netops-toast-resolved { border-left-color: #059669; }
     .netops-toast-resolved .netops-toast-icon { background: #ecfdf5; color: #059669; }
 
@@ -1653,6 +1678,17 @@ function _injectNetworkNotificationStyles() {
 
     .netops-toast-confirmed { border-left-color: #0d9488; }
     .netops-toast-confirmed .netops-toast-icon { background: #f0fdfa; color: #0d9488; }
+
+    .floating-notification-bell.has-items #notification-count {
+      background: #ef4444 !important;
+      color: #ffffff !important;
+      border: 2px solid #ffffff !important;
+      box-shadow: 0 4px 10px rgba(239, 68, 68, 0.45) !important;
+      display: grid !important;
+    }
+    .floating-notification-bell:not(.has-items) #notification-count {
+      display: none !important;
+    }
 
     .netops-toast-content {
       min-width: 0;
@@ -1739,31 +1775,30 @@ function playSubtleNotificationTone() {
     }
     const now = ctx.currentTime;
 
-    // Nota 1: D5 (587.33 Hz)
+    // Tono formal, corto y sutil (acorde armónico D5 -> A5 con envolvente limpia y sin distorsión)
     const osc1 = ctx.createOscillator();
     const gain1 = ctx.createGain();
     osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(587.33, now);
-    gain1.gain.setValueAtTime(0.001, now);
-    gain1.gain.linearRampToValueAtTime(0.08, now + 0.015);
-    gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+    osc1.frequency.setValueAtTime(587.33, now); // D5
+    gain1.gain.setValueAtTime(0.0001, now);
+    gain1.gain.linearRampToValueAtTime(0.08, now + 0.012);
+    gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.26);
     osc1.connect(gain1);
     gain1.connect(ctx.destination);
     osc1.start(now);
-    osc1.stop(now + 0.3);
+    osc1.stop(now + 0.28);
 
-    // Nota 2: A5 (880.00 Hz) con ligero retraso para brillo armónico
     const osc2 = ctx.createOscillator();
     const gain2 = ctx.createGain();
     osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(880.0, now + 0.09);
-    gain2.gain.setValueAtTime(0.001, now + 0.09);
-    gain2.gain.linearRampToValueAtTime(0.10, now + 0.11);
-    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+    osc2.frequency.setValueAtTime(880.0, now + 0.07); // A5
+    gain2.gain.setValueAtTime(0.0001, now + 0.07);
+    gain2.gain.linearRampToValueAtTime(0.09, now + 0.082);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.36);
     osc2.connect(gain2);
     gain2.connect(ctx.destination);
-    osc2.start(now + 0.09);
-    osc2.stop(now + 0.48);
+    osc2.start(now + 0.07);
+    osc2.stop(now + 0.38);
   } catch (e) {
     console.warn('No se pudo reproducir el tono de notificación', e);
   }
@@ -1787,7 +1822,7 @@ function showRightScreenNotification({
   type = 'info',
   url = '',
   orderId = '',
-  duration = 8000
+  duration = 8500
 } = {}) {
   const container = ensureRightNotificationContainer();
   const toast = document.createElement('div');
@@ -1796,6 +1831,7 @@ function showRightScreenNotification({
 
   const icons = {
     new_order: '<svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+    attending: '<svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
     resolved: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>',
     returned: '<svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v3"/></svg>',
     confirmed: '<svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
@@ -1817,12 +1853,20 @@ function showRightScreenNotification({
     <button type="button" class="netops-toast-close" aria-label="Cerrar">&times;</button>
   `;
 
-  if (url) {
-    toast.addEventListener('click', (e) => {
-      if (e.target.closest('.netops-toast-close')) return;
+  toast.addEventListener('click', (e) => {
+    if (e.target.closest('.netops-toast-close')) return;
+    if (orderId && typeof markNotificationReadByOrderId === 'function') {
+      markNotificationReadByOrderId(orderId);
+    }
+    if (orderId && window.location.pathname.includes('ordenes') && typeof openOrderTechnicianReport === 'function') {
+      openOrderTechnicianReport(orderId);
+      dismiss();
+      return;
+    }
+    if (url) {
       window.location.href = url;
-    });
-  }
+    }
+  });
 
   const closeBtn = toast.querySelector('.netops-toast-close');
   closeBtn.addEventListener('click', (e) => {
@@ -1851,30 +1895,44 @@ function showRightScreenNotification({
 }
 
 function requestNotificationPermissionOnce() {
-  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission === 'default') {
     try {
-      Notification.requestPermission();
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') {
+          console.log('Permiso de notificaciones concedido.');
+        }
+      }).catch(() => {});
     } catch(e) {}
   }
 }
 
-function triggerDesktopNotification({ title, message, url = '' }) {
+function triggerDesktopNotification({ title, message, url = '', orderId = '' }) {
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission === 'granted') {
     try {
+      const logoUrl = window.location.origin + '/assets/brand/wifimex-logo.jpg';
       const notif = new Notification(title, {
         body: message,
-        icon: '/assets/brand/wifimex-network-mark.svg',
-        tag: 'netops-network-' + Date.now(),
+        icon: logoUrl,
+        badge: logoUrl,
+        tag: 'netops-network-' + (orderId || Date.now()),
         renotify: true
       });
-      if (url) {
-        notif.onclick = () => {
+      notif.onclick = () => {
+        try {
           window.focus();
+        } catch (e) {}
+        if (orderId && typeof markNotificationReadByOrderId === 'function') {
+          markNotificationReadByOrderId(orderId);
+        }
+        if (orderId && window.location.pathname.includes('ordenes') && typeof openOrderTechnicianReport === 'function') {
+          openOrderTechnicianReport(orderId);
+        } else if (url) {
           window.location.href = url;
-          notif.close();
-        };
-      }
+        }
+        notif.close();
+      };
     } catch (e) {
       console.warn('No se pudo emitir la notificación de escritorio', e);
     }
@@ -1895,10 +1953,12 @@ function notifyNetworkDetailEvent({
     ? `ordenes.html?detailKind=network&orderId=${encodeURIComponent(orderId)}`
     : `ordenes.html?detailKind=network`;
 
+  // 1. Sonido sutil y formal
   if (sound) {
     playSubtleNotificationTone();
   }
 
+  // 2. Tarjeta flotante en pantalla
   showRightScreenNotification({
     title,
     message,
@@ -1907,7 +1967,7 @@ function notifyNetworkDetailEvent({
     orderId
   });
 
-  // Guardar en el buzón persistente de notificaciones (campana)
+  // 3. Guardar en el buzón persistente de la campana (abajo a la derecha)
   addNotificationToInbox({
     title,
     message,
@@ -1917,11 +1977,13 @@ function notifyNetworkDetailEvent({
     createdAt: new Date().toISOString()
   });
 
+  // 4. Notificación del sistema si la pestaña no está en foco o navegador minimizado
   if (desktop && (document.hidden || !document.hasFocus())) {
     triggerDesktopNotification({
       title,
       message,
-      url
+      url,
+      orderId
     });
   }
 }
