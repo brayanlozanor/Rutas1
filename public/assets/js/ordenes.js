@@ -1368,7 +1368,10 @@ async function reopenCompletedWO(id) {
 
 function getOrderStatusMeta(order) {
   if (order?.status === 'completada') return {label:getOrderCategory(order) === 'instalacion' ? 'Completado' : 'Solucionado',className:'is-done'};
-  if (order?.status === 'resuelto_soporte') return {label:'Resuelto por Soporte (Validar)',className:'is-resolving'};
+  if (order?.status === 'resuelto_soporte') {
+    const isSentToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(getOrderCategory(order));
+    return {label: isSentToAttention ? 'Respondido (Validar)' : 'Resuelto por Soporte (Validar)', className:'is-resolving'};
+  }
   if (order?.status === 'devuelto_soporte') return {label:'Devuelto a Soporte',className:'is-returned'};
   if (order?.status === 'no_realizado') return {label:'No solucionado',className:'is-unsolved'};
   if (order?.status === 'revisado') return {label:'Revisado',className:'is-reviewed'};
@@ -1958,27 +1961,54 @@ function renderWOs() {
 
             let networkQuickActions = '';
             if (w.detailKind === 'network') {
-              if (w.status === 'pendiente' || w.status === 'devuelto_soporte' || w.status === 'en_revision') {
-                if (isSoporte) {
-                  const isAssignedToOther = w.assignedUserId && w.assignedUserId !== currentActor.id;
-                  const isCheckingByOther = w.reviewOpenedById && w.reviewOpenedById !== currentActor.id;
-                  const canRetake = isAssignedToOther || isCheckingByOther;
+              const isSentToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(getOrderCategory(w));
 
-                  networkQuickActions = `
-                    <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Resolver detalle técnico y notificar a Atención a clientes">🔧 Resolver</button>
-                    ${canRetake ? `<button type="button" class="btn net-btn-retake" onclick="takeOverNetworkOrder('${w.id}')" title="Retomar este reporte y ponértelo a tu cargo">✋ Retomar</button>` : ''}
-                  `;
+              if (w.status === 'pendiente' || w.status === 'devuelto_soporte' || w.status === 'en_revision') {
+                if (isSentToAttention) {
+                  // Requerimiento enviado por Soporte hacia Atención a clientes
+                  if (isAtencion) {
+                    networkQuickActions = `
+                      <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Responder requerimiento a Soporte técnico">💬 Responder</button>
+                    `;
+                  } else {
+                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de respuesta por Atención a clientes">⏳ En Atención</span>`;
+                  }
                 } else {
-                  networkQuickActions = `<span class="net-pill-waiting" title="En espera de atención técnica por Soporte">⏳ En Soporte</span>`;
+                  // Detalle de red recibido por Soporte desde Atención a clientes
+                  if (isSoporte) {
+                    const isAssignedToOther = w.assignedUserId && w.assignedUserId !== currentActor.id;
+                    const isCheckingByOther = w.reviewOpenedById && w.reviewOpenedById !== currentActor.id;
+                    const canRetake = isAssignedToOther || isCheckingByOther;
+
+                    networkQuickActions = `
+                      <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Resolver detalle técnico y notificar a Atención a clientes">🔧 Resolver</button>
+                      ${canRetake ? `<button type="button" class="btn net-btn-retake" onclick="takeOverNetworkOrder('${w.id}')" title="Retomar este reporte y ponértelo a tu cargo">✋ Retomar</button>` : ''}
+                    `;
+                  } else {
+                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de atención técnica por Soporte">⏳ En Soporte</span>`;
+                  }
                 }
               } else if (w.status === 'resuelto_soporte') {
-                if (isAtencion || isSoporte) {
-                  networkQuickActions = `
-                    <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Cliente confirmó servicio: finalizar y cerrar">✓ Conforme</button>
-                    <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Cliente no conforme: devolver a Soporte">↩ Devolver</button>
-                  `;
+                if (isSentToAttention) {
+                  // Requerimiento que Soporte envió a Atención y ya fue respondido: Soporte valida si queda Conforme o lo Devuelve
+                  if (isSoporte) {
+                    networkQuickActions = `
+                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Respuesta satisfactoria: finalizar y cerrar">✓ Conforme</button>
+                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Respuesta no satisfactoria: devolver a Atención a clientes">↩ Devolver</button>
+                    `;
+                  } else {
+                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Soporte valide la respuesta">⏳ En validación (Soporte)</span>`;
+                  }
                 } else {
-                  networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Atención a clientes valide con el cliente">⏳ Por validar</span>`;
+                  // Reporte de red que Soporte resolvió: SOLO Atención a clientes debe validar con el cliente. Soporte NO lo valida.
+                  if (isAtencion) {
+                    networkQuickActions = `
+                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Cliente confirmó servicio: finalizar y cerrar">✓ Conforme</button>
+                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Cliente no conforme: devolver a Soporte">↩ Devolver</button>
+                    `;
+                  } else {
+                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Atención a clientes valide con el cliente">⏳ Por validar (Atención)</span>`;
+                  }
                 }
               }
             }
