@@ -358,6 +358,7 @@ function setupOrderControls() {
   }
   bindWOEvidenceEvents();
   syncWODetailKindField(document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind);
+  if (typeof applyRoleFormVisibility === 'function') applyRoleFormVisibility();
 }
 
 function bindWOEvidenceEvents() {
@@ -1052,6 +1053,82 @@ async function ensureOrderRelationRecords(order) {
   if (tasks.length) await Promise.all(tasks);
 }
 
+function applyRoleFormVisibility() {
+  const isSoporte = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+  const isAtencion = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
+  const isNetworkOrder = (document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind) === 'network';
+
+  const clientInput = document.getElementById('wo-client');
+  const clientFi = clientInput?.closest('.fi');
+  const clientGrid = clientFi?.closest('.modal-grid');
+  const phoneFi = document.getElementById('wo-phone')?.closest('.fi');
+  const nodeInput = document.getElementById('wo-node');
+  const nodeFi = nodeInput?.closest('.fi');
+  const nodeGrid = nodeFi?.closest('.modal-grid');
+  const relationInfo = document.getElementById('wo-relation-info');
+  const zoneInput = document.getElementById('wo-zone');
+  const zoneFi = zoneInput?.closest('.fi');
+  const zoneGrid = zoneFi?.closest('.modal-grid');
+  const assignFi = document.getElementById('wo-assign-field');
+  const typeFi = document.getElementById('wo-type')?.closest('.fi');
+  const evidenceZone = document.getElementById('wo-evidence-zone');
+  const detailKindFi = document.querySelector('#wo-mo .wo-detail-kind-field');
+
+  const categoryFi = document.getElementById('wo-category')?.closest('.fi');
+  const categoryLabel = categoryFi?.querySelector('label');
+  const detailFi = document.getElementById('wo-detail')?.closest('.fi');
+  const detailLabel = detailFi?.querySelector('label');
+  const detailTextarea = document.getElementById('wo-detail');
+  const modalTitle = document.getElementById('wo-modal-title');
+  const modalSub = document.querySelector('#wo-mo .modal-head p');
+  const saveBtn = document.querySelector('#wo-mo .card-actions .bc');
+
+  if (isSoporte && isNetworkOrder) {
+    // Como Soporte: solo requiere Categoría y Texto (además de prioridad/repetición)
+    if (clientGrid) clientGrid.style.display = 'none';
+    if (phoneFi) phoneFi.style.display = 'none';
+    if (nodeGrid) nodeGrid.style.display = 'none';
+    if (relationInfo) relationInfo.style.display = 'none';
+    if (zoneGrid) zoneGrid.style.display = 'none';
+    if (assignFi) assignFi.style.display = 'none';
+    if (typeFi) typeFi.style.display = 'none';
+    if (evidenceZone) evidenceZone.style.display = 'none';
+    if (detailKindFi) detailKindFi.style.display = 'none';
+
+    if (categoryLabel) categoryLabel.textContent = 'Categoría del requerimiento';
+    if (detailLabel) detailLabel.textContent = 'Mensaje / Requerimiento para Atención a clientes';
+    if (detailTextarea) detailTextarea.placeholder = 'Describe lo que necesitas consultar o solicitar a Atención a clientes...';
+
+    if (modalTitle) modalTitle.textContent = editingWOId ? 'Editar requerimiento para Atención a clientes' : 'Nuevo requerimiento para Atención a clientes';
+    if (modalSub) modalSub.textContent = 'Envía un requerimiento o consulta rápida a Atención a clientes.';
+    if (saveBtn) saveBtn.textContent = editingWOId ? 'Actualizar requerimiento' : 'Enviar a Atención a clientes';
+  } else {
+    // Como Atención a clientes (u otros): todos los campos completos y evidencia obligatoria
+    if (clientGrid) clientGrid.style.display = '';
+    if (phoneFi) phoneFi.style.display = '';
+    if (nodeGrid) nodeGrid.style.display = '';
+    if (relationInfo) relationInfo.style.display = '';
+    if (zoneGrid) zoneGrid.style.display = '';
+    if (assignFi) assignFi.style.display = '';
+    if (typeFi) typeFi.style.display = '';
+    if (evidenceZone) evidenceZone.style.display = '';
+    if (detailKindFi) detailKindFi.style.display = '';
+
+    if (categoryLabel) categoryLabel.textContent = 'Categoría';
+    if (detailLabel) detailLabel.textContent = 'Detalle específico';
+    if (detailTextarea) detailTextarea.placeholder = 'Describe exactamente lo que reportó el cliente...';
+
+    const evidenceCopy = document.querySelector('#wo-evidence-zone .wo-evidence-copy strong');
+    if (evidenceCopy) {
+      evidenceCopy.innerHTML = 'Adjuntar evidencias <span class="required-indicator" style="color:#ef4444;font-weight:700;margin-left:4px;">* Obligatorio</span>';
+    }
+
+    if (modalTitle) modalTitle.textContent = editingWOId ? 'Editar reporte para Soporte' : 'Nuevo reporte de red para Soporte';
+    if (modalSub) modalSub.textContent = 'Reporte: cliente, categoría, detalle específico, evidencias obligatorias, pueblo y zona.';
+    if (saveBtn) saveBtn.textContent = editingWOId ? 'Guardar detalle' : 'Enviar reporte a Soporte';
+  }
+}
+
 async function openWO(id = '') {
   if (id) {
     const existing = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
@@ -1095,6 +1172,7 @@ async function openWO(id = '') {
   updateWORelationInfo();
   setupOrderControls();
   renderWOEvidencePhotos();
+  applyRoleFormVisibility();
   OM('wo-mo');
 }
 
@@ -1156,6 +1234,7 @@ function clearWOForm() {
   const eqMenu = document.getElementById('wo-equipment-suggestions');
   if (eqMenu) eqMenu.classList.remove('open');
   updateWORelationInfo();
+  applyRoleFormVisibility();
 }
 
 function showWOFieldError(fieldId,message) {
@@ -1171,26 +1250,49 @@ function showWOFieldError(fieldId,message) {
 
 
 async function saveWO() {
+  const isSoporte = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+  const isAtencion = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
+  const isNetwork = isSoporte || document.getElementById('wo-detail-kind')?.value === 'network';
+
   let node = findNodeFromInput();
   const equipment = getSelectedEquipmentByHiddenId();
-  const typedNode = document.getElementById('wo-node').value.trim();
+  const typedNode = document.getElementById('wo-node')?.value.trim() || '';
   const existingWO = editingWOId ? (state.workOrders || []).find(x => x.id === editingWOId) : null;
-  const parsed = parseOptionalLocation(document.getElementById('wo-location').value);
+  const parsed = parseOptionalLocation(document.getElementById('wo-location')?.value || '');
   const category = document.getElementById('wo-category')?.value || '';
-  const specificDetail = document.getElementById('wo-detail').value.trim();
-  const region = document.getElementById('wo-zone').value || node?.zone || equipment?.region || '';
-  if (!document.getElementById('wo-client').value.trim()) return showWOFieldError('wo-client','Escribe el nombre del cliente.');
-  if (!category) return showWOFieldError('wo-category','Selecciona la categoría del detalle.');
-  if (!specificDetail) return showWOFieldError('wo-detail','Escribe el detalle específico del problema.');
-  if (!typedNode) return showWOFieldError('wo-node','Busca un pueblo o escribe uno nuevo.');
-  if (!node) return showWOFieldError('wo-node','Selecciona un pueblo registrado o pulsa “Agregar pueblo” para crearlo.');
-  if (!region) return showWOFieldError('wo-zone','Selecciona la zona del detalle.');
+  const specificDetail = document.getElementById('wo-detail')?.value.trim() || '';
+  const region = document.getElementById('wo-zone')?.value || node?.zone || equipment?.region || '';
+
+  if (isSoporte && isNetwork) {
+    if (!category) return showWOFieldError('wo-category', 'Selecciona la categoría del requerimiento.');
+    if (!specificDetail) return showWOFieldError('wo-detail', 'Escribe el texto o mensaje del requerimiento para Atención a clientes.');
+  } else {
+    if (!document.getElementById('wo-client')?.value.trim()) return showWOFieldError('wo-client', 'Escribe el nombre del cliente.');
+    if (!category) return showWOFieldError('wo-category', 'Selecciona la categoría del detalle.');
+    if (!specificDetail) return showWOFieldError('wo-detail', 'Escribe el detalle específico del problema.');
+    if (!typedNode) return showWOFieldError('wo-node', 'Busca un pueblo o escribe uno nuevo.');
+    if (!node) return showWOFieldError('wo-node', 'Selecciona un pueblo registrado o pulsa “Agregar pueblo” para crearlo.');
+    if (!region) return showWOFieldError('wo-zone', 'Selecciona la zona del detalle.');
+
+    // Evidencia obligatoria al subir reporte para Atención a clientes
+    const existingEvidences = (existingWO?.technicianReport?.evidencePhotos || []).filter(Boolean);
+    if (!woEvidencePhotos.length && !existingEvidences.length) {
+      notify('Como Atención a clientes es obligatorio adjuntar al menos una evidencia fotográfica o captura.', 'err');
+      const evZone = document.getElementById('wo-evidence-zone');
+      if (evZone) {
+        evZone.classList.add('wo-field-invalid');
+        evZone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => evZone.classList.remove('wo-field-invalid'), 2400);
+      }
+      return;
+    }
+  }
+
   const effectiveDetail = specificDetail || orderCategoryLabel(category);
-  const isNetwork = document.getElementById('wo-detail-kind')?.value === 'network';
-  const assignSelect = document.getElementById('wo-assigned-user');
-  const assignedUserId = isNetwork ? (assignSelect?.value || '') : '';
+  const assignSelect = document.getElementById('wo-assign-field')?.querySelector('select') || document.getElementById('wo-assigned-user');
+  const assignedUserId = (!isSoporte && isNetwork) ? (assignSelect?.value || '') : '';
   const assignedOption = assignSelect && assignSelect.selectedIndex >= 0 ? assignSelect.options[assignSelect.selectedIndex] : null;
-  const assignedUserName = (isNetwork && assignedUserId) ? (assignedOption?.getAttribute('data-name') || assignedOption?.text?.replace(/^👤\s*/, '') || '') : '';
+  const assignedUserName = (!isSoporte && isNetwork && assignedUserId) ? (assignedOption?.getAttribute('data-name') || assignedOption?.text?.replace(/^👤\s*/, '') || '') : '';
 
   const selectedPriority = document.getElementById('wo-priority')?.value || 'media';
   const customReminderMins = parseInt(document.getElementById('wo-priority-minutes')?.value, 10);
@@ -1199,30 +1301,32 @@ async function saveWO() {
   }
 
   const payload = {
-    clientName: document.getElementById('wo-client').value.trim(),
-    clientPhone: document.getElementById('wo-phone')?.value.trim() || '',
-    detailLocation: document.getElementById('wo-location').value.trim(),
+    clientName: (isSoporte && isNetwork)
+      ? (document.getElementById('wo-client')?.value.trim() || 'Atención a clientes')
+      : document.getElementById('wo-client').value.trim(),
+    clientPhone: (!isSoporte || !isNetwork) ? (document.getElementById('wo-phone')?.value.trim() || '') : '',
+    detailLocation: (!isSoporte || !isNetwork) ? (document.getElementById('wo-location')?.value.trim() || '') : '',
     category,
     detailKind: isNetwork ? 'network' : 'physical',
     assignedUserId,
     assignedUserName,
     title: effectiveDetail,
     description: specificDetail,
-    nodeId: node?.id || '',
-    nodeCode: node?.nodeCode || typedNode,
-    nodeName: node ? getNodeLabel(node) : typedNode,
-    town: node?.town || typedNode,
-    region,
-    visitType: document.getElementById('wo-type').value,
+    nodeId: (isSoporte && isNetwork) ? '' : (node?.id || ''),
+    nodeCode: (isSoporte && isNetwork) ? (node?.nodeCode || typedNode || 'REQ') : (node?.nodeCode || typedNode),
+    nodeName: (isSoporte && isNetwork) ? (node ? getNodeLabel(node) : (typedNode || 'Atención a clientes')) : (node ? getNodeLabel(node) : typedNode),
+    town: (isSoporte && isNetwork) ? (node?.town || typedNode || 'General') : (node?.town || typedNode),
+    region: (isSoporte && isNetwork) ? (region || 'General') : region,
+    visitType: (!isSoporte && document.getElementById('wo-type')?.value) ? document.getElementById('wo-type').value : 'comunidad',
     priority: selectedPriority,
     reminderIntervalMin: (!isNaN(customReminderMins) && customReminderMins > 0) ? customReminderMins : undefined,
     // Para órdenes de NODO solo guardamos lat/lng cuando el usuario capturó ubicación válida.
     // No usamos la ubicación del nodo porque la orden puede ser de un cliente o referencia distinta.
-    lat: parsed.lat || '',
-    lng: parsed.lng || '',
+    lat: (!isSoporte || !isNetwork) ? (parsed.lat || '') : '',
+    lng: (!isSoporte || !isNetwork) ? (parsed.lng || '') : '',
     status: existingWO?.status || 'pendiente',
-    equipmentId: equipment?.id || '',
-    equipmentName: equipment?.name || ''
+    equipmentId: (!isSoporte || !isNetwork) ? (equipment?.id || '') : '',
+    equipmentName: (!isSoporte || !isNetwork) ? (equipment?.name || '') : ''
   };
   const existingReport = existingWO?.technicianReport;
   if (woEvidencePhotos.length || existingReport) {
@@ -1424,10 +1528,9 @@ function getOrderStatusMeta(order) {
   if (order?.status === 'no_realizado') return {label:'No solucionado',className:'is-unsolved',title:'No solucionado'};
   if (order?.status === 'revisado') return {label:'Revisado',className:'is-reviewed',title:'Revisado'};
   if (order?.status === 'en_revision') {
-    const actor = order.reviewOpenedByName || order.assignedUserName;
     return {
       label: 'En atención',
-      title: actor ? `En atención por: ${actor}` : 'En atención por Soporte',
+      title: 'En atención',
       className: 'is-reviewing'
     };
   }
