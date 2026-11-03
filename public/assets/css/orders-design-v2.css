@@ -628,7 +628,7 @@
   gap: 7px !important
 }
 
-.orders-page .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake) {
+.orders-page .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend) {
   display: grid !important;
   width: 32px !important;
   height: 32px !important;
@@ -979,7 +979,7 @@
     flex-wrap: nowrap !important
   }
 
-  .orders-page .orders-table-card .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake) {
+  .orders-page .orders-table-card .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend) {
     flex: 0 0 32px !important;
     width: 32px !important;
     min-width: 32px !important
@@ -1354,9 +1354,11 @@
 }
 
 .orders-page .order-status-badge.is-reviewing {
-  border-color: #9abdf6 !important;
-  background: #eef4ff !important;
-  color: #2857b8 !important
+  border-color: #60a5fa !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  font-weight: 800 !important;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.15) !important;
 }
 
 .orders-page .order-status-badge.is-unsolved {
@@ -2414,6 +2416,33 @@
   align-items: center !important;
   gap: 6px !important;
   flex-wrap: wrap !important;
+}
+
+.orders-page .order-actions .net-btn-attend {
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: 29px !important;
+  align-items: center !important;
+  gap: 3px !important;
+  padding: 0 8px !important;
+  border-radius: 7px !important;
+  background: #f59e0b !important;
+  border: 1px solid #d97706 !important;
+  color: #ffffff !important;
+  font-size: 10.5px !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 2px 5px rgba(245, 158, 11, 0.22) !important;
+  transition: transform 0.15s, background 0.15s !important;
+}
+
+.orders-page .order-actions .net-btn-attend:hover {
+  background: #d97706 !important;
+  transform: translateY(-1px) !important;
 }
 
 .orders-page .order-actions .net-btn-resolve {

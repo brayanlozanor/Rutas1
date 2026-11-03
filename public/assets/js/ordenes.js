@@ -1375,7 +1375,10 @@ function getOrderStatusMeta(order) {
   if (order?.status === 'devuelto_soporte') return {label:'Devuelto a Soporte',className:'is-returned'};
   if (order?.status === 'no_realizado') return {label:'No solucionado',className:'is-unsolved'};
   if (order?.status === 'revisado') return {label:'Revisado',className:'is-reviewed'};
-  if (order?.status === 'en_revision') return {label:'En revisión',className:'is-reviewing'};
+  if (order?.status === 'en_revision') {
+    const actor = order.reviewOpenedByName || order.assignedUserName;
+    return {label: actor ? `En atención (${actor})` : 'En atención', className: 'is-reviewing'};
+  }
   return {label:'Pendiente',className:'is-pending'};
 }
 
@@ -1963,29 +1966,55 @@ function renderWOs() {
             if (w.detailKind === 'network') {
               const isSentToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(getOrderCategory(w));
 
-              if (w.status === 'pendiente' || w.status === 'devuelto_soporte' || w.status === 'en_revision') {
+              if (w.status === 'pendiente' || w.status === 'devuelto_soporte') {
                 if (isSentToAttention) {
                   // Requerimiento enviado por Soporte hacia Atención a clientes
                   if (isAtencion) {
                     networkQuickActions = `
-                      <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Responder requerimiento a Soporte técnico">💬 Responder</button>
+                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Comenzar a atender este requerimiento">⚡ Atender</button>
                     `;
                   } else {
                     networkQuickActions = `<span class="net-pill-waiting" title="En espera de respuesta por Atención a clientes">⏳ En Atención</span>`;
                   }
                 } else {
-                  // Detalle de red recibido por Soporte desde Atención a clientes
+                  // Detalle de red recibido por Soporte: primero tendrá el botón que diga "Atender"
+                  if (isSoporte) {
+                    networkQuickActions = `
+                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Comenzar a atender este reporte de red">⚡ Atender</button>
+                    `;
+                  } else {
+                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de atención técnica por Soporte">⏳ En Soporte</span>`;
+                  }
+                }
+              } else if (w.status === 'en_revision') {
+                // Ya se encuentra en atención: el cuadrito cambió de color y ahora se puede Resolver
+                if (isSentToAttention) {
+                  if (isAtencion) {
+                    networkQuickActions = `
+                      <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Responder requerimiento a Soporte técnico">💬 Responder</button>
+                    `;
+                  } else {
+                    networkQuickActions = `<span class="net-pill-waiting" title="Atención a clientes está atendiendo este reporte">⏳ Atendiendo...</span>`;
+                  }
+                } else {
+                  // Detalle de red en atención por Soporte
                   if (isSoporte) {
                     const isAssignedToOther = w.assignedUserId && w.assignedUserId !== currentActor.id;
                     const isCheckingByOther = w.reviewOpenedById && w.reviewOpenedById !== currentActor.id;
                     const canRetake = isAssignedToOther || isCheckingByOther;
 
-                    networkQuickActions = `
-                      <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Resolver detalle técnico y notificar a Atención a clientes">🔧 Resolver</button>
-                      ${canRetake ? `<button type="button" class="btn net-btn-retake" onclick="takeOverNetworkOrder('${w.id}')" title="Retomar este reporte y ponértelo a tu cargo">✋ Retomar</button>` : ''}
-                    `;
+                    if (canRetake) {
+                      networkQuickActions = `
+                        <button type="button" class="btn net-btn-retake" onclick="takeOverNetworkOrder('${w.id}')" title="Retomar este reporte y ponértelo a tu cargo">✋ Retomar</button>
+                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Resolver detalle técnico y notificar a Atención a clientes">🔧 Resolver</button>
+                      `;
+                    } else {
+                      networkQuickActions = `
+                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Resolver detalle técnico y notificar a Atención a clientes">🔧 Resolver</button>
+                      `;
+                    }
                   } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de atención técnica por Soporte">⏳ En Soporte</span>`;
+                    networkQuickActions = `<span class="net-pill-waiting" title="Soporte técnico está atendiendo este reporte">⏳ En atención</span>`;
                   }
                 }
               } else if (w.status === 'resuelto_soporte') {
@@ -2269,6 +2298,40 @@ async function submitNetworkResolution() {
   }
   notify('Detalle resuelto. Se notificó a Atención a clientes en tiempo real.', 'ok');
   await loadOrderPage();
+}
+
+async function startAttendingNetworkOrder(id) {
+  const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
+  if (!order) return notify('No se encontró el detalle de red.', 'err');
+
+  const currentUser = getCurrentUser();
+  const userName = currentUser.name || currentUser.username || 'Soporte';
+  const now = new Date().toISOString();
+
+  order.status = 'en_revision';
+  order.reviewOpenedAt = now;
+  order.reviewOpenedById = currentUser.id || '';
+  order.reviewOpenedByName = userName;
+  order.reviewOpenedByUsername = currentUser.username || '';
+  if (!order.assignedUserId) {
+    order.assignedUserId = currentUser.id || '';
+    order.assignedUserName = userName;
+  }
+  order.updatedAt = now;
+  order.updatedById = currentUser.id || '';
+
+  appendSharedNetworkFollowUp(order, 'en_atencion', 'En atención', `${userName} comenzó a atender este reporte.`);
+  setUpdatedAudit(order, 'comenzó a atender detalle de red');
+
+  const ok = await saveRecord('workOrders', order);
+  if (!ok) return notify('No se pudo iniciar la atención. Intenta de nuevo.', 'err');
+
+  if (typeof broadcastNetworkOrderChange === 'function') {
+    broadcastNetworkOrderChange(order, 'attending');
+  }
+
+  notify(`Comenzaste a atender el reporte #${getOrderFolio(order)}. Ahora puedes resolverlo al terminar.`, 'ok');
+  await renderWOs();
 }
 
 async function takeOverNetworkOrder(id) {
