@@ -1707,7 +1707,7 @@ async function saveWO() {
   CM('wo-mo');
 
   try {
-    if (savedOrder.detailKind === 'network' && typeof broadcastNetworkOrderChange === 'function') {
+    if (typeof broadcastNetworkOrderChange === 'function') {
       broadcastNetworkOrderChange(savedOrder, editingWOId ? 'updated' : 'new_order');
     }
   } catch (e) {
@@ -1843,6 +1843,11 @@ async function markWODone(id) {
       setUpdatedAudit(w, completion.withInformation ? 'completó orden con información' : 'marcó lista orden');
       const saved = await saveRecordWithAudit('workOrders',w,auditStart);
       if (!saved) { notify('No se pudo guardar en la nube. Intenta de nuevo.', 'err'); return false; }
+      try {
+        if (typeof broadcastNetworkOrderChange === 'function') {
+          broadcastNetworkOrderChange(w, 'confirmed');
+        }
+      } catch (e) {}
       await loadOrderPage();
       notify(completion.withInformation ? 'Información guardada y orden completada' : 'Orden completada');
       return true;
@@ -1864,6 +1869,11 @@ async function markWODone(id) {
   appendOrderFollowUp(w,'solved','Solucionado');
   setUpdatedAudit(w, 'marcó lista orden');
   await saveRecordWithAudit('workOrders',w,auditStart);
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(w, 'confirmed');
+    }
+  } catch (e) {}
   await loadOrderPage();
 }
 
@@ -1925,8 +1935,8 @@ async function reopenCompletedWO(id) {
   const saved = await saveRecordWithAudit('workOrders', w, auditStart);
   if (!saved) return notify('No se pudo reabrir el detalle. Por favor intente nuevamente.', 'err');
 
-  if (w.detailKind === 'network' && typeof broadcastNetworkOrderChange === 'function') {
-    broadcastNetworkOrderChange(w, 'returned');
+  if (typeof broadcastNetworkOrderChange === 'function') {
+    broadcastNetworkOrderChange(w, 'reopened');
   }
 
   notify(`El detalle #${folio} ha sido reabierto con éxito.`, 'ok');
@@ -2205,6 +2215,12 @@ async function saveOrderWorkflow(order,auditAction,message,{ firstPage = false }
   setUpdatedAudit(order,auditAction);
   const saved = await saveRecordWithAudit('workOrders',order,auditStart);
   if (!saved) return false;
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      const trans = order.detailKind === 'physical' ? 'sent_to_physical' : (order.status === 'pendiente' ? 'resent' : 'updated');
+      broadcastNetworkOrderChange(order, trans);
+    }
+  } catch (e) {}
   CM('order-actions-mo');
   if (firstPage) orderCurrentPage = 1;
   await loadOrderPage();
@@ -2377,7 +2393,14 @@ async function deleteWO(id) {
     targetType:'detail',
     targetId:id,
     targetName:w.clientName || w.title || w.description || 'detalle',
-    applyDelete:() => { setDeletedAudit(w, 'elimino orden'); },
+    applyDelete:() => {
+      setDeletedAudit(w, 'elimino orden');
+      try {
+        if (typeof broadcastNetworkOrderChange === 'function') {
+          broadcastNetworkOrderChange(w, 'deleted');
+        }
+      } catch (e) {}
+    },
     refresh:() => { void loadOrderPage(); }
   });
 }
