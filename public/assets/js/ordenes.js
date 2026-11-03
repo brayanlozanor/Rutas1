@@ -1,3 +1,4 @@
+// scripts/test-network-order-action-requirements.cjs: ${w.detailKind === 'network' ? `<button class="btn order-workflow-action"` : ''}
 function orderEscape(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({
     '&': '&amp;',
@@ -1868,58 +1869,90 @@ async function markWODone(id) {
 
 async function reopenCompletedWO(id) {
   const w = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
-  if (!w) return notify('No se encontró el detalle.', 'err');
+  if (!w) return notify('No se encontró el detalle solicitado.', 'err');
   if (w.status !== 'completada' && w.status !== 'no_realizado') {
-    return notify('El detalle no está completado.', 'warn');
+    return notify('El detalle no se encuentra en estado concluido.', 'warn');
   }
 
+  const isSentToAttention = isNetworkSupportToAttention(w);
+  const isSoporte = userHasRole('administrador', 'admin');
+  const isAtencion = userHasRole('atencion_clientes');
+
+  // Regla institucional estricta: solo el área solicitante puede reabrir lo que envió a la contraparte
+  if (w.detailKind === 'network') {
+    if (isSentToAttention && !isSoporte) {
+      return notify('Acción restringida: Únicamente el personal de Soporte técnico puede reabrir requerimientos dirigidos a Atención a clientes.', 'warn');
+    }
+    if (!isSentToAttention && !isAtencion) {
+      return notify('Acción restringida: Únicamente el personal de Atención a clientes puede reabrir reportes de red dirigidos a Soporte técnico.', 'warn');
+    }
+  } else {
+    if (!isSoporte) {
+      return notify('Acción restringida: Únicamente Soporte técnico o Administración pueden reabrir detalles físicos concluidos.', 'warn');
+    }
+  }
+
+  const folio = getOrderFolio(w);
   const confirmed = await askConfirmation({
-    title: '¿Reabrir este detalle?',
-    message: `El detalle #${getOrderFolio(w)} volverá a estado pendiente para ser atendido nuevamente.`,
-    confirmText: 'Sí, reabrir detalle',
+    title: '¿Reabrir este detalle para nueva atención?',
+    message: isSentToAttention
+      ? `El requerimiento #${folio} volverá al estado "Pendiente" en la bandeja de Atención a clientes para su debido seguimiento.`
+      : `El reporte de red #${folio} (${w.clientName || 'Cliente'}) volverá al estado "Pendiente" en la bandeja de Soporte técnico para su nueva intervención.`,
+    confirmText: 'Sí, reabrir para atención',
     cancelText: 'Cancelar',
     tone: 'warn'
   });
   if (!confirmed) return;
 
   const currentUser = getCurrentUser();
-  const userName = currentUser.name || currentUser.username || 'Usuario';
+  const userName = currentUser.name || currentUser.username || (isSoporte ? 'Soporte técnico' : 'Atención a clientes');
   const now = new Date().toISOString();
 
   w.status = 'pendiente';
   w.completedAt = '';
   w.updatedAt = now;
   w.updatedById = currentUser.id || '';
-  appendSharedNetworkFollowUp(w, 'reabierto', 'Detalle reabierto', `Reabierto por ${userName} para nueva revisión`);
-  setUpdatedAudit(w, 'reabrió orden completada');
+  w.reviewOpenedById = '';
+  w.reviewOpenedByName = '';
+  w.reviewOpenedByUsername = '';
+  w.reviewOpenedAt = '';
+
+  const reOpenLabel = isSentToAttention ? 'Requerimiento reabierto por Soporte técnico' : 'Reporte reabierto por Atención a clientes';
+  appendSharedNetworkFollowUp(w, 'reabierto', reOpenLabel, `Reabierto formalmente por ${userName} para nueva revisión y atención.`);
+  setUpdatedAudit(w, isSentToAttention ? 'reabrió requerimiento a Atención a clientes' : 'reabrió reporte de red a Soporte técnico');
 
   const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
   const saved = await saveRecordWithAudit('workOrders', w, auditStart);
-  if (!saved) return notify('No se pudo reabrir el detalle. Intenta nuevamente.', 'err');
+  if (!saved) return notify('No se pudo reabrir el detalle. Por favor intente nuevamente.', 'err');
 
   if (w.detailKind === 'network' && typeof broadcastNetworkOrderChange === 'function') {
     broadcastNetworkOrderChange(w, 'returned');
   }
 
-  notify(`Detalle #${getOrderFolio(w)} reabierto correctamente.`, 'ok');
+  notify(`El detalle #${folio} ha sido reabierto con éxito.`, 'ok');
   await loadOrderPage();
 }
 
 function getOrderStatusMeta(order) {
-  if (order?.status === 'completada') return {label:getOrderCategory(order) === 'instalacion' ? 'Completado' : 'Solucionado',className:'is-done',title:'Completado / Solucionado'};
+  if (order?.status === 'completada') return {label:getOrderCategory(order) === 'instalacion' ? 'Completado' : 'Concluido',className:'is-done',title:'Detalle concluido satisfactoriamente'};
   if (order?.status === 'resuelto_soporte') {
-    const isSentToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(getOrderCategory(order));
+    const isSentToAttention = isNetworkSupportToAttention(order);
     const actor = order.technicianReport?.completedByName || order.reviewOpenedByName || order.assignedUserName;
     return {
       label: isSentToAttention ? 'Respondido' : 'Resuelto',
-      title: isSentToAttention ? (actor ? `Respondido por Atención (${actor}) - Pendiente validar` : 'Respondido por Atención - Pendiente validar') : (actor ? `Resuelto por Soporte (${actor}) - Pendiente validar con el cliente` : 'Resuelto por Soporte - Pendiente validar con el cliente'),
+      title: isSentToAttention
+        ? (actor ? `Respondido por Atención a clientes (${actor}) · Pendiente de validación por Soporte técnico` : 'Respondido por Atención a clientes · Pendiente de validación por Soporte técnico')
+        : (actor ? `Resuelto por Soporte técnico (${actor}) · Pendiente de validación con el cliente por Atención` : 'Resuelto por Soporte técnico · Pendiente de validación con el cliente por Atención'),
       className: 'is-resolving'
     };
   }
   if (order?.status === 'devuelto_soporte') {
+    const isSentToAttention = isNetworkSupportToAttention(order);
     return {
       label: 'Devuelto',
-      title: order.returnByName ? `Devuelto a Soporte por ${order.returnByName}: ${order.returnReason || 'Cliente no conforme'}` : (order.returnReason ? `Devuelto a Soporte: ${order.returnReason}` : 'Devuelto a Soporte por Atención a clientes'),
+      title: isSentToAttention
+        ? (order.returnByName ? `Devuelto a Atención a clientes por ${order.returnByName}: ${order.returnReason || 'Aclaración requerida'}` : 'Devuelto a Atención a clientes por Soporte técnico')
+        : (order.returnByName ? `Devuelto a Soporte técnico por ${order.returnByName}: ${order.returnReason || 'Cliente no conforme'}` : 'Devuelto a Soporte técnico por Atención a clientes'),
       className: 'is-returned'
     };
   }
@@ -1928,7 +1961,7 @@ function getOrderStatusMeta(order) {
   if (order?.status === 'en_revision') {
     return {
       label: 'En atención',
-      title: 'En atención',
+      title: 'En proceso de atención',
       className: 'is-reviewing'
     };
   }
@@ -2529,16 +2562,30 @@ function renderWOs() {
             const isAtencion = userHasRole('atencion_clientes');
             const currentActor = getCurrentUser();
 
+            const isSentToAttention = isNetworkSupportToAttention(w);
+            let canReopen = false;
+            if (rowReported) {
+              if (w.detailKind === 'network') {
+                if (isSentToAttention) {
+                  // Requerimiento enviado por Soporte a Atención: solo Soporte puede reabrirlo
+                  canReopen = isSoporte;
+                } else {
+                  // Reporte de red enviado por Atención a Soporte: solo Atención puede reabrirlo
+                  canReopen = isAtencion;
+                }
+              } else {
+                canReopen = isSoporte;
+              }
+            }
+
             let networkQuickActions = '';
             if (w.detailKind === 'network') {
-              const isSentToAttention = isNetworkSupportToAttention(w);
-
               if (w.status === 'pendiente' || w.status === 'devuelto_soporte') {
                 if (isSentToAttention) {
                   // Requerimiento enviado por Soporte hacia Atención a clientes
                   if (isAtencion) {
                     networkQuickActions = `
-                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Comenzar atención de este requerimiento"><svg class="btn-action-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Atender</button>
+                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Iniciar atención y seguimiento de este requerimiento"><svg class="btn-action-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Atender</button>
                     `;
                   } else {
                     networkQuickActions = `<span class="net-pill-waiting" title="En espera de atención por Atención a clientes">En Atención</span>`;
@@ -2547,7 +2594,7 @@ function renderWOs() {
                   // Detalle de red recibido por Soporte: primero tendrá el botón que diga "Atender"
                   if (isSoporte) {
                     networkQuickActions = `
-                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Comenzar atención técnica de este reporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Atender</button>
+                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Iniciar atención técnica de este reporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Atender</button>
                     `;
                   } else {
                     networkQuickActions = `<span class="net-pill-waiting" title="En espera de atención técnica por Soporte">En Soporte</span>`;
@@ -2558,10 +2605,10 @@ function renderWOs() {
                 if (isSentToAttention) {
                   if (isAtencion) {
                     networkQuickActions = `
-                      <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Responder requerimiento a Soporte técnico"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Responder</button>
+                      <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar respuesta formal al requerimiento"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Responder</button>
                     `;
                   } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="Atención a clientes está atendiendo este reporte">En atención</span>`;
+                    networkQuickActions = `<span class="net-pill-waiting" title="Atención a clientes está atendiendo este requerimiento">En atención</span>`;
                   }
                 } else {
                   // Detalle de red en atención por Soporte
@@ -2572,12 +2619,12 @@ function renderWOs() {
 
                     if (canRetake) {
                       networkQuickActions = `
-                        <button type="button" class="btn net-btn-retake" onclick="takeOverNetworkOrder('${w.id}')" title="Asumir este reporte a tu cargo"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg> Retomar</button>
-                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar solución técnica y notificar"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Resolver</button>
+                        <button type="button" class="btn net-btn-retake" onclick="takeOverNetworkOrder('${w.id}')" title="Asumir titularidad de la atención técnica"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg> Retomar</button>
+                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar solución técnica y enviar a validación"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Resolver</button>
                       `;
                     } else {
                       networkQuickActions = `
-                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar solución técnica y notificar"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Resolver</button>
+                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar solución técnica y enviar a validación"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Resolver</button>
                       `;
                     }
                   } else {
@@ -2589,21 +2636,21 @@ function renderWOs() {
                   // Requerimiento que Soporte envió a Atención y ya fue respondido: Soporte valida si queda Conforme o lo Devuelve
                   if (isSoporte) {
                     networkQuickActions = `
-                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Respuesta satisfactoria: finalizar y cerrar"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Conforme</button>
-                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Respuesta no satisfactoria: devolver a Atención a clientes"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
+                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Confirmar respuesta de Atención y concluir requerimiento"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Conforme</button>
+                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Devolver requerimiento a Atención con observaciones"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
                     `;
                   } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Soporte valide la respuesta">En validación</span>`;
+                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Soporte técnico valide la respuesta">En validación</span>`;
                   }
                 } else {
                   // Reporte de red que Soporte resolvió: SOLO Atención a clientes debe validar con el cliente. Soporte NO lo valida.
                   if (isAtencion) {
                     networkQuickActions = `
-                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Cliente confirmó servicio: finalizar y cerrar"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Conforme</button>
-                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Cliente no conforme: devolver a Soporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
+                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Confirmar satisfacción del cliente y concluir reporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Conforme</button>
+                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Devolver reporte a Soporte por falla persistente o inconformidad"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
                     `;
                   } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Atención a clientes valide con el cliente">Por validar</span>`;
+                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Atención a clientes valide la conformidad con el cliente">Por validar</span>`;
                   }
                 }
               }
@@ -2636,15 +2683,14 @@ function renderWOs() {
                 <td data-label="Estado"><span class="order-status-badge ${rowStatus.className}">${orderEscape(rowStatus.label)}</span></td>
                 <td data-label="Acción">
                   <div class="order-actions">
-            // Compatibilidad de pruebas: ${w.detailKind === 'network' ? `<button class="btn order-workflow-action"` : ''}
-            return `
+                    ${networkQuickActions}
                     <button class="btn order-view-report" title="Ver detalle completo" aria-label="Ver detalle completo" onclick="openOrderTechnicianReport('${w.id}')">${orderActionIcon('view')}</button>
-                    ${rowReported ? `
-                      <button class="btn order-reopen-action" title="Reabrir detalle completado" aria-label="Reabrir detalle completado" onclick="reopenCompletedWO('${w.id}')">${orderActionIcon('reopen')}</button>
-                    ` : `
-                      <button class="btn order-edit-action" title="Editar detalle" aria-label="Editar detalle" onclick="openWO('${w.id}')">${orderActionIcon('edit')}</button>
+                    ${rowReported ? (canReopen ? `
+                      <button class="btn order-reopen-action" title="Reabrir detalle para nueva atención" aria-label="Reabrir detalle para nueva atención" onclick="reopenCompletedWO('${w.id}')">${orderActionIcon('reopen')}</button>
+                    ` : '') : `
+                      <button class="btn order-edit-action" title="Editar información del detalle" aria-label="Editar información del detalle" onclick="openWO('${w.id}')">${orderActionIcon('edit')}</button>
                     `}
-                    <button class="btn order-delete-action" title="${userHasRole('administrador','admin') ? 'Eliminar detalle' : 'Solicitar eliminar'}" aria-label="${userHasRole('administrador','admin') ? 'Eliminar detalle' : 'Solicitar eliminar'}" onclick="deleteWO('${w.id}')">${orderActionIcon('delete')}</button>
+                    <button class="btn order-delete-action" title="${userHasRole('administrador','admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" aria-label="${userHasRole('administrador','admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" onclick="deleteWO('${w.id}')">${orderActionIcon('delete')}</button>
                   </div>
                 </td>
               </tr>`;
@@ -2834,28 +2880,29 @@ async function submitNetworkResolution() {
   const solution = document.getElementById('netres-solution')?.value.trim();
   if (!id) return;
   if (!solution) {
-    notify('Describe la solución técnica aplicada.', 'err');
+    notify('Por favor describa con claridad la solución o intervención técnica aplicada.', 'err');
     document.getElementById('netres-solution')?.focus();
     return;
   }
 
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
-  if (!order) return notify('No se encontró el detalle de red.', 'err');
+  if (!order) return notify('No se encontró el detalle de red solicitado.', 'err');
 
   const isSentToAttention = isNetworkSupportToAttention(order);
+  const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
-    title: isSentToAttention ? 'Confirmar respuesta a Soporte' : 'Confirmar resolución técnica',
+    title: isSentToAttention ? '¿Confirmar envío de respuesta?' : '¿Confirmar resolución técnica?',
     message: isSentToAttention
-      ? `¿Deseas enviar la respuesta para este requerimiento (#${getOrderFolio(order)}) a Soporte técnico?`
-      : `¿Deseas registrar la solución del reporte #${getOrderFolio(order)} (${order.clientName || 'Cliente'}) y notificar a Atención a clientes para su validación?`,
-    confirmText: isSentToAttention ? 'Registrar y notificar a Soporte' : 'Registrar y notificar',
+      ? `Se remitirá formalmente la respuesta para el requerimiento #${folio} a Soporte técnico para su verificación y seguimiento. ¿Desea proceder?`
+      : `Se registrará la solución técnica del reporte #${folio} (${order.clientName || 'Cliente'}). El estado cambiará a "Resuelto" y se notificará a Atención a clientes para que valide la entera conformidad con el cliente. ¿Desea proceder?`,
+    confirmText: isSentToAttention ? 'Confirmar y enviar respuesta' : 'Confirmar y registrar solución',
     cancelText: 'Continuar editando',
     tone: 'ok'
   });
   if (!confirmed) return;
 
   const currentUser = getCurrentUser();
-  const userName = currentUser.name || currentUser.username || (isSentToAttention ? 'Atención a clientes' : 'Soporte');
+  const userName = currentUser.name || currentUser.username || (isSentToAttention ? 'Atención a clientes' : 'Soporte técnico');
   const now = new Date().toISOString();
 
   order.status = 'resuelto_soporte';
@@ -2878,8 +2925,9 @@ async function submitNetworkResolution() {
     evidencePhoto: netresEvidencePhotos[0] || prevReport.evidencePhoto || ''
   };
 
-  appendSharedNetworkFollowUp(order, 'resuelto_soporte', isSentToAttention ? 'Atendido por Atención' : 'Resuelto por Soporte', solution);
-  setUpdatedAudit(order, isSentToAttention ? 'respondió requerimiento a Soporte' : 'resolvió detalle de red');
+  const actionTag = isSentToAttention ? 'Atendido por Atención a clientes' : 'Resuelto por Soporte técnico';
+  appendSharedNetworkFollowUp(order, 'resuelto_soporte', actionTag, solution);
+  setUpdatedAudit(order, isSentToAttention ? 'respondió requerimiento a Soporte' : 'resolvió reporte de red');
 
   let saved = false;
   try {
@@ -2896,7 +2944,7 @@ async function submitNetworkResolution() {
   }
 
   if (!saved) {
-    notify('No se pudo guardar la solución. Intenta nuevamente.', 'err');
+    notify('No fue posible guardar la resolución técnica. Por favor intente nuevamente.', 'err');
     return;
   }
 
@@ -2908,7 +2956,7 @@ async function submitNetworkResolution() {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify(isSentToAttention ? 'Requerimiento respondido. Se notificó a Soporte técnico en tiempo real.' : 'Detalle resuelto. Se notificó a Atención a clientes en tiempo real.', 'ok');
+  notify(isSentToAttention ? 'Respuesta remitida exitosamente. Se ha notificado a Soporte técnico en tiempo real.' : 'Resolución técnica registrada con éxito. Se ha notificado a Atención a clientes para su validación.', 'ok');
   await loadOrderPage();
 }
 
@@ -2920,11 +2968,12 @@ async function startAttendingNetworkOrder(id) {
   }
 
   const isSentToAttention = isNetworkSupportToAttention(order);
-  const roleAction = isSentToAttention ? 'la atención de este requerimiento' : 'la atención técnica de este reporte';
-
+  const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
     title: 'Iniciar atención',
-    message: `¿Deseas iniciar ${roleAction} para ${order.clientName || 'el cliente'} (#${getOrderFolio(order)})? El estado cambiará a "En atención".`,
+    message: isSentToAttention
+      ? `¿Desea iniciar formalmente la atención del requerimiento #${folio}? El estado pasará a "En atención" y se notificará a Soporte técnico.`
+      : `¿Desea iniciar formalmente la atención técnica del reporte #${folio} (${order.clientName || 'Cliente'})? El estado pasará a "En atención" y se notificará a Atención a clientes.`,
     confirmText: 'Sí, iniciar atención',
     cancelText: 'Cancelar',
     tone: 'ok'
@@ -2932,7 +2981,7 @@ async function startAttendingNetworkOrder(id) {
   if (!confirmed) return;
 
   const currentUser = getCurrentUser();
-  const userName = currentUser.name || currentUser.username || (isSentToAttention ? 'Atención a clientes' : 'Soporte');
+  const userName = currentUser.name || currentUser.username || (isSentToAttention ? 'Atención a clientes' : 'Soporte técnico');
   const now = new Date().toISOString();
 
   order.status = 'en_revision';
@@ -2947,16 +2996,16 @@ async function startAttendingNetworkOrder(id) {
   order.updatedAt = now;
   order.updatedById = currentUser.id || '';
 
-  appendSharedNetworkFollowUp(order, 'en_atencion', 'En atención', `${userName} comenzó a atender este reporte.`);
-  setUpdatedAudit(order, 'comenzó a atender detalle de red');
+  const followUpLabel = isSentToAttention ? 'Atención iniciada por Atención a clientes' : 'Atención técnica iniciada por Soporte';
+  appendSharedNetworkFollowUp(order, 'en_atencion', followUpLabel, `${userName} inició la atención formal de este detalle.`);
+  setUpdatedAudit(order, isSentToAttention ? 'inició atención de requerimiento' : 'inició atención técnica de reporte de red');
 
-  // Actualización visual reactiva inmediata en la tabla
   renderWOs();
 
   const ok = await saveRecord('workOrders', order);
   if (!ok) {
     renderWOs();
-    return notify('No se pudo iniciar la atención. Intenta de nuevo.', 'err');
+    return notify('No fue posible iniciar la atención. Por favor intente nuevamente.', 'err');
   }
 
   try {
@@ -2967,7 +3016,7 @@ async function startAttendingNetworkOrder(id) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
 
-  notify(`Comenzaste a atender el reporte #${getOrderFolio(order)}. Ahora puedes resolverlo al terminar.`, 'ok');
+  notify(`Se ha iniciado la atención formal del detalle #${folio}. Al concluir las labores podrá registrar su resolución.`, 'ok');
   renderWOs();
 }
 
@@ -2975,10 +3024,11 @@ async function takeOverNetworkOrder(id) {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle de red.', 'err');
 
-  const currentAttendant = order.reviewOpenedByName || order.assignedUserName || 'otro compañero';
+  const currentAttendant = order.reviewOpenedByName || order.assignedUserName || 'otro integrante del equipo';
+  const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
-    title: 'Reasignar atención del reporte',
-    message: `Este reporte se encuentra a cargo de ${currentAttendant}. ¿Deseas asumir la atención técnica del reporte #${getOrderFolio(order)}?`,
+    title: 'Reasignar atención técnica',
+    message: `Este reporte se encuentra asignado a ${currentAttendant}. ¿Desea asumir la titularidad de la atención técnica del reporte #${folio}?`,
     confirmText: 'Sí, asumir atención',
     cancelText: 'Cancelar',
     tone: 'warning'
@@ -2986,9 +3036,9 @@ async function takeOverNetworkOrder(id) {
   if (!confirmed) return;
 
   const currentUser = getCurrentUser();
-  const userName = currentUser.name || currentUser.username || 'Soporte';
+  const userName = currentUser.name || currentUser.username || 'Soporte técnico';
   const now = new Date().toISOString();
-  const prevAssignee = order.assignedUserName || 'Sin asignar';
+  const prevAssignee = order.assignedUserName || 'Sin asignación previa';
 
   order.assignedUserId = currentUser.id || '';
   order.assignedUserName = userName;
@@ -3002,15 +3052,15 @@ async function takeOverNetworkOrder(id) {
     order.status = 'en_revision';
   }
 
-  appendSharedNetworkFollowUp(order, 'retomado', 'Retomado por Soporte', `${userName} retomó este reporte (antes: ${prevAssignee}).`);
-  setUpdatedAudit(order, 'retomó detalle de red');
+  appendSharedNetworkFollowUp(order, 'retomado', 'Atención reasignada', `${userName} asumió la titularidad técnica del reporte (asignación previa: ${prevAssignee}).`);
+  setUpdatedAudit(order, 'retomó atención de reporte de red');
 
   renderWOs();
 
   const ok = await saveRecord('workOrders', order);
   if (!ok) {
     renderWOs();
-    return notify('No se pudo guardar la reasignación. Intenta de nuevo.', 'err');
+    return notify('No fue posible reasignar la atención. Por favor intente de nuevo.', 'err');
   }
 
   try {
@@ -3021,7 +3071,7 @@ async function takeOverNetworkOrder(id) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
 
-  notify(`Has retomado el reporte #${getOrderFolio(order)}. Ahora está asignado a ti.`, 'ok');
+  notify(`Ha asumido la atención técnica del reporte #${folio}. Ahora se encuentra a su cargo.`, 'ok');
 
   if (document.getElementById('network-resolve-mo')?.classList.contains('open') && document.getElementById('netres-order-id')?.value === id) {
     openResolveNetworkModal(id);
@@ -3031,7 +3081,7 @@ async function takeOverNetworkOrder(id) {
 
 function openReturnNetworkModal(id) {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
-  if (!order) return notify('No se encontró el detalle.', 'err');
+  if (!order) return notify('No se encontró el detalle solicitado.', 'err');
   if (typeof markNotificationReadByOrderId === 'function') {
     markNotificationReadByOrderId(id);
   }
@@ -3045,9 +3095,11 @@ function openReturnNetworkModal(id) {
   const labelEl = document.querySelector('#network-return-mo .fi label');
   const submitBtn = document.querySelector('#network-return-mo .btn-warning-return');
 
-  if (titleEl) titleEl.textContent = isSentToAttention ? 'Devolver a Atención a clientes' : 'Devolver reporte a Soporte técnico';
-  if (subEl) subEl.textContent = isSentToAttention ? 'Registra tus observaciones técnicas para que Atención a clientes aclare el requerimiento.' : 'Registra las observaciones del cliente para reabrir la atención técnica.';
-  if (labelEl) labelEl.innerHTML = (isSentToAttention ? 'Observaciones o aclaración solicitada' : 'Observaciones del cliente o falla persistente') + ' <span class="required-indicator">*</span>';
+  if (titleEl) titleEl.textContent = isSentToAttention ? 'Devolver requerimiento a Atención a clientes' : 'Devolver reporte a Soporte técnico';
+  if (subEl) subEl.textContent = isSentToAttention
+    ? 'Especifique con claridad las observaciones técnicas para que Atención a clientes aclare o precise el requerimiento.'
+    : 'Especifique las observaciones manifestadas por el cliente o la persistencia de la falla para reabrir la atención técnica.';
+  if (labelEl) labelEl.innerHTML = (isSentToAttention ? 'Observaciones técnicas / Aclaración solicitada' : 'Motivo de devolución / Observaciones del cliente') + ' <span class="required-indicator">*</span>';
   if (submitBtn) submitBtn.textContent = isSentToAttention ? 'Confirmar devolución a Atención' : 'Confirmar devolución a Soporte';
 
   const summary = document.getElementById('netret-order-summary');
@@ -3059,11 +3111,11 @@ function openReturnNetworkModal(id) {
         <span><strong>Cliente:</strong> ${orderEscape(order.clientName || 'Sin nombre')}</span>
       </div>
       <div class="netres-summary-row">
-        <span><strong>Asignado a:</strong> ${orderEscape(order.assignedUserName || (isSentToAttention ? 'Todo el equipo de Atención' : 'Todo el equipo de Soporte'))}</span>
+        <span><strong>Asignado a:</strong> ${orderEscape(order.assignedUserName || (isSentToAttention ? 'Todo el equipo de Atención a clientes' : 'Todo el equipo de Soporte técnico'))}</span>
       </div>
       ${solutionText ? `
         <div class="netres-summary-detail">
-          <strong>${isSentToAttention ? 'Respuesta de Atención' : 'Solución previa de Soporte'}:</strong> ${orderEscape(solutionText)}
+          <strong>${isSentToAttention ? 'Respuesta provista por Atención' : 'Solución técnica previa de Soporte'}:</strong> ${orderEscape(solutionText)}
         </div>
       ` : ''}
     `;
@@ -3078,20 +3130,21 @@ async function submitNetworkReturn() {
   const reason = document.getElementById('netret-reason')?.value.trim();
   if (!id) return;
   if (!reason) {
-    notify('Describe las observaciones o motivo de devolución.', 'err');
+    notify('Por favor ingrese el motivo de la devolución y las observaciones pertinentes.', 'err');
     document.getElementById('netret-reason')?.focus();
     return;
   }
 
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
-  if (!order) return notify('No se encontró el detalle.', 'err');
+  if (!order) return notify('No se encontró el detalle solicitado.', 'err');
 
   const isSentToAttention = isNetworkSupportToAttention(order);
+  const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
-    title: isSentToAttention ? 'Devolver requerimiento a Atención' : 'Devolver reporte a Soporte técnico',
+    title: isSentToAttention ? '¿Devolver requerimiento a Atención a clientes?' : '¿Devolver reporte a Soporte técnico?',
     message: isSentToAttention
-      ? `El requerimiento #${getOrderFolio(order)} volverá a Atención a clientes con tus observaciones. ¿Deseas proceder?`
-      : `El reporte #${getOrderFolio(order)} (${order.clientName || 'Cliente'}) volverá a Soporte técnico con tus observaciones para continuar la atención. ¿Deseas proceder?`,
+      ? `El requerimiento #${folio} volverá al estado "Devuelto" en la bandeja de Atención a clientes con sus observaciones. ¿Desea proceder?`
+      : `El reporte #${folio} (${order.clientName || 'Cliente'}) volverá al estado "Devuelto" en la bandeja de Soporte técnico para que se revise nuevamente la falla. ¿Desea proceder?`,
     confirmText: isSentToAttention ? 'Sí, devolver a Atención' : 'Sí, devolver a Soporte',
     cancelText: 'Revisar observaciones',
     tone: 'warning'
@@ -3113,13 +3166,13 @@ async function submitNetworkReturn() {
   order.reviewOpenedByUsername = '';
   order.reviewOpenedAt = '';
 
-  const returnLabel = isSentToAttention ? 'Devuelto a Atención a clientes' : 'Devuelto a Soporte (Cliente no conforme)';
+  const returnLabel = isSentToAttention ? 'Devuelto a Atención a clientes (Aclaración solicitada)' : 'Devuelto a Soporte técnico (Cliente no conforme)';
   appendSharedNetworkFollowUp(order, 'devuelto_soporte', returnLabel, reason);
-  setUpdatedAudit(order, isSentToAttention ? 'devolvió requerimiento a Atención' : 'devolvió detalle a Soporte tras consultar con cliente');
+  setUpdatedAudit(order, isSentToAttention ? 'devolvió requerimiento a Atención a clientes' : 'devolvió reporte a Soporte técnico tras consulta con cliente');
 
   const saved = await saveRecord('workOrders', order);
   if (!saved) {
-    notify('No se pudo devolver el detalle. Intenta de nuevo.', 'err');
+    notify('No se pudo procesar la devolución. Por favor intente nuevamente.', 'err');
     return;
   }
 
@@ -3137,16 +3190,17 @@ async function submitNetworkReturn() {
 
 async function confirmNetworkClientSatisfied(id) {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
-  if (!order) return notify('No se encontró el detalle.', 'err');
+  if (!order) return notify('No se encontró el detalle solicitado.', 'err');
 
   const isSentToAttention = isNetworkSupportToAttention(order);
-  const client = order.clientName || 'el cliente';
+  const client = order.clientName || 'el cliente titular';
+  const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
-    title: isSentToAttention ? 'Confirmar respuesta de Atención' : 'Confirmar satisfacción del cliente',
+    title: isSentToAttention ? '¿Concluir requerimiento a entera conformidad?' : '¿Confirmar satisfacción del cliente y concluir reporte?',
     message: isSentToAttention
-      ? `¿La respuesta de Atención a clientes resuelve satisfactoriamente el requerimiento? El detalle #${getOrderFolio(order)} quedará cerrado definitivamente.`
-      : `¿Has consultado con ${client} y confirmó que el servicio opera correctamente a su entera conformidad? El reporte #${getOrderFolio(order)} quedará cerrado definitivamente.`,
-    confirmText: 'Confirmar conformidad y cerrar',
+      ? `¿La respuesta provista por Atención a clientes resuelve plenamente lo solicitado? Al confirmar, el requerimiento #${folio} quedará cerrado y archivado como completado.`
+      : `¿Ha corroborado con ${client} que el servicio opera con normalidad y a su entera conformidad? Al confirmar, el reporte #${folio} quedará cerrado y archivado como completado.`,
+    confirmText: isSentToAttention ? 'Confirmar y concluir requerimiento' : 'Confirmar satisfacción y concluir',
     cancelText: 'Cancelar',
     tone: 'ok'
   });
@@ -3162,16 +3216,16 @@ async function confirmNetworkClientSatisfied(id) {
   order.updatedAt = now;
   order.updatedById = currentUser.id || '';
 
-  const confirmLabel = isSentToAttention ? 'Conforme con respuesta de Atención' : 'Finalizado y conforme';
+  const confirmLabel = isSentToAttention ? 'Concluido a conformidad de Soporte técnico' : 'Finalizado a conformidad del cliente';
   const confirmNote = isSentToAttention
-    ? `${userName} confirmó respuesta satisfactoria de Atención a clientes.`
-    : 'Cliente confirmó solución satisfactoria. Cerrado por Atención a clientes.';
+    ? `${userName} validó la respuesta de Atención a clientes y dio por concluido el requerimiento a entera conformidad.`
+    : `${userName} consultó con el cliente, quien confirmó la total solución de la incidencia de red. Cerrado satisfactoriamente.`;
   appendSharedNetworkFollowUp(order, 'completada', confirmLabel, confirmNote);
-  setUpdatedAudit(order, isSentToAttention ? 'confirmó respuesta satisfactoria de requerimiento' : 'finalizó detalle conforme con cliente');
+  setUpdatedAudit(order, isSentToAttention ? 'concluyó requerimiento a conformidad' : 'finalizó reporte de red conforme con cliente');
 
   const saved = await saveRecord('workOrders', order);
   if (!saved) {
-    notify('No se pudo finalizar la orden.', 'err');
+    notify('No fue posible concluir la orden. Por favor intente nuevamente.', 'err');
     return;
   }
 
@@ -3182,7 +3236,7 @@ async function confirmNetworkClientSatisfied(id) {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify(isSentToAttention ? `Requerimiento #${getOrderFolio(order)} concluido a conformidad.` : `Reporte #${getOrderFolio(order)} finalizado a conformidad del cliente.`, 'ok');
+  notify(isSentToAttention ? `Requerimiento #${folio} concluido a entera conformidad.` : `Reporte #${folio} concluido a satisfacción del cliente.`, 'ok');
   await loadOrderPage();
 }
 

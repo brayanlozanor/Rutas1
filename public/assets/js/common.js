@@ -2481,10 +2481,10 @@ function handleNetworkOrderEvent(payload) {
       if (!isOwnCreator && isAtencion) {
         const shouldNotify = hasAssignment ? isAssignedToMe : true;
         if (shouldNotify) {
-          const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
+          const assignedNotice = hasAssignment ? ' (Asignado formalmente a su usuario)' : '';
           notifyNetworkDetailEvent({
-            title: `Nuevo requerimiento de Soporte${assignedNotice}`,
-            message: `${order.clientName || 'Comunidad'} (${order.town || 'Red'}) · ${order.title || 'Solicitud de Atención a clientes'}`,
+            title: `Nuevo requerimiento de Soporte técnico${assignedNotice}`,
+            message: `Localidad: ${order.town || 'Red general'} · ${order.title || 'Solicitud de Atención a clientes'}. Pendiente de atención.`,
             type: 'new_order',
             orderId: order.id
           });
@@ -2495,10 +2495,10 @@ function handleNetworkOrderEvent(payload) {
       if (!isOwnCreator && isSoporte) {
         const shouldNotify = hasAssignment ? isAssignedToMe : true;
         if (shouldNotify) {
-          const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
+          const assignedNotice = hasAssignment ? ' (Asignado formalmente a su usuario)' : '';
           notifyNetworkDetailEvent({
-            title: `Nuevo reporte de red${assignedNotice}`,
-            message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · ${order.title || 'Reportado por Atención a clientes'}`,
+            title: `Nuevo reporte de incidencia de red${assignedNotice}`,
+            message: `Cliente: ${order.clientName || 'Cliente'} (${order.town || 'Red'}) · ${order.title || 'Reporte de red'}. Pendiente de atención técnica.`,
             type: 'new_order',
             orderId: order.id
           });
@@ -2513,8 +2513,8 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Atención a clientes ha iniciado la atención',
-          message: `${order.clientName || 'Comunidad'} (${order.town || 'Red'}) · En atención por ${payload.byName || 'Atención a clientes'}.`,
+          title: 'Atención a clientes inició la atención',
+          message: `El requerimiento #${order.id} se encuentra en atención formal por ${payload.byName || 'Atención a clientes'}.`,
           type: 'attending',
           orderId: order.id
         });
@@ -2525,8 +2525,8 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Soporte técnico ha iniciado la atención',
-          message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · En atención por ${payload.byName || 'Soporte'}.`,
+          title: 'Soporte técnico inició la atención técnica',
+          message: `El reporte #${order.id} (${order.clientName || 'Cliente'}) se encuentra en atención por ${payload.byName || 'Soporte técnico'}.`,
           type: 'attending',
           orderId: order.id
         });
@@ -2539,8 +2539,8 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Atención a clientes atendió requerimiento',
-          message: `${order.clientName || 'Comunidad'} · ${order.solution ? order.solution.slice(0, 65) + '...' : 'Revisa la respuesta.'}`,
+          title: 'Requerimiento respondido por Atención a clientes',
+          message: `Requerimiento #${order.id}: ${order.solution ? order.solution.slice(0, 80) : 'Respuesta disponible'}. Pendiente de su verificación formal.`,
           type: 'resolved',
           orderId: order.id
         });
@@ -2550,10 +2550,10 @@ function handleNetworkOrderEvent(payload) {
       const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
       const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
       if (shouldNotify) {
-        const solSnippet = order.solution ? `Solución: ${order.solution.slice(0, 65)}...` : 'Consulta con el cliente para validar.';
+        const solSnippet = order.solution ? `Solución técnica: ${order.solution.slice(0, 80)}` : 'Solución técnica aplicada';
         notifyNetworkDetailEvent({
-          title: 'Detalle resuelto por Soporte técnico',
-          message: `${order.clientName || 'Cliente'} · ${solSnippet}`,
+          title: 'Reporte de red resuelto por Soporte técnico',
+          message: `Reporte #${order.id} (${order.clientName || 'Cliente'}): ${solSnippet}. Por favor valide la entera conformidad con el cliente.`,
           type: 'resolved',
           orderId: order.id
         });
@@ -2565,8 +2565,8 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Requerimiento devuelto por Soporte',
-          message: `${order.clientName || 'Comunidad'} · ${order.note ? order.note.slice(0, 65) + '...' : 'Se solicita aclaración.'}`,
+          title: 'Requerimiento devuelto por Soporte técnico',
+          message: `Requerimiento #${order.id}: ${order.note ? order.note.slice(0, 80) : 'Se solicita aclaración técnica'}.`,
           type: 'returned',
           orderId: order.id
         });
@@ -2574,10 +2574,10 @@ function handleNetworkOrderEvent(payload) {
     } else {
       const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
       if (shouldNotify) {
-        const reasonSnippet = order.note ? `Motivo: ${order.note.slice(0, 65)}...` : 'El cliente indica que continúa la falla.';
+        const reasonSnippet = order.note ? `Motivo: ${order.note.slice(0, 80)}` : 'El cliente indica persistencia de la incidencia';
         notifyNetworkDetailEvent({
-          title: 'Reporte devuelto a Soporte técnico',
-          message: `${order.clientName || 'Cliente'} · ${reasonSnippet}`,
+          title: 'Reporte devuelto por Atención a clientes',
+          message: `Reporte #${order.id} (${order.clientName || 'Cliente'}): ${reasonSnippet}. Se requiere nueva intervención técnica.`,
           type: 'returned',
           orderId: order.id
         });
@@ -2589,8 +2589,8 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Requerimiento cerrado a conformidad',
-          message: `Soporte confirmó respuesta satisfactoria de ${order.clientName || 'Comunidad'}.`,
+          title: 'Requerimiento concluido a conformidad',
+          message: `Soporte técnico verificó la respuesta y concluyó formalmente el requerimiento #${order.id}.`,
           type: 'confirmed',
           orderId: order.id
         });
@@ -2599,8 +2599,8 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Reporte concluido a conformidad',
-          message: `${order.clientName || 'Cliente'} confirmó que el servicio quedó funcionando.`,
+          title: 'Reporte de red finalizado a conformidad',
+          message: `Atención a clientes corroboró con ${order.clientName || 'el cliente titular'} la solución de la falla. Reporte #${order.id} cerrado.`,
           type: 'confirmed',
           orderId: order.id
         });
@@ -2608,8 +2608,8 @@ function handleNetworkOrderEvent(payload) {
     }
   } else if (transition === 'retaken' && isSoporte && payload.byUserId !== user.id) {
     notifyNetworkDetailEvent({
-      title: 'Reporte reasignado en Soporte',
-      message: `${payload.byName || 'Otro compañero'} retomó el reporte de ${order.clientName || 'Cliente'}.`,
+      title: 'Atención técnica reasignada en Soporte',
+      message: `${payload.byName || 'Un integrante del equipo'} asumió la atención técnica del reporte #${order.id} (${order.clientName || 'Cliente'}).`,
       type: 'retaken',
       orderId: order.id
     });
@@ -2682,10 +2682,10 @@ async function checkNetworkOrderNotifications() {
           if (isSupportToAttention) {
             const shouldNotifyNew = hasAssignment ? isAssignedToMe : (userHasRole('atencion_clientes') && !isOwnCreator);
             if (shouldNotifyNew) {
-              const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
+              const assignedNotice = hasAssignment ? ' (Asignado formalmente a su usuario)' : '';
               notifyNetworkDetailEvent({
-                title: `Nuevo requerimiento de Soporte${assignedNotice}`,
-                message: `${client} (${place}) · ${orderTitle}`,
+                title: `Nuevo requerimiento de Soporte técnico${assignedNotice}`,
+                message: `Localidad: ${place} · ${orderTitle}. Pendiente de atención.`,
                 type: 'new_order',
                 orderId: order.id
               });
@@ -2693,10 +2693,10 @@ async function checkNetworkOrderNotifications() {
           } else {
             const shouldNotifyNew = hasAssignment ? isAssignedToMe : (userHasRole('administrador', 'admin') && !isOwnCreator);
             if (shouldNotifyNew) {
-              const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
+              const assignedNotice = hasAssignment ? ' (Asignado formalmente a su usuario)' : '';
               notifyNetworkDetailEvent({
-                title: `Nuevo reporte de red${assignedNotice}`,
-                message: `${client} (${place}) · ${orderTitle}`,
+                title: `Nuevo reporte de incidencia de red${assignedNotice}`,
+                message: `Cliente: ${client} (${place}) · ${orderTitle}. Pendiente de atención técnica.`,
                 type: 'new_order',
                 orderId: order.id
               });
@@ -2732,10 +2732,10 @@ async function checkNetworkOrderNotifications() {
               ? (hasCreator ? isCreatedByMe : userHasRole('administrador', 'admin'))
               : (hasCreator ? isCreatedByMe : userHasRole('atencion_clientes'));
             if (shouldNotifyAttending) {
-              const actor = order.reviewOpenedByName || (isSupportToAttention ? 'Atención a clientes' : 'Soporte');
+              const actor = order.reviewOpenedByName || (isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico');
               notifyNetworkDetailEvent({
-                title: `${isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico'} ha iniciado la atención`,
-                message: `${client} (${place}) · Atendido por ${actor}.`,
+                title: `${isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico'} inició la atención`,
+                message: `El detalle #${order.id} (${client}) se encuentra en atención formal por ${actor}.`,
                 type: 'attending',
                 orderId: order.id
               });
@@ -2744,8 +2744,8 @@ async function checkNetworkOrderNotifications() {
             if (isSupportToAttention) {
               if (userHasRole('administrador', 'admin')) {
                 notifyNetworkDetailEvent({
-                  title: 'Atención a clientes atendió requerimiento',
-                  message: `${client} · ${order.technicianReport?.solution ? order.technicianReport.solution.slice(0, 65) + '...' : 'Revisa la respuesta.'}`,
+                  title: 'Requerimiento respondido por Atención a clientes',
+                  message: `Requerimiento #${order.id} (${client}): ${order.technicianReport?.solution ? order.technicianReport.solution.slice(0, 80) : 'Respuesta disponible'}. Pendiente de su verificación formal.`,
                   type: 'resolved',
                   orderId: order.id
                 });
@@ -2756,8 +2756,8 @@ async function checkNetworkOrderNotifications() {
               if (shouldNotifyResolved) {
                 const sol = order.technicianReport?.solution || '';
                 notifyNetworkDetailEvent({
-                  title: 'Detalle resuelto por Soporte técnico',
-                  message: `${client} · ${sol ? 'Solución: ' + sol.slice(0, 65) + '...' : 'Consulta con el cliente para validar.'}`,
+                  title: 'Reporte de red resuelto por Soporte técnico',
+                  message: `Reporte #${order.id} (${client}): ${sol ? sol.slice(0, 80) : 'Solución técnica aplicada'}. Por favor valide la conformidad con el cliente.`,
                   type: 'resolved',
                   orderId: order.id
                 });
@@ -2766,10 +2766,10 @@ async function checkNetworkOrderNotifications() {
           } else if (currentStatus === 'devuelto_soporte') {
             const shouldNotifyReturned = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin');
             if (shouldNotifyReturned) {
-              const lastNote = (Array.isArray(order.followUps) ? order.followUps.slice(-1)[0]?.note : '') || 'Continúa la falla';
+              const lastNote = (Array.isArray(order.followUps) ? order.followUps.slice(-1)[0]?.note : '') || 'Incidencia no resuelta';
               notifyNetworkDetailEvent({
-                title: 'Reporte devuelto a Soporte técnico',
-                message: `${client} · ${lastNote.slice(0, 65)}...`,
+                title: 'Reporte devuelto por Atención a clientes',
+                message: `Reporte #${order.id} (${client}): ${lastNote.slice(0, 80)}. Se requiere nueva intervención técnica.`,
                 type: 'returned',
                 orderId: order.id
               });
@@ -2778,8 +2778,8 @@ async function checkNetworkOrderNotifications() {
             const shouldNotifyConfirmed = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin');
             if (shouldNotifyConfirmed) {
               notifyNetworkDetailEvent({
-                title: 'Reporte concluido a conformidad',
-                message: `${client} confirmó servicio restablecido.`,
+                title: 'Reporte de red finalizado a conformidad',
+                message: `Atención a clientes corroboró con ${client} el servicio restablecido. Reporte #${order.id} concluido.`,
                 type: 'confirmed',
                 orderId: order.id
               });
