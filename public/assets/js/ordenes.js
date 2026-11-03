@@ -1252,9 +1252,17 @@ async function saveWO() {
 
   const ok = await saveRecord('workOrders', savedOrder);
   if (!ok) return;
-  if (savedOrder.detailKind === 'network' && typeof broadcastNetworkOrderChange === 'function') {
-    broadcastNetworkOrderChange(savedOrder, editingWOId ? 'updated' : 'new_order');
+
+  CM('wo-mo');
+
+  try {
+    if (savedOrder.detailKind === 'network' && typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(savedOrder, editingWOId ? 'updated' : 'new_order');
+    }
+  } catch (e) {
+    console.warn('broadcastNetworkOrderChange error:', e);
   }
+
   if (!editingWOId) {
     const search = document.getElementById('wo-search');
     if (search) search.value = '';
@@ -1266,7 +1274,6 @@ async function saveWO() {
     renderOrderFilterMenus();
   }
   notify(editingWOId ? 'Detalle actualizado y sincronizado.' : 'Detalle creado y visible en la lista.');
-  CM('wo-mo');
   await loadOrderPage({scroll:!editingWOId});
 }
 
@@ -2339,8 +2346,12 @@ async function submitNetworkResolution() {
   }
 
   CM('network-resolve-mo');
-  if (typeof broadcastNetworkOrderChange === 'function') {
-    broadcastNetworkOrderChange(order, 'resolved');
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(order, 'resolved');
+    }
+  } catch (e) {
+    console.warn('broadcastNetworkOrderChange error:', e);
   }
   notify('Detalle resuelto. Se notificó a Atención a clientes en tiempo real.', 'ok');
   await loadOrderPage();
@@ -2369,15 +2380,25 @@ async function startAttendingNetworkOrder(id) {
   appendSharedNetworkFollowUp(order, 'en_atencion', 'En atención', `${userName} comenzó a atender este reporte.`);
   setUpdatedAudit(order, 'comenzó a atender detalle de red');
 
-  const ok = await saveRecord('workOrders', order);
-  if (!ok) return notify('No se pudo iniciar la atención. Intenta de nuevo.', 'err');
+  // Actualización visual reactiva inmediata en la tabla
+  renderWOs();
 
-  if (typeof broadcastNetworkOrderChange === 'function') {
-    broadcastNetworkOrderChange(order, 'attending');
+  const ok = await saveRecord('workOrders', order);
+  if (!ok) {
+    renderWOs();
+    return notify('No se pudo iniciar la atención. Intenta de nuevo.', 'err');
+  }
+
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(order, 'attending');
+    }
+  } catch (e) {
+    console.warn('broadcastNetworkOrderChange error:', e);
   }
 
   notify(`Comenzaste a atender el reporte #${getOrderFolio(order)}. Ahora puedes resolverlo al terminar.`, 'ok');
-  await renderWOs();
+  renderWOs();
 }
 
 async function takeOverNetworkOrder(id) {
@@ -2404,11 +2425,20 @@ async function takeOverNetworkOrder(id) {
   appendSharedNetworkFollowUp(order, 'retomado', 'Retomado por Soporte', `${userName} retomó este reporte (antes: ${prevAssignee}).`);
   setUpdatedAudit(order, 'retomó detalle de red');
 
-  const ok = await saveRecord('workOrders', order);
-  if (!ok) return notify('No se pudo guardar la reasignación. Intenta de nuevo.', 'err');
+  renderWOs();
 
-  if (typeof broadcastNetworkOrderChange === 'function') {
-    broadcastNetworkOrderChange(order, 'retaken');
+  const ok = await saveRecord('workOrders', order);
+  if (!ok) {
+    renderWOs();
+    return notify('No se pudo guardar la reasignación. Intenta de nuevo.', 'err');
+  }
+
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(order, 'retaken');
+    }
+  } catch (e) {
+    console.warn('broadcastNetworkOrderChange error:', e);
   }
 
   notify(`Has retomado el reporte #${getOrderFolio(order)}. Ahora está asignado a ti.`, 'ok');
@@ -2487,8 +2517,12 @@ async function submitNetworkReturn() {
   }
 
   CM('network-return-mo');
-  if (typeof broadcastNetworkOrderChange === 'function') {
-    broadcastNetworkOrderChange(order, 'returned');
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(order, 'returned');
+    }
+  } catch (e) {
+    console.warn('broadcastNetworkOrderChange error:', e);
   }
   notify('Detalle devuelto a Soporte. Soporte ha sido notificado en tiempo real.', 'warn');
   await loadOrderPage();
@@ -2527,8 +2561,12 @@ async function confirmNetworkClientSatisfied(id) {
     return;
   }
 
-  if (typeof broadcastNetworkOrderChange === 'function') {
-    broadcastNetworkOrderChange(order, 'confirmed');
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(order, 'confirmed');
+    }
+  } catch (e) {
+    console.warn('broadcastNetworkOrderChange error:', e);
   }
   notify('Detalle completado y cerrado exitosamente.', 'ok');
   await loadOrderPage();

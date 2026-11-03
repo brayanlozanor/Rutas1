@@ -2143,7 +2143,7 @@ async function saveDB() {
 }
 
 // Guarda un único registro de forma rápida sin enviar todo el estado
-async function saveRecord(listKey, record) {
+async function saveRecord(listKey, record, { notifyUser = false } = {}) {
     if (rejectBlockedMutation()) return false;
     if (!listKey || !record?.id) {
         console.warn('saveRecord: listKey o record.id faltante');
@@ -2170,7 +2170,7 @@ async function saveRecord(listKey, record) {
         clearCloudOfflineStatus();
         setSyncStatus('Guardado', 'ok');
         setTimeout(() => setSyncStatus('Sincronizado', 'ok'), 1200);
-        if (typeof notify === 'function') notify('Guardado correctamente.');
+        if (notifyUser && typeof notify === 'function') notify('Guardado correctamente.');
         return true;
     } catch(e) {
         console.log('saveRecord fallo; se cancela el cambio local', e);

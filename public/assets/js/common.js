@@ -1934,6 +1934,12 @@ function getStoredNetworkStateCache() {
   }
 }
 
+function setStoredNetworkStateCache(cache) {
+  try {
+    localStorage.setItem(NETOPS_NETWORK_CACHE_KEY, JSON.stringify(cache || {}));
+  } catch (e) {}
+}
+
 /* ==========================================================================
    CONFIGURACIÓN Y REPETICIÓN PERIÓDICA DE NOTIFICACIONES SEGÚN PRIORIDAD
    (Baja: 45m, Media: 30m, Alta: 20m, Muy Alta: 10m - Administrable y editable)
@@ -2096,38 +2102,16 @@ function isOrderCreatorOrAssigner(order, user) {
  * Emite un evento en tiempo real tras mutar una orden de red (creación, resolución, devolución o confirmación).
  */
 function broadcastNetworkOrderChange(order, transition) {
-  if (!order || order.detailKind !== 'network') return;
-  const user = getCurrentUser();
-  const cache = getStoredNetworkStateCache();
-  cache[order.id] = {
-    status: order.status || 'pendiente',
-    updatedAt: order.updatedAt || new Date().toISOString(),
-    title: order.title || order.description || '',
-    clientName: order.clientName || '',
-    town: order.town || order.nodeName || '',
-    assignedUserId: order.assignedUserId || '',
-    assignedUserName: order.assignedUserName || '',
-    reviewOpenedById: order.reviewOpenedById || '',
-    reviewOpenedByName: order.reviewOpenedByName || '',
-    reviewOpenedAt: order.reviewOpenedAt || '',
-    createdById: order.createdById || order.createdBy || '',
-    createdByName: order.createdByName || '',
-    createdByUsername: order.createdByUsername || '',
-    lastTransition: transition
-  };
-  setStoredNetworkStateCache(cache);
-
-  const payload = {
-    type: 'NETWORK_ORDER_EVENT',
-    transition,
-    orderId: order.id,
-    order: {
-      id: order.id,
-      status: order.status,
+  try {
+    if (!order || order.detailKind !== 'network') return;
+    const user = getCurrentUser();
+    const cache = getStoredNetworkStateCache();
+    cache[order.id] = {
+      status: order.status || 'pendiente',
+      updatedAt: order.updatedAt || new Date().toISOString(),
+      title: order.title || order.description || '',
       clientName: order.clientName || '',
       town: order.town || order.nodeName || '',
-      title: order.title || order.description || '',
-      category: order.category || '',
       assignedUserId: order.assignedUserId || '',
       assignedUserName: order.assignedUserName || '',
       reviewOpenedById: order.reviewOpenedById || '',
@@ -2136,23 +2120,49 @@ function broadcastNetworkOrderChange(order, transition) {
       createdById: order.createdById || order.createdBy || '',
       createdByName: order.createdByName || '',
       createdByUsername: order.createdByUsername || '',
-      solution: order.technicianReport?.solution || '',
-      note: (Array.isArray(order.followUps) ? order.followUps.slice(-1)[0]?.note : '') || ''
-    },
-    byUserId: user.id || '',
-    byName: user.name || user.username || '',
-    timestamp: Date.now()
-  };
+      lastTransition: transition
+    };
+    setStoredNetworkStateCache(cache);
 
-  try {
-    if (_netopsNetworkChannel) {
-      _netopsNetworkChannel.postMessage(payload);
-    }
-  } catch (e) {}
+    const payload = {
+      type: 'NETWORK_ORDER_EVENT',
+      transition,
+      orderId: order.id,
+      order: {
+        id: order.id,
+        status: order.status,
+        clientName: order.clientName || '',
+        town: order.town || order.nodeName || '',
+        title: order.title || order.description || '',
+        category: order.category || '',
+        assignedUserId: order.assignedUserId || '',
+        assignedUserName: order.assignedUserName || '',
+        reviewOpenedById: order.reviewOpenedById || '',
+        reviewOpenedByName: order.reviewOpenedByName || '',
+        reviewOpenedAt: order.reviewOpenedAt || '',
+        createdById: order.createdById || order.createdBy || '',
+        createdByName: order.createdByName || '',
+        createdByUsername: order.createdByUsername || '',
+        solution: order.technicianReport?.solution || '',
+        note: (Array.isArray(order.followUps) ? order.followUps.slice(-1)[0]?.note : '') || ''
+      },
+      byUserId: user.id || '',
+      byName: user.name || user.username || '',
+      timestamp: Date.now()
+    };
 
-  try {
-    localStorage.setItem(NETOPS_EVENT_STORAGE_KEY, JSON.stringify(payload));
-  } catch (e) {}
+    try {
+      if (_netopsNetworkChannel) {
+        _netopsNetworkChannel.postMessage(payload);
+      }
+    } catch (e) {}
+
+    try {
+      localStorage.setItem(NETOPS_EVENT_STORAGE_KEY, JSON.stringify(payload));
+    } catch (e) {}
+  } catch (err) {
+    console.warn('broadcastNetworkOrderChange error:', err);
+  }
 }
 
 function handleNetworkOrderEvent(payload) {
