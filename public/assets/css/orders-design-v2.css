@@ -2420,19 +2420,20 @@
   display: inline-flex !important;
   width: auto !important;
   min-width: 0 !important;
-  height: 30px !important;
+  height: 29px !important;
   align-items: center !important;
-  gap: 4px !important;
-  padding: 0 8px !important;
+  gap: 3px !important;
+  padding: 0 7px !important;
   border-radius: 7px !important;
   background: #2563eb !important;
   border: 1px solid #1d4ed8 !important;
   color: #ffffff !important;
-  font-size: 11px !important;
+  font-size: 10.5px !important;
   line-height: 1 !important;
   font-weight: 800 !important;
   cursor: pointer !important;
   white-space: nowrap !important;
+  flex-shrink: 0 !important;
   box-shadow: 0 2px 5px rgba(37, 99, 235, 0.22) !important;
   transition: transform 0.15s, background 0.15s !important;
 }
@@ -2446,19 +2447,20 @@
   display: inline-flex !important;
   width: auto !important;
   min-width: 0 !important;
-  height: 30px !important;
+  height: 29px !important;
   align-items: center !important;
-  gap: 4px !important;
-  padding: 0 8px !important;
+  gap: 3px !important;
+  padding: 0 7px !important;
   border-radius: 7px !important;
   background: #059669 !important;
   border: 1px solid #047857 !important;
   color: #ffffff !important;
-  font-size: 11px !important;
+  font-size: 10.5px !important;
   line-height: 1 !important;
   font-weight: 800 !important;
   cursor: pointer !important;
   white-space: nowrap !important;
+  flex-shrink: 0 !important;
   box-shadow: 0 2px 5px rgba(5, 150, 105, 0.22) !important;
   transition: transform 0.15s, background 0.15s !important;
 }
@@ -2472,19 +2474,20 @@
   display: inline-flex !important;
   width: auto !important;
   min-width: 0 !important;
-  height: 30px !important;
+  height: 29px !important;
   align-items: center !important;
-  gap: 4px !important;
-  padding: 0 8px !important;
+  gap: 3px !important;
+  padding: 0 7px !important;
   border-radius: 7px !important;
   background: #fff1f2 !important;
   border: 1px solid #fecdd3 !important;
   color: #be123c !important;
-  font-size: 11px !important;
+  font-size: 10.5px !important;
   line-height: 1 !important;
   font-weight: 800 !important;
   cursor: pointer !important;
   white-space: nowrap !important;
+  flex-shrink: 0 !important;
   transition: background 0.15s, transform 0.15s !important;
 }
 
@@ -2496,20 +2499,21 @@
 .orders-page .order-actions .net-btn-retake {
   display: inline-flex !important;
   width: auto !important;
-  height: 30px !important;
-  min-height: 30px !important;
+  height: 29px !important;
+  min-height: 29px !important;
   align-items: center !important;
-  gap: 4px !important;
-  padding: 0 8px !important;
+  gap: 3px !important;
+  padding: 0 7px !important;
   border-radius: 7px !important;
   background: #f8fafc !important;
   border: 1px solid #cbd5e1 !important;
   color: #334155 !important;
-  font-size: 11px !important;
+  font-size: 10.5px !important;
   line-height: 1 !important;
   font-weight: 800 !important;
   cursor: pointer !important;
   white-space: nowrap !important;
+  flex-shrink: 0 !important;
   transition: all 0.15s ease !important;
 }
 
