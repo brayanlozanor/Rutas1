@@ -1397,19 +1397,34 @@ async function reopenCompletedWO(id) {
 }
 
 function getOrderStatusMeta(order) {
-  if (order?.status === 'completada') return {label:getOrderCategory(order) === 'instalacion' ? 'Completado' : 'Solucionado',className:'is-done'};
+  if (order?.status === 'completada') return {label:getOrderCategory(order) === 'instalacion' ? 'Completado' : 'Solucionado',className:'is-done',title:'Completado / Solucionado'};
   if (order?.status === 'resuelto_soporte') {
     const isSentToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(getOrderCategory(order));
-    return {label: isSentToAttention ? 'Respondido (Validar)' : 'Resuelto por Soporte (Validar)', className:'is-resolving'};
+    const actor = order.technicianReport?.completedByName || order.reviewOpenedByName || order.assignedUserName;
+    return {
+      label: isSentToAttention ? 'Respondido' : 'Resuelto',
+      title: isSentToAttention ? (actor ? `Respondido por Atención (${actor}) - Pendiente validar` : 'Respondido por Atención - Pendiente validar') : (actor ? `Resuelto por Soporte (${actor}) - Pendiente validar con el cliente` : 'Resuelto por Soporte - Pendiente validar con el cliente'),
+      className: 'is-resolving'
+    };
   }
-  if (order?.status === 'devuelto_soporte') return {label:'Devuelto a Soporte',className:'is-returned'};
-  if (order?.status === 'no_realizado') return {label:'No solucionado',className:'is-unsolved'};
-  if (order?.status === 'revisado') return {label:'Revisado',className:'is-reviewed'};
+  if (order?.status === 'devuelto_soporte') {
+    return {
+      label: 'Devuelto',
+      title: order.returnByName ? `Devuelto a Soporte por ${order.returnByName}: ${order.returnReason || 'Cliente no conforme'}` : (order.returnReason ? `Devuelto a Soporte: ${order.returnReason}` : 'Devuelto a Soporte por Atención a clientes'),
+      className: 'is-returned'
+    };
+  }
+  if (order?.status === 'no_realizado') return {label:'No solucionado',className:'is-unsolved',title:'No solucionado'};
+  if (order?.status === 'revisado') return {label:'Revisado',className:'is-reviewed',title:'Revisado'};
   if (order?.status === 'en_revision') {
     const actor = order.reviewOpenedByName || order.assignedUserName;
-    return {label: actor ? `En atención (${actor})` : 'En atención', className: 'is-reviewing'};
+    return {
+      label: 'En atención',
+      title: actor ? `En atención por: ${actor}` : 'En atención por Soporte',
+      className: 'is-reviewing'
+    };
   }
-  return {label:'Pendiente',className:'is-pending'};
+  return {label:'Pendiente',className:'is-pending',title:'Pendiente de atención'};
 }
 
 function orderReviewOpenedSummary(order) {
@@ -1937,7 +1952,7 @@ async function openOrderTechnicianReport(orderId) {
     ${visibleFollowUps.length ? `<section class="order-report-block order-follow-up-history"><small>Seguimiento</small>${visibleFollowUps.slice().reverse().map(item => `<div><strong>${orderEscape(item.label || item.action || 'Actualización')}</strong><span>${orderEscape(item.at ? new Date(item.at).toLocaleString('es-MX') : '')}${item.byName ? ` · ${orderEscape(item.byName)}` : ''}</span>${item.note ? `<p>${orderEscape(item.note)}</p>` : ''}</div>`).join('')}</section>` : ''}
     ${materialItems.length ? `<section class="order-report-block"><small>Materiales registrados</small><div class="order-report-materials">${materialItems.map(item => `<span><strong>${orderEscape(item.name || item.nombre || 'Material')}</strong> · ${orderEscape(item.quantity ?? item.cantidad ?? '')} ${orderEscape(item.unit || item.unidad || '')}</span>`).join('')}</div></section>` : ''}
     ${photos.length ? `<section class="order-report-evidence"><small>${completed ? 'Evidencias' : 'Imágenes adjuntas al crear el detalle'}</small><div>${photos.map((photo,index) => `<button type="button" onclick="openOrderReportEvidence('${orderEscape(order.id)}',${index})"><img src="${orderEscape(photo)}" alt="Evidencia ${index + 1}"><span>${index + 1}</span></button>`).join('')}</div></section>` : (completed ? '<div class="order-report-empty">No se adjuntaron evidencias gráficas.</div>' : '')}
-    ${!completed ? (order.status === 'resuelto_soporte' ? '<div class="order-report-pending" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0"><strong>✓ Resuelto por Soporte:</strong> En espera de que Atención a clientes confirme la satisfacción con el cliente.</div>' : (order.status === 'devuelto_soporte' ? '<div class="order-report-pending" style="background:#fff1f2;color:#be123c;border-color:#fecdd3"><strong>⚠️ Devuelto a Soporte:</strong> Atención a clientes indicó que el cliente sigue presentando fallas.</div>' : '<div class="order-report-pending">Esta orden sigue pendiente. Se muestran los datos capturados al registrarla.</div>')) : ''}`;
+    ${!completed ? (order.status === 'resuelto_soporte' ? '<div class="order-report-pending" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0"><strong>✓ Resuelto por Soporte:</strong> En espera de que Atención a clientes confirme la satisfacción con el cliente.</div>' : (order.status === 'devuelto_soporte' ? `<div class="order-report-pending" style="background:#fff1f2;color:#be123c;border-color:#fecdd3"><strong>⚠️ Devuelto a Soporte:</strong> ${orderEscape(order.returnReason || 'Atención a clientes indicó que el cliente sigue presentando fallas.')}${order.returnByName ? `<div style="font-size:12px;margin-top:5px;color:#9f1239;">Devuelto por: <strong>${orderEscape(order.returnByName)}</strong></div>` : ''}</div>` : '<div class="order-report-pending">Esta orden sigue pendiente. Se muestran los datos capturados al registrarla.</div>')) : ''}`;
   OM('order-tech-report-mo');
 }
 
@@ -2088,7 +2103,7 @@ function renderWOs() {
                 </td>
                 <td data-label="Tipo">${orderEscape(getOrderDisplayType(w))}</td>
                 <td data-label="Prioridad"><span class="priority-badge priority-${orderEscape(w.priority || 'media')}"><span class="priority-dot"></span>${orderEscape(pl(w.priority || 'media'))}</span></td>
-                <td data-label="Estado"><span class="order-status-badge ${rowStatus.className}">${rowStatus.label}</span></td>
+                <td data-label="Estado"><span class="order-status-badge ${rowStatus.className}" title="${orderEscape(rowStatus.title || rowStatus.label)}">${orderEscape(rowStatus.label)}</span></td>
                 <td data-label="Acción">
                   <div class="order-actions">
                     ${networkQuickActions}
@@ -2228,10 +2243,11 @@ function openResolveNetworkModal(id) {
       <div class="netres-summary-detail">
         <strong>Detalle reportado:</strong> ${orderEscape(order.description || order.title || orderCategoryLabel(getOrderCategory(order)))}
       </div>
-      ${order.status === 'devuelto_soporte' && returnFollowUp ? `
-        <div class="netres-alert-returned">
-          <strong>⚠️ Detalle devuelto por Atención a clientes tras consultar con el cliente:</strong>
-          <span>${orderEscape(returnFollowUp.note || 'El cliente indica que continúa la falla.')}</span>
+      ${order.status === 'devuelto_soporte' ? `
+        <div class="netres-alert-returned" style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:12px 14px;border-radius:9px;margin-top:12px;">
+          <div style="font-size:12px;font-weight:800;display:flex;align-items:center;gap:6px;">⚠️ Motivo de devolución (Cliente no conforme):</div>
+          <div style="margin-top:5px;font-size:13px;font-weight:600;line-height:1.45;color:#7f1d1d;">${orderEscape(order.returnReason || returnFollowUp?.note || 'El cliente indica que continúa la falla.')}</div>
+          ${order.returnByName ? `<div style="font-size:11px;color:#991b1b;margin-top:4px;opacity:0.9;">Devuelto por: <strong>${orderEscape(order.returnByName)}</strong></div>` : ''}
         </div>
       ` : ''}
     `;
@@ -2453,6 +2469,13 @@ async function submitNetworkReturn() {
   order.status = 'devuelto_soporte';
   order.updatedAt = now;
   order.updatedById = currentUser.id || '';
+  order.returnReason = reason;
+  order.returnByName = userName;
+  order.returnAt = now;
+  order.reviewOpenedById = '';
+  order.reviewOpenedByName = '';
+  order.reviewOpenedByUsername = '';
+  order.reviewOpenedAt = '';
 
   appendSharedNetworkFollowUp(order, 'devuelto_soporte', 'Devuelto a Soporte (Cliente no conforme)', reason);
   setUpdatedAudit(order, 'devolvió detalle a Soporte tras consultar con cliente');

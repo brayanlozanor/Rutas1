@@ -27,7 +27,7 @@
 .orders-page .order-table td{height:52px!important;padding:8px 10px!important;font-size:9px!important}
 .orders-page .order-folio{display:inline-flex;padding:4px 7px;border-radius:6px;background:#e9f3ff;color:#0871dd;font-size:8px}
 .orders-page .order-actions{justify-content:center!important}
-.orders-page .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake){width:31px!important;height:31px!important;min-width:31px!important;min-height:31px!important;padding:0!important;border-radius:7px!important;font-size:0!important}
+.orders-page .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend){width:31px!important;height:31px!important;min-width:31px!important;min-height:31px!important;padding:0!important;border-radius:7px!important;font-size:0!important}
 .orders-page .order-actions .btn:before{font-size:14px!important;line-height:1!important}
 .orders-page .order-actions .order-view-report:before{content:"◉"}
 .orders-page .order-actions .btn.bc:before{content:"✎"}
