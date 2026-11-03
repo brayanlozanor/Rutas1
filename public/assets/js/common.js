@@ -1054,17 +1054,79 @@ function applyPagePermissions() {
 }
 
 
+/* ==========================================================================
+   CENTRO DE NOTIFICACIONES UNIFICADO (Campana flotante, registro histórico y pendientes)
+   ========================================================================== */
+
+const NETOPS_INBOX_STORAGE_KEY = 'netops_network_notifications_inbox_v1';
+
+function getStoredNotificationsInbox() {
+  try {
+    return JSON.parse(localStorage.getItem(NETOPS_INBOX_STORAGE_KEY) || '[]') || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function setStoredNotificationsInbox(items) {
+  try {
+    localStorage.setItem(NETOPS_INBOX_STORAGE_KEY, JSON.stringify((items || []).slice(0, 100)));
+  } catch (e) {}
+}
+
+function addNotificationToInbox({ id, title, message, type, orderId = '', url = '', createdAt = new Date().toISOString() }) {
+  const inbox = getStoredNotificationsInbox();
+  // Evitar duplicados idénticos en menos de 5 segundos
+  const existingIdx = inbox.findIndex(x => x.id === id || (x.orderId === orderId && x.type === type && Math.abs(new Date(x.createdAt).getTime() - new Date(createdAt).getTime()) < 5000));
+  if (existingIdx >= 0) {
+    inbox[existingIdx].unread = true;
+    inbox[existingIdx].createdAt = createdAt;
+  } else {
+    inbox.unshift({
+      id: id || ('notif_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)),
+      title,
+      message,
+      type,
+      orderId,
+      url,
+      unread: true,
+      createdAt
+    });
+  }
+  setStoredNotificationsInbox(inbox);
+  renderNotificationCenter();
+}
+
+function markNotificationAsRead(id, targetUrl = '') {
+  const inbox = getStoredNotificationsInbox();
+  const item = inbox.find(x => x.id === id);
+  if (item) {
+    item.unread = false;
+    setStoredNotificationsInbox(inbox);
+    renderNotificationCenter();
+  }
+  if (targetUrl) {
+    window.location.href = targetUrl;
+  }
+}
+
+function markAllNotificationsAsRead() {
+  const inbox = getStoredNotificationsInbox();
+  inbox.forEach(x => { x.unread = false; });
+  setStoredNotificationsInbox(inbox);
+  renderNotificationCenter();
+}
+
 function ensureNotificationCenter() {
-    if (!userHasRole('administrador', 'admin')) return;
     if (!document.getElementById('notification-bell')) {
         const btn = document.createElement('button');
         btn.id = 'notification-bell';
         btn.className = 'notification-bell floating-notification-bell';
         btn.type = 'button';
         btn.setAttribute('aria-label', 'Abrir notificaciones');
-        btn.title = 'Notificaciones';
+        btn.title = 'Centro de notificaciones';
         btn.onclick = openNotificationPanel;
-        btn.innerHTML = '<span class="notification-bell-icon" aria-hidden="true">!</span><span id="notification-count">0</span>';
+        btn.innerHTML = '<span class="notification-bell-icon" aria-hidden="true">🔔</span><span id="notification-count">0</span>';
         document.body.appendChild(btn);
     }
     if (!document.getElementById('notification-panel-mo')) {
@@ -1072,15 +1134,18 @@ function ensureNotificationCenter() {
         modal.id = 'notification-panel-mo';
         modal.className = 'mo';
         modal.innerHTML = `
-            <div class="md notification-panel" role="dialog" aria-modal="true">
-                <div class="modal-head">
+            <div class="md notification-panel" role="dialog" aria-modal="true" style="max-width:620px;">
+                <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
                     <div>
-                        <h2>Notificaciones</h2>
-                        <p>Solicitudes de eliminacion pendientes.</p>
+                        <h2 style="margin:0 0 4px;font-size:20px;">Centro de Notificaciones</h2>
+                        <p id="notification-panel-sub" style="margin:0;color:#64748b;font-size:12px;">Avisos de detalles de red y actividades en tiempo real.</p>
                     </div>
-                    <button class="btn bgh" onclick="CM('notification-panel-mo')">Cerrar</button>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <button class="btn bgh" type="button" style="font-size:11px;padding:4px 9px;" onclick="markAllNotificationsAsRead()">Marcar leídas</button>
+                        <button class="btn bgh" type="button" style="font-size:11px;padding:4px 9px;" onclick="CM('notification-panel-mo')">Cerrar</button>
+                    </div>
                 </div>
-                <div id="notification-list" class="notification-list"></div>
+                <div id="notification-list" class="notification-list" style="max-height:60vh;overflow-y:auto;padding-right:4px;"></div>
             </div>`;
         document.body.appendChild(modal);
         modal.addEventListener('click', event => {
@@ -1100,35 +1165,84 @@ function renderNotificationCenter() {
     const bell = document.getElementById('notification-bell');
     const count = document.getElementById('notification-count');
     const list = document.getElementById('notification-list');
-    if (!userHasRole('administrador', 'admin')) {
-        if (bell) bell.remove();
-        return;
+    if (!bell) return;
+
+    const isAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+    const delReqs = isAdmin && typeof getPendingDeletionRequests === 'function' ? getPendingDeletionRequests() : [];
+    const inbox = getStoredNotificationsInbox();
+    const unreadInbox = inbox.filter(x => x.unread);
+
+    const totalUnread = delReqs.length + unreadInbox.length;
+
+    if (count) {
+        count.textContent = totalUnread > 9 ? '+9' : String(totalUnread);
     }
-    const reqs = typeof getPendingDeletionRequests === 'function' ? getPendingDeletionRequests() : [];
-    if (count) count.textContent = String(reqs.length);
-    if (bell) bell.classList.toggle('has-items', reqs.length > 0);
+    bell.classList.toggle('has-items', totalUnread > 0);
+
     if (!list) return;
-    if (!reqs.length) {
-        list.innerHTML = '<div class="empty-state">No hay solicitudes pendientes.</div>';
+
+    if (!totalUnread && !inbox.length) {
+        list.innerHTML = '<div class="empty-state" style="padding:32px 16px;text-align:center;color:#64748b;font-size:13px;">No tienes notificaciones pendientes.</div>';
         return;
     }
-    list.innerHTML = reqs.map(req => {
-        const label = typeof getRequestTargetLabel === 'function' ? getRequestTargetLabel(req) : (req.targetName || req.nodeName || 'Elemento');
-        const type = typeof getRequestTargetType === 'function' ? getRequestTargetType(req) : (req.nodeId ? 'node' : 'item');
-        const typeLabel = type === 'detail' ? 'Detalle' : (type === 'node' ? 'Pueblo' : (type === 'equipment' ? 'Antena' : 'Elemento'));
-        return `
-            <div class="notification-item">
-                <div class="notification-top">
-                    <strong>${escapeHtml(label)}</strong>
-                    <span class="badge warning">Pendiente</span>
+
+    const itemsHtml = [];
+
+    // 1. Solicitudes de eliminación (solo visible para admin si existen)
+    if (delReqs.length) {
+        itemsHtml.push(`
+            <div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;margin:8px 0 4px;">
+                Solicitudes de autorización (${delReqs.length})
+            </div>
+        `);
+        delReqs.forEach(req => {
+            const label = typeof getRequestTargetLabel === 'function' ? getRequestTargetLabel(req) : (req.targetName || req.nodeName || 'Elemento');
+            const type = typeof getRequestTargetType === 'function' ? getRequestTargetType(req) : (req.nodeId ? 'node' : 'item');
+            const typeLabel = type === 'detail' ? 'Detalle' : (type === 'node' ? 'Pueblo' : (type === 'equipment' ? 'Antena' : 'Elemento'));
+            itemsHtml.push(`
+                <div class="notification-item" style="border-left:4px solid #ef4444;margin-bottom:8px;">
+                    <div class="notification-top">
+                        <strong>${escapeHtml(label)}</strong>
+                        <span class="badge warning">Eliminación</span>
+                    </div>
+                    <div class="entity-sub">${typeLabel} · Solicitó: ${escapeHtml(req.requestedByName || 'Usuario')}</div>
+                    <div class="card-actions" style="margin-top:8px;">
+                        <button class="btn bg2" onclick="approveDeletionRequest('${req.id}')">Aprobar</button>
+                        <button class="btn br" onclick="rejectDeletionRequest('${req.id}')">Rechazar</button>
+                    </div>
                 </div>
-                <div class="entity-sub">${typeLabel} - Solicito: ${escapeHtml(req.requestedByName || 'Usuario')}</div>
-                <div class="card-actions">
-                    <button class="btn bg2" onclick="approveDeletionRequest('${req.id}')">Aprobar</button>
-                    <button class="btn br" onclick="rejectDeletionRequest('${req.id}')">Rechazar</button>
+            `);
+        });
+    }
+
+    // 2. Notificaciones de detalles de red
+    if (inbox.length) {
+        itemsHtml.push(`
+            <div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;margin:12px 0 4px;">
+                Avisos de Detalles de Red
+            </div>
+        `);
+        inbox.forEach(notif => {
+            const dateStr = notif.createdAt ? new Date(notif.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }) : '';
+            const unreadStyle = notif.unread ? 'background:#f0f9ff;border-color:#bae6fd;' : 'background:#ffffff;opacity:0.85;';
+            const accentColor = notif.type === 'resolved' ? '#10b981' : (notif.type === 'returned' ? '#f59e0b' : '#3b82f6');
+            itemsHtml.push(`
+                <div class="notification-item" style="${unreadStyle}border-left:4px solid ${accentColor};margin-bottom:8px;cursor:pointer;transition:transform 0.12s;" onclick="markNotificationAsRead('${notif.id}','${notif.url || ''}')">
+                    <div class="notification-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                        <strong style="font-size:13px;color:#0f172a;">${escapeHtml(notif.title)}</strong>
+                        ${notif.unread ? '<span class="badge" style="background:#0284c7;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;">Nuevo</span>' : ''}
+                    </div>
+                    <div style="font-size:12px;color:#334155;margin:4px 0 6px;line-height:1.4;">${escapeHtml(notif.message)}</div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#94a3b8;">
+                        <span>${dateStr}</span>
+                        <span style="color:#2563eb;font-weight:700;">Ver detalle →</span>
+                    </div>
                 </div>
-            </div>`;
-    }).join('');
+            `);
+        });
+    }
+
+    list.innerHTML = itemsHtml.join('');
 }
 function copyDeletionCode(id) {
     const reqs = typeof getPendingDeletionRequests === 'function' ? getPendingDeletionRequests() : [];
@@ -1237,12 +1351,26 @@ const DETAIL_CATEGORIES_BY_KIND = {
     ['portal_cautivo', 'No abre portal'],
     ['cobertura_reducida', 'No tiene el mismo alcance'],
     ['otro_red', 'Otro de red']
+  ],
+  support_to_attention: [
+    ['preguntar_luz', '⚡ Preguntar si hay luz en comunidad'],
+    ['verificar_cliente', '📞 Contactar cliente por falla general'],
+    ['confirmar_servicio', '📶 Validar calidad con clientes clave'],
+    ['reporte_zona', '⚠️ Aviso de afectación o mantenimiento'],
+    ['otro_soporte', '📌 Otro requerimiento para Atención']
   ]
 };
-const DETAIL_CATEGORIES = [...DETAIL_CATEGORIES_BY_KIND.physical,...DETAIL_CATEGORIES_BY_KIND.network];
+const DETAIL_CATEGORIES = [...DETAIL_CATEGORIES_BY_KIND.physical,...DETAIL_CATEGORIES_BY_KIND.network,...DETAIL_CATEGORIES_BY_KIND.support_to_attention];
 
 function detailCategoriesForKind(kind) {
-  return DETAIL_CATEGORIES_BY_KIND[kind === 'network' ? 'network' : 'physical'];
+  const isSoporte = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+  if (kind === 'network') {
+    if (isSoporte) {
+      return DETAIL_CATEGORIES_BY_KIND.support_to_attention;
+    }
+    return DETAIL_CATEGORIES_BY_KIND.network;
+  }
+  return DETAIL_CATEGORIES_BY_KIND.physical;
 }
 
 function detailCategoryLabel(value) {
@@ -1427,8 +1555,9 @@ function copySharedNetworkDetail(id) {
 }
 
 function getWorkOrderFolio(order) {
-  const prefix = order?.category === 'instalacion' ? 'NEW' : 'DET';
-  if (order?.folio) return String(order.folio).replace(/^(DET|NEW)-/i, `${prefix}-`);
+  const isNetwork = order?.detailKind === 'network' || /_red$|^red_/.test(String(order?.category || ''));
+  const prefix = isNetwork ? 'RED' : (order?.category === 'instalacion' ? 'NEW' : 'DET');
+  if (order?.folio) return String(order.folio).replace(/^(DET|NEW|RED)-/i, `${prefix}-`);
   const source = String(order?.id || order?.createdAt || 'detalle');
   let hash = 0;
   for (let index = 0; index < source.length; index += 1) {
@@ -1778,6 +1907,16 @@ function notifyNetworkDetailEvent({
     orderId
   });
 
+  // Guardar en el buzón persistente de notificaciones (campana)
+  addNotificationToInbox({
+    title,
+    message,
+    type,
+    orderId,
+    url,
+    createdAt: new Date().toISOString()
+  });
+
   if (desktop && (document.hidden || !document.hasFocus())) {
     triggerDesktopNotification({
       title,
@@ -1795,13 +1934,132 @@ function getStoredNetworkStateCache() {
   }
 }
 
-function setStoredNetworkStateCache(cache) {
+/* ==========================================================================
+   CONFIGURACIÓN Y REPETICIÓN PERIÓDICA DE NOTIFICACIONES SEGÚN PRIORIDAD
+   (Baja: 45m, Media: 30m, Alta: 20m, Muy Alta: 10m - Administrable y editable)
+   ========================================================================== */
+
+const NETOPS_PRIORITY_INTERVALS_KEY = 'netops_priority_reminder_intervals_v1';
+const NETOPS_LAST_REMINDER_KEY = 'netops_priority_last_reminded_timestamps_v1';
+
+const DEFAULT_PRIORITY_MINUTES = {
+  baja: 45,
+  media: 30,
+  alta: 20,
+  muy_alta: 10
+};
+
+function getPriorityReminderMinutes() {
   try {
-    // Mantener solo los 100 registros más recientes para evitar sobrecarga
-    const entries = Object.entries(cache || {});
-    const trimmed = Object.fromEntries(entries.slice(-100));
-    localStorage.setItem(NETOPS_NETWORK_CACHE_KEY, JSON.stringify(trimmed));
+    const saved = JSON.parse(localStorage.getItem(NETOPS_PRIORITY_INTERVALS_KEY) || '{}');
+    return { ...DEFAULT_PRIORITY_MINUTES, ...saved };
+  } catch (e) {
+    return { ...DEFAULT_PRIORITY_MINUTES };
+  }
+}
+
+function setPriorityReminderMinutes(newIntervals) {
+  try {
+    const current = getPriorityReminderMinutes();
+    const updated = { ...current, ...newIntervals };
+    localStorage.setItem(NETOPS_PRIORITY_INTERVALS_KEY, JSON.stringify(updated));
+    return updated;
+  } catch (e) {
+    return DEFAULT_PRIORITY_MINUTES;
+  }
+}
+
+function getPriorityReminderLabel(priority) {
+  const intervals = getPriorityReminderMinutes();
+  const mins = intervals[priority] || DEFAULT_PRIORITY_MINUTES[priority] || 30;
+  return `Recordatorio cada ${mins} min`;
+}
+
+function checkPriorityUnresolvedReminders(orders = []) {
+  if (!Array.isArray(orders) || !orders.length) return;
+  const user = getCurrentUser();
+  if (!user || !user.role) return;
+
+  const intervals = getPriorityReminderMinutes();
+  let lastReminders = {};
+  try {
+    lastReminders = JSON.parse(localStorage.getItem(NETOPS_LAST_REMINDER_KEY) || '{}') || {};
   } catch (e) {}
+
+  const now = Date.now();
+  let touched = false;
+
+  for (const order of orders) {
+    if (order.detailKind !== 'network' || order.deletedAt) continue;
+    const isUnresolved = order.status === 'pendiente' || order.status === 'devuelto_soporte' || order.status === 'en_revision' || order.status === 'resuelto_soporte';
+    if (!isUnresolved) continue;
+
+    const hasAssignment = !!(order.assignedUserId || order.assignedUserName);
+    const isAssignedToMe = isOrderAssignedToUser(order, user);
+    const isCreatedByMe = isOrderCreatorOrAssigner(order, user);
+
+    let shouldRemindMe = false;
+    let reminderTitle = '';
+    let reminderMsg = '';
+    let reminderType = 'info';
+
+    if (order.status === 'resuelto_soporte') {
+      // Pendiente de validación por Atención a clientes
+      const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
+      shouldRemindMe = hasCreator ? isCreatedByMe : userHasRole('atencion_clientes');
+      reminderTitle = '⏳ Pendiente validar solución con cliente';
+      reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Aún no se ha validado si el servicio quedó restablecido.`;
+      reminderType = 'resolved';
+    } else {
+      // Pendiente en Soporte técnico
+      shouldRemindMe = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin');
+      reminderTitle = '⏰ Reporte de red pendiente sin resolver';
+      reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Prioridad ${order.priority || 'media'}. Sigue pendiente de atención técnica.`;
+      reminderType = order.status === 'devuelto_soporte' ? 'returned' : 'new_order';
+    }
+
+    if (!shouldRemindMe) continue;
+
+    const prio = String(order.priority || 'media').toLowerCase();
+    const intervalMins = Number(intervals[prio]) || DEFAULT_PRIORITY_MINUTES[prio] || 30;
+    const intervalMs = intervalMins * 60 * 1000;
+
+    const key = `${order.id}_${user.id || user.username}_${order.status}`;
+    const lastTime = Number(lastReminders[key]) || 0;
+
+    if (!lastTime) {
+      // Inicializar el temporizador desde la última actualización de la orden
+      const orderTime = new Date(order.updatedAt || order.createdAt || now).getTime();
+      if ((now - orderTime) >= intervalMs) {
+        lastReminders[key] = now;
+        touched = true;
+        notifyNetworkDetailEvent({
+          title: reminderTitle,
+          message: reminderMsg,
+          type: reminderType,
+          orderId: order.id
+        });
+      } else {
+        lastReminders[key] = orderTime;
+        touched = true;
+      }
+    } else if ((now - lastTime) >= intervalMs) {
+      lastReminders[key] = now;
+      touched = true;
+      notifyNetworkDetailEvent({
+        title: reminderTitle,
+        message: reminderMsg,
+        type: reminderType,
+        orderId: order.id
+      });
+    }
+  }
+
+  if (touched) {
+    try {
+      localStorage.setItem(NETOPS_LAST_REMINDER_KEY, JSON.stringify(lastReminders));
+    } catch (e) {}
+  }
 }
 
 function isOrderAssignedToUser(order, user) {
@@ -2118,6 +2376,11 @@ async function checkNetworkOrderNotifications() {
 
     if (updated) {
       setStoredNetworkStateCache(cache);
+    }
+
+    // Verificar recordatorios periódicos por prioridad de detalles no resueltos
+    if (orders.length) {
+      checkPriorityUnresolvedReminders(orders);
     }
   } catch (err) {
     // Silencioso para no saturar consola en reconexiones

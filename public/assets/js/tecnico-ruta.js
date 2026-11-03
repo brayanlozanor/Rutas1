@@ -1001,13 +1001,13 @@
         pendingTechEvidencePhotos = [];
         renderTechRoute();
         notify(mode === 'terminado'
-          ? 'Detalle terminado y guardado en Cloudflare.'
-          : 'Reporte guardado en Cloudflare.');
+          ? 'Detalle terminado y guardado correctamente.'
+          : 'Reporte guardado correctamente.');
       } catch (e) {
         if (detailIndex >= 0) state.workOrders[detailIndex] = originalDetail;
         originalStops.forEach(item => Object.assign(item.stop, item.data));
         renderTechRoute();
-        notify(`No se guardo en Cloudflare/D1: ${e.message || e}. Intentalo otra vez.`, 'err');
+        notify(`No se pudo guardar: ${e.message || e}. Inténtalo otra vez.`, 'err');
       }
     }
 

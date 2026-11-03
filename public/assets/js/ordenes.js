@@ -12,6 +12,7 @@ function orderActionIcon(type) {
   const icons = {
     view: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg>',
     edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16-.8 4 4-.8L18.5 7.9l-3.2-3.2L4 16ZM13.8 6.2l3.2 3.2"/></svg>',
+    reopen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.3-5.7"/><path d="M20 4v7h-7"/></svg>',
     actions: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>',
     delete: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 10v7M14 10v7"/></svg>'
   };
@@ -61,9 +62,16 @@ const ORDER_CATEGORIES_BY_KIND = {
     ['portal_cautivo', 'No abre portal'],
     ['cobertura_reducida', 'No tiene el mismo alcance'],
     ['otro_red', 'Otro de red']
+  ],
+  support_to_attention: [
+    ['preguntar_luz', '⚡ Preguntar si hay luz en comunidad'],
+    ['verificar_cliente', '📞 Contactar cliente por falla general'],
+    ['confirmar_servicio', '📶 Validar calidad con clientes clave'],
+    ['reporte_zona', '⚠️ Aviso de afectación o mantenimiento'],
+    ['otro_soporte', '📌 Otro requerimiento para Atención']
   ]
 };
-const ORDER_CATEGORIES = [...ORDER_CATEGORIES_BY_KIND.physical,...ORDER_CATEGORIES_BY_KIND.network];
+const ORDER_CATEGORIES = [...ORDER_CATEGORIES_BY_KIND.physical,...ORDER_CATEGORIES_BY_KIND.network,...ORDER_CATEGORIES_BY_KIND.support_to_attention];
 const PHYSICAL_STATS_EXCLUDED_CATEGORIES = new Set(['instalacion','nueva_instalacion','instalacion_nueva','reubicacion_antena','reubicacion','resurtir_antena','surtir_antena','solicitud_respaldo','solicitud_de_respaldo']);
 let woEvidencePhotos = [];
 
@@ -170,7 +178,15 @@ function orderCategoryLabel(value) {
 }
 
 function orderCategoriesForKind(kind) {
-  return ORDER_CATEGORIES_BY_KIND[kind === 'network' ? 'network' : 'physical'];
+  const isSoporte = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+  if (kind === 'network') {
+    if (isSoporte) {
+      // Como soporte solo creo detalles que van dirigidos a Atención a clientes
+      return ORDER_CATEGORIES_BY_KIND.support_to_attention;
+    }
+    return ORDER_CATEGORIES_BY_KIND.network;
+  }
+  return ORDER_CATEGORIES_BY_KIND.physical;
 }
 
 function renderWOCategoryOptions(kind, selected = '') {
@@ -980,8 +996,9 @@ function getOrderSearchText(order) {
 }
 
 function getOrderFolio(order) {
-  const prefix = order?.category === 'instalacion' ? 'NEW' : 'DET';
-  if (order?.folio) return String(order.folio).replace(/^(DET|NEW)-/i, `${prefix}-`);
+  const isNetwork = order?.detailKind === 'network' || /_red$|^red_/.test(String(order?.category || ''));
+  const prefix = isNetwork ? 'RED' : (order?.category === 'instalacion' ? 'NEW' : 'DET');
+  if (order?.folio) return String(order.folio).replace(/^(DET|NEW|RED)-/i, `${prefix}-`);
   const source = String(order?.id || order?.createdAt || 'detalle');
   let hash = 0;
   for (let index = 0; index < source.length; index += 1) hash = ((hash * 31) + source.charCodeAt(index)) >>> 0;
@@ -1006,6 +1023,13 @@ async function ensureOrderRelationRecords(order) {
 }
 
 async function openWO(id = '') {
+  if (id) {
+    const existing = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
+    if (existing && (existing.status === 'completada' || existing.status === 'no_realizado')) {
+      notify('Los detalles completados no pueden ser editados. Puedes reabrirlo con el botón de reabrir.', 'warn');
+      return;
+    }
+  }
   editingWOId = id;
   copyingWOFromId = '';
   clearWOForm();
@@ -1032,6 +1056,7 @@ async function openWO(id = '') {
       document.getElementById('wo-zone').value = w.region || target.zone || '';
       document.getElementById('wo-type').value = w.visitType || 'comunidad';
       document.getElementById('wo-priority').value = w.priority || 'media';
+      updateWOPriorityReminderHint();
       const report = w.technicianReport || {};
       woEvidencePhotos = [...new Set([...(Array.isArray(report.evidencePhotos) ? report.evidencePhotos : []),report.evidencePhoto].filter(Boolean))].slice(0,6);
     }
@@ -1041,6 +1066,41 @@ async function openWO(id = '') {
   setupOrderControls();
   renderWOEvidencePhotos();
   OM('wo-mo');
+}
+
+function updateWOPriorityReminderHint() {
+  const prioSelect = document.getElementById('wo-priority');
+  const hintEl = document.getElementById('wo-priority-interval-hint');
+  if (!prioSelect || !hintEl) return;
+  const prio = prioSelect.value || 'media';
+  if (typeof getPriorityReminderLabel === 'function') {
+    hintEl.textContent = `⚙️ ${getPriorityReminderLabel(prio)} (Clic para ajustar minutos)`;
+  }
+}
+
+async function openPriorityIntervalConfig() {
+  const intervals = typeof getPriorityReminderMinutes === 'function' ? getPriorityReminderMinutes() : { baja: 45, media: 30, alta: 20, muy_alta: 10 };
+  const baja = prompt('Minutos para prioridad BAJA:', intervals.baja || 45);
+  if (baja === null) return;
+  const media = prompt('Minutos para prioridad MEDIA:', intervals.media || 30);
+  if (media === null) return;
+  const alta = prompt('Minutos para prioridad ALTA:', intervals.alta || 20);
+  if (alta === null) return;
+  const muyAlta = prompt('Minutos para prioridad MUY ALTA:', intervals.muy_alta || 10);
+  if (muyAlta === null) return;
+
+  const updated = {
+    baja: Math.max(1, parseInt(baja, 10) || 45),
+    media: Math.max(1, parseInt(media, 10) || 30),
+    alta: Math.max(1, parseInt(alta, 10) || 20),
+    muy_alta: Math.max(1, parseInt(muyAlta, 10) || 10)
+  };
+
+  if (typeof setPriorityReminderMinutes === 'function') {
+    setPriorityReminderMinutes(updated);
+  }
+  updateWOPriorityReminderHint();
+  notify('Frecuencias de recordatorio actualizadas correctamente.', 'ok');
 }
 
 function clearWOForm() {
@@ -1057,6 +1117,7 @@ function clearWOForm() {
   document.getElementById('wo-zone').value = '';
   document.getElementById('wo-type').value = 'comunidad';
   document.getElementById('wo-priority').value = 'baja';
+  updateWOPriorityReminderHint();
   syncWODetailKindField(activeOrderDetailKind);
   renderWOAssignedUserOptions('');
   document.getElementById('wo-category').value = '';
@@ -1258,6 +1319,45 @@ async function markWODone(id) {
   appendOrderFollowUp(w,'solved','Solucionado');
   setUpdatedAudit(w, 'marcó lista orden');
   await saveRecordWithAudit('workOrders',w,auditStart);
+  await loadOrderPage();
+}
+
+async function reopenCompletedWO(id) {
+  const w = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
+  if (!w) return notify('No se encontró el detalle.', 'err');
+  if (w.status !== 'completada' && w.status !== 'no_realizado') {
+    return notify('El detalle no está completado.', 'warn');
+  }
+
+  const confirmed = await askConfirmation({
+    title: '¿Reabrir este detalle?',
+    message: `El detalle #${getOrderFolio(w)} volverá a estado pendiente para ser atendido nuevamente.`,
+    confirmText: 'Sí, reabrir detalle',
+    cancelText: 'Cancelar',
+    tone: 'warn'
+  });
+  if (!confirmed) return;
+
+  const currentUser = getCurrentUser();
+  const userName = currentUser.name || currentUser.username || 'Usuario';
+  const now = new Date().toISOString();
+
+  w.status = 'pendiente';
+  w.completedAt = '';
+  w.updatedAt = now;
+  w.updatedById = currentUser.id || '';
+  appendSharedNetworkFollowUp(w, 'reabierto', 'Detalle reabierto', `Reabierto por ${userName} para nueva revisión`);
+  setUpdatedAudit(w, 'reabrió orden completada');
+
+  const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
+  const saved = await saveRecordWithAudit('workOrders', w, auditStart);
+  if (!saved) return notify('No se pudo reabrir el detalle. Intenta nuevamente.', 'err');
+
+  if (w.detailKind === 'network' && typeof broadcastNetworkOrderChange === 'function') {
+    broadcastNetworkOrderChange(w, 'returned');
+  }
+
+  notify(`Detalle #${getOrderFolio(w)} reabierto correctamente.`, 'ok');
   await loadOrderPage();
 }
 
@@ -1899,7 +1999,11 @@ function renderWOs() {
                   <div class="order-actions">
                     ${networkQuickActions}
                     <button class="btn order-view-report" title="Ver detalle completo" aria-label="Ver detalle completo" onclick="openOrderTechnicianReport('${w.id}')">${orderActionIcon('view')}</button>
-                    <button class="btn order-edit-action" title="Editar detalle" aria-label="Editar detalle" onclick="openWO('${w.id}')">${orderActionIcon('edit')}</button>
+                    ${rowReported ? `
+                      <button class="btn order-reopen-action" title="Reabrir detalle completado" aria-label="Reabrir detalle completado" onclick="reopenCompletedWO('${w.id}')">${orderActionIcon('reopen')}</button>
+                    ` : `
+                      <button class="btn order-edit-action" title="Editar detalle" aria-label="Editar detalle" onclick="openWO('${w.id}')">${orderActionIcon('edit')}</button>
+                    `}
                     <button class="btn order-delete-action" title="${userHasRole('administrador','admin') ? 'Eliminar detalle' : 'Solicitar eliminar'}" aria-label="${userHasRole('administrador','admin') ? 'Eliminar detalle' : 'Solicitar eliminar'}" onclick="deleteWO('${w.id}')">${orderActionIcon('delete')}</button>
                   </div>
                 </td>

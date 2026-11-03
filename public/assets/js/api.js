@@ -2170,7 +2170,7 @@ async function saveRecord(listKey, record) {
         clearCloudOfflineStatus();
         setSyncStatus('Guardado', 'ok');
         setTimeout(() => setSyncStatus('Sincronizado', 'ok'), 1200);
-        if (typeof notify === 'function') notify('Guardado en Cloudflare.');
+        if (typeof notify === 'function') notify('Guardado correctamente.');
         return true;
     } catch(e) {
         console.log('saveRecord fallo; se cancela el cambio local', e);
@@ -2192,7 +2192,7 @@ async function saveRecordWithAudit(listKey,record,auditStart=0) {
 function saveDBInBackground({ notifyUser = true, delay = 250 } = {}) {
     window.setTimeout(() => {
         saveDB().then(ok => {
-            if (notifyUser && ok && typeof notify === 'function') notify('Guardado en Cloudflare.');
+            if (notifyUser && ok && typeof notify === 'function') notify('Guardado correctamente.');
         });
     }, delay);
 

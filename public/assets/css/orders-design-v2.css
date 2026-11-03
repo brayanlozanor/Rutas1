@@ -672,6 +672,16 @@
   color: #0874e8 !important
 }
 
+.orders-page .order-actions .order-reopen-action {
+  border-color: #fde68a !important;
+  background: #fffbeb !important;
+  color: #d97706 !important
+}
+.orders-page .order-actions .order-reopen-action:hover {
+  background: #fef3c7 !important;
+  color: #b45309 !important
+}
+
 .orders-page .order-actions .order-delete-action {
   border-color: #fac6cf !important;
   background: #fff7f8 !important;

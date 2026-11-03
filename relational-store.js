@@ -70,11 +70,12 @@ function generatedId(prefix = 'id') {
 }
 
 function workOrderFolio(order) {
-  const prefix=order?.category==='instalacion'?'NEW':'DET';
-  const source=text(order?.id||order?.created_at||'detalle');
-  let hash=0;
-  for(let index=0;index<source.length;index+=1)hash=((hash*31)+source.charCodeAt(index))>>>0;
-  return `${prefix}-${String(hash%1000000).padStart(6,'0')}`;
+  const isNetwork = order?.detail_kind === 'network' || /_red$|^red_/.test(String(order?.category || ''));
+  const prefix = isNetwork ? 'RED' : (order?.category === 'instalacion' ? 'NEW' : 'DET');
+  const source = text(order?.id || order?.created_at || 'detalle');
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) hash = ((hash * 31) + source.charCodeAt(index)) >>> 0;
+  return `${prefix}-${String(hash % 1000000).padStart(6, '0')}`;
 }
 
 function isInstallationCategory(category) {
@@ -722,7 +723,7 @@ async function resolveExactWorkOrderFolioSearch(env,page) {
   if(!page||page._workOrderFolioResolved)return;
   page._workOrderFolioResolved=true;
   const requested=text(page.q).trim().toUpperCase();
-  const prefixed=/^(DET|NEW)-\d{6}$/.test(requested);
+  const prefixed=/^(DET|NEW|RED)-\d{6}$/.test(requested);
   const numberOnly=/^\d{6}$/.test(requested);
   if(!prefixed&&!numberOnly)return;
   const detailKind=page.detailKind==='network'?'network':page.detailKind==='physical'?'physical':'';

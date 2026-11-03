@@ -42,13 +42,41 @@ function historyRowBelongsToTechnician(row) {
   return [row?.byId,row?.byUsername,row?.byName].map(normalizeName).filter(Boolean).some(alias => historyTechnicianAliases.has(alias));
 }
 
+function historyRowBelongsToSupport(row) {
+  const role = normalizeRole(row?.byRole || '');
+  if (role === 'administrador' || role === 'admin') return true;
+  const user = (state.users || []).find(u => u.id === row?.byId || u.username === row?.byUsername);
+  if (user && (user.role === 'administrador' || user.role === 'admin')) return true;
+  return false;
+}
+
+function isDetailCompletionOrResolution(row) {
+  const text = normalizeName(String(row?.action || ''));
+  // Técnico completando un detalle
+  if (/completo|completó|termino|terminó|marco listo|marcó listo|marco detalle hecho|marcó detalle hecho/.test(text)) return true;
+  // Soporte resolviendo detalle de red
+  if (/resolvio|resolvió|solucion|resuelto/.test(text)) return true;
+  return false;
+}
+
 function historyRowBelongsToPrincipal(row) {
   return [row?.byUsername,row?.byName].map(normalizeName).some(value=>value==='abraham'||value==='abraham paula iglesias');
 }
 
 function historyRowsForViewer() {
   const rows = (state.auditLog || []).filter(row=>!historyRowBelongsToPrincipal(row));
-  return isAttentionHistoryView() ? rows.filter(historyRowBelongsToTechnician) : rows;
+  if (isAttentionHistoryView()) {
+    // Atención a clientes solo ve cuando un técnico completa detalles y cuando soporte resuelve uno
+    return rows.filter(row => {
+      const isTech = historyRowBelongsToTechnician(row);
+      const isSupp = historyRowBelongsToSupport(row);
+      if (isTech && isDetailCompletionOrResolution(row)) return true;
+      if (isSupp && isDetailCompletionOrResolution(row)) return true;
+      return false;
+    });
+  }
+  // Soporte / Administrador sigue teniendo acceso a todos
+  return rows;
 }
 
 function historyDateKey(value = new Date()) {
@@ -239,10 +267,10 @@ async function initHistoryPage() {
     const heading = document.querySelector('.history-heading h1');
     const copy = document.querySelector('.history-heading p');
     const search = document.getElementById('history-search');
-    if (eyebrow) eyebrow.textContent = 'Operación / Técnicos';
-    if (heading) heading.textContent = 'Historial de técnicos';
-    if (copy) copy.textContent = 'Consulta las actividades realizadas por los técnicos dentro de la plataforma.';
-    if (search) search.placeholder = 'Buscar técnico, acción, folio o detalle...';
+    if (eyebrow) eyebrow.textContent = 'Operación / Detalles resueltos';
+    if (heading) heading.textContent = 'Historial de detalles completados';
+    if (copy) copy.textContent = 'Consulta los detalles completados por técnicos y los resueltos por soporte técnico.';
+    if (search) search.placeholder = 'Buscar técnico, soporte, folio o cliente...';
   }
   populateHistoryFilters();
   renderHistoryWindow();
