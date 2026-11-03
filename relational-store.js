@@ -266,7 +266,9 @@ async function ensureWorkOrderColumns(env) {
     ['follow_ups_json', 'TEXT'],
     ['source_order_id', 'TEXT'],
     ['assigned_user_id', 'TEXT'],
-    ['assigned_user_name', 'TEXT']
+    ['assigned_user_name', 'TEXT'],
+    ['target_role', 'TEXT'],
+    ['origin_role', 'TEXT']
   ];
   for (const [name, definition] of requiredColumns) {
     if (columns.has(name)) continue;
@@ -710,9 +712,9 @@ function workOrderQuery(page = {}) {
   if(to){clauses.push('(w.created_at<? OR w.completed_at<?)');binds.push(to,to);}
   const sort = text(page?.sort);
   const statusRank = `CASE
-    WHEN COALESCE(w.status,'pendiente') IN ('pendiente','devuelto_soporte') THEN 0
-    WHEN w.status = 'en_revision' THEN 1
-    WHEN w.status = 'resuelto_soporte' THEN 2
+    WHEN w.status = 'resuelto_soporte' THEN 0
+    WHEN COALESCE(w.status,'pendiente') IN ('pendiente','devuelto_soporte') THEN 1
+    WHEN w.status = 'en_revision' THEN 2
     WHEN w.status IN ('completada','no_realizado','revisado') THEN 4
     ELSE 3
   END`;
@@ -797,6 +799,8 @@ async function loadWorkOrders(env, ctx, page = null) {
     addActorFields(out,'reviewOpenedBy',ctx.users.get(row.review_opened_by));
     out.assignedUserId = row.assigned_user_id || '';
     out.assignedUserName = ctx.users?.get(row.assigned_user_id)?.name || row.assigned_user_name || '';
+    out.targetRole = row.target_role || '';
+    out.originRole = row.origin_role || '';
     if (row.reviewed_at) out.reviewedAt = row.reviewed_at;
     if (row.last_resent_at) out.lastResentAt = row.last_resent_at;
     if (row.source_order_id) out.sourceOrderId = row.source_order_id;
@@ -1323,11 +1327,15 @@ export async function loadStatePart(env, part, page = {}) {
     const visibleIds=new Set(workOrders.map(order=>order.id));
     const deletionRequests=(page?.windowed==='1'||page?.scoped==='1')?(await loadDeletionRequests(env)).filter(request=>visibleIds.has(request.targetId)||visibleIds.has(request.detailId)):[];
     const query=workOrderQuery(page);
-    const supportUsers = (await all(env,`SELECT u.id,u.name,u.username,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('administrador','admin') ORDER BY lower(u.name),lower(u.username)`))
-      .map(user=>({id:user.id,name:user.name||user.username||'Soporte',username:user.username}));
+    const [supportUsers, attentionUsers] = await Promise.all([
+      all(env,`SELECT u.id,u.name,u.username,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('administrador','admin') ORDER BY lower(u.name),lower(u.username)`),
+      all(env,`SELECT u.id,u.name,u.username,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code = 'atencion_clientes' ORDER BY lower(u.name),lower(u.username)`)
+    ]);
+    const mappedSupportUsers = supportUsers.map(user=>({id:user.id,name:user.name||user.username||'Soporte',username:user.username}));
+    const mappedAttentionUsers = attentionUsers.map(user=>({id:user.id,name:user.name||user.username||'Atención',username:user.username}));
     if (page?.windowed !== '1') {
       const totalRow=await first(env,`SELECT COUNT(*) AS total FROM work_orders w LEFT JOIN zones z ON z.id=w.zone_id${query.where}`,query.binds);
-      return {workOrders,deletionRequests,total:Number(totalRow?.total)||0,supportUsers};
+      return {workOrders,deletionRequests,total:Number(totalRow?.total)||0,supportUsers:mappedSupportUsers,attentionUsers:mappedAttentionUsers};
     }
     const statsDetailKind=page?.detailKind==='network'?'network':'physical';
     const excludedStatsCategories=statsDetailKind==='physical'?PHYSICAL_STATS_EXCLUDED_CATEGORIES:[];
@@ -1343,7 +1351,8 @@ export async function loadStatePart(env, part, page = {}) {
       total:Number(totalRow?.total)||0,
       stats:{total:Number(statsRow?.total)||0,pending:Number(statsRow?.pending)||0,critical:Number(statsRow?.critical)||0,done:Number(statsRow?.done)||0},
       creators:creatorRows.map(user=>({id:user.id,name:user.name||user.username||'Usuario'})),
-      supportUsers,
+      supportUsers:mappedSupportUsers,
+      attentionUsers:mappedAttentionUsers,
       ...(placeNodes.length?{nodes:placeNodes}:{})
     };
   }
@@ -1476,10 +1485,12 @@ async function upsertWorkOrder(env,rec) {
   const town=relationValue('town','town_legacy');
   const assignedUserId=nullableText(rec.assignedUserId || rec.assignedTo || rec.assignedToUserId);
   const assignedUserName=nullableText(rec.assignedUserName || rec.assignedToName);
-  await run(env, `INSERT INTO work_orders(id,title,category,detail_kind,review_opened_at,review_opened_by,reviewed_at,last_resent_at,follow_ups_json,source_order_id,assigned_user_id,assigned_user_name,description,legacy_desc,client_name,client_phone,equipment_id,node_id,equipment_name_legacy,node_code_legacy,node_name_legacy,town_legacy,priority,visit_type,zone_id,status,detail_location,lat,lng,legacy_technician_id,created_at,updated_at,completed_at,deleted_at,created_by,updated_by,deleted_by)
-   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-   ON CONFLICT(id) DO UPDATE SET title=excluded.title,category=excluded.category,detail_kind=excluded.detail_kind,review_opened_at=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL ELSE COALESCE(NULLIF(work_orders.review_opened_at,''),NULLIF(excluded.review_opened_at,'')) END,review_opened_by=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL WHEN NULLIF(work_orders.review_opened_at,'') IS NULL THEN excluded.review_opened_by ELSE work_orders.review_opened_by END,reviewed_at=excluded.reviewed_at,last_resent_at=excluded.last_resent_at,follow_ups_json=excluded.follow_ups_json,source_order_id=excluded.source_order_id,assigned_user_id=excluded.assigned_user_id,assigned_user_name=excluded.assigned_user_name,description=excluded.description,legacy_desc=excluded.legacy_desc,client_name=excluded.client_name,client_phone=excluded.client_phone,equipment_id=excluded.equipment_id,node_id=excluded.node_id,equipment_name_legacy=excluded.equipment_name_legacy,node_code_legacy=excluded.node_code_legacy,node_name_legacy=excluded.node_name_legacy,town_legacy=excluded.town_legacy,priority=excluded.priority,visit_type=excluded.visit_type,zone_id=excluded.zone_id,status=CASE WHEN work_orders.status='en_revision' AND excluded.status='pendiente' AND excluded.last_resent_at IS NULL THEN work_orders.status ELSE excluded.status END,detail_location=excluded.detail_location,lat=excluded.lat,lng=excluded.lng,legacy_technician_id=excluded.legacy_technician_id,created_at=COALESCE(work_orders.created_at,excluded.created_at),updated_at=excluded.updated_at,completed_at=excluded.completed_at,deleted_at=excluded.deleted_at,created_by=COALESCE(work_orders.created_by,excluded.created_by),updated_by=excluded.updated_by,deleted_by=excluded.deleted_by`,
-   [rec.id,text(rec.title),rec.category??null,rec.detailKind==='network'?'network':'physical',nullableText(rec.reviewOpenedAt),nullableText(rec.reviewOpenedById),rec.reviewedAt??null,rec.lastResentAt??null,JSON.stringify(Array.isArray(rec.followUps)?rec.followUps:[]),nullableText(rec.sourceOrderId),assignedUserId,assignedUserName,rec.description??null,rec.desc??null,rec.clientName??null,rec.clientPhone??rec.phone??null,equipmentId,nodeId,equipmentName,nodeCode,nodeName,town,text(rec.priority),text(rec.visitType),zoneId,status,rec.detailLocation??null,nullableNumber(rec.lat),nullableNumber(rec.lng),rec.technicianId??null,rec.createdAt??null,rec.updatedAt??null,completedAt,rec.deletedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById),nullableText(rec.deletedById)]);
+  const targetRole=nullableText(rec.targetRole);
+  const originRole=nullableText(rec.originRole);
+  await run(env, `INSERT INTO work_orders(id,title,category,detail_kind,target_role,origin_role,review_opened_at,review_opened_by,reviewed_at,last_resent_at,follow_ups_json,source_order_id,assigned_user_id,assigned_user_name,description,legacy_desc,client_name,client_phone,equipment_id,node_id,equipment_name_legacy,node_code_legacy,node_name_legacy,town_legacy,priority,visit_type,zone_id,status,detail_location,lat,lng,legacy_technician_id,created_at,updated_at,completed_at,deleted_at,created_by,updated_by,deleted_by)
+   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+   ON CONFLICT(id) DO UPDATE SET title=excluded.title,category=excluded.category,detail_kind=excluded.detail_kind,target_role=COALESCE(excluded.target_role,work_orders.target_role),origin_role=COALESCE(excluded.origin_role,work_orders.origin_role),review_opened_at=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL ELSE COALESCE(NULLIF(work_orders.review_opened_at,''),NULLIF(excluded.review_opened_at,'')) END,review_opened_by=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL WHEN NULLIF(work_orders.review_opened_at,'') IS NULL THEN excluded.review_opened_by ELSE work_orders.review_opened_by END,reviewed_at=excluded.reviewed_at,last_resent_at=excluded.last_resent_at,follow_ups_json=excluded.follow_ups_json,source_order_id=excluded.source_order_id,assigned_user_id=excluded.assigned_user_id,assigned_user_name=excluded.assigned_user_name,description=excluded.description,legacy_desc=excluded.legacy_desc,client_name=excluded.client_name,client_phone=excluded.client_phone,equipment_id=excluded.equipment_id,node_id=excluded.node_id,equipment_name_legacy=excluded.equipment_name_legacy,node_code_legacy=excluded.node_code_legacy,node_name_legacy=excluded.node_name_legacy,town_legacy=excluded.town_legacy,priority=excluded.priority,visit_type=excluded.visit_type,zone_id=excluded.zone_id,status=CASE WHEN work_orders.status='en_revision' AND excluded.status='pendiente' AND excluded.last_resent_at IS NULL THEN work_orders.status ELSE excluded.status END,detail_location=excluded.detail_location,lat=excluded.lat,lng=excluded.lng,legacy_technician_id=excluded.legacy_technician_id,created_at=COALESCE(work_orders.created_at,excluded.created_at),updated_at=excluded.updated_at,completed_at=excluded.completed_at,deleted_at=excluded.deleted_at,created_by=COALESCE(work_orders.created_by,excluded.created_by),updated_by=excluded.updated_by,deleted_by=excluded.deleted_by`,
+   [rec.id,text(rec.title),rec.category??null,rec.detailKind==='network'?'network':'physical',targetRole,originRole,nullableText(rec.reviewOpenedAt),nullableText(rec.reviewOpenedById),rec.reviewedAt??null,rec.lastResentAt??null,JSON.stringify(Array.isArray(rec.followUps)?rec.followUps:[]),nullableText(rec.sourceOrderId),assignedUserId,assignedUserName,rec.description??null,rec.desc??null,rec.clientName??null,rec.clientPhone??rec.phone??null,equipmentId,nodeId,equipmentName,nodeCode,nodeName,town,text(rec.priority),text(rec.visitType),zoneId,status,rec.detailLocation??null,nullableNumber(rec.lat),nullableNumber(rec.lng),rec.technicianId??null,rec.createdAt??null,rec.updatedAt??null,completedAt,rec.deletedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById),nullableText(rec.deletedById)]);
   if (Array.isArray(rec.materials)) {
     await run(env,'DELETE FROM work_order_materials WHERE work_order_id=?',[rec.id]);
     const stmts=[];

@@ -2706,3 +2706,119 @@
 .netres-evidence-item button:hover {
   background: #e11d48;
 }
+
+/* Selector múltiple de asignación de detalles */
+.wo-multi-assign-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.wo-multi-assign-wrapper:focus-within {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
+}
+
+.wo-assign-quick-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.wo-assign-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.wo-assign-all-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.wo-assign-all-btn.is-active {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.35);
+}
+
+.wo-assign-hint {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.wo-assign-users-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.wo-assign-user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.wo-assign-user-pill:hover {
+  border-color: #38bdf8;
+  background: #f0f9ff;
+  color: #0369a1;
+}
+
+.wo-assign-user-pill.is-selected {
+  background: #e0f2fe;
+  border-color: #0284c7;
+  color: #0369a1;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(2, 132, 199, 0.2);
+}
+
+.wo-assign-user-pill .wo-assign-check {
+  display: none;
+  width: 13px;
+  height: 13px;
+  stroke: #0284c7;
+  stroke-width: 2.5;
+  fill: none;
+}
+
+.wo-assign-user-pill.is-selected .wo-assign-check {
+  display: inline-block;
+}
+
+.wo-assign-user-pill.is-selected .wo-assign-avatar {
+  display: none;
+}

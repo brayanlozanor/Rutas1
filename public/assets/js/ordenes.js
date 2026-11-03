@@ -209,6 +209,9 @@ function syncWODetailKindField(kind) {
   renderWOCategoryOptions(resolved,document.getElementById('wo-category')?.value || '');
 }
 
+let currentWOCandidates = [];
+let currentWOSelectedUserIds = new Set();
+
 function getAvailableSupportUsers() {
   if (Array.isArray(window.netopsSupportUsers) && window.netopsSupportUsers.length) {
     return window.netopsSupportUsers;
@@ -227,31 +230,134 @@ function getAvailableSupportUsers() {
   return [];
 }
 
-async function renderWOAssignedUserOptions(selectedId = '') {
-  const select = document.getElementById('wo-assigned-user');
-  if (!select) return;
+function getAvailableAttentionUsers() {
+  if (Array.isArray(window.netopsAttentionUsers) && window.netopsAttentionUsers.length) {
+    return window.netopsAttentionUsers;
+  }
+  try {
+    const cached = JSON.parse(localStorage.getItem('netops_cached_attention_users') || '[]');
+    if (Array.isArray(cached) && cached.length) {
+      window.netopsAttentionUsers = cached;
+      return cached;
+    }
+  } catch (e) {}
+  if (Array.isArray(state.users)) {
+    const fromState = state.users.filter(u => String(u.role).toLowerCase() === 'atencion_clientes' && u.active !== false);
+    if (fromState.length) return fromState;
+  }
+  return [];
+}
 
-  let users = getAvailableSupportUsers();
-  if (!users.length && typeof fetchDataPage === 'function') {
+async function renderWOAssignedUserOptions(selectedIds = '') {
+  const container = document.getElementById('wo-assign-users-grid');
+  const allBtn = document.getElementById('wo-assign-all-btn');
+  const allBtnText = document.getElementById('wo-assign-all-text');
+  const assignLabel = document.getElementById('wo-assign-label');
+  const hiddenIdInput = document.getElementById('wo-assigned-user');
+  const hiddenNamesInput = document.getElementById('wo-assigned-names');
+  if (!container) return;
+
+  const isSoporte = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+  const targetIsAttention = isSoporte;
+
+  let candidates = targetIsAttention ? getAvailableAttentionUsers() : getAvailableSupportUsers();
+  if (!candidates.length && typeof fetchDataPage === 'function') {
     try {
       const res = await fetchDataPage('operations', { windowed: '1', limit: 1 });
-      if (Array.isArray(res?.supportUsers) && res.supportUsers.length) {
+      if (Array.isArray(res?.supportUsers)) {
         window.netopsSupportUsers = res.supportUsers;
         try { localStorage.setItem('netops_cached_support_users', JSON.stringify(res.supportUsers)); } catch (e) {}
-        users = res.supportUsers;
       }
+      if (Array.isArray(res?.attentionUsers)) {
+        window.netopsAttentionUsers = res.attentionUsers;
+        try { localStorage.setItem('netops_cached_attention_users', JSON.stringify(res.attentionUsers)); } catch (e) {}
+      }
+      candidates = targetIsAttention ? getAvailableAttentionUsers() : getAvailableSupportUsers();
     } catch (e) {}
   }
 
-  let html = '<option value="">-- Sin asignar (Todo Soporte) --</option>';
-  users.forEach(u => {
+  currentWOCandidates = candidates;
+
+  if (assignLabel) {
+    assignLabel.textContent = targetIsAttention ? 'Asignar a Atención a clientes' : 'Asignar a Soporte técnico';
+  }
+  if (allBtnText) {
+    allBtnText.textContent = targetIsAttention ? 'Todo el equipo de Atención a clientes' : 'Todo el equipo de Soporte técnico';
+  }
+
+  currentWOSelectedUserIds.clear();
+  if (selectedIds) {
+    const list = Array.isArray(selectedIds)
+      ? selectedIds
+      : String(selectedIds).split(',').map(s => s.trim()).filter(Boolean);
+    list.forEach(id => {
+      const cand = candidates.find(c => String(c.id).toLowerCase() === id.toLowerCase() || String(c.username || '').toLowerCase() === id.toLowerCase());
+      if (cand) currentWOSelectedUserIds.add(cand.id);
+      else if (id) currentWOSelectedUserIds.add(id);
+    });
+  }
+
+  updateWOAssignUI();
+}
+
+function updateWOAssignUI() {
+  const container = document.getElementById('wo-assign-users-grid');
+  const allBtn = document.getElementById('wo-assign-all-btn');
+  const hiddenIdInput = document.getElementById('wo-assigned-user');
+  const hiddenNamesInput = document.getElementById('wo-assigned-names');
+  if (!container) return;
+
+  const isAll = currentWOSelectedUserIds.size === 0;
+  if (allBtn) {
+    allBtn.classList.toggle('is-active', isAll);
+  }
+
+  let html = '';
+  currentWOCandidates.forEach(u => {
     const uid = String(u.id || '').trim();
-    const uname = String(u.name || u.username || 'Soporte').trim();
-    const isSel = (selectedId && (uid === selectedId || String(u.username || '').trim() === selectedId)) ? 'selected' : '';
-    html += `<option value="${orderEscape(uid)}" data-name="${orderEscape(uname)}" ${isSel}>👤 ${orderEscape(uname)}</option>`;
+    const uname = String(u.name || u.username || 'Usuario').trim();
+    const isSel = currentWOSelectedUserIds.has(uid);
+    html += `
+      <button type="button" class="wo-assign-user-pill ${isSel ? 'is-selected' : ''}" data-uid="${orderEscape(uid)}" onclick="toggleWOAssignUser('${orderEscape(uid)}')">
+        <svg class="wo-assign-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        <span class="wo-assign-avatar" aria-hidden="true">👤</span>
+        <span class="wo-assign-name">${orderEscape(uname)}</span>
+      </button>
+    `;
   });
-  select.innerHTML = html;
-  if (selectedId) select.value = selectedId;
+
+  if (!currentWOCandidates.length) {
+    html = '<div style="font-size:12px;color:#94a3b8;font-style:italic;padding:4px;">No hay miembros registrados para este rol.</div>';
+  }
+
+  container.innerHTML = html;
+
+  if (isAll) {
+    if (hiddenIdInput) hiddenIdInput.value = '';
+    if (hiddenNamesInput) hiddenNamesInput.value = '';
+  } else {
+    const selIds = Array.from(currentWOSelectedUserIds);
+    const selNames = selIds.map(id => {
+      const u = currentWOCandidates.find(c => c.id === id);
+      return u ? (u.name || u.username) : id;
+    });
+    if (hiddenIdInput) hiddenIdInput.value = selIds.join(', ');
+    if (hiddenNamesInput) hiddenNamesInput.value = selNames.join(', ');
+  }
+}
+
+function toggleWOAssignAll() {
+  currentWOSelectedUserIds.clear();
+  updateWOAssignUI();
+}
+
+function toggleWOAssignUser(uid) {
+  if (currentWOSelectedUserIds.has(uid)) {
+    currentWOSelectedUserIds.delete(uid);
+  } else {
+    currentWOSelectedUserIds.add(uid);
+  }
+  updateWOAssignUI();
 }
 
 function getOrderCategory(order) {
@@ -1078,7 +1184,10 @@ function applyRoleFormVisibility() {
     if (nodeGrid) nodeGrid.style.display = 'none';
     if (relationInfo) relationInfo.style.display = 'none';
     if (zoneGrid) zoneGrid.style.display = 'none';
-    if (assignFi) assignFi.style.display = 'none';
+    if (assignFi) {
+      assignFi.style.display = '';
+      assignFi.style.gridColumn = '1 / -1';
+    }
     if (typeFi) typeFi.style.display = 'none';
     if (evidenceZone) evidenceZone.style.display = 'none';
     if (detailKindFi) detailKindFi.style.display = 'none';
@@ -1283,10 +1392,10 @@ async function saveWO() {
   }
 
   const effectiveDetail = specificDetail || orderCategoryLabel(category);
-  const assignSelect = document.getElementById('wo-assign-field')?.querySelector('select') || document.getElementById('wo-assigned-user');
-  const assignedUserId = (!isSoporte && isNetwork) ? (assignSelect?.value || '') : '';
-  const assignedOption = assignSelect && assignSelect.selectedIndex >= 0 ? assignSelect.options[assignSelect.selectedIndex] : null;
-  const assignedUserName = (!isSoporte && isNetwork && assignedUserId) ? (assignedOption?.getAttribute('data-name') || assignedOption?.text?.replace(/^👤\s*/, '') || '') : '';
+  const assignedUserId = isNetwork ? (document.getElementById('wo-assigned-user')?.value.trim() || '') : '';
+  const assignedUserName = isNetwork ? (document.getElementById('wo-assigned-names')?.value.trim() || '') : '';
+  const targetRole = isSoporte ? 'atencion_clientes' : 'soporte';
+  const originRole = isSoporte ? 'soporte' : 'atencion_clientes';
 
   const selectedPriority = document.getElementById('wo-priority')?.value || 'media';
   const customReminderMins = parseInt(document.getElementById('wo-priority-minutes')?.value, 10);
@@ -1302,6 +1411,8 @@ async function saveWO() {
     detailLocation: (!isSoporte || !isNetwork) ? (document.getElementById('wo-location')?.value.trim() || '') : '',
     category,
     detailKind: isNetwork ? 'network' : 'physical',
+    targetRole,
+    originRole,
     assignedUserId,
     assignedUserName,
     title: effectiveDetail,
@@ -2179,7 +2290,7 @@ function renderWOs() {
 
             let networkQuickActions = '';
             if (w.detailKind === 'network') {
-              const isSentToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(getOrderCategory(w));
+              const isSentToAttention = isNetworkSupportToAttention(w);
 
               if (w.status === 'pendiente' || w.status === 'devuelto_soporte') {
                 if (isSentToAttention) {
@@ -2189,7 +2300,7 @@ function renderWOs() {
                       <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Comenzar atención de este requerimiento"><svg class="btn-action-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Atender</button>
                     `;
                   } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de respuesta por Atención a clientes">En Atención</span>`;
+                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de atención por Atención a clientes">En Atención</span>`;
                   }
                 } else {
                   // Detalle de red recibido por Soporte: primero tendrá el botón que diga "Atender"
@@ -2214,7 +2325,7 @@ function renderWOs() {
                 } else {
                   // Detalle de red en atención por Soporte
                   if (isSoporte) {
-                    const isAssignedToOther = w.assignedUserId && w.assignedUserId !== currentActor.id;
+                    const isAssignedToOther = w.assignedUserId && !isOrderAssignedToUser(w, currentActor);
                     const isCheckingByOther = w.reviewOpenedById && w.reviewOpenedById !== currentActor.id;
                     const canRetake = isAssignedToOther || isCheckingByOther;
 
@@ -2267,13 +2378,21 @@ function renderWOs() {
                   <span class="order-category-badge">${orderEscape(orderCategoryLabel(getOrderCategory(w)))}</span>
                   ${w.description ? `<div>${orderEscape(w.description)}</div>` : (w.title && w.title !== orderCategoryLabel(getOrderCategory(w)) ? `<div>${orderEscape(w.title)}</div>` : '')}
                   <div class="order-assignment-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">
-                    ${w.assignedUserName ? `<span class="order-assigned-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:12px;background:#e0f2fe;color:#0369a1;"><svg style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${orderEscape(w.assignedUserName)}</span>` : ''}
-                    ${w.reviewOpenedByName && !['completada','no_realizado'].includes(w.status) && w.reviewOpenedByName !== w.assignedUserName ? `<span class="order-checking-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;"><svg style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${w.reviewOpenedById === (currentActor.id || '') ? 'En atención personal' : `En atención: ${orderEscape(w.reviewOpenedByName)}`}</span>` : ''}
+                    ${w.assignedUserName ? (w.assignedUserName.split(',').map(s => s.trim()).filter(Boolean).map(name => `
+                      <span class="order-assigned-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:12px;background:#e0f2fe;color:#0369a1;">
+                        <svg style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${orderEscape(name)}
+                      </span>
+                    `).join('')) : ''}
+                    ${w.reviewOpenedByName && !['completada','no_realizado'].includes(w.status) && !((w.assignedUserName || '').includes(w.reviewOpenedByName)) ? `
+                      <span class="order-checking-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;">
+                        <svg style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${w.reviewOpenedById === (currentActor.id || '') ? 'En atención personal' : `En atención: ${orderEscape(w.reviewOpenedByName)}`}
+                      </span>
+                    ` : ''}
                   </div>
                 </td>
                 <td data-label="Tipo">${orderEscape(getOrderDisplayType(w))}</td>
                 <td data-label="Prioridad"><span class="priority-badge priority-${orderEscape(w.priority || 'media')}"><span class="priority-dot"></span>${orderEscape(pl(w.priority || 'media'))}</span></td>
-                <td data-label="Estado"><span class="order-status-badge ${rowStatus.className}" title="${orderEscape(rowStatus.title || rowStatus.label)}">${orderEscape(rowStatus.label)}</span></td>
+                <td data-label="Estado"><span class="order-status-badge ${rowStatus.className}">${orderEscape(rowStatus.label)}</span></td>
                 <td data-label="Acción">
                   <div class="order-actions">
                     ${networkQuickActions}
@@ -2378,6 +2497,18 @@ function openResolveNetworkModal(id) {
   netresEvidencePhotos = [];
   renderNetresEvidencePhotos();
 
+  const isSentToAttention = isNetworkSupportToAttention(order);
+  const modalTitle = document.getElementById('netres-modal-title');
+  const modalSub = document.getElementById('netres-modal-subtitle');
+  if (modalTitle) {
+    modalTitle.textContent = isSentToAttention ? 'Responder requerimiento a Soporte' : 'Resolver detalle de red';
+  }
+  if (modalSub) {
+    modalSub.textContent = isSentToAttention
+      ? 'Registra la respuesta o confirmación para Soporte técnico.'
+      : 'Registra la solución técnica implementada y notifica a Atención a clientes.';
+  }
+
   const summary = document.getElementById('netres-order-summary');
   const returnFollowUp = (Array.isArray(order.followUps) ? order.followUps : [])
     .slice()
@@ -2386,7 +2517,7 @@ function openResolveNetworkModal(id) {
 
   if (summary) {
     const isCheckingByOther = order.reviewOpenedByName && order.reviewOpenedById !== currentUser.id;
-    const isAssignedToOther = order.assignedUserId && order.assignedUserId !== currentUser.id;
+    const isAssignedToOther = order.assignedUserId && !isOrderAssignedToUser(order, currentUser);
 
     summary.innerHTML = `
       ${isCheckingByOther ? `
@@ -2408,8 +2539,8 @@ function openResolveNetworkModal(id) {
         <span><strong>Cliente:</strong> ${orderEscape(order.clientName || 'Sin nombre')}</span>
       </div>
       <div class="netres-summary-row">
-        <span><strong>Asignado a:</strong> ${orderEscape(order.assignedUserName || 'Todo el equipo de Soporte')}</span>
-        <span><strong>Reportado por:</strong> ${orderEscape(order.createdByName || order.createdByUsername || 'Atención a clientes')}</span>
+        <span><strong>Asignado a:</strong> ${orderEscape(order.assignedUserName || (isSentToAttention ? 'Todo el equipo de Atención' : 'Todo el equipo de Soporte'))}</span>
+        <span><strong>Reportado por:</strong> ${orderEscape(order.createdByName || order.createdByUsername || (isSentToAttention ? 'Soporte técnico' : 'Atención a clientes'))}</span>
       </div>
       ${order.clientPhone || order.phone ? `
       <div class="netres-summary-row">
@@ -2420,8 +2551,8 @@ function openResolveNetworkModal(id) {
       </div>
       ${order.status === 'devuelto_soporte' ? `
         <div class="netres-alert-returned" style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:12px 14px;border-radius:9px;margin-top:12px;">
-          <div style="font-size:12px;font-weight:800;display:flex;align-items:center;gap:6px;">⚠️ Motivo de devolución (Cliente no conforme):</div>
-          <div style="margin-top:5px;font-size:13px;font-weight:600;line-height:1.45;color:#7f1d1d;">${orderEscape(order.returnReason || returnFollowUp?.note || 'El cliente indica que continúa la falla.')}</div>
+          <div style="font-size:12px;font-weight:800;display:flex;align-items:center;gap:6px;">⚠️ Motivo de devolución (${isSentToAttention ? 'Aclaración solicitada' : 'Cliente no conforme'}):</div>
+          <div style="margin-top:5px;font-size:13px;font-weight:600;line-height:1.45;color:#7f1d1d;">${orderEscape(order.returnReason || returnFollowUp?.note || 'Se solicitó aclaración o revisión.')}</div>
           ${order.returnByName ? `<div style="font-size:11px;color:#991b1b;margin-top:4px;opacity:0.9;">Devuelto por: <strong>${orderEscape(order.returnByName)}</strong></div>` : ''}
         </div>
       ` : ''}
@@ -2469,24 +2600,29 @@ async function submitNetworkResolution() {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle de red.', 'err');
 
+  const isSentToAttention = isNetworkSupportToAttention(order);
   const confirmed = await askConfirmation({
-    title: 'Confirmar resolución técnica',
-    message: `¿Deseas registrar la solución del reporte #${getOrderFolio(order)} (${order.clientName || 'Cliente'}) y notificar a Atención a clientes para su validación?`,
-    confirmText: 'Registrar y notificar',
+    title: isSentToAttention ? 'Confirmar respuesta a Soporte' : 'Confirmar resolución técnica',
+    message: isSentToAttention
+      ? `¿Deseas enviar la respuesta para este requerimiento (#${getOrderFolio(order)}) a Soporte técnico?`
+      : `¿Deseas registrar la solución del reporte #${getOrderFolio(order)} (${order.clientName || 'Cliente'}) y notificar a Atención a clientes para su validación?`,
+    confirmText: isSentToAttention ? 'Registrar y notificar a Soporte' : 'Registrar y notificar',
     cancelText: 'Continuar editando',
     tone: 'ok'
   });
   if (!confirmed) return;
 
   const currentUser = getCurrentUser();
-  const userName = currentUser.name || currentUser.username || 'Soporte';
+  const userName = currentUser.name || currentUser.username || (isSentToAttention ? 'Atención a clientes' : 'Soporte');
   const now = new Date().toISOString();
 
   order.status = 'resuelto_soporte';
   order.updatedAt = now;
   order.updatedById = currentUser.id || '';
-  order.assignedUserId = currentUser.id || order.assignedUserId || '';
-  order.assignedUserName = userName || order.assignedUserName || '';
+  if (!order.assignedUserId) {
+    order.assignedUserId = currentUser.id || '';
+    order.assignedUserName = userName || '';
+  }
 
   const prevReport = order.technicianReport && typeof order.technicianReport === 'object' ? order.technicianReport : {};
   order.technicianReport = {
@@ -2500,8 +2636,8 @@ async function submitNetworkResolution() {
     evidencePhoto: netresEvidencePhotos[0] || prevReport.evidencePhoto || ''
   };
 
-  appendSharedNetworkFollowUp(order, 'resuelto_soporte', 'Resuelto por Soporte', solution);
-  setUpdatedAudit(order, 'resolvió detalle de red');
+  appendSharedNetworkFollowUp(order, 'resuelto_soporte', isSentToAttention ? 'Atendido por Atención' : 'Resuelto por Soporte', solution);
+  setUpdatedAudit(order, isSentToAttention ? 'respondió requerimiento a Soporte' : 'resolvió detalle de red');
 
   let saved = false;
   try {
@@ -2530,7 +2666,7 @@ async function submitNetworkResolution() {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify('Detalle resuelto. Se notificó a Atención a clientes en tiempo real.', 'ok');
+  notify(isSentToAttention ? 'Requerimiento respondido. Se notificó a Soporte técnico en tiempo real.' : 'Detalle resuelto. Se notificó a Atención a clientes en tiempo real.', 'ok');
   await loadOrderPage();
 }
 
@@ -2541,7 +2677,7 @@ async function startAttendingNetworkOrder(id) {
     markNotificationReadByOrderId(id);
   }
 
-  const isSentToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(getOrderCategory(order));
+  const isSentToAttention = isNetworkSupportToAttention(order);
   const roleAction = isSentToAttention ? 'la atención de este requerimiento' : 'la atención técnica de este reporte';
 
   const confirmed = await askConfirmation({
@@ -2554,7 +2690,7 @@ async function startAttendingNetworkOrder(id) {
   if (!confirmed) return;
 
   const currentUser = getCurrentUser();
-  const userName = currentUser.name || currentUser.username || 'Soporte';
+  const userName = currentUser.name || currentUser.username || (isSentToAttention ? 'Atención a clientes' : 'Soporte');
   const now = new Date().toISOString();
 
   order.status = 'en_revision';
@@ -2661,6 +2797,17 @@ function openReturnNetworkModal(id) {
   document.getElementById('netret-order-id').value = order.id;
   document.getElementById('netret-reason').value = '';
 
+  const isSentToAttention = isNetworkSupportToAttention(order);
+  const titleEl = document.querySelector('#network-return-mo .modal-head h2');
+  const subEl = document.querySelector('#network-return-mo .modal-head p');
+  const labelEl = document.querySelector('#network-return-mo .fi label');
+  const submitBtn = document.querySelector('#network-return-mo .btn-warning-return');
+
+  if (titleEl) titleEl.textContent = isSentToAttention ? 'Devolver a Atención a clientes' : 'Devolver reporte a Soporte técnico';
+  if (subEl) subEl.textContent = isSentToAttention ? 'Registra tus observaciones técnicas para que Atención a clientes aclare el requerimiento.' : 'Registra las observaciones del cliente para reabrir la atención técnica.';
+  if (labelEl) labelEl.innerHTML = (isSentToAttention ? 'Observaciones o aclaración solicitada' : 'Observaciones del cliente o falla persistente') + ' <span class="required-indicator">*</span>';
+  if (submitBtn) submitBtn.textContent = isSentToAttention ? 'Confirmar devolución a Atención' : 'Confirmar devolución a Soporte';
+
   const summary = document.getElementById('netret-order-summary');
   const solutionText = order.technicianReport?.solution || '';
   if (summary) {
@@ -2670,11 +2817,11 @@ function openReturnNetworkModal(id) {
         <span><strong>Cliente:</strong> ${orderEscape(order.clientName || 'Sin nombre')}</span>
       </div>
       <div class="netres-summary-row">
-        <span><strong>Asignado a:</strong> ${orderEscape(order.assignedUserName || 'Todo el equipo de Soporte')}</span>
+        <span><strong>Asignado a:</strong> ${orderEscape(order.assignedUserName || (isSentToAttention ? 'Todo el equipo de Atención' : 'Todo el equipo de Soporte'))}</span>
       </div>
       ${solutionText ? `
         <div class="netres-summary-detail">
-          <strong>Solución previa de Soporte:</strong> ${orderEscape(solutionText)}
+          <strong>${isSentToAttention ? 'Respuesta de Atención' : 'Solución previa de Soporte'}:</strong> ${orderEscape(solutionText)}
         </div>
       ` : ''}
     `;
@@ -2689,7 +2836,7 @@ async function submitNetworkReturn() {
   const reason = document.getElementById('netret-reason')?.value.trim();
   if (!id) return;
   if (!reason) {
-    notify('Describe las observaciones del cliente o falla persistente.', 'err');
+    notify('Describe las observaciones o motivo de devolución.', 'err');
     document.getElementById('netret-reason')?.focus();
     return;
   }
@@ -2697,17 +2844,20 @@ async function submitNetworkReturn() {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle.', 'err');
 
+  const isSentToAttention = isNetworkSupportToAttention(order);
   const confirmed = await askConfirmation({
-    title: 'Devolver reporte a Soporte técnico',
-    message: `El reporte #${getOrderFolio(order)} (${order.clientName || 'Cliente'}) volverá a Soporte técnico con tus observaciones para continuar la atención. ¿Deseas proceder?`,
-    confirmText: 'Sí, devolver a Soporte',
+    title: isSentToAttention ? 'Devolver requerimiento a Atención' : 'Devolver reporte a Soporte técnico',
+    message: isSentToAttention
+      ? `El requerimiento #${getOrderFolio(order)} volverá a Atención a clientes con tus observaciones. ¿Deseas proceder?`
+      : `El reporte #${getOrderFolio(order)} (${order.clientName || 'Cliente'}) volverá a Soporte técnico con tus observaciones para continuar la atención. ¿Deseas proceder?`,
+    confirmText: isSentToAttention ? 'Sí, devolver a Atención' : 'Sí, devolver a Soporte',
     cancelText: 'Revisar observaciones',
     tone: 'warning'
   });
   if (!confirmed) return;
 
   const currentUser = getCurrentUser();
-  const userName = currentUser.name || currentUser.username || 'Atención a clientes';
+  const userName = currentUser.name || currentUser.username || (isSentToAttention ? 'Soporte técnico' : 'Atención a clientes');
   const now = new Date().toISOString();
 
   order.status = 'devuelto_soporte';
@@ -2721,8 +2871,9 @@ async function submitNetworkReturn() {
   order.reviewOpenedByUsername = '';
   order.reviewOpenedAt = '';
 
-  appendSharedNetworkFollowUp(order, 'devuelto_soporte', 'Devuelto a Soporte (Cliente no conforme)', reason);
-  setUpdatedAudit(order, 'devolvió detalle a Soporte tras consultar con cliente');
+  const returnLabel = isSentToAttention ? 'Devuelto a Atención a clientes' : 'Devuelto a Soporte (Cliente no conforme)';
+  appendSharedNetworkFollowUp(order, 'devuelto_soporte', returnLabel, reason);
+  setUpdatedAudit(order, isSentToAttention ? 'devolvió requerimiento a Atención' : 'devolvió detalle a Soporte tras consultar con cliente');
 
   const saved = await saveRecord('workOrders', order);
   if (!saved) {
@@ -2738,7 +2889,7 @@ async function submitNetworkReturn() {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify('Reporte devuelto a Soporte técnico. Se notificó al equipo en tiempo real.', 'warn');
+  notify(isSentToAttention ? 'Requerimiento devuelto a Atención a clientes. Se notificó al equipo en tiempo real.' : 'Reporte devuelto a Soporte técnico. Se notificó al equipo en tiempo real.', 'warn');
   await loadOrderPage();
 }
 
@@ -2746,10 +2897,13 @@ async function confirmNetworkClientSatisfied(id) {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle.', 'err');
 
+  const isSentToAttention = isNetworkSupportToAttention(order);
   const client = order.clientName || 'el cliente';
   const confirmed = await askConfirmation({
-    title: 'Confirmar satisfacción del cliente',
-    message: `¿Has consultado con ${client} y confirmó que el servicio opera correctamente a su entera conformidad? El reporte #${getOrderFolio(order)} quedará cerrado definitivamente.`,
+    title: isSentToAttention ? 'Confirmar respuesta de Atención' : 'Confirmar satisfacción del cliente',
+    message: isSentToAttention
+      ? `¿La respuesta de Atención a clientes resuelve satisfactoriamente el requerimiento? El detalle #${getOrderFolio(order)} quedará cerrado definitivamente.`
+      : `¿Has consultado con ${client} y confirmó que el servicio opera correctamente a su entera conformidad? El reporte #${getOrderFolio(order)} quedará cerrado definitivamente.`,
     confirmText: 'Confirmar conformidad y cerrar',
     cancelText: 'Cancelar',
     tone: 'ok'
@@ -2758,7 +2912,7 @@ async function confirmNetworkClientSatisfied(id) {
   if (!confirmed) return;
 
   const currentUser = getCurrentUser();
-  const userName = currentUser.name || currentUser.username || 'Atención a clientes';
+  const userName = currentUser.name || currentUser.username || (isSentToAttention ? 'Soporte técnico' : 'Atención a clientes');
   const now = new Date().toISOString();
 
   order.status = 'completada';
@@ -2766,8 +2920,12 @@ async function confirmNetworkClientSatisfied(id) {
   order.updatedAt = now;
   order.updatedById = currentUser.id || '';
 
-  appendSharedNetworkFollowUp(order, 'completada', 'Finalizado y conforme', 'Cliente confirmó solución satisfactoria. Cerrado por Atención a clientes.');
-  setUpdatedAudit(order, 'finalizó detalle conforme con cliente');
+  const confirmLabel = isSentToAttention ? 'Conforme con respuesta de Atención' : 'Finalizado y conforme';
+  const confirmNote = isSentToAttention
+    ? `${userName} confirmó respuesta satisfactoria de Atención a clientes.`
+    : 'Cliente confirmó solución satisfactoria. Cerrado por Atención a clientes.';
+  appendSharedNetworkFollowUp(order, 'completada', confirmLabel, confirmNote);
+  setUpdatedAudit(order, isSentToAttention ? 'confirmó respuesta satisfactoria de requerimiento' : 'finalizó detalle conforme con cliente');
 
   const saved = await saveRecord('workOrders', order);
   if (!saved) {
@@ -2782,7 +2940,7 @@ async function confirmNetworkClientSatisfied(id) {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify('Detalle completado y cerrado exitosamente.', 'ok');
+  notify(isSentToAttention ? `Requerimiento #${getOrderFolio(order)} concluido a conformidad.` : `Reporte #${getOrderFolio(order)} finalizado a conformidad del cliente.`, 'ok');
   await loadOrderPage();
 }
 

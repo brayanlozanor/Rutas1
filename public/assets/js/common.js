@@ -2316,14 +2316,19 @@ function checkPriorityUnresolvedReminders(orders = []) {
 
 function isOrderAssignedToUser(order, user) {
   if (!order || !user) return false;
-  const assignedId = String(order.assignedUserId || order.assignedTo || '').trim().toLowerCase();
-  const assignedName = String(order.assignedUserName || order.assignedToName || '').trim().toLowerCase();
+  const rawIds = String(order.assignedUserId || order.assignedTo || '').trim().toLowerCase();
+  const rawNames = String(order.assignedUserName || order.assignedToName || '').trim().toLowerCase();
   const uid = String(user.id || '').trim().toLowerCase();
   const uname = String(user.username || '').trim().toLowerCase();
   const name = String(user.name || '').trim().toLowerCase();
 
-  if (assignedId && (assignedId === uid || assignedId === uname)) return true;
-  if (assignedName && (assignedName === name || assignedName === uname)) return true;
+  const idList = rawIds.split(',').map(s => s.trim()).filter(Boolean);
+  const nameList = rawNames.split(',').map(s => s.trim()).filter(Boolean);
+
+  if (idList.some(id => id === uid || id === uname)) return true;
+  if (nameList.some(n => n === name || n === uname)) return true;
+  if (rawIds && (rawIds === uid || rawIds === uname)) return true;
+  if (rawNames && (rawNames === name || rawNames === uname)) return true;
   return false;
 }
 
@@ -2342,6 +2347,18 @@ function isOrderCreatorOrAssigner(order, user) {
   return false;
 }
 
+function isNetworkSupportToAttention(order) {
+  if (!order) return false;
+  if (order.targetRole === 'atencion_clientes') return true;
+  if (order.targetRole === 'soporte') return false;
+  if (order.originRole === 'soporte') return true;
+  if (order.originRole === 'atencion_clientes') return false;
+  const creatorRole = String(order.createdByRole || '').toLowerCase();
+  if (creatorRole === 'administrador' || creatorRole === 'admin') return true;
+  if (creatorRole === 'atencion_clientes') return false;
+  return ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(order.category);
+}
+
 /**
  * Emite un evento en tiempo real tras mutar una orden de red (creación, resolución, devolución o confirmación).
  */
@@ -2356,6 +2373,9 @@ function broadcastNetworkOrderChange(order, transition) {
       title: order.title || order.description || '',
       clientName: order.clientName || '',
       town: order.town || order.nodeName || '',
+      targetRole: order.targetRole || '',
+      originRole: order.originRole || '',
+      createdByRole: order.createdByRole || '',
       assignedUserId: order.assignedUserId || '',
       assignedUserName: order.assignedUserName || '',
       reviewOpenedById: order.reviewOpenedById || '',
@@ -2379,6 +2399,9 @@ function broadcastNetworkOrderChange(order, transition) {
         town: order.town || order.nodeName || '',
         title: order.title || order.description || '',
         category: order.category || '',
+        targetRole: order.targetRole || '',
+        originRole: order.originRole || '',
+        createdByRole: order.createdByRole || '',
         assignedUserId: order.assignedUserId || '',
         assignedUserName: order.assignedUserName || '',
         reviewOpenedById: order.reviewOpenedById || '',
@@ -2449,49 +2472,72 @@ function handleNetworkOrderEvent(payload) {
   const hasAssignment = !!(order.assignedUserId || order.assignedUserName);
   const isAssignedToMe = isOrderAssignedToUser(order, user);
   const isCreatedByMe = isOrderCreatorOrAssigner(order, user);
-  const isSupportToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(order.category);
+  const isOwnCreator = (order.createdById && order.createdById === user.id) || (order.createdByUsername && order.createdByUsername === user.username) || (payload.byUserId && payload.byUserId === user.id);
+  const isSupportToAttention = isNetworkSupportToAttention(order);
 
   if (transition === 'new_order') {
     if (isSupportToAttention) {
       // Requerimiento enviado por Soporte hacia Atención a clientes
-      if (isAtencion) {
+      if (!isOwnCreator && isAtencion) {
+        const shouldNotify = hasAssignment ? isAssignedToMe : true;
+        if (shouldNotify) {
+          const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
+          notifyNetworkDetailEvent({
+            title: `Nuevo requerimiento de Soporte${assignedNotice}`,
+            message: `${order.clientName || 'Comunidad'} (${order.town || 'Red'}) · ${order.title || 'Solicitud de Atención a clientes'}`,
+            type: 'new_order',
+            orderId: order.id
+          });
+        }
+      }
+    } else {
+      // Reporte de red enviado por Atención a clientes hacia Soporte técnico
+      if (!isOwnCreator && isSoporte) {
+        const shouldNotify = hasAssignment ? isAssignedToMe : true;
+        if (shouldNotify) {
+          const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
+          notifyNetworkDetailEvent({
+            title: `Nuevo reporte de red${assignedNotice}`,
+            message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · ${order.title || 'Reportado por Atención a clientes'}`,
+            type: 'new_order',
+            orderId: order.id
+          });
+        }
+      }
+    }
+  } else if (transition === 'attending') {
+    // Cuando se da clic en Atender: notificar a la contraparte
+    if (isSupportToAttention) {
+      // Atención a clientes está atendiendo el requerimiento de Soporte: notificar a Soporte / creador
+      const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
+      const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
+      if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Nuevo requerimiento de Soporte',
-          message: `${order.clientName || 'Comunidad'} (${order.town || 'Red'}) · ${order.title || 'Solicitud de Atención a clientes'}`,
-          type: 'new_order',
+          title: 'Atención a clientes ha iniciado la atención',
+          message: `${order.clientName || 'Comunidad'} (${order.town || 'Red'}) · En atención por ${payload.byName || 'Atención a clientes'}.`,
+          type: 'attending',
           orderId: order.id
         });
       }
     } else {
-      // Si viene asignado a alguien específico de soporte: SOLO esa persona recibe la notificación
-      // Si no viene asignado a nadie en específico: lo reciben los miembros de Soporte
-      const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
+      // Soporte técnico está atendiendo el reporte de red: notificar a Atención a clientes / creador
+      const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
+      const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
       if (shouldNotify) {
-        const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
         notifyNetworkDetailEvent({
-          title: `Nuevo reporte de red${assignedNotice}`,
-          message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · ${order.title || 'Reportado por Atención a clientes'}`,
-          type: 'new_order',
+          title: 'Soporte técnico ha iniciado la atención',
+          message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · En atención por ${payload.byName || 'Soporte'}.`,
+          type: 'attending',
           orderId: order.id
         });
       }
     }
-  } else if (transition === 'attending') {
-    // Cuando Soporte da clic en Atender: notificar al creador / Atención a clientes
-    const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
-    const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
-    if (shouldNotify) {
-      notifyNetworkDetailEvent({
-        title: 'Soporte técnico ha iniciado la atención',
-        message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · En atención por ${payload.byName || 'Soporte'}.`,
-        type: 'attending',
-        orderId: order.id
-      });
-    }
   } else if (transition === 'resolved') {
     if (isSupportToAttention) {
-      // Atención respondió requerimiento de Soporte: notificar a Soporte
-      if (isSoporte) {
+      // Atención respondió requerimiento de Soporte: notificar a Soporte / creador
+      const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
+      const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
+      if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Atención a clientes atendió requerimiento',
           message: `${order.clientName || 'Comunidad'} · ${order.solution ? order.solution.slice(0, 65) + '...' : 'Revisa la respuesta.'}`,
@@ -2516,7 +2562,8 @@ function handleNetworkOrderEvent(payload) {
   } else if (transition === 'returned') {
     // Cuando Atención a clientes devuelve el detalle a Soporte (o Soporte devuelve a Atención)
     if (isSupportToAttention) {
-      if (isAtencion) {
+      const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
+      if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Requerimiento devuelto por Soporte',
           message: `${order.clientName || 'Comunidad'} · ${order.note ? order.note.slice(0, 65) + '...' : 'Se solicita aclaración.'}`,
@@ -2538,14 +2585,26 @@ function handleNetworkOrderEvent(payload) {
     }
   } else if (transition === 'confirmed') {
     // Cuando se confirma/completa el detalle
-    const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
-    if (shouldNotify) {
-      notifyNetworkDetailEvent({
-        title: 'Reporte concluido a conformidad',
-        message: `${order.clientName || 'Cliente'} confirmó que el servicio quedó funcionando.`,
-        type: 'confirmed',
-        orderId: order.id
-      });
+    if (isSupportToAttention) {
+      const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
+      if (shouldNotify) {
+        notifyNetworkDetailEvent({
+          title: 'Requerimiento cerrado a conformidad',
+          message: `Soporte confirmó respuesta satisfactoria de ${order.clientName || 'Comunidad'}.`,
+          type: 'confirmed',
+          orderId: order.id
+        });
+      }
+    } else {
+      const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
+      if (shouldNotify) {
+        notifyNetworkDetailEvent({
+          title: 'Reporte concluido a conformidad',
+          message: `${order.clientName || 'Cliente'} confirmó que el servicio quedó funcionando.`,
+          type: 'confirmed',
+          orderId: order.id
+        });
+      }
     }
   } else if (transition === 'retaken' && isSoporte && payload.byUserId !== user.id) {
     notifyNetworkDetailEvent({
@@ -2595,7 +2654,7 @@ async function checkNetworkOrderNotifications() {
       const isAssignedToMe = isOrderAssignedToUser(order, user);
       const isCreatedByMe = isOrderCreatorOrAssigner(order, user);
       const isOwnCreator = (order.createdById && order.createdById === user.id) || (order.createdByUsername && order.createdByUsername === user.username);
-      const isSupportToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(order.category);
+      const isSupportToAttention = isNetworkSupportToAttention(order);
 
       if (!prev) {
         // Nueva orden detectada
@@ -2605,6 +2664,9 @@ async function checkNetworkOrderNotifications() {
           title: orderTitle,
           clientName: client,
           town: place,
+          targetRole: order.targetRole || '',
+          originRole: order.originRole || '',
+          createdByRole: order.createdByRole || '',
           assignedUserId: order.assignedUserId || '',
           assignedUserName: order.assignedUserName || '',
           reviewOpenedById: order.reviewOpenedById || '',
@@ -2618,9 +2680,11 @@ async function checkNetworkOrderNotifications() {
 
         if (!isFirstRun && currentStatus === 'pendiente') {
           if (isSupportToAttention) {
-            if (userHasRole('atencion_clientes') && !isOwnCreator) {
+            const shouldNotifyNew = hasAssignment ? isAssignedToMe : (userHasRole('atencion_clientes') && !isOwnCreator);
+            if (shouldNotifyNew) {
+              const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
               notifyNetworkDetailEvent({
-                title: 'Nuevo requerimiento de Soporte',
+                title: `Nuevo requerimiento de Soporte${assignedNotice}`,
                 message: `${client} (${place}) · ${orderTitle}`,
                 type: 'new_order',
                 orderId: order.id
@@ -2646,6 +2710,9 @@ async function checkNetworkOrderNotifications() {
           ...prev,
           status: currentStatus,
           updatedAt: order.updatedAt || new Date().toISOString(),
+          targetRole: order.targetRole || prev.targetRole || '',
+          originRole: order.originRole || prev.originRole || '',
+          createdByRole: order.createdByRole || prev.createdByRole || '',
           assignedUserId: order.assignedUserId || prev.assignedUserId || '',
           assignedUserName: order.assignedUserName || prev.assignedUserName || '',
           reviewOpenedById: order.reviewOpenedById || prev.reviewOpenedById || '',
@@ -2661,11 +2728,13 @@ async function checkNetworkOrderNotifications() {
         if (!isFirstRun && !isOwnUpdater && prev.status !== currentStatus) {
           if (currentStatus === 'en_revision' && oldStatus !== 'en_revision') {
             const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
-            const shouldNotifyAttending = hasCreator ? isCreatedByMe : userHasRole('atencion_clientes');
+            const shouldNotifyAttending = isSupportToAttention
+              ? (hasCreator ? isCreatedByMe : userHasRole('administrador', 'admin'))
+              : (hasCreator ? isCreatedByMe : userHasRole('atencion_clientes'));
             if (shouldNotifyAttending) {
-              const actor = order.reviewOpenedByName || 'Soporte';
+              const actor = order.reviewOpenedByName || (isSupportToAttention ? 'Atención a clientes' : 'Soporte');
               notifyNetworkDetailEvent({
-                title: 'Soporte técnico ha iniciado la atención',
+                title: `${isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico'} ha iniciado la atención`,
                 message: `${client} (${place}) · Atendido por ${actor}.`,
                 type: 'attending',
                 orderId: order.id
