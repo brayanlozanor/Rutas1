@@ -334,15 +334,9 @@ function setupOrderControls() {
   if (duplicateTownField) duplicateTownField.remove();
   document.getElementById('wo-zone')?.closest('.fi')?.classList.add('wo-zone-field');
   const equipmentField = document.getElementById('wo-equipment')?.closest('.fi');
-  const equipmentInput = document.getElementById('wo-equipment');
-  if (equipmentInput) {
-    equipmentInput.readOnly = true;
-    equipmentInput.placeholder = 'Se asigna automáticamente al elegir un pueblo';
-    equipmentInput.removeAttribute('oninput');
-    equipmentInput.removeAttribute('onfocus');
-    equipmentInput.removeAttribute('onblur');
-  }
-  if (equipmentField) equipmentField.classList.add('wo-equipment-readonly');
+  if (equipmentField) equipmentField.remove();
+  const relationBox = document.getElementById('wo-relation-info');
+  if (relationBox) relationBox.remove();
   const actions = document.querySelector('#wo-mo .card-actions');
   if (actions && !document.getElementById('wo-evidence-zone')) {
     actions.insertAdjacentHTML('beforebegin', `<section id="wo-evidence-zone" class="wo-evidence-zone" tabindex="0">
@@ -719,19 +713,8 @@ async function chooseWONode(id) {
   document.getElementById('wo-zone').value = n.zone || '';
   // Importante: en órdenes por nodo NO se autollenan coordenadas del nodo.
   // La ubicación de la tabla debe ser solo la que el usuario capture en "Ubicación".
-  document.getElementById('wo-equipment-id').value = '';
-  document.getElementById('wo-equipment').value = 'Consultando antenas vinculadas...';
-  try {
-    const data = await fetchDataPage('equipment',{nodeIds:n.id,paged:'1',windowed:'1',limit:100,offset:0});
-    mergeOrderLookupRecords('equipment',data.equipment);
-  } catch (error) {
-    console.warn('No se pudieron consultar las antenas del pueblo',error);
-  }
-  const linked = getNodeLinkedEquipment(n.id);
-  document.getElementById('wo-equipment').value = linked.length
-    ? linked.map(item => item.name || item.ip || 'Antena').join(', ')
-    : 'Sin antena vinculada';
-  if (linked.length === 1) document.getElementById('wo-equipment-id').value = linked[0].id;
+  if (document.getElementById('wo-equipment-id')) document.getElementById('wo-equipment-id').value = '';
+  if (document.getElementById('wo-equipment')) document.getElementById('wo-equipment').value = '';
   const menu = document.getElementById('wo-node-suggestions');
   if (menu) menu.classList.remove('open');
   updateWORelationInfo();
@@ -908,31 +891,8 @@ function chooseWOEquipment(id, fillZone = true) {
 function updateWORelationInfo() {
   const box = document.getElementById('wo-relation-info');
   if (!box) return;
-  const node = getSelectedNodeByHiddenId();
-  const eq = getSelectedEquipmentByHiddenId();
-  const lines = [];
-  if (eq) {
-    const eqLabel = getEquipmentRelationLabel(eq.id);
-    if (eqLabel && eqLabel !== 'Sin pueblos vinculados') lines.push(eqLabel);
-  }
-  if (node) {
-    const nodeLabel = getNodeRelationLabel(node.id);
-    if (nodeLabel && nodeLabel !== 'Sin antena vinculada') lines.push(nodeLabel);
-  }
-  const newNodeName = document.getElementById('wo-node')?.dataset.newNodeName || '';
-  box.classList.toggle('is-new-node', Boolean(newNodeName));
-  if (newNodeName) {
-    box.style.display = 'block';
-    box.textContent = `Pueblo nuevo listo: “${newNodeName}”. Selecciona su zona y guarda el detalle.`;
-  } else if (lines.length) {
-    box.style.display = 'block';
-    box.textContent = lines.join(' | ');
-  } else if (!node && !eq) {
-    box.style.display = 'block';
-    box.textContent = 'Selecciona un pueblo registrado o usa la opción “Agregar pueblo”. La antena se asignará automáticamente.';
-  } else {
-    box.style.display = 'none';
-  }
+  box.style.display = 'none';
+  box.textContent = '';
 }
 
 function syncWOFromNode() {
@@ -1192,8 +1152,8 @@ async function openWO(id = '') {
       document.getElementById('wo-category').value = getOrderCategory(w);
       document.getElementById('wo-node-id').value = w.nodeId || '';
       document.getElementById('wo-node').value = w.nodeName || w.nodeCode || ''; // si estaba ligado a antena no forzamos nodo
-      document.getElementById('wo-equipment-id').value = w.equipmentId || '';
-      document.getElementById('wo-equipment').value = w.equipmentName || getOrderEquipment(w)?.name || '';
+      if (document.getElementById('wo-equipment-id')) document.getElementById('wo-equipment-id').value = w.equipmentId || '';
+      if (document.getElementById('wo-equipment')) document.getElementById('wo-equipment').value = w.equipmentName || getOrderEquipment(w)?.name || '';
       document.getElementById('wo-zone').value = w.region || target.zone || '';
       document.getElementById('wo-type').value = w.visitType || 'comunidad';
       document.getElementById('wo-priority').value = w.priority || 'media';
