@@ -84,7 +84,7 @@ const activeOrderFilters = {
   creator: new Set()
 };
 let orderCurrentPage = 1;
-let orderRowsPerPage = 20;
+let orderRowsPerPage = 15;
 let orderLoadSequence = 0;
 let orderNodeLookupSequence = 0;
 let orderEquipmentLookupSequence = 0;
@@ -576,14 +576,27 @@ function changeOrderPage(nextPage) {
   const page = Number(nextPage);
   if (!Number.isFinite(page) || page < 1) return;
   orderCurrentPage = page;
-  void loadOrderPage({scroll:true});
+  const pageMeta = window.netopsPageMeta?.operations || {};
+  const isServerWindowed = Number.isFinite(Number(pageMeta.total)) && Number(pageMeta.total) > 0 && (state.workOrders || []).length <= orderRowsPerPage;
+  if (isServerWindowed && typeof loadOrderPage === 'function') {
+    void loadOrderPage({scroll:true});
+  } else {
+    renderWOs();
+    document.querySelector('.orders-table-card')?.scrollIntoView({behavior:'smooth',block:'start'});
+  }
 }
 
 function changeOrderPageSize(value) {
   const size = Number(value);
-  orderRowsPerPage = [20, 50, 100].includes(size) ? size : 20;
+  orderRowsPerPage = [10, 15, 20, 50, 100].includes(size) ? size : 15;
   orderCurrentPage = 1;
-  void loadOrderPage();
+  const pageMeta = window.netopsPageMeta?.operations || {};
+  const isServerWindowed = Number.isFinite(Number(pageMeta.total)) && Number(pageMeta.total) > 0 && (state.workOrders || []).length <= orderRowsPerPage;
+  if (isServerWindowed && typeof loadOrderPage === 'function') {
+    void loadOrderPage();
+  } else {
+    renderWOs();
+  }
 }
 
 function renderActiveOrderFilters() {
@@ -1083,6 +1096,9 @@ function applyRoleFormVisibility() {
   const modalSub = document.querySelector('#wo-mo .modal-head p');
   const saveBtn = document.querySelector('#wo-mo .card-actions .bc');
 
+  // En ambas partes ya no es necesario elegir la zona de donde es, debe estar relacionado al pueblo
+  if (zoneFi) zoneFi.style.display = 'none';
+
   if (isSoporte && isNetworkOrder) {
     // Como Soporte: solo requiere Categoría y Texto (además de prioridad/repetición)
     if (clientGrid) clientGrid.style.display = 'none';
@@ -1103,13 +1119,19 @@ function applyRoleFormVisibility() {
     if (modalSub) modalSub.textContent = 'Envía un requerimiento o consulta rápida a Atención a clientes.';
     if (saveBtn) saveBtn.textContent = editingWOId ? 'Actualizar requerimiento' : 'Enviar a Atención a clientes';
   } else {
-    // Como Atención a clientes (u otros): todos los campos completos y evidencia obligatoria
+    // Como Atención a clientes (u otros): todos los campos completos excepto zona (que viene del pueblo) y evidencia obligatoria
     if (clientGrid) clientGrid.style.display = '';
     if (phoneFi) phoneFi.style.display = '';
     if (nodeGrid) nodeGrid.style.display = '';
     if (relationInfo) relationInfo.style.display = '';
-    if (zoneGrid) zoneGrid.style.display = '';
-    if (assignFi) assignFi.style.display = '';
+    if (zoneGrid) {
+      zoneGrid.style.display = '';
+      zoneGrid.style.gridTemplateColumns = '1fr';
+    }
+    if (assignFi) {
+      assignFi.style.display = '';
+      assignFi.style.gridColumn = '1 / -1';
+    }
     if (typeFi) typeFi.style.display = '';
     if (evidenceZone) evidenceZone.style.display = '';
     if (detailKindFi) detailKindFi.style.display = '';
@@ -1124,7 +1146,7 @@ function applyRoleFormVisibility() {
     }
 
     if (modalTitle) modalTitle.textContent = editingWOId ? 'Editar reporte para Soporte' : 'Nuevo reporte de red para Soporte';
-    if (modalSub) modalSub.textContent = 'Reporte: cliente, categoría, detalle específico, evidencias obligatorias, pueblo y zona.';
+    if (modalSub) modalSub.textContent = 'Reporte: cliente, categoría, detalle específico, evidencias obligatorias y pueblo.';
     if (saveBtn) saveBtn.textContent = editingWOId ? 'Guardar detalle' : 'Enviar reporte a Soporte';
   }
 }
@@ -1272,7 +1294,7 @@ async function saveWO() {
     if (!specificDetail) return showWOFieldError('wo-detail', 'Escribe el detalle específico del problema.');
     if (!typedNode) return showWOFieldError('wo-node', 'Busca un pueblo o escribe uno nuevo.');
     if (!node) return showWOFieldError('wo-node', 'Selecciona un pueblo registrado o pulsa “Agregar pueblo” para crearlo.');
-    if (!region) return showWOFieldError('wo-zone', 'Selecciona la zona del detalle.');
+    // La zona se toma automáticamente del pueblo relacionado; si no tiene zona asignada se omite
 
     // Evidencia obligatoria al subir reporte para Atención a clientes
     const existingEvidences = (existingWO?.technicianReport?.evidencePhotos || []).filter(Boolean);
@@ -1394,10 +1416,62 @@ function orderFilters() {
   };
 }
 
+function getOrderLifecycleRank(order) {
+  const status = String(order?.status || 'pendiente').toLowerCase();
+  // 1° Atender: pendientes y devueltos
+  if (status === 'pendiente' || status === 'devuelto_soporte') return 0;
+  // 2° Resolver: en atención (en revisión)
+  if (status === 'en_revision') return 1;
+  // 3° Por validar: resuelto por soporte, esperando validación
+  if (status === 'resuelto_soporte') return 2;
+  // 4° Hasta el último los completados (solucionados, no realizados, revisados)
+  if (['completada', 'no_realizado', 'revisado'].includes(status)) return 4;
+  return 3;
+}
+
+function getOrderPriorityRank(order) {
+  const prio = String(order?.priority || 'media').toLowerCase();
+  if (prio === 'muy_alta') return 0;
+  if (prio === 'alta') return 1;
+  if (prio === 'media') return 2;
+  return 3;
+}
+
 function filteredOrders() {
-  // La API ya entrega únicamente la categoría activa. Volver a filtrarla aquí
-  // ocultaba toda la página cuando un Worker anterior no incluía detailKind.
-  return (state.workOrders || []).filter(w => !w.deletedAt);
+  const rawList = (state.workOrders || []).filter(w => !w.deletedAt);
+  const activeSort = document.getElementById('wo-sort')?.value || 'priority';
+
+  return rawList.slice().sort((a, b) => {
+    // 1° Ciclo de vida: Atender -> Resolver -> Por validar -> Completados al final
+    const rankA = getOrderLifecycleRank(a);
+    const rankB = getOrderLifecycleRank(b);
+    if (rankA !== rankB) return rankA - rankB;
+
+    // Resent first
+    const resentA = (a.status === 'pendiente' && a.lastResentAt) ? 0 : 1;
+    const resentB = (b.status === 'pendiente' && b.lastResentAt) ? 0 : 1;
+    if (resentA !== resentB) return resentA - resentB;
+
+    if (activeSort === 'newest') {
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    }
+    if (activeSort === 'oldest') {
+      return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+    }
+    if (activeSort === 'town') {
+      return (getOrderTown(a) || '').localeCompare(getOrderTown(b) || '', 'es');
+    }
+    if (activeSort === 'client') {
+      return (a.clientName || '').localeCompare(b.clientName || '', 'es');
+    }
+
+    // Default: Prioridad y fecha
+    const prioA = getOrderPriorityRank(a);
+    const prioB = getOrderPriorityRank(b);
+    if (prioA !== prioB) return prioA - prioB;
+
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  });
 }
 
 function getOrderTown(order) {
@@ -2087,13 +2161,24 @@ function renderWOs() {
   }
 
   const pageMeta = window.netopsPageMeta?.operations || {};
-  const remoteTotal = Number(pageMeta.total);
-  const totalRows = Number.isFinite(remoteTotal) ? remoteTotal : allRows.length;
+  const isServerWindowed = Number.isFinite(Number(pageMeta.total)) && Number(pageMeta.total) > 0 && allRows.length <= orderRowsPerPage;
+  const totalRows = isServerWindowed ? Number(pageMeta.total) : allRows.length;
   const totalPages = Math.max(1, Math.ceil(totalRows / orderRowsPerPage));
   orderCurrentPage = Math.min(Math.max(orderCurrentPage, 1), totalPages);
-  const rangeStart = Number.isFinite(Number(pageMeta.offset)) ? Number(pageMeta.offset) : (orderCurrentPage - 1) * orderRowsPerPage;
-  const rangeEnd = Math.min(rangeStart + allRows.length, totalRows);
-  const rows = allRows;
+
+  let rangeStart = 0;
+  let rangeEnd = 0;
+  let rows = [];
+
+  if (isServerWindowed) {
+    rangeStart = Number.isFinite(Number(pageMeta.offset)) ? Number(pageMeta.offset) : (orderCurrentPage - 1) * orderRowsPerPage;
+    rangeEnd = Math.min(rangeStart + allRows.length, totalRows);
+    rows = allRows;
+  } else {
+    rangeStart = (orderCurrentPage - 1) * orderRowsPerPage;
+    rangeEnd = Math.min(rangeStart + orderRowsPerPage, totalRows);
+    rows = allRows.slice(rangeStart, rangeEnd);
+  }
 
   wrap.innerHTML = `
     <div class="table-wrap clean">
@@ -2236,12 +2321,14 @@ function renderWOs() {
     </div>
     <div class="order-table-footer">
       <div class="order-pagination-nav">
-        <button type="button" class="order-page-button" aria-label="Página anterior" onclick="changeOrderPage(${orderCurrentPage - 1})" ${orderCurrentPage === 1 ? 'disabled' : ''}>‹</button>
-        <button type="button" class="order-page-button" aria-label="Página siguiente" onclick="changeOrderPage(${orderCurrentPage + 1})" ${orderCurrentPage === totalPages ? 'disabled' : ''}>›</button>
-        <span><strong>${totalRows ? rangeStart + 1 : 0}-${rangeEnd}</strong> de <strong>${totalRows}</strong> detalles</span>
-        <span class="order-page-indicator">Página ${orderCurrentPage} de ${totalPages}</span>
+        <button type="button" class="order-page-button" aria-label="Primera página" title="Primera página" onclick="changeOrderPage(1)" ${orderCurrentPage === 1 ? 'disabled' : ''}>«</button>
+        <button type="button" class="order-page-button" aria-label="Página anterior" title="Página anterior" onclick="changeOrderPage(${orderCurrentPage - 1})" ${orderCurrentPage === 1 ? 'disabled' : ''}>‹</button>
+        <span class="order-page-indicator">Página <strong>${orderCurrentPage}</strong> de <strong>${totalPages}</strong></span>
+        <button type="button" class="order-page-button" aria-label="Página siguiente" title="Página siguiente" onclick="changeOrderPage(${orderCurrentPage + 1})" ${orderCurrentPage === totalPages ? 'disabled' : ''}>›</button>
+        <button type="button" class="order-page-button" aria-label="Última página" title="Última página" onclick="changeOrderPage(${totalPages})" ${orderCurrentPage === totalPages ? 'disabled' : ''}>»</button>
+        <span class="order-page-count" style="margin-left:8px;color:#64748b;font-size:11px;">(<strong>${totalRows ? rangeStart + 1 : 0}-${rangeEnd}</strong> de <strong>${totalRows}</strong> detalles)</span>
       </div>
-      <label class="order-page-size"><span>Filas por página:</span><select onchange="changeOrderPageSize(this.value)"><option value="20" ${orderRowsPerPage === 20 ? 'selected' : ''}>20</option><option value="50" ${orderRowsPerPage === 50 ? 'selected' : ''}>50</option><option value="100" ${orderRowsPerPage === 100 ? 'selected' : ''}>100</option></select></label>
+      <label class="order-page-size"><span>Filas por página:</span><select onchange="changeOrderPageSize(this.value)"><option value="10" ${orderRowsPerPage === 10 ? 'selected' : ''}>10</option><option value="15" ${orderRowsPerPage === 15 ? 'selected' : ''}>15</option><option value="20" ${orderRowsPerPage === 20 ? 'selected' : ''}>20</option><option value="50" ${orderRowsPerPage === 50 ? 'selected' : ''}>50</option></select></label>
     </div>`;
 }
 

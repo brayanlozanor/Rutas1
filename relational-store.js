@@ -709,13 +709,21 @@ function workOrderQuery(page = {}) {
   if(from){clauses.push('(w.created_at>=? OR w.completed_at>=?)');binds.push(from,from);}
   if(to){clauses.push('(w.created_at<? OR w.completed_at<?)');binds.push(to,to);}
   const sort = text(page?.sort);
+  const statusRank = `CASE
+    WHEN COALESCE(w.status,'pendiente') IN ('pendiente','devuelto_soporte') THEN 0
+    WHEN w.status = 'en_revision' THEN 1
+    WHEN w.status = 'resuelto_soporte' THEN 2
+    WHEN w.status IN ('completada','no_realizado','revisado') THEN 4
+    ELSE 3
+  END`;
   const resentFirst = "CASE WHEN w.status='pendiente' AND w.last_resent_at IS NOT NULL THEN 0 ELSE 1 END, w.last_resent_at DESC";
+  const priorityRank = "CASE COALESCE(w.priority,'media') WHEN 'muy_alta' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END";
   const selectedOrder = sort === 'newest' ? 'w.created_at DESC, w.rowid DESC'
     : sort === 'oldest' ? 'w.created_at ASC, w.rowid ASC'
     : sort === 'town' ? "lower(COALESCE(w.town_legacy,w.node_name_legacy,w.node_code_legacy,'')) ASC, w.rowid ASC"
     : sort === 'client' ? "lower(COALESCE(w.client_name,'')) ASC, w.rowid ASC"
-    : "CASE COALESCE(w.priority,'media') WHEN 'muy_alta' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END, w.created_at DESC, w.rowid DESC";
-  const orderBy = `${resentFirst}, ${selectedOrder}`;
+    : `${priorityRank}, w.created_at DESC, w.rowid DESC`;
+  const orderBy = `${statusRank} ASC, ${resentFirst}, ${selectedOrder}`;
   return {where:clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '',binds,orderBy};
 }
 
