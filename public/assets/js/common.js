@@ -2162,7 +2162,7 @@ function handleNetworkOrderEvent(payload) {
 
   const { transition, order } = payload;
 
-  // Actualizar estado reactivo en memoria para que se refleje inmediatamente en la tabla si está abierta
+  // Actualizar estado reactivo en memoria para que se refleje inmediatamente en la tabla sin recargar
   if (order && typeof state !== 'undefined' && Array.isArray(state.workOrders)) {
     const existing = state.workOrders.find(x => x.id === order.id);
     if (existing) {
@@ -2173,10 +2173,14 @@ function handleNetworkOrderEvent(payload) {
       if (order.reviewOpenedByName !== undefined) existing.reviewOpenedByName = order.reviewOpenedByName;
       if (order.reviewOpenedAt !== undefined) existing.reviewOpenedAt = order.reviewOpenedAt;
       if (order.updatedAt !== undefined) existing.updatedAt = order.updatedAt;
-      if (typeof renderWOs === 'function') {
-        renderWOs();
-      }
     }
+  }
+
+  // Refrescar vistas activas en tiempo real
+  if (typeof loadOrderPage === 'function') {
+    loadOrderPage();
+  } else if (typeof renderWOs === 'function') {
+    renderWOs();
   }
 
   // Evitar auto-notificar en la misma pestaña si el autor fue este mismo usuario
@@ -2191,49 +2195,95 @@ function handleNetworkOrderEvent(payload) {
   const hasAssignment = !!(order.assignedUserId || order.assignedUserName);
   const isAssignedToMe = isOrderAssignedToUser(order, user);
   const isCreatedByMe = isOrderCreatorOrAssigner(order, user);
+  const isSupportToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(order.category);
 
   if (transition === 'new_order') {
-    // Si viene asignado a alguien específico de soporte: SOLO esa persona recibe la notificación
-    // Si no viene asignado a nadie en específico: lo reciben los miembros de Soporte
-    const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
+    if (isSupportToAttention) {
+      // Requerimiento enviado por Soporte hacia Atención a clientes
+      if (isAtencion) {
+        notifyNetworkDetailEvent({
+          title: '📢 Nuevo requerimiento de Soporte',
+          message: `${order.clientName || 'Comunidad'} (${order.town || 'Red'}) · ${order.title || 'Solicitud de Atención a clientes'}`,
+          type: 'new_order',
+          orderId: order.id
+        });
+      }
+    } else {
+      // Si viene asignado a alguien específico de soporte: SOLO esa persona recibe la notificación
+      // Si no viene asignado a nadie en específico: lo reciben los miembros de Soporte
+      const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
+      if (shouldNotify) {
+        const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
+        notifyNetworkDetailEvent({
+          title: `🔔 Nuevo detalle de red${assignedNotice}`,
+          message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · ${order.title || 'Reportado por Atención a clientes'}`,
+          type: 'new_order',
+          orderId: order.id
+        });
+      }
+    }
+  } else if (transition === 'attending') {
+    // Cuando Soporte da clic en Atender: notificar al creador / Atención a clientes
+    const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
+    const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
     if (shouldNotify) {
-      const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
       notifyNetworkDetailEvent({
-        title: `🔔 Nuevo detalle de red${assignedNotice}`,
-        message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · ${order.title || 'Reportado por Atención a clientes'}`,
-        type: 'new_order',
+        title: '⚡ Soporte comenzó a atender tu reporte',
+        message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · Atendido por ${payload.byName || 'Soporte'}.`,
+        type: 'attending',
         orderId: order.id
       });
     }
   } else if (transition === 'resolved') {
-    // Cuando Soporte resuelve: SOLO la persona que asignó/creó el detalle recibe la notificación
-    const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
-    const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
-    if (shouldNotify) {
-      const solSnippet = order.solution ? `Solución: ${order.solution.slice(0, 65)}...` : 'Consulta con el cliente para validar.';
-      notifyNetworkDetailEvent({
-        title: '✅ Soporte resolvió tu detalle de red',
-        message: `${order.clientName || 'Cliente'} · ${solSnippet}`,
-        type: 'resolved',
-        orderId: order.id
-      });
+    if (isSupportToAttention) {
+      // Atención respondió requerimiento de Soporte: notificar a Soporte
+      if (isSoporte) {
+        notifyNetworkDetailEvent({
+          title: '💬 Atención a clientes respondió requerimiento',
+          message: `${order.clientName || 'Comunidad'} · ${order.solution ? order.solution.slice(0, 65) + '...' : 'Revisa la respuesta.'}`,
+          type: 'resolved',
+          orderId: order.id
+        });
+      }
+    } else {
+      // Cuando Soporte resuelve: la persona que creó el reporte o Atención a clientes recibe notificación
+      const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
+      const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
+      if (shouldNotify) {
+        const solSnippet = order.solution ? `Solución: ${order.solution.slice(0, 65)}...` : 'Consulta con el cliente para validar.';
+        notifyNetworkDetailEvent({
+          title: '✅ Soporte resolvió tu detalle de red',
+          message: `${order.clientName || 'Cliente'} · ${solSnippet}`,
+          type: 'resolved',
+          orderId: order.id
+        });
+      }
     }
   } else if (transition === 'returned') {
-    // Cuando Atención a clientes devuelve el detalle a Soporte:
-    // SOLO la persona asignada de soporte (o todo Soporte si no había asignación)
-    const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
-    if (shouldNotify) {
-      const reasonSnippet = order.note ? `Motivo: ${order.note.slice(0, 65)}...` : 'El cliente indica que continúa la falla.';
-      notifyNetworkDetailEvent({
-        title: '⚠️ Detalle devuelto por Atención a clientes',
-        message: `${order.clientName || 'Cliente'} · ${reasonSnippet}`,
-        type: 'returned',
-        orderId: order.id
-      });
+    // Cuando Atención a clientes devuelve el detalle a Soporte (o Soporte devuelve a Atención)
+    if (isSupportToAttention) {
+      if (isAtencion) {
+        notifyNetworkDetailEvent({
+          title: '⚠️ Requerimiento devuelto por Soporte',
+          message: `${order.clientName || 'Comunidad'} · ${order.note ? order.note.slice(0, 65) + '...' : 'Se solicita aclaración.'}`,
+          type: 'returned',
+          orderId: order.id
+        });
+      }
+    } else {
+      const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
+      if (shouldNotify) {
+        const reasonSnippet = order.note ? `Motivo: ${order.note.slice(0, 65)}...` : 'El cliente indica que continúa la falla.';
+        notifyNetworkDetailEvent({
+          title: '⚠️ Detalle devuelto por Atención a clientes',
+          message: `${order.clientName || 'Cliente'} · ${reasonSnippet}`,
+          type: 'returned',
+          orderId: order.id
+        });
+      }
     }
   } else if (transition === 'confirmed') {
-    // Cuando se confirma/completa el detalle:
-    // SOLO la persona asignada de soporte (o soporte general si no fue asignada)
+    // Cuando se confirma/completa el detalle
     const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
     if (shouldNotify) {
       notifyNetworkDetailEvent({
@@ -2263,9 +2313,14 @@ async function checkNetworkOrderNotifications() {
     const res = await fetchDataPage('operations', {
       detailKind: 'network',
       windowed: '1',
-      limit: 25,
+      limit: 30,
       sort: 'newest'
     }, 6000);
+
+    if (Array.isArray(res?.supportUsers) && res.supportUsers.length) {
+      window.netopsSupportUsers = res.supportUsers;
+      try { localStorage.setItem('netops_cached_support_users', JSON.stringify(res.supportUsers)); } catch (e) {}
+    }
 
     const orders = Array.isArray(res?.workOrders) ? res.workOrders : [];
     if (!orders.length) return;
@@ -2286,6 +2341,7 @@ async function checkNetworkOrderNotifications() {
       const isAssignedToMe = isOrderAssignedToUser(order, user);
       const isCreatedByMe = isOrderCreatorOrAssigner(order, user);
       const isOwnCreator = (order.createdById && order.createdById === user.id) || (order.createdByUsername && order.createdByUsername === user.username);
+      const isSupportToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(order.category);
 
       if (!prev) {
         // Nueva orden detectada
@@ -2307,19 +2363,30 @@ async function checkNetworkOrderNotifications() {
         updated = true;
 
         if (!isFirstRun && currentStatus === 'pendiente') {
-          const shouldNotifyNew = hasAssignment ? isAssignedToMe : (userHasRole('administrador', 'admin') && !isOwnCreator);
-          if (shouldNotifyNew) {
-            const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
-            notifyNetworkDetailEvent({
-              title: `🔔 Nuevo detalle de red${assignedNotice}`,
-              message: `${client} (${place}) · ${orderTitle}`,
-              type: 'new_order',
-              orderId: order.id
-            });
+          if (isSupportToAttention) {
+            if (userHasRole('atencion_clientes') && !isOwnCreator) {
+              notifyNetworkDetailEvent({
+                title: '📢 Nuevo requerimiento de Soporte',
+                message: `${client} (${place}) · ${orderTitle}`,
+                type: 'new_order',
+                orderId: order.id
+              });
+            }
+          } else {
+            const shouldNotifyNew = hasAssignment ? isAssignedToMe : (userHasRole('administrador', 'admin') && !isOwnCreator);
+            if (shouldNotifyNew) {
+              const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
+              notifyNetworkDetailEvent({
+                title: `🔔 Nuevo detalle de red${assignedNotice}`,
+                message: `${client} (${place}) · ${orderTitle}`,
+                type: 'new_order',
+                orderId: order.id
+              });
+            }
           }
         }
-      } else if (prev.status !== currentStatus) {
-        // Transición de estado detectada
+      } else if (prev.status !== currentStatus || (order.updatedAt && prev.updatedAt && order.updatedAt !== prev.updatedAt)) {
+        // Transición de estado o actualización detectada
         const oldStatus = prev.status;
         cache[order.id] = {
           ...prev,
@@ -2337,18 +2404,41 @@ async function checkNetworkOrderNotifications() {
         updated = true;
 
         const isOwnUpdater = (order.updatedById && order.updatedById === user.id) || (order.updatedByUsername && order.updatedByUsername === user.username);
-        if (!isFirstRun && !isOwnUpdater) {
-          if (currentStatus === 'resuelto_soporte') {
+        if (!isFirstRun && !isOwnUpdater && prev.status !== currentStatus) {
+          if (currentStatus === 'en_revision' && oldStatus !== 'en_revision') {
             const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
-            const shouldNotifyResolved = hasCreator ? isCreatedByMe : userHasRole('atencion_clientes');
-            if (shouldNotifyResolved) {
-              const sol = order.technicianReport?.solution || '';
+            const shouldNotifyAttending = hasCreator ? isCreatedByMe : userHasRole('atencion_clientes');
+            if (shouldNotifyAttending) {
+              const actor = order.reviewOpenedByName || 'Soporte';
               notifyNetworkDetailEvent({
-                title: '✅ Soporte resolvió tu detalle de red',
-                message: `${client} · ${sol ? 'Solución: ' + sol.slice(0, 65) + '...' : 'Consulta con el cliente para validar.'}`,
-                type: 'resolved',
+                title: '⚡ Soporte comenzó a atender tu reporte',
+                message: `${client} (${place}) · Atendido por ${actor}.`,
+                type: 'attending',
                 orderId: order.id
               });
+            }
+          } else if (currentStatus === 'resuelto_soporte') {
+            if (isSupportToAttention) {
+              if (userHasRole('administrador', 'admin')) {
+                notifyNetworkDetailEvent({
+                  title: '💬 Atención a clientes respondió requerimiento',
+                  message: `${client} · ${order.technicianReport?.solution ? order.technicianReport.solution.slice(0, 65) + '...' : 'Revisa la respuesta.'}`,
+                  type: 'resolved',
+                  orderId: order.id
+                });
+              }
+            } else {
+              const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
+              const shouldNotifyResolved = hasCreator ? isCreatedByMe : userHasRole('atencion_clientes');
+              if (shouldNotifyResolved) {
+                const sol = order.technicianReport?.solution || '';
+                notifyNetworkDetailEvent({
+                  title: '✅ Soporte resolvió tu detalle de red',
+                  message: `${client} · ${sol ? 'Solución: ' + sol.slice(0, 65) + '...' : 'Consulta con el cliente para validar.'}`,
+                  type: 'resolved',
+                  orderId: order.id
+                });
+              }
             }
           } else if (currentStatus === 'devuelto_soporte') {
             const shouldNotifyReturned = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin');
@@ -2378,6 +2468,14 @@ async function checkNetworkOrderNotifications() {
 
     if (updated) {
       setStoredNetworkStateCache(cache);
+      // Auto-actualizar la vista sin necesidad de recargar la página
+      if (!isFirstRun) {
+        if (typeof loadOrderPage === 'function') {
+          loadOrderPage();
+        } else if (typeof renderWOs === 'function') {
+          renderWOs();
+        }
+      }
     }
 
     // Verificar recordatorios periódicos por prioridad de detalles no resueltos
@@ -2420,8 +2518,8 @@ function initNetworkNotifications() {
     }
   });
 
-  // 3. Poller en segundo plano: cada 7s visible, 14s en segundo plano
-  let intervalMs = 7000;
+  // 3. Poller en segundo plano: cada 4s visible, 10s en segundo plano para sincronización en tiempo real
+  let intervalMs = 4000;
   const runPoll = () => {
     checkNetworkOrderNotifications();
   };
@@ -2432,9 +2530,9 @@ function initNetworkNotifications() {
     clearInterval(_netopsWatcherInterval);
     if (!document.hidden) {
       runPoll();
-      _netopsWatcherInterval = setInterval(runPoll, 7000);
+      _netopsWatcherInterval = setInterval(runPoll, 4000);
     } else {
-      _netopsWatcherInterval = setInterval(runPoll, 14000);
+      _netopsWatcherInterval = setInterval(runPoll, 10000);
     }
   });
 

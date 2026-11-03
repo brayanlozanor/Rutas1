@@ -122,7 +122,7 @@ function forbidden(requestId) {
 
 function sanitizeDataForSession(data,session) {
   if (!data||typeof data!=='object'||hasRole(session,'administrador','admin')) return data;
-  if (Array.isArray(data.users)) data.users=hasRole(session,'atencion_clientes')?data.users.filter(user=>String(user.role||'').toLowerCase()==='tecnico'):data.users.filter(user=>String(user.id||'')===String(session.sub||''));
+  if (Array.isArray(data.users)) data.users=hasRole(session,'atencion_clientes')?data.users.filter(user=>['tecnico','administrador','admin'].includes(String(user.role||'').toLowerCase())):data.users.filter(user=>String(user.id||'')===String(session.sub||''));
   if (Array.isArray(data.auditLog)) data.auditLog=hasRole(session,'atencion_clientes')?data.auditLog.filter(item=>String(item.byRole||'').toLowerCase()==='tecnico'):data.auditLog.filter(item=>String(item.byId||'')===String(session.sub||''));
   return data;
 }

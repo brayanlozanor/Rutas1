@@ -130,7 +130,10 @@ async function loadOrderPage({ scroll = false } = {}) {
     }
     state.workOrders = Array.isArray(data.workOrders) ? data.workOrders : [];
     if (Array.isArray(data.nodes)) state.nodes = data.nodes;
-    if (Array.isArray(data.supportUsers)) window.netopsSupportUsers = data.supportUsers;
+    if (Array.isArray(data.supportUsers)) {
+      window.netopsSupportUsers = data.supportUsers;
+      try { localStorage.setItem('netops_cached_support_users', JSON.stringify(data.supportUsers)); } catch (e) {}
+    }
     if (typeof _previousStateSaved !== 'undefined' && _previousStateSaved) {
       _previousStateSaved.workOrders = cloneData(state.workOrders);
     }
@@ -210,12 +213,39 @@ function syncWODetailKindField(kind) {
   renderWOCategoryOptions(resolved,document.getElementById('wo-category')?.value || '');
 }
 
-function renderWOAssignedUserOptions(selectedId = '') {
+function getAvailableSupportUsers() {
+  if (Array.isArray(window.netopsSupportUsers) && window.netopsSupportUsers.length) {
+    return window.netopsSupportUsers;
+  }
+  try {
+    const cached = JSON.parse(localStorage.getItem('netops_cached_support_users') || '[]');
+    if (Array.isArray(cached) && cached.length) {
+      window.netopsSupportUsers = cached;
+      return cached;
+    }
+  } catch (e) {}
+  if (Array.isArray(state.users)) {
+    const fromState = state.users.filter(u => ['administrador', 'admin'].includes(String(u.role).toLowerCase()) && u.active !== false);
+    if (fromState.length) return fromState;
+  }
+  return [];
+}
+
+async function renderWOAssignedUserOptions(selectedId = '') {
   const select = document.getElementById('wo-assigned-user');
   if (!select) return;
-  const users = Array.isArray(window.netopsSupportUsers) && window.netopsSupportUsers.length
-    ? window.netopsSupportUsers
-    : (Array.isArray(state.users) ? state.users.filter(u => ['administrador', 'admin'].includes(String(u.role).toLowerCase()) && u.active !== false) : []);
+
+  let users = getAvailableSupportUsers();
+  if (!users.length && typeof fetchDataPage === 'function') {
+    try {
+      const res = await fetchDataPage('operations', { windowed: '1', limit: 1 });
+      if (Array.isArray(res?.supportUsers) && res.supportUsers.length) {
+        window.netopsSupportUsers = res.supportUsers;
+        try { localStorage.setItem('netops_cached_support_users', JSON.stringify(res.supportUsers)); } catch (e) {}
+        users = res.supportUsers;
+      }
+    } catch (e) {}
+  }
 
   let html = '<option value="">-- Sin asignar (Todo Soporte) --</option>';
   users.forEach(u => {
