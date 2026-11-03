@@ -5,9 +5,27 @@ let materialLoadSequence = 0;
 let materialTechnicianDirectoryLoaded = false;
 let materialPhotoData = '';
 
+let dispatchCurrentPage = 1;
+const dispatchPageSize = 8;
+
 let activeAdminMainTab = 'dispatches'; // 'dispatches' | 'catalog'
 let activeDispatchFilterStatus = 'all'; // 'all' | 'pending_receipt' | 'received' | 'pending_handover' | 'completed'
 let activeTechTab = 'pending_receipt'; // 'pending_receipt' | 'received' | 'pending_handover' | 'completed'
+
+function isRealDispatchMovement(mov) {
+  if (!mov || !mov.id) return false;
+  const rawType = String(mov.type || mov.movementType || mov.movement_type || '').toLowerCase();
+  // Movimientos internos de almacén (entradas iniciales o ajustes de edición de producto) NUNCA son entregas a técnicos
+  if (['entry', 'adjustment', 'initial'].includes(rawType)) return false;
+  const ref = String(mov.reference || '').toLowerCase();
+  const reason = String(mov.reason || '').toLowerCase();
+  if (ref.includes('existencia inicial') || ref.includes('edición del material') || ref.includes('edicion del material')) return false;
+  if (reason.includes('existencia ajustada') || reason.includes('ajuste')) return false;
+
+  // Es despacho si su tipo es de entrega/recepción o si tiene un técnico asignado
+  if (['give', 'dispatch', 'settle', 'reception', 'return'].includes(rawType)) return true;
+  return Boolean(mov.technicianId || mov.technicianName);
+}
 
 function materialRemoteParams() {
   return {
@@ -35,7 +53,7 @@ async function loadMaterialPage() {
     }
     state.materials = Array.isArray(data.materials) ? data.materials : [];
     if (Array.isArray(data.technicians)) state.technicians = data.technicians;
-    if (Array.isArray(data.materialMovements)) state.materialMovements = data.materialMovements;
+    if (Array.isArray(data.materialMovements)) state.materialMovements = data.materialMovements.filter(isRealDispatchMovement);
     normalizeMaterials();
     updateMaterialDatalist();
     if (typeof _previousStateSaved !== 'undefined' && _previousStateSaved) {
@@ -81,6 +99,9 @@ async function initMaterialPage() {
   }
 
   await loadDB({ showOverlay: false, preferCache: true });
+  if (Array.isArray(state.materialMovements)) {
+    state.materialMovements = state.materialMovements.filter(isRealDispatchMovement);
+  }
   await cargarDirectorioTecnicos();
   normalizeMaterials();
   renderMaterialViews();
@@ -196,10 +217,11 @@ function getDispatchFolios(d) {
 function getAllDispatches() {
   const dispatchesMap = new Map();
 
-  // 1. Envíos directos desde la tabla/colección de materialMovements
+  // 1. Envíos directos desde la tabla/colección de materialMovements (solo despachos genuinos)
   const directMovements = Array.isArray(state.materialMovements) ? state.materialMovements : [];
   for (const mov of directMovements) {
     if (!mov || !mov.id) continue;
+    if (!isRealDispatchMovement(mov)) continue;
     const items = normalizeDispatchItems(mov);
     const folios = getDispatchFolios(mov);
     dispatchesMap.set(mov.id, {
@@ -221,10 +243,11 @@ function getAllDispatches() {
     });
   }
 
-  // 2. Historial previo asociado dentro del objeto material
+  // 2. Historial previo asociado dentro del objeto material (solo si es un despacho a técnico real)
   for (const m of (state.materials || [])) {
     for (const mov of (m.movements || [])) {
       if (!mov || !mov.id) continue;
+      if (!isRealDispatchMovement(mov)) continue;
       if (!dispatchesMap.has(mov.id)) {
         const items = normalizeDispatchItems(mov, m);
         const folios = getDispatchFolios(mov);
@@ -510,6 +533,7 @@ function switchAdminMainTab(tab) {
 
 function setDispatchFilterStatus(status) {
   activeDispatchFilterStatus = status;
+  dispatchCurrentPage = 1;
   ['all', 'pending_receipt', 'received', 'pending_handover', 'completed'].forEach(s => {
     document.getElementById(`chip-status-${s}`)?.classList.toggle('active', s === status);
   });
@@ -517,6 +541,7 @@ function setDispatchFilterStatus(status) {
 }
 
 function filtrarDispatches() {
+  dispatchCurrentPage = 1;
   renderAdminDispatches();
 }
 
@@ -598,12 +623,69 @@ function renderAdminDispatches() {
     return matchesStatus && matchesTech && matchesFolio && matchesSearch;
   });
 
+  const totalFiltered = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / dispatchPageSize));
+  if (dispatchCurrentPage > totalPages) dispatchCurrentPage = totalPages;
+  if (dispatchCurrentPage < 1) dispatchCurrentPage = 1;
+
+  const startIndex = (dispatchCurrentPage - 1) * dispatchPageSize;
+  const endIndex = Math.min(startIndex + dispatchPageSize, totalFiltered);
+  const paged = filtered.slice(startIndex, endIndex);
+
   const grid = document.getElementById('dispatches-grid');
   const empty = document.getElementById('dispatches-empty');
-  if (empty) empty.style.display = filtered.length ? 'none' : 'block';
+  if (empty) empty.style.display = totalFiltered ? 'none' : 'block';
   if (grid) {
-    grid.innerHTML = filtered.map(d => renderAdminDispatchCard(d)).join('');
+    grid.innerHTML = paged.map(d => renderAdminDispatchCard(d)).join('');
   }
+
+  renderDispatchesPagination(totalFiltered, totalPages, startIndex, endIndex);
+}
+
+function changeDispatchPage(page) {
+  const next = Number(page);
+  if (!Number.isFinite(next) || next < 1) return;
+  dispatchCurrentPage = next;
+  renderAdminDispatches();
+  document.getElementById('admin-section-dispatches')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderDispatchesPagination(total, totalPages, startIndex, endIndex) {
+  const paginationEl = document.getElementById('dispatches-pagination');
+  if (!paginationEl) return;
+  if (total <= 0) {
+    paginationEl.style.display = 'none';
+    paginationEl.innerHTML = '';
+    return;
+  }
+  paginationEl.style.display = 'flex';
+
+  const isFirst = dispatchCurrentPage <= 1;
+  const isLast = dispatchCurrentPage >= totalPages;
+
+  let pageButtons = '';
+  let startP = Math.max(1, dispatchCurrentPage - 2);
+  let endP = Math.min(totalPages, startP + 4);
+  if (endP - startP < 4) startP = Math.max(1, endP - 4);
+
+  for (let p = startP; p <= endP; p++) {
+    pageButtons += `<button type="button" class="dispatch-page-num ${p === dispatchCurrentPage ? 'active' : ''}" onclick="changeDispatchPage(${p})">${p}</button>`;
+  }
+
+  paginationEl.innerHTML = `
+    <div class="dispatch-pagination-info">
+      Mostrando <strong>${total ? startIndex + 1 : 0}–${endIndex}</strong> de <strong>${total}</strong> entregas
+    </div>
+    <div class="dispatch-pagination-controls">
+      <button type="button" class="dispatch-page-nav-btn" onclick="changeDispatchPage(${dispatchCurrentPage - 1})" ${isFirst ? 'disabled' : ''} title="Página anterior">
+        ‹ Anterior
+      </button>
+      <div class="dispatch-page-numbers">${pageButtons}</div>
+      <button type="button" class="dispatch-page-nav-btn" onclick="changeDispatchPage(${dispatchCurrentPage + 1})" ${isLast ? 'disabled' : ''} title="Página siguiente">
+        Siguiente ›
+      </button>
+    </div>
+  `;
 }
 
 function renderAdminDispatchCard(d) {
@@ -936,8 +1018,11 @@ function renderMaterialSuggestions(inputEl) {
 
   box.innerHTML = matches.map(m => `
     <div class="mat-suggestion-item" data-name="${escapeHtml(m.name)}" data-unit="${escapeHtml(m.unit || 'pieza')}">
-      <span class="mat-suggestion-name">${escapeHtml(m.name)}</span>
-      <span class="mat-suggestion-unit">${escapeHtml(m.unit || 'pieza')}</span>
+      <div class="mat-suggestion-left">
+        <span class="mat-suggestion-name">${escapeHtml(m.name)}</span>
+        <span class="mat-suggestion-unit">${escapeHtml(m.unit || 'pieza')}</span>
+      </div>
+      <span class="mat-suggestion-stock ${Number(m.stock) <= 0 ? 'empty' : Number(m.stock) <= Number(m.minimumStock) ? 'low' : ''}">Stock: ${qty(m.stock)}</span>
     </div>
   `).join('');
 
@@ -983,24 +1068,31 @@ function addDeliverRow(materialNameOrId = '', quantity = 1, unit = 'pieza') {
   row.className = 'deliver-item-row';
   row.innerHTML = `
     <div class="mat-autocomplete-wrap">
-      <input type="text" class="deliver-row-material" autocomplete="off" placeholder="Escribe o selecciona material..." value="${escapeHtml(initialName)}" oninput="renderMaterialSuggestions(this)" onfocus="renderMaterialSuggestions(this)" onblur="hideMaterialSuggestions(this)" style="width:100%">
+      <div class="mat-search-input-box">
+        <span class="mat-input-icon">📦</span>
+        <input type="text" class="deliver-row-material" autocomplete="off" placeholder="Escribe o selecciona material..." value="${escapeHtml(initialName)}" oninput="renderMaterialSuggestions(this)" onfocus="renderMaterialSuggestions(this)" onblur="hideMaterialSuggestions(this)">
+      </div>
       <div class="mat-suggestions-box"></div>
     </div>
-    <div>
-      <input type="number" class="deliver-row-qty" min="0.01" step="0.01" value="${quantity}" placeholder="Cant." style="width:100%">
+    <div class="deliver-qty-box">
+      <input type="number" class="deliver-row-qty" min="0.01" step="0.01" value="${quantity}" placeholder="Cant.">
     </div>
-    <div>
-      <select class="deliver-row-unit" style="width:100%">
+    <div class="deliver-unit-box">
+      <select class="deliver-row-unit">
         <option value="pieza" ${initialUnit === 'pieza' ? 'selected' : ''}>pieza</option>
         <option value="metro" ${initialUnit === 'metro' ? 'selected' : ''}>metro</option>
         <option value="unidad" ${initialUnit === 'unidad' ? 'selected' : ''}>unidad</option>
         <option value="rollo" ${initialUnit === 'rollo' ? 'selected' : ''}>rollo</option>
         <option value="paquete" ${initialUnit === 'paquete' ? 'selected' : ''}>paquete</option>
+        <option value="bobina" ${initialUnit === 'bobina' ? 'selected' : ''}>bobina</option>
         <option value="caja" ${initialUnit === 'caja' ? 'selected' : ''}>caja</option>
+        <option value="kit" ${initialUnit === 'kit' ? 'selected' : ''}>kit</option>
         <option value="kg" ${initialUnit === 'kg' ? 'selected' : ''}>kg</option>
       </select>
     </div>
-    <button type="button" class="deliver-row-remove-btn" onclick="removeDeliverRow(this)" title="Quitar material">✕</button>
+    <button type="button" class="deliver-row-remove-btn" onclick="removeDeliverRow(this)" title="Quitar este material">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+    </button>
   `;
   list.appendChild(row);
 }
@@ -1169,24 +1261,31 @@ function addEditRow(materialNameOrId = '', quantity = 1, unit = 'pieza') {
   row.className = 'deliver-item-row';
   row.innerHTML = `
     <div class="mat-autocomplete-wrap">
-      <input type="text" class="deliver-row-material" autocomplete="off" placeholder="Escribe o selecciona material..." value="${escapeHtml(initialName)}" oninput="renderMaterialSuggestions(this)" onfocus="renderMaterialSuggestions(this)" onblur="hideMaterialSuggestions(this)" style="width:100%">
+      <div class="mat-search-input-box">
+        <span class="mat-input-icon">📦</span>
+        <input type="text" class="deliver-row-material" autocomplete="off" placeholder="Escribe o selecciona material..." value="${escapeHtml(initialName)}" oninput="renderMaterialSuggestions(this)" onfocus="renderMaterialSuggestions(this)" onblur="hideMaterialSuggestions(this)">
+      </div>
       <div class="mat-suggestions-box"></div>
     </div>
-    <div>
-      <input type="number" class="deliver-row-qty" min="0.01" step="0.01" value="${quantity}" placeholder="Cant." style="width:100%">
+    <div class="deliver-qty-box">
+      <input type="number" class="deliver-row-qty" min="0.01" step="0.01" value="${quantity}" placeholder="Cant.">
     </div>
-    <div>
-      <select class="deliver-row-unit" style="width:100%">
+    <div class="deliver-unit-box">
+      <select class="deliver-row-unit">
         <option value="pieza" ${initialUnit === 'pieza' ? 'selected' : ''}>pieza</option>
         <option value="metro" ${initialUnit === 'metro' ? 'selected' : ''}>metro</option>
         <option value="unidad" ${initialUnit === 'unidad' ? 'selected' : ''}>unidad</option>
         <option value="rollo" ${initialUnit === 'rollo' ? 'selected' : ''}>rollo</option>
         <option value="paquete" ${initialUnit === 'paquete' ? 'selected' : ''}>paquete</option>
+        <option value="bobina" ${initialUnit === 'bobina' ? 'selected' : ''}>bobina</option>
         <option value="caja" ${initialUnit === 'caja' ? 'selected' : ''}>caja</option>
+        <option value="kit" ${initialUnit === 'kit' ? 'selected' : ''}>kit</option>
         <option value="kg" ${initialUnit === 'kg' ? 'selected' : ''}>kg</option>
       </select>
     </div>
-    <button type="button" class="deliver-row-remove-btn" onclick="removeEditRow(this)" title="Quitar material">✕</button>
+    <button type="button" class="deliver-row-remove-btn" onclick="removeEditRow(this)" title="Quitar este material">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+    </button>
   `;
   list.appendChild(row);
 }
@@ -1473,23 +1572,29 @@ function onReceiveDispatchSelected() {
       const defaultUsed = retItem != null ? Number(retItem.usedQuantity ?? 0) : (dispatch.usedQuantity != null && items.length === 1 ? Number(dispatch.usedQuantity) : 0);
 
       return `
-        <div style="background:#f8fafc;border:1px solid #dfe6ef;border-radius:10px;padding:12px;margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <strong style="color:var(--mat-text);font-size:13px">${escapeHtml(it.materialName)}</strong>
-            <span style="font-size:12px;color:var(--mat-primary);font-weight:800">Entregado: ${qty(it.quantity)} ${escapeHtml(it.unit || 'pieza')}</span>
+        <div class="receive-breakdown-card">
+          <div class="receive-breakdown-card-head">
+            <div class="receive-breakdown-mat-info">
+              <span class="receive-mat-icon">📦</span>
+              <div>
+                <strong class="receive-breakdown-mat-name">${escapeHtml(it.materialName)}</strong>
+                <div class="receive-breakdown-mat-unit">${escapeHtml(it.unit || 'pieza')}</div>
+              </div>
+            </div>
+            <span class="receive-delivered-badge">Entregado: <b>${qty(it.quantity)}</b> ${escapeHtml(it.unit || 'pz')}</span>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
-            <div>
-              <label style="font-size:9px;color:var(--mat-muted);text-transform:uppercase;font-weight:700">Buen estado</label>
-              <input type="number" class="receive-item-good" data-index="${idx}" min="0" step="0.01" value="${defaultGood}" style="height:38px;font-size:13px;font-weight:700">
+          <div class="receive-breakdown-grid">
+            <div class="receive-input-box good">
+              <label><span>🟢</span> Buen estado</label>
+              <input type="number" class="receive-item-good" data-index="${idx}" min="0" step="0.01" value="${defaultGood}">
             </div>
-            <div>
-              <label style="font-size:9px;color:var(--mat-muted);text-transform:uppercase;font-weight:700">Dañado</label>
-              <input type="number" class="receive-item-damaged" data-index="${idx}" min="0" step="0.01" value="${defaultDamaged}" style="height:38px;font-size:13px;font-weight:700">
+            <div class="receive-input-box used">
+              <label><span>🛠️</span> Utilizado</label>
+              <input type="number" class="receive-item-used" data-index="${idx}" min="0" step="0.01" value="${defaultUsed}">
             </div>
-            <div>
-              <label style="font-size:9px;color:var(--mat-muted);text-transform:uppercase;font-weight:700">Utilizado</label>
-              <input type="number" class="receive-item-used" data-index="${idx}" min="0" step="0.01" value="${defaultUsed}" style="height:38px;font-size:13px;font-weight:700">
+            <div class="receive-input-box damaged">
+              <label><span>⚠️</span> Dañado</label>
+              <input type="number" class="receive-item-damaged" data-index="${idx}" min="0" step="0.01" value="${defaultDamaged}">
             </div>
           </div>
         </div>

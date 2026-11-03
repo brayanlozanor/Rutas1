@@ -1122,6 +1122,8 @@ async function loadAllMaterialMovements(env) {
   const rows = await all(env, `SELECT mm.*, t.name AS tech_db_name, t.user_id AS tech_db_user_id 
     FROM material_movements mm 
     LEFT JOIN technicians t ON t.id = mm.technician_id 
+    WHERE (mm.movement_type IN ('give', 'dispatch', 'settle', 'reception', 'return') OR (mm.technician_id IS NOT NULL AND mm.technician_id != ''))
+      AND mm.movement_type NOT IN ('entry', 'adjustment', 'initial')
     ORDER BY mm.created_at DESC`);
   return rows.map(movement => {
     let extra = {};

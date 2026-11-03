@@ -101,40 +101,40 @@
       <section id="admin-section-dispatches">
         <header class="material-dashboard-head">
           <div>
-            <h1>Entregas y Recepciones de Técnicos</h1>
-            <p>Entrega varios materiales a la vez a técnicos y recibe material devuelto sobre envíos existentes.</p>
+            <h1>Entregas y Recepciones a Técnicos</h1>
+            <p>Control de despachos a campo, liquidaciones y devoluciones con folio oficial.</p>
           </div>
           <div class="dispatches-actions-group">
-            <button class="btn bc" onclick="abrirEntrega()" style="min-height:44px;padding:0 18px;font-size:13px">＋ Entregar material</button>
-            <button class="btn bg2" onclick="abrirRecepcion()" style="min-height:44px;padding:0 18px;font-size:13px">↓ Recibir material</button>
+            <button class="btn bc" onclick="abrirEntrega()" style="min-height:44px;padding:0 20px;font-size:13px;font-weight:700">＋ Entregar material</button>
+            <button class="btn bg2" onclick="abrirRecepcion()" style="min-height:44px;padding:0 20px;font-size:13px;font-weight:700">📥 Recibir material</button>
           </div>
         </header>
 
-        <!-- Filtros superiores -->
+        <!-- Filtros superiores organizados -->
         <div class="dispatches-header-actions">
           <div class="dispatches-filters-group">
-            <label class="material-search-box" style="width:230px">
+            <label class="material-search-box" style="flex:1;min-width:240px">
               <span>⌕</span>
-              <input id="dispatch-search" placeholder="Buscar por material, técnico..." oninput="filtrarDispatches()">
+              <input id="dispatch-search" placeholder="Buscar por material, técnico, referencia..." oninput="filtrarDispatches()">
             </label>
             <label class="material-search-box" style="width:200px">
               <span style="font-size:12px;font-weight:900;color:var(--mat-primary)">#</span>
-              <input id="dispatch-folio-filter" placeholder="Folio (ENT-... / REC-...)" oninput="filtrarDispatches()">
+              <input id="dispatch-folio-filter" placeholder="Folio (ENT / REC)..." oninput="filtrarDispatches()">
             </label>
-            <select id="dispatch-tech-filter" class="dispatches-select-filter" onchange="filtrarDispatches()">
+            <select id="dispatch-tech-filter" class="dispatches-select-filter" onchange="filtrarDispatches()" style="min-width:200px">
               <option value="all">Todos los técnicos</option>
             </select>
           </div>
         </div>
 
-        <!-- Chips de estado -->
+        <!-- Chips de estado organizados en barra segmentada -->
         <div class="dispatch-status-chips">
           <button class="dispatch-chip active" id="chip-status-all" onclick="setDispatchFilterStatus('all')">
             <span>Todos los envíos</span>
             <span class="chip-count" id="count-status-all">0</span>
           </button>
           <button class="dispatch-chip" id="chip-status-pending_receipt" onclick="setDispatchFilterStatus('pending_receipt')">
-            <span>🟡 Pendientes por recibir (Técnico)</span>
+            <span>🟡 Por recibir (Técnico)</span>
             <span class="chip-count" id="count-status-pending_receipt">0</span>
           </button>
           <button class="dispatch-chip" id="chip-status-received" onclick="setDispatchFilterStatus('received')">
@@ -142,11 +142,11 @@
             <span class="chip-count" id="count-status-received">0</span>
           </button>
           <button class="dispatch-chip" id="chip-status-pending_handover" onclick="setDispatchFilterStatus('pending_handover')">
-            <span>🟠 Por confirmar entrega (Técnico)</span>
+            <span>🟠 Por confirmar recepción</span>
             <span class="chip-count" id="count-status-pending_handover">0</span>
           </button>
           <button class="dispatch-chip" id="chip-status-completed" onclick="setDispatchFilterStatus('completed')">
-            <span>🔵 Completados y cerrados</span>
+            <span>🔵 Completados</span>
             <span class="chip-count" id="count-status-completed">0</span>
           </button>
         </div>
@@ -157,75 +157,59 @@
           <h3>No se encontraron registros de entrega</h3>
           <p>Utiliza el botón “＋ Entregar material” para registrar una entrega hacia un técnico.</p>
         </div>
+
+        <!-- Paginación de entregas -->
+        <div id="dispatches-pagination" class="dispatch-pagination-bar" style="display:none"></div>
       </section>
 
       <!-- SECCIÓN 2: Inventario -->
       <section id="admin-section-catalog" style="display:none">
         <header class="material-dashboard-head">
           <div>
-            <h1>Inventario</h1>
-            <p>Catálogo de materiales y productos registrados en el sistema.</p>
+            <h1>Inventario y Catálogo</h1>
+            <p>Control de existencias, almacén general y catálogo de insumos.</p>
           </div>
           <div class="material-head-actions">
-            <button class="btn bc" onclick="agregarMaterial()" style="min-height:42px;padding:0 18px;font-size:13px">＋ Nuevo material</button>
-            <button class="btn bo2" onclick="abrirEntrada()" style="min-height:42px;padding:0 18px;font-size:13px">↓ Registrar entrada</button>
+            <button class="btn bc" onclick="agregarMaterial()" style="min-height:42px;padding:0 18px;font-size:13px;font-weight:700">＋ Nuevo material</button>
+            <button class="btn bo2" onclick="abrirEntrada()" style="min-height:42px;padding:0 18px;font-size:13px;font-weight:700">↓ Registrar entrada</button>
           </div>
         </header>
 
         <div class="inventory-main-layout">
-          <!-- Bloque Superior: Acciones Rápidas (Principales) + Estadísticas -->
-          <div class="inventory-primary-bar">
-            <!-- Acciones Rápidas (Principales) -->
-            <div class="inventory-quick-panel">
-              <div class="inventory-quick-title">⚡ Acciones rápidas</div>
-              <div class="inventory-quick-grid">
-                <button type="button" class="inventory-hero-card card-add" onclick="agregarMaterial()">
-                  <div class="hero-icon">＋</div>
-                  <div>
-                    <strong>Agregar nuevo material</strong>
-                    <small>Registrar artículo, unidad y fotografía</small>
-                  </div>
-                </button>
-                <button type="button" class="inventory-hero-card card-entry" onclick="abrirEntrada()">
-                  <div class="hero-icon">↓</div>
-                  <div>
-                    <strong>Registrar entrada</strong>
-                    <small>Sumar existencias recibidas de un producto</small>
-                  </div>
-                </button>
+          <!-- Estadísticas Unificadas: 4 KPI Cards ordenadas sin duplicación -->
+          <div class="inventory-kpis-grid">
+            <article class="inventory-kpi-card kpi-total">
+              <div class="kpi-icon-pill">📦</div>
+              <div class="kpi-data">
+                <span class="kpi-label">Total de Artículos</span>
+                <strong class="kpi-value" id="material-total">0</strong>
+                <small class="kpi-sub">En catálogo general</small>
               </div>
-            </div>
-
-            <!-- Estadísticas (Productos, Stock bajo, Sin stock) -->
-            <div class="inventory-quick-panel">
-              <div class="inventory-quick-title">📊 Resumen de catálogo</div>
-              <div class="inventory-kpis-clean">
-                <article class="inventory-kpi-clean kpi-products">
-                  <div class="kpi-icon">◇</div>
-                  <div>
-                    <strong id="material-total">0</strong>
-                    <b>Productos</b>
-                    <small>Registrados en catálogo</small>
-                  </div>
-                </article>
-                <article class="inventory-kpi-clean kpi-low">
-                  <div class="kpi-icon">!</div>
-                  <div>
-                    <strong id="material-low">0</strong>
-                    <b>Stock bajo</b>
-                    <small>Menor al mínimo deseado</small>
-                  </div>
-                </article>
-                <article class="inventory-kpi-clean kpi-empty">
-                  <div class="kpi-icon">✕</div>
-                  <div>
-                    <strong id="material-empty-count">0</strong>
-                    <b>Sin stock</b>
-                    <small>Existencia en cero</small>
-                  </div>
-                </article>
+            </article>
+            <article class="inventory-kpi-card kpi-available">
+              <div class="kpi-icon-pill">🟢</div>
+              <div class="kpi-data">
+                <span class="kpi-label">Disponibles</span>
+                <strong class="kpi-value" id="material-available-count">0</strong>
+                <small class="kpi-sub">Con stock suficiente</small>
               </div>
-            </div>
+            </article>
+            <article class="inventory-kpi-card kpi-low">
+              <div class="kpi-icon-pill">⚠️</div>
+              <div class="kpi-data">
+                <span class="kpi-label">Stock Bajo</span>
+                <strong class="kpi-value" id="material-low">0</strong>
+                <small class="kpi-sub">Menor al mínimo deseado</small>
+              </div>
+            </article>
+            <article class="inventory-kpi-card kpi-empty">
+              <div class="kpi-icon-pill">⛔</div>
+              <div class="kpi-data">
+                <span class="kpi-label">Sin Stock</span>
+                <strong class="kpi-value" id="material-empty-count">0</strong>
+                <small class="kpi-sub">Existencia en cero</small>
+              </div>
+            </article>
           </div>
 
           <!-- Catálogo de Materiales (Tabla completa) -->
@@ -268,42 +252,79 @@
        MODAL: ENTREGAR MATERIAL A TÉCNICO (MÚLTIPLES MATERIALES)
        ==================================================================== -->
   <div class="mo" id="deliver-material-mo">
-    <div class="md" style="max-width:580px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--mat-border); padding-bottom:12px">
-        <div>
-          <div class="mt2" style="margin:0">Entregar material a técnico</div>
-          <small style="color:var(--mat-muted);font-weight:600">Puedes agregar varios materiales en una sola entrega.</small>
+    <div class="md modal-modern" style="max-width:640px;">
+      <div class="modal-modern-head">
+        <div class="modal-modern-title-group">
+          <span class="modal-icon-badge deliver">📦</span>
+          <div>
+            <h2 class="modal-modern-title">Entregar material a técnico</h2>
+            <p class="modal-modern-subtitle">Despacha uno o varios productos a la vez asignados al personal técnico.</p>
+          </div>
         </div>
-        <button class="btn bsm bgh" onclick="CM('deliver-material-mo')">✕</button>
+        <button class="modal-modern-close" onclick="CM('deliver-material-mo')" title="Cerrar ventana">✕</button>
       </div>
 
-      <div class="fi">
-        <label>Técnico receptor <b>Obligatorio</b></label>
-        <select id="deliver-tech" style="height:44px;font-size:13px"></select>
+      <!-- Paso 1: Destinatario y Folio de orden -->
+      <div class="modal-section-card">
+        <div class="modal-section-card-title">
+          <span class="step-badge">1</span>
+          <span>Destinatario y Referencia</span>
+        </div>
+        <div class="modal-form-grid-2">
+          <div class="fi" style="margin:0">
+            <label>Técnico receptor <b class="req-star">* Obligatorio</b></label>
+            <select id="deliver-tech"></select>
+          </div>
+          <div class="fi" style="margin:0">
+            <label>Folio de orden o referencia <span class="opt-tag">Opcional</span></label>
+            <input id="deliver-reference" placeholder="Ej: OT-4501, Proyecto Cuautla...">
+          </div>
+        </div>
       </div>
 
-      <div style="margin:16px 0 8px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <label style="font-size:11px;font-weight:800;color:var(--mat-muted);text-transform:uppercase">Materiales a entregar</label>
-          <button type="button" class="btn bo2 bsm" onclick="addDeliverRow()" style="padding:4px 10px;font-size:11px">＋ Agregar otro material</button>
+      <!-- Paso 2: Materiales a despachar -->
+      <div class="modal-section-card">
+        <div class="modal-section-card-header-bar">
+          <div class="modal-section-card-title" style="margin:0">
+            <span class="step-badge">2</span>
+            <span>Materiales a entregar</span>
+          </div>
+          <button type="button" class="btn-pill-action" onclick="addDeliverRow()">
+            <span>＋</span> Agregar otro material
+          </button>
+        </div>
+
+        <div class="deliver-table-header">
+          <span>Material / Insumo</span>
+          <span style="text-align:center">Cantidad</span>
+          <span>Unidad</span>
+          <span></span>
         </div>
         <div id="deliver-items-list" class="deliver-items-list">
           <!-- Filas dinámicas -->
         </div>
+
+        <button type="button" class="btn-add-item-full" onclick="addDeliverRow()">
+          <span>＋</span> Agregar otro producto a la entrega
+        </button>
       </div>
 
-      <div class="fi">
-        <label>Folio de orden o referencia <span>Opcional</span></label>
-        <input id="deliver-reference" placeholder="Ej: OT-4501, Proyecto Cuautla...">
+      <!-- Paso 3: Observaciones -->
+      <div class="modal-section-card">
+        <div class="modal-section-card-title">
+          <span class="step-badge">3</span>
+          <span>Observaciones / Notas adicionales <span class="opt-tag">Opcional</span></span>
+        </div>
+        <div class="fi" style="margin:0">
+          <textarea id="deliver-notes" rows="2" placeholder="Indicaciones sobre el destino, condiciones o detalles de la entrega..."></textarea>
+        </div>
       </div>
 
-      <div class="fi">
-        <label>Observaciones / Notas adicionales <span>Opcional</span></label>
-        <textarea id="deliver-notes" rows="2" placeholder="Detalles de la entrega"></textarea>
-      </div>
-
-      <div class="material-form-actions" style="margin-top:20px">
-        <button class="btn bc bfu" id="deliver-submit-btn" onclick="guardarEntrega()" style="min-height:46px;font-size:14px">Confirmar y entregar al técnico</button>
+      <div class="modal-modern-footer">
+        <button type="button" class="btn-modal-secondary" onclick="CM('deliver-material-mo')">Cancelar</button>
+        <button type="button" class="btn-modal-primary deliver-theme" id="deliver-submit-btn" onclick="guardarEntrega()">
+          <span>✓</span> Confirmar y entregar al técnico
+        </button>
       </div>
     </div>
   </div>
@@ -312,42 +333,73 @@
        MODAL: EDITAR ENVÍO DE MATERIAL (MÚLTIPLES MATERIALES)
        ==================================================================== -->
   <div class="mo" id="edit-dispatch-mo">
-    <div class="md" style="max-width:580px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--mat-border); padding-bottom:12px">
-        <div>
-          <div class="mt2" style="margin:0">Editar envío de material</div>
-          <small style="color:var(--mat-muted);font-weight:600">Modifica los materiales o cantidades entregadas.</small>
+    <div class="md modal-modern" style="max-width:640px;">
+      <div class="modal-modern-head">
+        <div class="modal-modern-title-group">
+          <span class="modal-icon-badge edit">✎</span>
+          <div>
+            <h2 class="modal-modern-title">Editar envío de material</h2>
+            <p class="modal-modern-subtitle">Modifica los materiales, unidades o cantidades entregadas a este técnico.</p>
+          </div>
         </div>
-        <button class="btn bsm bgh" onclick="CM('edit-dispatch-mo')">✕</button>
+        <button class="modal-modern-close" onclick="CM('edit-dispatch-mo')" title="Cerrar ventana">✕</button>
       </div>
 
       <input type="hidden" id="edit-dispatch-id">
 
-      <div id="edit-dispatch-rejected-banner" style="display:none;background:#fff1f2;border:1px solid #fecdd3;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px"></div>
+      <div id="edit-dispatch-rejected-banner" style="display:none;background:#fff1f2;border:1px solid #fecdd3;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:12px"></div>
 
-      <div class="fi">
-        <label>Técnico receptor</label>
-        <select id="edit-dispatch-tech" style="height:44px;font-size:13px"></select>
+      <div class="modal-section-card">
+        <div class="modal-section-card-title">
+          <span class="step-badge">1</span>
+          <span>Técnico y Referencia</span>
+        </div>
+        <div class="modal-form-grid-2">
+          <div class="fi" style="margin:0">
+            <label>Técnico receptor</label>
+            <select id="edit-dispatch-tech"></select>
+          </div>
+          <div class="fi" style="margin:0">
+            <label>Referencia / Folio</label>
+            <input id="edit-dispatch-reference" placeholder="Ej: OT-4501">
+          </div>
+        </div>
       </div>
 
-      <div style="margin:16px 0 8px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <label style="font-size:11px;font-weight:800;color:var(--mat-muted);text-transform:uppercase">Materiales de la entrega</label>
-          <button type="button" class="btn bo2 bsm" onclick="addEditRow()" style="padding:4px 10px;font-size:11px">＋ Agregar otro material</button>
+      <div class="modal-section-card">
+        <div class="modal-section-card-header-bar">
+          <div class="modal-section-card-title" style="margin:0">
+            <span class="step-badge">2</span>
+            <span>Materiales de la entrega</span>
+          </div>
+          <button type="button" class="btn-pill-action" onclick="addEditRow()">
+            <span>＋</span> Agregar otro material
+          </button>
+        </div>
+
+        <div class="deliver-table-header">
+          <span>Material / Insumo</span>
+          <span style="text-align:center">Cantidad</span>
+          <span>Unidad</span>
+          <span></span>
         </div>
         <div id="edit-items-list" class="deliver-items-list">
           <!-- Filas dinámicas -->
         </div>
+
+        <button type="button" class="btn-add-item-full" onclick="addEditRow()">
+          <span>＋</span> Agregar otro producto a la entrega
+        </button>
       </div>
 
-      <div class="fi">
-        <label>Referencia / Folio</label>
-        <input id="edit-dispatch-reference" placeholder="Ej: OT-4501">
-      </div>
-
-      <div class="fi">
-        <label>Observaciones</label>
-        <textarea id="edit-dispatch-notes" rows="2"></textarea>
+      <div class="modal-section-card">
+        <div class="modal-section-card-title">
+          <span class="step-badge">3</span>
+          <span>Observaciones</span>
+        </div>
+        <div class="fi" style="margin:0">
+          <textarea id="edit-dispatch-notes" rows="2" placeholder="Notas de edición..."></textarea>
+        </div>
       </div>
 
       <div class="dispatch-edited-warning" style="margin:12px 0 6px">
@@ -355,8 +407,11 @@
         <p>Al guardar cambios, el técnico recibirá una <b>notificación de que el envío fue editado</b> y deberá confirmar los materiales actualizados.</p>
       </div>
 
-      <div class="material-form-actions" style="margin-top:16px">
-        <button class="btn bc bfu" onclick="guardarEdicionEnvio()" style="min-height:46px;font-size:14px">Guardar cambios en el envío</button>
+      <div class="modal-modern-footer">
+        <button type="button" class="btn-modal-secondary" onclick="CM('edit-dispatch-mo')">Cancelar</button>
+        <button type="button" class="btn-modal-primary edit-theme" onclick="guardarEdicionEnvio()">
+          <span>✓</span> Guardar cambios en el envío
+        </button>
       </div>
     </div>
   </div>
@@ -365,66 +420,95 @@
        MODAL: RECIBIR MATERIAL DE TÉCNICO (Solo sobre envíos YA recibidos)
        ==================================================================== -->
   <div class="mo" id="receive-material-mo">
-    <div class="md" style="max-width:580px;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--mat-border); padding-bottom:12px">
-        <div>
-          <div class="mt2" style="margin:0">Recibir material de técnico</div>
-          <small style="color:var(--mat-muted);font-weight:600">Solo se puede recibir material que el técnico ya haya aceptado recibir.</small>
+    <div class="md modal-modern" style="max-width:640px;">
+      <div class="modal-modern-head">
+        <div class="modal-modern-title-group">
+          <span class="modal-icon-badge receive">📥</span>
+          <div>
+            <h2 class="modal-modern-title">Recibir material de técnico</h2>
+            <p class="modal-modern-subtitle">Liquida y recibe los materiales devueltos o utilizados por el personal técnico.</p>
+          </div>
         </div>
-        <button class="btn bsm bgh" onclick="CM('receive-material-mo')">✕</button>
+        <button class="modal-modern-close" onclick="CM('receive-material-mo')" title="Cerrar ventana">✕</button>
       </div>
 
-      <!-- Selección del Técnico -->
-      <div class="fi">
-        <label>1. Selecciona el técnico <b>Obligatorio</b></label>
-        <select id="receive-tech" onchange="onReceiveTechChanged()" style="height:44px;font-size:13px"></select>
+      <!-- Paso 1: Selección del Técnico -->
+      <div class="modal-section-card">
+        <div class="modal-section-card-title">
+          <span class="step-badge">1</span>
+          <span>Técnico a liquidar</span>
+        </div>
+        <div class="fi" style="margin:0">
+          <label>Selecciona el técnico receptor <b class="req-star">* Obligatorio</b></label>
+          <select id="receive-tech" onchange="onReceiveTechChanged()"></select>
+        </div>
       </div>
 
       <!-- Alerta cuando no hay envíos previamente recibidos -->
-      <div id="receive-empty-warning" class="receive-empty-warning" style="display:none">
-        <span style="font-size:22px">⛔</span>
-        <div>
-          <strong>No se puede generar un formato de recepción vacío</strong>
-          <span id="receive-empty-warning-text">Este técnico no tiene materiales recibidos en su posesión para entregar. Solo se puede recibir material sobre un envío que el técnico ya haya confirmado haber recibido previamente en su perfil.</span>
+      <div id="receive-empty-warning" class="receive-empty-notice" style="display:none">
+        <span class="notice-icon">⛔</span>
+        <div class="notice-content">
+          <strong>No hay entregas pendientes de liquidar para este técnico</strong>
+          <span id="receive-empty-warning-text">Este técnico no tiene materiales confirmados en su posesión actualmente. Solo se puede registrar una recepción sobre un envío que el técnico ya haya confirmado previamente en su perfil.</span>
         </div>
       </div>
 
       <!-- Formulario cuando SÍ hay envíos previos recibidos -->
       <div id="receive-dispatch-form-fields" style="display:none">
-        <div id="receive-dispatch-rejected-banner" style="display:none;background:#fff1f2;border:1px solid #fecdd3;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px"></div>
+        <div id="receive-dispatch-rejected-banner" style="display:none;background:#fff1f2;border:1px solid #fecdd3;border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:12px"></div>
 
-        <div class="fi">
-          <label>2. Selecciona el envío a recibir / liquidar <b>Obligatorio</b></label>
-          <select id="receive-dispatch-select" onchange="onReceiveDispatchSelected()" style="height:44px;font-size:13px;font-weight:600"></select>
-        </div>
+        <div class="modal-section-card">
+          <div class="modal-section-card-title">
+            <span class="step-badge">2</span>
+            <span>Envío a liquidar</span>
+          </div>
+          <div class="fi" style="margin:0 0 12px">
+            <label>Selecciona la orden de entrega <b class="req-star">* Obligatorio</b></label>
+            <select id="receive-dispatch-select" onchange="onReceiveDispatchSelected()"></select>
+          </div>
 
-        <!-- Tarjeta informativa del envío seleccionado -->
-        <div id="receive-dispatch-summary" class="selected-dispatch-summary">
-          <h4 id="receive-summary-mat-name">Materiales de la entrega</h4>
-          <div class="selected-dispatch-grid">
-            <div>Fecha de envío: <strong id="receive-summary-date">-</strong></div>
-            <div>Entregado por: <strong id="receive-summary-admin">-</strong></div>
-            <div>Aceptado por técnico: <strong id="receive-summary-accepted-date">-</strong></div>
+          <!-- Tarjeta informativa del envío seleccionado -->
+          <div id="receive-dispatch-summary" class="selected-dispatch-summary">
+            <h4 id="receive-summary-mat-name">Materiales de la entrega</h4>
+            <div class="selected-dispatch-grid">
+              <div>Fecha de envío: <strong id="receive-summary-date">-</strong></div>
+              <div>Entregado por: <strong id="receive-summary-admin">-</strong></div>
+              <div>Aceptado por técnico: <strong id="receive-summary-accepted-date">-</strong></div>
+            </div>
           </div>
         </div>
 
-        <div style="margin:14px 0 8px">
-          <label style="font-size:11px;font-weight:800;color:var(--mat-muted);text-transform:uppercase;display:block;margin-bottom:8px">Desglose de recepción por cada material</label>
+        <div class="modal-section-card">
+          <div class="modal-section-card-title">
+            <span class="step-badge">3</span>
+            <span>Desglose de recepción por material</span>
+          </div>
+          <p class="modal-section-desc">Indica las cantidades que regresan a almacén en buen estado, las usadas en servicios o dañadas.</p>
           <div id="receive-items-breakdown-container"></div>
         </div>
 
-        <div class="fi">
-          <label>Orden, folio o explicación</label>
-          <input id="receive-reference" placeholder="Ej: OT-1024 o motivo de uso">
+        <div class="modal-section-card">
+          <div class="modal-section-card-title">
+            <span class="step-badge">4</span>
+            <span>Referencia y Observaciones <span class="opt-tag">Opcional</span></span>
+          </div>
+          <div class="modal-form-grid-2">
+            <div class="fi" style="margin:0">
+              <label>Orden, folio o explicación</label>
+              <input id="receive-reference" placeholder="Ej: OT-1024 o liquidación de ruta">
+            </div>
+            <div class="fi" style="margin:0">
+              <label>Observaciones de recepción</label>
+              <input id="receive-notes" placeholder="Estado del material recibido...">
+            </div>
+          </div>
         </div>
 
-        <div class="fi">
-          <label>Observaciones de recepción</label>
-          <textarea id="receive-notes" rows="2" placeholder="Estado del material recibido"></textarea>
-        </div>
-
-        <div class="material-form-actions" style="margin-top:20px">
-          <button class="btn bg2 bfu" id="receive-submit-btn" onclick="guardarRecepcion()" style="min-height:46px;font-size:14px">Registrar recepción de material</button>
+        <div class="modal-modern-footer">
+          <button type="button" class="btn-modal-secondary" onclick="CM('receive-material-mo')">Cancelar</button>
+          <button type="button" class="btn-modal-primary receive-theme" id="receive-submit-btn" onclick="guardarRecepcion()">
+            <span>📥</span> Registrar recepción de material
+          </button>
         </div>
       </div>
     </div>

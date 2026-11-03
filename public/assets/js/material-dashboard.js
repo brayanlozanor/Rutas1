@@ -11,11 +11,13 @@ function renderMateriales() {
   const meta = window.netopsPageMeta?.materials || {};
   const stats = meta.stats || {};
   const total = Number.isFinite(Number(meta.total)) ? Number(meta.total) : all.length;
-  const low = all.filter(m => Number(m.stock) <= Number(m.minimumStock));
+  const low = all.filter(m => Number(m.stock) <= Number(m.minimumStock) && Number(m.stock) > 0);
   const empty = all.filter(m => Number(m.stock) <= 0);
+  const available = all.filter(m => Number(m.stock) > Number(m.minimumStock));
 
   const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = typeof value === 'number' ? qty(value) : value; };
   setText('material-total', Number(stats.total) || total);
+  setText('material-available-count', available.length);
   setText('material-low', Number(stats.low) || low.length);
   setText('material-empty-count', empty.length);
   setText('material-table-count', `Mostrando ${materiales.length} de ${total} materiales`);
