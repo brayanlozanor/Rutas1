@@ -2506,8 +2506,8 @@ function handleNetworkOrderEvent(payload) {
     if (order.detailKind === 'physical') {
       if (!isOwnCreator && (isSoporte || userHasRole('tecnico'))) {
         notifyNetworkDetailEvent({
-          title: `Nuevo detalle #${order.id}`,
-          message: `${order.clientName ? order.clientName + ' · ' : ''}${order.town || 'General'}`,
+          title: 'Nuevo detalle físico',
+          message: `Pueblo: ${order.town || 'General'} · Cliente: ${order.clientName || 'Cliente'}.`,
           type: 'new_order',
           orderId: order.id
         });
@@ -2517,8 +2517,8 @@ function handleNetworkOrderEvent(payload) {
         const shouldNotify = hasAssignment ? isAssignedToMe : true;
         if (shouldNotify) {
           notifyNetworkDetailEvent({
-            title: `Nuevo requerimiento #${order.id}`,
-            message: `${order.town || 'Red general'}${hasAssignment && order.assignedUserName ? ' · Asignado a ' + order.assignedUserName : ''}`,
+            title: 'Nuevo requerimiento',
+            message: `Localidad: ${order.town || 'Red general'} · Solicitud de Atención a clientes.`,
             type: 'new_order',
             orderId: order.id
           });
@@ -2529,8 +2529,8 @@ function handleNetworkOrderEvent(payload) {
         const shouldNotify = hasAssignment ? isAssignedToMe : true;
         if (shouldNotify) {
           notifyNetworkDetailEvent({
-            title: `Nuevo reporte #${order.id}`,
-            message: `${order.clientName ? order.clientName + ' · ' : ''}${order.town || 'Red'}${hasAssignment && order.assignedUserName ? ' · Asignado a ' + order.assignedUserName : ''}`,
+            title: 'Nuevo reporte de red',
+            message: `Cliente: ${order.clientName || 'Cliente'} (${order.town || 'Red'}) · Pendiente de atención.`,
             type: 'new_order',
             orderId: order.id
           });
@@ -2544,8 +2544,8 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: `En atención #${order.id}`,
-          message: `${actor} está atendiendo este requerimiento.`,
+          title: 'Atención iniciada',
+          message: `${actor} inició la atención de este requerimiento.`,
           type: 'attending',
           orderId: order.id
         });
@@ -2555,8 +2555,8 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: `En atención #${order.id}`,
-          message: `${actor} está atendiendo este reporte${order.clientName ? ' (' + order.clientName + ')' : ''}.`,
+          title: 'Atención iniciada',
+          message: `${actor} inició la atención de este reporte${order.clientName ? ' (' + order.clientName + ')' : ''}.`,
           type: 'attending',
           orderId: order.id
         });
@@ -2569,7 +2569,7 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: `Resuelto #${order.id}`,
+          title: 'Requerimiento respondido',
           message: `${actor} respondió el requerimiento.`,
           type: 'resolved',
           orderId: order.id
@@ -2580,7 +2580,7 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: `Resuelto #${order.id}`,
+          title: 'Reporte resuelto',
           message: `${actor} resolvió el reporte${order.clientName ? ' de ' + order.clientName : ''}.`,
           type: 'resolved',
           orderId: order.id
@@ -2593,7 +2593,7 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: `Devuelto #${order.id}`,
+          title: 'Requerimiento devuelto',
           message: `${actor} devolvió el requerimiento${order.note ? ': ' + order.note.slice(0, 60) : '.'}`,
           type: 'returned',
           orderId: order.id
@@ -2603,7 +2603,7 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: `Devuelto #${order.id}`,
+          title: 'Reporte devuelto',
           message: `${actor} devolvió el reporte${order.clientName ? ' (' + order.clientName + ')' : ''}${order.note ? ': ' + order.note.slice(0, 60) : '.'}`,
           type: 'returned',
           orderId: order.id
@@ -2616,7 +2616,7 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: `Concluido #${order.id}`,
+          title: 'Requerimiento concluido',
           message: `${actor} concluyó el requerimiento a conformidad.`,
           type: 'confirmed',
           orderId: order.id
@@ -2626,8 +2626,8 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: `Concluido #${order.id}`,
-          message: `${actor} concluyó el reporte a conformidad${order.clientName ? ' (' + order.clientName + ')' : ''}.`,
+          title: 'Reporte finalizado',
+          message: `${actor} corroboró la solución a entera conformidad${order.clientName ? ' con ' + order.clientName : ''}.`,
           type: 'confirmed',
           orderId: order.id
         });
@@ -2641,8 +2641,8 @@ function handleNetworkOrderEvent(payload) {
           const shouldNotify = hasAssignment ? isAssignedToMe : true;
           if (shouldNotify) {
             notifyNetworkDetailEvent({
-              title: `Reabierto #${order.id}`,
-              message: `${actor} reabrió el requerimiento.`,
+              title: 'Requerimiento reabierto',
+              message: `${actor} reabrió el requerimiento para nueva atención.`,
               type: 'reopened',
               orderId: order.id
             });
@@ -2653,8 +2653,8 @@ function handleNetworkOrderEvent(payload) {
           const shouldNotify = hasAssignment ? isAssignedToMe : true;
           if (shouldNotify) {
             notifyNetworkDetailEvent({
-              title: `Reabierto #${order.id}`,
-              message: `${actor} reabrió el reporte${order.clientName ? ' (' + order.clientName + ')' : ''}.`,
+              title: 'Reporte reabierto',
+              message: `${actor} reabrió el reporte${order.clientName ? ' (' + order.clientName + ')' : ''} para revisión técnica.`,
               type: 'reopened',
               orderId: order.id
             });
@@ -2664,7 +2664,7 @@ function handleNetworkOrderEvent(payload) {
     } else {
       if ((isSoporte || userHasRole('tecnico')) && payload.byUserId !== user.id) {
         notifyNetworkDetailEvent({
-          title: `Reabierto #${order.id}`,
+          title: 'Detalle físico reabierto',
           message: `${actor} reabrió el detalle físico${order.clientName ? ' (' + order.clientName + ')' : ''}.`,
           type: 'reopened',
           orderId: order.id
@@ -2674,7 +2674,7 @@ function handleNetworkOrderEvent(payload) {
   } else if (transition === 'updated' && payload.byUserId !== user.id) {
     const actor = payload.byName || 'Personal';
     notifyNetworkDetailEvent({
-      title: `Actualizado #${order.id}`,
+      title: 'Detalle actualizado',
       message: `${actor} actualizó este detalle.`,
       type: 'updated',
       orderId: order.id
@@ -2683,8 +2683,8 @@ function handleNetworkOrderEvent(payload) {
     if (isSoporte || userHasRole('tecnico')) {
       const actor = payload.byName || 'Personal';
       notifyNetworkDetailEvent({
-        title: `Detalle físico #${order.id}`,
-        message: `${actor} turnó este detalle a campo.`,
+        title: 'Derivado a detalle físico',
+        message: `${actor} turnó este detalle a trabajo en campo.`,
         type: 'sent_to_physical',
         orderId: order.id
       });
@@ -2693,8 +2693,8 @@ function handleNetworkOrderEvent(payload) {
     if (isSoporte) {
       const actor = payload.byName || 'Personal';
       notifyNetworkDetailEvent({
-        title: `Reenviado #${order.id}`,
-        message: `${actor} reenvió este reporte.`,
+        title: 'Reporte reenviado',
+        message: `${actor} reenvió este reporte para atención.`,
         type: 'resent',
         orderId: order.id
       });
@@ -2702,16 +2702,16 @@ function handleNetworkOrderEvent(payload) {
   } else if (transition === 'deleted' && payload.byUserId !== user.id) {
     const actor = payload.byName || 'Personal';
     notifyNetworkDetailEvent({
-      title: `Eliminado #${order.id}`,
-      message: `${actor} eliminó este detalle.`,
+      title: 'Detalle eliminado',
+      message: `${actor} eliminó este detalle del sistema.`,
       type: 'deleted',
       orderId: order.id
     });
   } else if (transition === 'retaken' && isSoporte && payload.byUserId !== user.id) {
     const actor = payload.byName || 'Personal';
     notifyNetworkDetailEvent({
-      title: `En atención #${order.id}`,
-      message: `${actor} ahora está atendiendo este detalle.`,
+      title: 'Atención reasignada',
+      message: `${actor} asumió la atención de este reporte.`,
       type: 'retaken',
       orderId: order.id
     });
@@ -2786,8 +2786,8 @@ async function checkNetworkOrderNotifications() {
             : (hasAssignment ? isAssignedToMe : (userHasRole('administrador', 'admin') && !isOwnCreator));
           if (shouldNotifyNew) {
             notifyNetworkDetailEvent({
-              title: `Nuevo detalle #${order.id}`,
-              message: `${client ? client + ' · ' : ''}${place}${hasAssignment && order.assignedUserName ? ' · Asignado a ' + order.assignedUserName : ''}`,
+              title: isSupportToAttention ? 'Nuevo requerimiento' : 'Nuevo reporte de red',
+              message: `${client ? client + ' · ' : ''}${place}`,
               type: 'new_order',
               orderId: order.id
             });
@@ -2824,7 +2824,7 @@ async function checkNetworkOrderNotifications() {
             if (shouldNotifyAttending) {
               const actor = order.reviewOpenedByName || (isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico');
               notifyNetworkDetailEvent({
-                title: `En atención #${order.id}`,
+                title: 'Atención iniciada',
                 message: `${actor} está atendiendo este detalle${client ? ' (' + client + ')' : ''}.`,
                 type: 'attending',
                 orderId: order.id
@@ -2837,7 +2837,7 @@ async function checkNetworkOrderNotifications() {
               : (hasCreator ? isCreatedByMe : userHasRole('atencion_clientes'));
             if (shouldNotifyResolved) {
               notifyNetworkDetailEvent({
-                title: `Resuelto #${order.id}`,
+                title: isSupportToAttention ? 'Requerimiento respondido' : 'Reporte resuelto',
                 message: `Detalle resuelto${client ? ' (' + client + ')' : ''}.`,
                 type: 'resolved',
                 orderId: order.id
@@ -2847,7 +2847,7 @@ async function checkNetworkOrderNotifications() {
             const shouldNotifyReturned = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin');
             if (shouldNotifyReturned) {
               notifyNetworkDetailEvent({
-                title: `Devuelto #${order.id}`,
+                title: 'Reporte devuelto',
                 message: `Detalle devuelto para revisión${client ? ' (' + client + ')' : ''}.`,
                 type: 'returned',
                 orderId: order.id
@@ -2859,7 +2859,7 @@ async function checkNetworkOrderNotifications() {
               : (hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin'));
             if (shouldNotifyConfirmed) {
               notifyNetworkDetailEvent({
-                title: `Concluido #${order.id}`,
+                title: isSupportToAttention ? 'Requerimiento concluido' : 'Reporte finalizado',
                 message: `Detalle concluido a conformidad${client ? ' (' + client + ')' : ''}.`,
                 type: 'confirmed',
                 orderId: order.id
@@ -2871,7 +2871,7 @@ async function checkNetworkOrderNotifications() {
               : (hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin'));
             if (shouldNotifyReopened) {
               notifyNetworkDetailEvent({
-                title: `Reabierto #${order.id}`,
+                title: isSupportToAttention ? 'Requerimiento reabierto' : 'Reporte reabierto',
                 message: `Detalle reabierto para atención${client ? ' (' + client + ')' : ''}.`,
                 type: 'reopened',
                 orderId: order.id

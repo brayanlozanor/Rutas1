@@ -1348,10 +1348,20 @@ function applyRoleFormVisibility() {
 
   if (isSoporte) {
     // ------------------------------------------
-    // SOPORTE -> ATENCIÓN
+    // SOPORTE -> ATENCIÓN (Requerimiento)
     // ------------------------------------------
-    if (clientGrid) clientGrid.style.display = 'none';
-    if (phoneFi) phoneFi.style.display = 'none';
+    if (clientGrid) clientGrid.style.display = '';
+    if (clientFi) {
+      clientFi.style.display = '';
+      const cLabel = clientFi.querySelector('label');
+      if (cLabel) cLabel.textContent = 'Nombre del cliente (opcional)';
+    }
+    if (clientInput) clientInput.placeholder = 'Nombre del cliente (opcional si es consulta general)';
+    if (phoneFi) {
+      phoneFi.style.display = '';
+      const pLabel = phoneFi.querySelector('label');
+      if (pLabel) pLabel.textContent = 'Teléfono (opcional)';
+    }
     if (locationFi) locationFi.style.display = 'none';
     if (nodeGrid) nodeGrid.style.display = 'none';
     if (typeFi) typeFi.style.display = 'none';
@@ -1370,7 +1380,7 @@ function applyRoleFormVisibility() {
     if (priorityLabel) priorityLabel.textContent = 'Prioridad y frecuencia de recordatorio';
 
     if (modalTitle) modalTitle.textContent = editingWOId ? 'Editar requerimiento para Atención a clientes' : 'Nuevo requerimiento para Atención a clientes';
-    if (modalSub) modalSub.textContent = 'Envía un requerimiento o consulta rápida a Atención a clientes.';
+    if (modalSub) modalSub.textContent = 'Envía un requerimiento a Atención a clientes (el nombre del cliente es opcional).';
     if (saveBtn) saveBtn.textContent = editingWOId ? 'Actualizar requerimiento' : 'Enviar a Atención a clientes';
   } else {
     // ------------------------------------------
@@ -1380,9 +1390,9 @@ function applyRoleFormVisibility() {
     if (clientFi) {
       clientFi.style.display = '';
       const cLabel = clientFi.querySelector('label');
-      if (cLabel) cLabel.textContent = 'Nombre del cliente';
+      if (cLabel) cLabel.textContent = 'Nombre del cliente (opcional)';
     }
-    if (clientInput) clientInput.placeholder = 'Nombre completo del cliente';
+    if (clientInput) clientInput.placeholder = 'Nombre del cliente (opcional si es falla general)';
 
     if (phoneFi) {
       phoneFi.style.display = '';
@@ -1591,7 +1601,7 @@ async function saveWO() {
     if (!category) return showWOFieldError('wo-category', 'Selecciona la categoría del requerimiento.');
     if (!specificDetail) return showWOFieldError('wo-detail', 'Escribe el texto o mensaje del requerimiento para Atención a clientes.');
   } else {
-    if (!document.getElementById('wo-client')?.value.trim()) return showWOFieldError('wo-client', 'Escribe el nombre del cliente.');
+    // Para detalles de red el nombre del cliente es opcional
     if (!category) return showWOFieldError('wo-category', 'Selecciona la categoría del detalle.');
     if (!specificDetail) return showWOFieldError('wo-detail', 'Escribe el detalle específico del problema.');
     if (!typedNode) return showWOFieldError('wo-node', 'Busca un pueblo o escribe uno nuevo.');
@@ -1743,13 +1753,16 @@ function orderFilters() {
 
 function getOrderLifecycleRank(order) {
   const status = String(order?.status || 'pendiente').toLowerCase();
-  // 1° Conforme y Devolver (reportes resueltos en espera de validación): prioridad máxima en ambos roles
-  if (status === 'resuelto_soporte') return 0;
-  // 2° Atender: pendientes y devueltos
-  if (status === 'pendiente' || status === 'devuelto_soporte') return 1;
-  // 3° Resolver: en atención (en revisión)
-  if (status === 'en_revision') return 2;
-  // 4° Hasta el final los completados (solucionados, no realizados, revisados)
+  const isSentToAttention = typeof isNetworkSupportToAttention === 'function' ? isNetworkSupportToAttention(order) : false;
+
+  // 1° Resolver/Responder (requerimientos en atención) y Resolver (reportes de red en atención)
+  if (status === 'en_revision') {
+    return isSentToAttention ? 0 : 1;
+  }
+  // 2° Atender: pendientes y devueltos para iniciar atención
+  if (status === 'pendiente' || status === 'devuelto_soporte') return 2;
+  // 3° Y al final los resueltos (resueltos por soporte / en validación y completados)
+  if (status === 'resuelto_soporte') return 3;
   if (['completada', 'no_realizado', 'revisado'].includes(status)) return 4;
   return 3;
 }
