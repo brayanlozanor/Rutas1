@@ -1084,33 +1084,55 @@ function ensureAppTopbar() {
     }
 }
 
-let sidebarCollapseTimer = null;
+// ========================================================
+// SISTEMA DE TEMA (MODO OSCURO / CLARO) - TELECOM NOC
+// ========================================================
+(function initThemeEarly() {
+    if (typeof window === 'undefined') return;
+    try {
+        const saved = localStorage.getItem('netops_theme');
+        const theme = saved || 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) {}
+})();
 
-function clearSidebarCollapseTimer() {
-    if (sidebarCollapseTimer) {
-        clearTimeout(sidebarCollapseTimer);
-        sidebarCollapseTimer = null;
-    }
+function toggleTheme() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const next = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('netops_theme', next); } catch (e) {}
+    updateThemeToggleButtons();
 }
 
-function collapseSidebar() {
-    clearSidebarCollapseTimer();
-    const topbar = document.querySelector('.topbar.app-sidebar');
-    if (document.body && !document.body.classList.contains('sidebar-collapsed')) {
-        document.body.classList.add('sidebar-collapsed');
-        topbar?.classList.remove('menu-open');
-        try { localStorage.setItem('netops_menu_open_v3', '0'); } catch (e) {}
-        const btn = document.getElementById('mobile-menu-toggle');
-        if (btn) btn.setAttribute('aria-expanded', 'false');
-    }
+function updateThemeToggleButtons() {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const sunSvg = `<svg class="theme-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+    const moonSvg = `<svg class="theme-svg" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+    document.querySelectorAll('.btn-theme-toggle').forEach(btn => {
+        const iconSlot = btn.querySelector('.theme-icon-slot');
+        const labelSlot = btn.querySelector('.theme-label-slot');
+        if (iconSlot) iconSlot.innerHTML = isDark ? sunSvg : moonSvg;
+        if (labelSlot) labelSlot.textContent = isDark ? 'Modo claro' : 'Modo oscuro';
+        btn.setAttribute('aria-pressed', isDark ? 'true' : 'false');
+        btn.title = isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro';
+    });
 }
 
-function scheduleSidebarCollapse(delay = 2500) {
-    clearSidebarCollapseTimer();
-    if (!document.body || document.body.classList.contains('sidebar-collapsed')) return;
-    sidebarCollapseTimer = setTimeout(() => {
-        collapseSidebar();
-    }, delay);
+function ensureThemeToggle() {
+    document.querySelectorAll('.topbar .sbar').forEach(sbar => {
+        if (!sbar.querySelector('#theme-toggle-btn')) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.id = 'theme-toggle-btn';
+            btn.className = 'btn btn-theme-toggle';
+            btn.title = 'Alternar modo oscuro / claro';
+            btn.setAttribute('aria-label', 'Alternar modo oscuro / claro');
+            btn.onclick = toggleTheme;
+            btn.innerHTML = `<span class="theme-icon-slot"></span><span class="theme-label-slot">Modo oscuro</span>`;
+            sbar.insertBefore(btn, sbar.firstChild);
+        }
+    });
+    updateThemeToggleButtons();
 }
 
 function updateActiveNavLink() {
@@ -1164,7 +1186,10 @@ function setupResponsiveMenu() {
         link.title = item.label;
 
         link.addEventListener('click', (e) => {
-            collapseSidebar();
+            if (window.innerWidth <= 760) {
+                document.body.classList.add('sidebar-collapsed');
+                topbar.classList.remove('menu-open');
+            }
             if (getCurrentPageName() === 'ordenes.html') {
                 const linkHref = link.getAttribute('href') || '';
                 if (linkHref.includes('detailKind=network')) {
@@ -1184,22 +1209,12 @@ function setupResponsiveMenu() {
         });
     });
 
-    topbar.addEventListener('mouseenter', () => {
-        clearSidebarCollapseTimer();
-    });
-    topbar.addEventListener('mouseleave', () => {
-        if (!document.body.classList.contains('sidebar-collapsed')) {
-            scheduleSidebarCollapse(1200);
-        }
-    });
-
     if (document.getElementById('mobile-menu-toggle')) return;
     const menuPreference = localStorage.getItem('netops_menu_open_v3');
     if (menuPreference === '0') {
         document.body.classList.add('sidebar-collapsed');
     } else {
         document.body.classList.remove('sidebar-collapsed');
-        scheduleSidebarCollapse(2500);
     }
     const btn = document.createElement('button');
     btn.id = 'mobile-menu-toggle';
@@ -1213,11 +1228,6 @@ function setupResponsiveMenu() {
         const collapsed = document.body.classList.toggle('sidebar-collapsed');
         try { localStorage.setItem('netops_menu_open_v3', collapsed ? '0' : '1'); } catch (e) {}
         btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-        if (!collapsed) {
-            scheduleSidebarCollapse(3500);
-        } else {
-            clearSidebarCollapseTimer();
-        }
     });
     topbar.insertBefore(btn, nav);
 }
@@ -1506,6 +1516,7 @@ function initCommon() {
     hydrateLogoLinks();
     applyPagePermissions();
     setupResponsiveMenu();
+    ensureThemeToggle();
     applyModuleVisualIdentity(current);
     ensureNotificationCenter();
     initNetworkNotifications();
