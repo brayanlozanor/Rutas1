@@ -2506,35 +2506,31 @@ function handleNetworkOrderEvent(payload) {
     if (order.detailKind === 'physical') {
       if (!isOwnCreator && (isSoporte || userHasRole('tecnico'))) {
         notifyNetworkDetailEvent({
-          title: 'Nuevo detalle físico registrado',
-          message: `Pueblo: ${order.town || 'General'} · Cliente: ${order.clientName || 'Cliente'} · ${order.title || 'Trabajo de campo'}.`,
+          title: `Nuevo detalle #${order.id}`,
+          message: `${order.clientName ? order.clientName + ' · ' : ''}${order.town || 'General'}`,
           type: 'new_order',
           orderId: order.id
         });
       }
     } else if (isSupportToAttention) {
-      // Requerimiento enviado por Soporte hacia Atención a clientes
       if (!isOwnCreator && isAtencion) {
         const shouldNotify = hasAssignment ? isAssignedToMe : true;
         if (shouldNotify) {
-          const assignedNotice = hasAssignment ? ' (Asignado formalmente a su usuario)' : '';
           notifyNetworkDetailEvent({
-            title: `Nuevo requerimiento de Soporte técnico${assignedNotice}`,
-            message: `Localidad: ${order.town || 'Red general'} · ${order.title || 'Solicitud de Atención a clientes'}. Pendiente de atención.`,
+            title: `Nuevo requerimiento #${order.id}`,
+            message: `${order.town || 'Red general'}${hasAssignment && order.assignedUserName ? ' · Asignado a ' + order.assignedUserName : ''}`,
             type: 'new_order',
             orderId: order.id
           });
         }
       }
     } else {
-      // Reporte de red enviado por Atención a clientes hacia Soporte técnico
       if (!isOwnCreator && isSoporte) {
         const shouldNotify = hasAssignment ? isAssignedToMe : true;
         if (shouldNotify) {
-          const assignedNotice = hasAssignment ? ' (Asignado formalmente a su usuario)' : '';
           notifyNetworkDetailEvent({
-            title: `Nuevo reporte de incidencia de red${assignedNotice}`,
-            message: `Cliente: ${order.clientName || 'Cliente'} (${order.town || 'Red'}) · ${order.title || 'Reporte de red'}. Pendiente de atención técnica.`,
+            title: `Nuevo reporte #${order.id}`,
+            message: `${order.clientName ? order.clientName + ' · ' : ''}${order.town || 'Red'}${hasAssignment && order.assignedUserName ? ' · Asignado a ' + order.assignedUserName : ''}`,
             type: 'new_order',
             orderId: order.id
           });
@@ -2542,67 +2538,63 @@ function handleNetworkOrderEvent(payload) {
       }
     }
   } else if (transition === 'attending') {
-    // Cuando se da clic en Atender: notificar a la contraparte
+    const actor = payload.byName || order.reviewOpenedByName || 'Personal';
     if (isSupportToAttention) {
-      // Atención a clientes está atendiendo el requerimiento de Soporte: notificar a Soporte / creador
       const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
       const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Atención a clientes inició la atención',
-          message: `El requerimiento #${order.id} se encuentra en atención formal por ${payload.byName || 'Atención a clientes'}.`,
+          title: `En atención #${order.id}`,
+          message: `${actor} está atendiendo este requerimiento.`,
           type: 'attending',
           orderId: order.id
         });
       }
     } else {
-      // Soporte técnico está atendiendo el reporte de red: notificar a Atención a clientes / creador
       const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
       const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Soporte técnico inició la atención técnica',
-          message: `El reporte #${order.id} (${order.clientName || 'Cliente'}) se encuentra en atención por ${payload.byName || 'Soporte técnico'}.`,
+          title: `En atención #${order.id}`,
+          message: `${actor} está atendiendo este reporte${order.clientName ? ' (' + order.clientName + ')' : ''}.`,
           type: 'attending',
           orderId: order.id
         });
       }
     }
   } else if (transition === 'resolved') {
+    const actor = payload.byName || 'Personal';
     if (isSupportToAttention) {
-      // Atención respondió requerimiento de Soporte: notificar a Soporte / creador
       const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
       const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Requerimiento respondido por Atención a clientes',
-          message: `Requerimiento #${order.id}: ${order.solution ? order.solution.slice(0, 80) : 'Respuesta disponible'}. Pendiente de su verificación formal.`,
+          title: `Resuelto #${order.id}`,
+          message: `${actor} respondió el requerimiento.`,
           type: 'resolved',
           orderId: order.id
         });
       }
     } else {
-      // Cuando Soporte resuelve: la persona que creó el reporte o Atención a clientes recibe notificación
       const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
       const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
       if (shouldNotify) {
-        const solSnippet = order.solution ? `Solución técnica: ${order.solution.slice(0, 80)}` : 'Solución técnica aplicada';
         notifyNetworkDetailEvent({
-          title: 'Reporte de red resuelto por Soporte técnico',
-          message: `Reporte #${order.id} (${order.clientName || 'Cliente'}): ${solSnippet}. Por favor valide la entera conformidad con el cliente.`,
+          title: `Resuelto #${order.id}`,
+          message: `${actor} resolvió el reporte${order.clientName ? ' de ' + order.clientName : ''}.`,
           type: 'resolved',
           orderId: order.id
         });
       }
     }
   } else if (transition === 'returned') {
-    // Cuando Atención a clientes devuelve el detalle a Soporte (o Soporte devuelve a Atención)
+    const actor = payload.byName || 'Personal';
     if (isSupportToAttention) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Requerimiento devuelto por Soporte técnico',
-          message: `Requerimiento #${order.id}: ${order.note ? order.note.slice(0, 80) : 'Se solicita aclaración técnica'}.`,
+          title: `Devuelto #${order.id}`,
+          message: `${actor} devolvió el requerimiento${order.note ? ': ' + order.note.slice(0, 60) : '.'}`,
           type: 'returned',
           orderId: order.id
         });
@@ -2610,23 +2602,22 @@ function handleNetworkOrderEvent(payload) {
     } else {
       const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
       if (shouldNotify) {
-        const reasonSnippet = order.note ? `Motivo: ${order.note.slice(0, 80)}` : 'El cliente indica persistencia de la incidencia';
         notifyNetworkDetailEvent({
-          title: 'Reporte devuelto por Atención a clientes',
-          message: `Reporte #${order.id} (${order.clientName || 'Cliente'}): ${reasonSnippet}. Se requiere nueva intervención técnica.`,
+          title: `Devuelto #${order.id}`,
+          message: `${actor} devolvió el reporte${order.clientName ? ' (' + order.clientName + ')' : ''}${order.note ? ': ' + order.note.slice(0, 60) : '.'}`,
           type: 'returned',
           orderId: order.id
         });
       }
     }
   } else if (transition === 'confirmed') {
-    // Cuando se confirma/completa el detalle
+    const actor = payload.byName || 'Personal';
     if (isSupportToAttention) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Requerimiento concluido a conformidad',
-          message: `Soporte técnico verificó la respuesta y concluyó formalmente el requerimiento #${order.id}.`,
+          title: `Concluido #${order.id}`,
+          message: `${actor} concluyó el requerimiento a conformidad.`,
           type: 'confirmed',
           orderId: order.id
         });
@@ -2635,39 +2626,35 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Reporte de red finalizado a conformidad',
-          message: `Atención a clientes corroboró con ${order.clientName || 'el cliente titular'} la solución de la falla. Reporte #${order.id} cerrado.`,
+          title: `Concluido #${order.id}`,
+          message: `${actor} concluyó el reporte a conformidad${order.clientName ? ' (' + order.clientName + ')' : ''}.`,
           type: 'confirmed',
           orderId: order.id
         });
       }
     }
   } else if (transition === 'reopened') {
-    // Al reabrir detalles: notificación formal e inmediata a la contraparte
+    const actor = payload.byName || 'Personal';
     if (order.detailKind === 'network') {
       if (isSupportToAttention) {
-        // Soporte reabrió requerimiento enviado a Atención: notificar a Atención a clientes
         if (!isOwnCreator && isAtencion) {
           const shouldNotify = hasAssignment ? isAssignedToMe : true;
           if (shouldNotify) {
-            const assignedNotice = hasAssignment ? ' (Asignado formalmente a su usuario)' : '';
             notifyNetworkDetailEvent({
-              title: `Requerimiento reabierto por Soporte técnico${assignedNotice}`,
-              message: `El requerimiento #${order.id} fue reabierto por ${payload.byName || 'Soporte técnico'} para nueva atención y seguimiento.`,
+              title: `Reabierto #${order.id}`,
+              message: `${actor} reabrió el requerimiento.`,
               type: 'reopened',
               orderId: order.id
             });
           }
         }
       } else {
-        // Atención a clientes reabrió reporte de red enviado a Soporte: notificar a Soporte técnico
         if (!isOwnCreator && isSoporte) {
           const shouldNotify = hasAssignment ? isAssignedToMe : true;
           if (shouldNotify) {
-            const assignedNotice = hasAssignment ? ' (Asignado formalmente a su usuario)' : '';
             notifyNetworkDetailEvent({
-              title: `Reporte de red reabierto por Atención a clientes${assignedNotice}`,
-              message: `El reporte #${order.id} (${order.clientName || 'Cliente'}) fue reabierto por ${payload.byName || 'Atención a clientes'} para nueva revisión técnica.`,
+              title: `Reabierto #${order.id}`,
+              message: `${actor} reabrió el reporte${order.clientName ? ' (' + order.clientName + ')' : ''}.`,
               type: 'reopened',
               orderId: order.id
             });
@@ -2675,74 +2662,56 @@ function handleNetworkOrderEvent(payload) {
         }
       }
     } else {
-      // Detalle físico reabierto
       if ((isSoporte || userHasRole('tecnico')) && payload.byUserId !== user.id) {
         notifyNetworkDetailEvent({
-          title: 'Detalle físico reabierto',
-          message: `El detalle físico #${order.id} (${order.clientName || order.town || 'Pueblo'}) fue reabierto por ${payload.byName || 'Soporte'} para nueva atención en campo.`,
+          title: `Reabierto #${order.id}`,
+          message: `${actor} reabrió el detalle físico${order.clientName ? ' (' + order.clientName + ')' : ''}.`,
           type: 'reopened',
           orderId: order.id
         });
       }
     }
   } else if (transition === 'updated' && payload.byUserId !== user.id) {
-    if (order.detailKind === 'network') {
-      if (isSupportToAttention) {
-        if (isAtencion) {
-          notifyNetworkDetailEvent({
-            title: 'Requerimiento de red actualizado',
-            message: `El requerimiento #${order.id} (${order.town || 'Red'}) fue actualizado por ${payload.byName || 'Soporte técnico'}.`,
-            type: 'updated',
-            orderId: order.id
-          });
-        }
-      } else {
-        if (isSoporte) {
-          notifyNetworkDetailEvent({
-            title: 'Reporte de red actualizado',
-            message: `El reporte #${order.id} (${order.clientName || 'Cliente'}) fue actualizado por ${payload.byName || 'Atención a clientes'}.`,
-            type: 'updated',
-            orderId: order.id
-          });
-        }
-      }
-    } else if (isSoporte || userHasRole('tecnico')) {
-      notifyNetworkDetailEvent({
-        title: 'Detalle físico actualizado',
-        message: `El detalle #${order.id} (${order.clientName || order.town || 'Pueblo'}) fue actualizado.`,
-        type: 'updated',
-        orderId: order.id
-      });
-    }
+    const actor = payload.byName || 'Personal';
+    notifyNetworkDetailEvent({
+      title: `Actualizado #${order.id}`,
+      message: `${actor} actualizó este detalle.`,
+      type: 'updated',
+      orderId: order.id
+    });
   } else if (transition === 'sent_to_physical' && payload.byUserId !== user.id) {
     if (isSoporte || userHasRole('tecnico')) {
+      const actor = payload.byName || 'Personal';
       notifyNetworkDetailEvent({
-        title: 'Detalle derivado a trabajo físico de campo',
-        message: `El reporte #${order.id} (${order.clientName || 'Cliente'}) fue turnado a Detalles físicos por ${payload.byName || 'el operador'}.`,
+        title: `Detalle físico #${order.id}`,
+        message: `${actor} turnó este detalle a campo.`,
         type: 'sent_to_physical',
         orderId: order.id
       });
     }
   } else if (transition === 'resent' && payload.byUserId !== user.id) {
     if (isSoporte) {
+      const actor = payload.byName || 'Personal';
       notifyNetworkDetailEvent({
-        title: 'Reporte reenviado con información nueva',
-        message: `El reporte #${order.id} (${order.clientName || 'Cliente'}) fue reenviado para atención por ${payload.byName || 'Atención a clientes'}.`,
+        title: `Reenviado #${order.id}`,
+        message: `${actor} reenvió este reporte.`,
         type: 'resent',
         orderId: order.id
       });
     }
   } else if (transition === 'deleted' && payload.byUserId !== user.id) {
+    const actor = payload.byName || 'Personal';
     notifyNetworkDetailEvent({
-      title: 'Detalle eliminado',
-      message: `El detalle #${order.id} (${order.clientName || 'Folio'}) fue eliminado del sistema por ${payload.byName || 'Administración'}.`,
+      title: `Eliminado #${order.id}`,
+      message: `${actor} eliminó este detalle.`,
       type: 'deleted',
       orderId: order.id
     });
   } else if (transition === 'retaken' && isSoporte && payload.byUserId !== user.id) {
+    const actor = payload.byName || 'Personal';
     notifyNetworkDetailEvent({
-      title: 'Atención técnica reasignada en Soporte',
-      message: `${payload.byName || 'Un integrante del equipo'} asumió la atención técnica del reporte #${order.id} (${order.clientName || 'Cliente'}).`,
+      title: `En atención #${order.id}`,
+      message: `${actor} ahora está atendiendo este detalle.`,
       type: 'retaken',
       orderId: order.id
     });
@@ -2812,28 +2781,16 @@ async function checkNetworkOrderNotifications() {
         updated = true;
 
         if (!isFirstRun && currentStatus === 'pendiente') {
-          if (isSupportToAttention) {
-            const shouldNotifyNew = hasAssignment ? isAssignedToMe : (userHasRole('atencion_clientes') && !isOwnCreator);
-            if (shouldNotifyNew) {
-              const assignedNotice = hasAssignment ? ' (Asignado formalmente a su usuario)' : '';
-              notifyNetworkDetailEvent({
-                title: `Nuevo requerimiento de Soporte técnico${assignedNotice}`,
-                message: `Localidad: ${place} · ${orderTitle}. Pendiente de atención.`,
-                type: 'new_order',
-                orderId: order.id
-              });
-            }
-          } else {
-            const shouldNotifyNew = hasAssignment ? isAssignedToMe : (userHasRole('administrador', 'admin') && !isOwnCreator);
-            if (shouldNotifyNew) {
-              const assignedNotice = hasAssignment ? ' (Asignado formalmente a su usuario)' : '';
-              notifyNetworkDetailEvent({
-                title: `Nuevo reporte de incidencia de red${assignedNotice}`,
-                message: `Cliente: ${client} (${place}) · ${orderTitle}. Pendiente de atención técnica.`,
-                type: 'new_order',
-                orderId: order.id
-              });
-            }
+          const shouldNotifyNew = isSupportToAttention
+            ? (hasAssignment ? isAssignedToMe : (userHasRole('atencion_clientes') && !isOwnCreator))
+            : (hasAssignment ? isAssignedToMe : (userHasRole('administrador', 'admin') && !isOwnCreator));
+          if (shouldNotifyNew) {
+            notifyNetworkDetailEvent({
+              title: `Nuevo detalle #${order.id}`,
+              message: `${client ? client + ' · ' : ''}${place}${hasAssignment && order.assignedUserName ? ' · Asignado a ' + order.assignedUserName : ''}`,
+              type: 'new_order',
+              orderId: order.id
+            });
           }
         }
       } else if (prev.status !== currentStatus || (order.updatedAt && prev.updatedAt && order.updatedAt !== prev.updatedAt)) {
@@ -2867,42 +2824,31 @@ async function checkNetworkOrderNotifications() {
             if (shouldNotifyAttending) {
               const actor = order.reviewOpenedByName || (isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico');
               notifyNetworkDetailEvent({
-                title: `${isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico'} inició la atención`,
-                message: `El detalle #${order.id} (${client}) se encuentra en atención formal por ${actor}.`,
+                title: `En atención #${order.id}`,
+                message: `${actor} está atendiendo este detalle${client ? ' (' + client + ')' : ''}.`,
                 type: 'attending',
                 orderId: order.id
               });
             }
           } else if (currentStatus === 'resuelto_soporte') {
-            if (isSupportToAttention) {
-              if (userHasRole('administrador', 'admin')) {
-                notifyNetworkDetailEvent({
-                  title: 'Requerimiento respondido por Atención a clientes',
-                  message: `Requerimiento #${order.id} (${client}): ${order.technicianReport?.solution ? order.technicianReport.solution.slice(0, 80) : 'Respuesta disponible'}. Pendiente de su verificación formal.`,
-                  type: 'resolved',
-                  orderId: order.id
-                });
-              }
-            } else {
-              const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
-              const shouldNotifyResolved = hasCreator ? isCreatedByMe : userHasRole('atencion_clientes');
-              if (shouldNotifyResolved) {
-                const sol = order.technicianReport?.solution || '';
-                notifyNetworkDetailEvent({
-                  title: 'Reporte de red resuelto por Soporte técnico',
-                  message: `Reporte #${order.id} (${client}): ${sol ? sol.slice(0, 80) : 'Solución técnica aplicada'}. Por favor valide la conformidad con el cliente.`,
-                  type: 'resolved',
-                  orderId: order.id
-                });
-              }
+            const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
+            const shouldNotifyResolved = isSupportToAttention
+              ? userHasRole('administrador', 'admin')
+              : (hasCreator ? isCreatedByMe : userHasRole('atencion_clientes'));
+            if (shouldNotifyResolved) {
+              notifyNetworkDetailEvent({
+                title: `Resuelto #${order.id}`,
+                message: `Detalle resuelto${client ? ' (' + client + ')' : ''}.`,
+                type: 'resolved',
+                orderId: order.id
+              });
             }
           } else if (currentStatus === 'devuelto_soporte') {
             const shouldNotifyReturned = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin');
             if (shouldNotifyReturned) {
-              const lastNote = (Array.isArray(order.followUps) ? order.followUps.slice(-1)[0]?.note : '') || 'Incidencia no resuelta';
               notifyNetworkDetailEvent({
-                title: 'Reporte devuelto por Atención a clientes',
-                message: `Reporte #${order.id} (${client}): ${lastNote.slice(0, 80)}. Se requiere nueva intervención técnica.`,
+                title: `Devuelto #${order.id}`,
+                message: `Detalle devuelto para revisión${client ? ' (' + client + ')' : ''}.`,
                 type: 'returned',
                 orderId: order.id
               });
@@ -2913,36 +2859,23 @@ async function checkNetworkOrderNotifications() {
               : (hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin'));
             if (shouldNotifyConfirmed) {
               notifyNetworkDetailEvent({
-                title: isSupportToAttention ? 'Requerimiento concluido a conformidad' : 'Reporte de red finalizado a conformidad',
-                message: isSupportToAttention
-                  ? `Soporte técnico concluyó formalmente el requerimiento #${order.id}.`
-                  : `Atención a clientes corroboró con ${client} el servicio restablecido. Reporte #${order.id} concluido.`,
+                title: `Concluido #${order.id}`,
+                message: `Detalle concluido a conformidad${client ? ' (' + client + ')' : ''}.`,
                 type: 'confirmed',
                 orderId: order.id
               });
             }
           } else if (currentStatus === 'pendiente' && (oldStatus === 'completada' || oldStatus === 'no_realizado')) {
-            // Reapertura de detalle detectada en sondeo en segundo plano
-            if (isSupportToAttention) {
-              const shouldNotifyReopened = hasAssignment ? isAssignedToMe : userHasRole('atencion_clientes');
-              if (shouldNotifyReopened) {
-                notifyNetworkDetailEvent({
-                  title: 'Requerimiento reabierto por Soporte técnico',
-                  message: `El requerimiento #${order.id} ha sido reabierto para nueva atención y seguimiento.`,
-                  type: 'reopened',
-                  orderId: order.id
-                });
-              }
-            } else {
-              const shouldNotifyReopened = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin');
-              if (shouldNotifyReopened) {
-                notifyNetworkDetailEvent({
-                  title: 'Reporte de red reabierto por Atención a clientes',
-                  message: `El reporte #${order.id} (${client}) ha sido reabierto para nueva revisión técnica.`,
-                  type: 'reopened',
-                  orderId: order.id
-                });
-              }
+            const shouldNotifyReopened = isSupportToAttention
+              ? (hasAssignment ? isAssignedToMe : userHasRole('atencion_clientes'))
+              : (hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin'));
+            if (shouldNotifyReopened) {
+              notifyNetworkDetailEvent({
+                title: `Reabierto #${order.id}`,
+                message: `Detalle reabierto para atención${client ? ' (' + client + ')' : ''}.`,
+                type: 'reopened',
+                orderId: order.id
+              });
             }
           }
         }

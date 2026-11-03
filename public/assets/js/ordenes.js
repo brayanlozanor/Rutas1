@@ -1904,11 +1904,9 @@ async function reopenCompletedWO(id) {
 
   const folio = getOrderFolio(w);
   const confirmed = await askConfirmation({
-    title: '¿Reabrir este detalle para nueva atención?',
-    message: isSentToAttention
-      ? `El requerimiento #${folio} volverá al estado "Pendiente" en la bandeja de Atención a clientes para su debido seguimiento.`
-      : `El reporte de red #${folio} (${w.clientName || 'Cliente'}) volverá al estado "Pendiente" en la bandeja de Soporte técnico para su nueva intervención.`,
-    confirmText: 'Sí, reabrir para atención',
+    title: `¿Reabrir detalle #${folio}?`,
+    message: `El detalle #${folio} volverá a Pendiente para nueva atención.`,
+    confirmText: 'Sí, reabrir',
     cancelText: 'Cancelar',
     tone: 'warn'
   });
@@ -1939,7 +1937,7 @@ async function reopenCompletedWO(id) {
     broadcastNetworkOrderChange(w, 'reopened');
   }
 
-  notify(`El detalle #${folio} ha sido reabierto con éxito.`, 'ok');
+  notify(`Detalle #${folio} reabierto.`, 'ok');
   await loadOrderPage();
 }
 
@@ -2979,7 +2977,7 @@ async function submitNetworkResolution() {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify(isSentToAttention ? 'Respuesta remitida exitosamente. Se ha notificado a Soporte técnico en tiempo real.' : 'Resolución técnica registrada con éxito. Se ha notificado a Atención a clientes para su validación.', 'ok');
+  notify('Detalle resuelto.', 'ok');
   await loadOrderPage();
 }
 
@@ -2994,10 +2992,8 @@ async function startAttendingNetworkOrder(id) {
   const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
     title: 'Iniciar atención',
-    message: isSentToAttention
-      ? `¿Desea iniciar formalmente la atención del requerimiento #${folio}? El estado pasará a "En atención" y se notificará a Soporte técnico.`
-      : `¿Desea iniciar formalmente la atención técnica del reporte #${folio} (${order.clientName || 'Cliente'})? El estado pasará a "En atención" y se notificará a Atención a clientes.`,
-    confirmText: 'Sí, iniciar atención',
+    message: `¿Iniciar la atención del detalle #${folio}?`,
+    confirmText: 'Sí, atender',
     cancelText: 'Cancelar',
     tone: 'ok'
   });
@@ -3039,7 +3035,7 @@ async function startAttendingNetworkOrder(id) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
 
-  notify(`Se ha iniciado la atención formal del detalle #${folio}. Al concluir las labores podrá registrar su resolución.`, 'ok');
+  notify(`Atendiendo detalle #${folio}.`, 'ok');
   renderWOs();
 }
 
@@ -3050,9 +3046,9 @@ async function takeOverNetworkOrder(id) {
   const currentAttendant = order.reviewOpenedByName || order.assignedUserName || 'otro integrante del equipo';
   const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
-    title: 'Reasignar atención técnica',
-    message: `Este reporte se encuentra asignado a ${currentAttendant}. ¿Desea asumir la titularidad de la atención técnica del reporte #${folio}?`,
-    confirmText: 'Sí, asumir atención',
+    title: 'Reasignar atención',
+    message: `Actualmente lo atiende ${currentAttendant}. ¿Deseas atenderlo tú?`,
+    confirmText: 'Sí, atender',
     cancelText: 'Cancelar',
     tone: 'warning'
   });
@@ -3094,7 +3090,7 @@ async function takeOverNetworkOrder(id) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
 
-  notify(`Ha asumido la atención técnica del reporte #${folio}. Ahora se encuentra a su cargo.`, 'ok');
+  notify(`Detalle #${folio} a tu cargo.`, 'ok');
 
   if (document.getElementById('network-resolve-mo')?.classList.contains('open') && document.getElementById('netres-order-id')?.value === id) {
     openResolveNetworkModal(id);
@@ -3164,12 +3160,10 @@ async function submitNetworkReturn() {
   const isSentToAttention = isNetworkSupportToAttention(order);
   const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
-    title: isSentToAttention ? '¿Devolver requerimiento a Atención a clientes?' : '¿Devolver reporte a Soporte técnico?',
-    message: isSentToAttention
-      ? `El requerimiento #${folio} volverá al estado "Devuelto" en la bandeja de Atención a clientes con sus observaciones. ¿Desea proceder?`
-      : `El reporte #${folio} (${order.clientName || 'Cliente'}) volverá al estado "Devuelto" en la bandeja de Soporte técnico para que se revise nuevamente la falla. ¿Desea proceder?`,
-    confirmText: isSentToAttention ? 'Sí, devolver a Atención' : 'Sí, devolver a Soporte',
-    cancelText: 'Revisar observaciones',
+    title: `¿Devolver detalle #${folio}?`,
+    message: `El detalle #${folio} volverá a Devuelto con tus observaciones.`,
+    confirmText: 'Sí, devolver',
+    cancelText: 'Cancelar',
     tone: 'warning'
   });
   if (!confirmed) return;
@@ -3207,7 +3201,7 @@ async function submitNetworkReturn() {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify(isSentToAttention ? 'Requerimiento devuelto a Atención a clientes. Se notificó al equipo en tiempo real.' : 'Reporte devuelto a Soporte técnico. Se notificó al equipo en tiempo real.', 'warn');
+  notify('Detalle devuelto.', 'warn');
   await loadOrderPage();
 }
 
@@ -3219,11 +3213,9 @@ async function confirmNetworkClientSatisfied(id) {
   const client = order.clientName || 'el cliente titular';
   const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
-    title: isSentToAttention ? '¿Concluir requerimiento a entera conformidad?' : '¿Confirmar satisfacción del cliente y concluir reporte?',
-    message: isSentToAttention
-      ? `¿La respuesta provista por Atención a clientes resuelve plenamente lo solicitado? Al confirmar, el requerimiento #${folio} quedará cerrado y archivado como completado.`
-      : `¿Ha corroborado con ${client} que el servicio opera con normalidad y a su entera conformidad? Al confirmar, el reporte #${folio} quedará cerrado y archivado como completado.`,
-    confirmText: isSentToAttention ? 'Confirmar y concluir requerimiento' : 'Confirmar satisfacción y concluir',
+    title: `¿Concluir detalle #${folio}?`,
+    message: `¿El detalle quedó solucionado a entera conformidad?`,
+    confirmText: 'Sí, concluir',
     cancelText: 'Cancelar',
     tone: 'ok'
   });
@@ -3259,7 +3251,7 @@ async function confirmNetworkClientSatisfied(id) {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify(isSentToAttention ? `Requerimiento #${folio} concluido a entera conformidad.` : `Reporte #${folio} concluido a satisfacción del cliente.`, 'ok');
+  notify(`Detalle #${folio} concluido.`, 'ok');
   await loadOrderPage();
 }
 
