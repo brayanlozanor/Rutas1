@@ -911,7 +911,8 @@ const NAV_ITEMS = [
     { href: 'antenas.html', icon: '<img src="assets/icons/antenna-module-256-v1.png" alt="">', label: 'Antenas' },
     { href: 'nodos.html', icon: '<svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>', label: 'Pueblos' },
     { href: 'planificar.html', icon: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>', label: 'Planificar' },
-    { href: 'ordenes.html', icon: '<svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 7h6M9 11h6M9 15h4"/><path d="M4 6v15h12"/></svg>', label: 'Ordenes' },
+    { href: 'ordenes.html?detailKind=network', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><path d="M12 7v4M5 16v-3h14v3"/></svg>', label: 'Detalles de red' },
+    { href: 'ordenes.html?detailKind=physical', icon: '<svg viewBox="0 0 24 24"><path d="M14 6a4 4 0 0 0-5 5L3 17l4 4 6-6a4 4 0 0 0 5-5l-3 3-4-4z"/></svg>', label: 'Detalles físicos' },
     { href: 'material.html', icon: '<svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="m4 7v10l8 4 8-4V7M12 11v10"/></svg>', label: 'Material' },
     { href: 'historial.html', adminOnly: true, icon: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>', label: 'Historial' },
     { href: 'tecnicos.html', principalOnly: true, icon: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>', label: 'Usuarios' }
@@ -955,16 +956,84 @@ function ensureAppTopbar() {
             </div>`);
     }
     const nav = topbar.querySelector('.nav');
-    NAV_ITEMS.forEach(item => {
-        if (!nav) return;
-        let link = nav.querySelector(`a[href="${item.href}"]`);
-        if (!link) {
-            link = document.createElement('a');
-            link.href = item.href;
-            link.className = 'nb';
-            link.textContent = item.label;
+    if (nav) {
+        nav.querySelectorAll('a[href="ordenes.html"], a[href="ordenes.html/"]').forEach(l => l.remove());
+        NAV_ITEMS.forEach(item => {
+            let link = nav.querySelector(`a[href="${item.href}"]`);
+            if (!link) {
+                link = document.createElement('a');
+                link.href = item.href;
+                link.className = 'nb';
+                link.textContent = item.label;
+            }
+            nav.appendChild(link);
+        });
+    }
+}
+
+let sidebarCollapseTimer = null;
+
+function clearSidebarCollapseTimer() {
+    if (sidebarCollapseTimer) {
+        clearTimeout(sidebarCollapseTimer);
+        sidebarCollapseTimer = null;
+    }
+}
+
+function collapseSidebar() {
+    clearSidebarCollapseTimer();
+    const topbar = document.querySelector('.topbar.app-sidebar');
+    if (document.body && !document.body.classList.contains('sidebar-collapsed')) {
+        document.body.classList.add('sidebar-collapsed');
+        topbar?.classList.remove('menu-open');
+        try { localStorage.setItem('netops_menu_open_v3', '0'); } catch (e) {}
+        const btn = document.getElementById('mobile-menu-toggle');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+}
+
+function scheduleSidebarCollapse(delay = 2500) {
+    clearSidebarCollapseTimer();
+    if (!document.body || document.body.classList.contains('sidebar-collapsed')) return;
+    sidebarCollapseTimer = setTimeout(() => {
+        collapseSidebar();
+    }, delay);
+}
+
+function updateActiveNavLink() {
+    const current = getCurrentPageName();
+    const currentParams = new URLSearchParams(window.location.search);
+    let currentKind = currentParams.get('detailKind');
+    if (!currentKind && typeof activeOrderDetailKind !== 'undefined') {
+        currentKind = activeOrderDetailKind;
+    }
+    if (!currentKind && current === 'ordenes.html') {
+        currentKind = 'network';
+    }
+
+    document.querySelectorAll('.nav .nb').forEach(link => {
+        const href = String(link.getAttribute('href') || '').trim();
+        const [page, query] = href.split('?');
+        const linkParams = new URLSearchParams(query || '');
+
+        let isActive = false;
+        if (current === 'ordenes.html' && page === 'ordenes.html') {
+            const linkKind = linkParams.get('detailKind');
+            if (linkKind) {
+                isActive = (linkKind === currentKind);
+            } else {
+                isActive = false;
+            }
+        } else {
+            isActive = (page === current);
         }
-        nav.appendChild(link);
+
+        link.classList.toggle('active', isActive);
+        if (isActive) {
+            link.setAttribute('aria-current', 'page');
+        } else {
+            link.removeAttribute('aria-current');
+        }
     });
 }
 
@@ -975,18 +1044,49 @@ function setupResponsiveMenu() {
     topbar.classList.add('app-sidebar');
     const itemByHref = Object.fromEntries(NAV_ITEMS.map(item => [item.href, item]));
     nav.querySelectorAll('.nb').forEach(link => {
-        const href = String(link.getAttribute('href') || '').split('?')[0].toLowerCase();
+        const href = String(link.getAttribute('href') || '').trim();
         const cleanLabel = String(link.textContent || '').replace(/[^\w\s.-]/g, '').trim();
-        const item = itemByHref[href] || { icon: '', label: cleanLabel };
+        const item = itemByHref[href] || itemByHref[href.split('?')[0].toLowerCase()] || { icon: '', label: cleanLabel };
         link.innerHTML = `<span class="nav-emoji" aria-hidden="true">${item.icon}</span><span class="nav-label">${item.label}</span>`;
         link.title = item.label;
+
+        link.addEventListener('click', (e) => {
+            collapseSidebar();
+            if (getCurrentPageName() === 'ordenes.html') {
+                const linkHref = link.getAttribute('href') || '';
+                if (linkHref.includes('detailKind=network')) {
+                    e.preventDefault();
+                    if (typeof selectOrderDetailKind === 'function') {
+                        selectOrderDetailKind('network');
+                    }
+                    updateActiveNavLink();
+                } else if (linkHref.includes('detailKind=physical')) {
+                    e.preventDefault();
+                    if (typeof selectOrderDetailKind === 'function') {
+                        selectOrderDetailKind('physical');
+                    }
+                    updateActiveNavLink();
+                }
+            }
+        });
     });
+
+    topbar.addEventListener('mouseenter', () => {
+        clearSidebarCollapseTimer();
+    });
+    topbar.addEventListener('mouseleave', () => {
+        if (!document.body.classList.contains('sidebar-collapsed')) {
+            scheduleSidebarCollapse(1200);
+        }
+    });
+
     if (document.getElementById('mobile-menu-toggle')) return;
     const menuPreference = localStorage.getItem('netops_menu_open_v3');
     if (menuPreference === '0') {
         document.body.classList.add('sidebar-collapsed');
     } else {
         document.body.classList.remove('sidebar-collapsed');
+        scheduleSidebarCollapse(2500);
     }
     const btn = document.createElement('button');
     btn.id = 'mobile-menu-toggle';
@@ -998,8 +1098,13 @@ function setupResponsiveMenu() {
     btn.addEventListener('click', () => {
         topbar.classList.remove('menu-open');
         const collapsed = document.body.classList.toggle('sidebar-collapsed');
-        localStorage.setItem('netops_menu_open_v3', collapsed ? '0' : '1');
+        try { localStorage.setItem('netops_menu_open_v3', collapsed ? '0' : '1'); } catch (e) {}
         btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        if (!collapsed) {
+            scheduleSidebarCollapse(3500);
+        } else {
+            clearSidebarCollapseTimer();
+        }
     });
     topbar.insertBefore(btn, nav);
 }
@@ -1013,7 +1118,7 @@ function applyModuleVisualIdentity(currentPage = getCurrentPageName()) {
     const moduleName = pageModules[currentPage] || '';
     if (!moduleName || !document.body) return;
     document.body.dataset.module = moduleName;
-    const navItem = NAV_ITEMS.find(item => item.href === currentPage)
+    const navItem = NAV_ITEMS.find(item => item.href.split('?')[0] === currentPage)
         || (currentPage === 'rutas.html' ? NAV_ITEMS.find(item => item.href === 'mapa.html') : null);
     const heroContent = document.querySelector('.hero-panel > div:first-child');
     if (heroContent && navItem && !heroContent.querySelector('.module-hero-icon')) {
@@ -1027,10 +1132,11 @@ function applyModuleVisualIdentity(currentPage = getCurrentPageName()) {
 function applyRoleNavigation(role) {
     const allowed = ROLE_PAGE_ACCESS[role];
     document.querySelectorAll('.nav .nb').forEach(link => {
-        const href = String(link.getAttribute('href') || '').split('?')[0].toLowerCase();
-        const item = NAV_ITEMS.find(entry => entry.href === href);
+        const fullHref = String(link.getAttribute('href') || '').trim();
+        const pageHref = fullHref.split('?')[0].toLowerCase();
+        const item = NAV_ITEMS.find(entry => entry.href === fullHref || entry.href.split('?')[0].toLowerCase() === pageHref);
         const isAdmin = role === 'administrador' || role === 'admin';
-        const canShow = allowed ? allowed.has(href) : ((!item?.adminOnly || isAdmin)&&(!item?.principalOnly||isPrincipalAdministratorClient()));
+        const canShow = allowed ? allowed.has(pageHref) : ((!item?.adminOnly || isAdmin)&&(!item?.principalOnly||isPrincipalAdministratorClient()));
         link.hidden = !canShow;
         link.setAttribute('aria-hidden', canShow ? 'false' : 'true');
         link.classList.toggle('role-hidden-nav', !canShow);
@@ -1282,11 +1388,7 @@ function initCommon() {
     // La primera carga de /api/data ya valida la misma cookie y redirige en
     // caso de 401; evitar /api/session aquí ahorra una petición por pantalla.
     ensureAppTopbar();
-    document.querySelectorAll('.nav .nb').forEach(link => {
-        const href = link.getAttribute('href');
-        if (href === current) link.classList.add('active');
-        else link.classList.remove('active');
-    });
+    updateActiveNavLink();
     hydrateTopbarUser();
     hydrateLogoLinks();
     applyPagePermissions();

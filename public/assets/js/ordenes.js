@@ -440,6 +440,7 @@ function updateOrderDetailTabs() {
   });
   const newButton = document.querySelector('.order-new-button');
   if (newButton) newButton.setAttribute('aria-label',`Nuevo ${labels[activeOrderDetailKind].toLowerCase().replace(/s$/,'')}`);
+  if (typeof updateActiveNavLink === 'function') updateActiveNavLink();
 }
 
 function selectOrderDetailKind(kind) {
