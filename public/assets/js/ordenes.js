@@ -911,13 +911,28 @@ function updateWORelationInfo() {
   const node = getSelectedNodeByHiddenId();
   const eq = getSelectedEquipmentByHiddenId();
   const lines = [];
-  if (eq) lines.push(getEquipmentRelationLabel(eq.id));
-  if (node) lines.push(getNodeRelationLabel(node.id));
+  if (eq) {
+    const eqLabel = getEquipmentRelationLabel(eq.id);
+    if (eqLabel && eqLabel !== 'Sin pueblos vinculados') lines.push(eqLabel);
+  }
+  if (node) {
+    const nodeLabel = getNodeRelationLabel(node.id);
+    if (nodeLabel && nodeLabel !== 'Sin antena vinculada') lines.push(nodeLabel);
+  }
   const newNodeName = document.getElementById('wo-node')?.dataset.newNodeName || '';
-  box.classList.toggle('is-new-node',Boolean(newNodeName));
-  box.textContent = newNodeName
-    ? `Pueblo nuevo listo: “${newNodeName}”. Selecciona su zona y guarda el detalle.`
-    : (lines.length ? lines.join(' | ') : 'Selecciona un pueblo registrado o usa la opción “Agregar pueblo”. La antena se asignará automáticamente.');
+  box.classList.toggle('is-new-node', Boolean(newNodeName));
+  if (newNodeName) {
+    box.style.display = 'block';
+    box.textContent = `Pueblo nuevo listo: “${newNodeName}”. Selecciona su zona y guarda el detalle.`;
+  } else if (lines.length) {
+    box.style.display = 'block';
+    box.textContent = lines.join(' | ');
+  } else if (!node && !eq) {
+    box.style.display = 'block';
+    box.textContent = 'Selecciona un pueblo registrado o usa la opción “Agregar pueblo”. La antena se asignará automáticamente.';
+  } else {
+    box.style.display = 'none';
+  }
 }
 
 function syncWOFromNode() {
@@ -1683,16 +1698,16 @@ function ensureOrderReviewDecisionModal() {
   document.body.insertAdjacentHTML('beforeend', `<div class="mo order-review-decision-mo" id="order-review-decision-mo">
     <div class="md order-review-decision-card" role="dialog" aria-modal="true" aria-labelledby="order-review-decision-title">
       <div id="order-review-decision-choice">
-        <span class="order-review-decision-icon">?</span>
+        <span class="order-review-decision-icon"><svg style="width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
         <span id="order-review-decision-context" class="order-review-decision-context"></span>
-        <h2 id="order-review-decision-title">¿Va a atender ahorita el detalle?</h2>
-        <p>El detalle ya quedó registrado como visto. Confirma si comenzarás a revisarlo en este momento.</p>
-        <div class="order-review-decision-actions"><button type="button" class="btn bc" onclick="saveOrderReviewDecision(true)">Sí, atender ahora</button><button type="button" class="btn bgh" onclick="showOrderReviewReason()">No, ahora no</button></div>
+        <h2 id="order-review-decision-title">¿Desea iniciar la atención técnica del detalle?</h2>
+        <p>El detalle ha sido registrado como visto. Confirme si comenzará la atención técnica en este momento.</p>
+        <div class="order-review-decision-actions"><button type="button" class="btn bc" onclick="saveOrderReviewDecision(true)">Iniciar atención técnica</button><button type="button" class="btn bgh" onclick="showOrderReviewReason()">Posponer atención</button></div>
       </div>
       <div id="order-review-decision-reason" hidden>
-        <h2>¿Por qué no lo revisará en este momento?</h2>
-        <p>El motivo quedará guardado en el seguimiento del detalle.</p>
-        <label class="fi"><span>Motivo <em>Obligatorio</em></span><textarea id="order-review-reason" rows="4" placeholder="Escribe el motivo..."></textarea></label>
+        <h2>Motivo por el cual se pospone la atención</h2>
+        <p>El motivo quedará registrado en el historial de seguimiento del reporte.</p>
+        <label class="fi"><span>Motivo de postergación <em>Obligatorio</em></span><textarea id="order-review-reason" rows="4" placeholder="Describa el motivo por el cual no se atiende en este momento..."></textarea></label>
         <div class="order-review-decision-actions"><button type="button" class="btn bgh" onclick="showOrderReviewDecisionChoice()">Volver</button><button type="button" class="btn bc" onclick="saveOrderReviewDecision(false)">Guardar motivo</button></div>
       </div>
     </div>
@@ -2211,19 +2226,19 @@ function renderWOs() {
                   // Requerimiento enviado por Soporte hacia Atención a clientes
                   if (isAtencion) {
                     networkQuickActions = `
-                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Comenzar a atender este requerimiento">⚡ Atender</button>
+                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Comenzar atención de este requerimiento"><svg class="btn-action-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Atender</button>
                     `;
                   } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de respuesta por Atención a clientes">⏳ En Atención</span>`;
+                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de respuesta por Atención a clientes">En Atención</span>`;
                   }
                 } else {
                   // Detalle de red recibido por Soporte: primero tendrá el botón que diga "Atender"
                   if (isSoporte) {
                     networkQuickActions = `
-                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Comenzar a atender este reporte de red">⚡ Atender</button>
+                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Comenzar atención técnica de este reporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Atender</button>
                     `;
                   } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de atención técnica por Soporte">⏳ En Soporte</span>`;
+                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de atención técnica por Soporte">En Soporte</span>`;
                   }
                 }
               } else if (w.status === 'en_revision') {
@@ -2231,10 +2246,10 @@ function renderWOs() {
                 if (isSentToAttention) {
                   if (isAtencion) {
                     networkQuickActions = `
-                      <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Responder requerimiento a Soporte técnico">💬 Responder</button>
+                      <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Responder requerimiento a Soporte técnico"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Responder</button>
                     `;
                   } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="Atención a clientes está atendiendo este reporte">⏳ Atendiendo...</span>`;
+                    networkQuickActions = `<span class="net-pill-waiting" title="Atención a clientes está atendiendo este reporte">En atención</span>`;
                   }
                 } else {
                   // Detalle de red en atención por Soporte
@@ -2245,16 +2260,16 @@ function renderWOs() {
 
                     if (canRetake) {
                       networkQuickActions = `
-                        <button type="button" class="btn net-btn-retake" onclick="takeOverNetworkOrder('${w.id}')" title="Retomar este reporte y ponértelo a tu cargo">✋ Retomar</button>
-                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Resolver detalle técnico y notificar a Atención a clientes">🔧 Resolver</button>
+                        <button type="button" class="btn net-btn-retake" onclick="takeOverNetworkOrder('${w.id}')" title="Asumir este reporte a tu cargo"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg> Retomar</button>
+                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar solución técnica y notificar"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Resolver</button>
                       `;
                     } else {
                       networkQuickActions = `
-                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Resolver detalle técnico y notificar a Atención a clientes">🔧 Resolver</button>
+                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar solución técnica y notificar"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Resolver</button>
                       `;
                     }
                   } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="Soporte técnico está atendiendo este reporte">⏳ En atención</span>`;
+                    networkQuickActions = `<span class="net-pill-waiting" title="Soporte técnico está atendiendo este reporte">En atención</span>`;
                   }
                 }
               } else if (w.status === 'resuelto_soporte') {
@@ -2262,21 +2277,21 @@ function renderWOs() {
                   // Requerimiento que Soporte envió a Atención y ya fue respondido: Soporte valida si queda Conforme o lo Devuelve
                   if (isSoporte) {
                     networkQuickActions = `
-                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Respuesta satisfactoria: finalizar y cerrar">✓ Conforme</button>
-                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Respuesta no satisfactoria: devolver a Atención a clientes">↩ Devolver</button>
+                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Respuesta satisfactoria: finalizar y cerrar"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Conforme</button>
+                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Respuesta no satisfactoria: devolver a Atención a clientes"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
                     `;
                   } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Soporte valide la respuesta">⏳ En validación (Soporte)</span>`;
+                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Soporte valide la respuesta">En validación</span>`;
                   }
                 } else {
                   // Reporte de red que Soporte resolvió: SOLO Atención a clientes debe validar con el cliente. Soporte NO lo valida.
                   if (isAtencion) {
                     networkQuickActions = `
-                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Cliente confirmó servicio: finalizar y cerrar">✓ Conforme</button>
-                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Cliente no conforme: devolver a Soporte">↩ Devolver</button>
+                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Cliente confirmó servicio: finalizar y cerrar"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Conforme</button>
+                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Cliente no conforme: devolver a Soporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
                     `;
                   } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Atención a clientes valide con el cliente">⏳ Por validar (Atención)</span>`;
+                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Atención a clientes valide con el cliente">Por validar</span>`;
                   }
                 }
               }
@@ -2292,8 +2307,8 @@ function renderWOs() {
                   <span class="order-category-badge">${orderEscape(orderCategoryLabel(getOrderCategory(w)))}</span>
                   ${w.description ? `<div>${orderEscape(w.description)}</div>` : (w.title && w.title !== orderCategoryLabel(getOrderCategory(w)) ? `<div>${orderEscape(w.title)}</div>` : '')}
                   <div class="order-assignment-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">
-                    ${w.assignedUserName ? `<span class="order-assigned-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:12px;background:#e0f2fe;color:#0369a1;" title="Asignado a ${orderEscape(w.assignedUserName)}">👤 ${orderEscape(w.assignedUserName)}</span>` : ''}
-                    ${w.reviewOpenedByName && !['completada','no_realizado'].includes(w.status) ? `<span class="order-checking-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;" title="Abierto para checar: ${orderEscape(w.reviewOpenedByName)} (${orderEscape(orderReviewOpenedSummary(w))})">👀 ${w.reviewOpenedById === (currentActor.id || '') ? 'Checándolo tú' : `Checando: ${orderEscape(w.reviewOpenedByName)}`}</span>` : ''}
+                    ${w.assignedUserName ? `<span class="order-assigned-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:12px;background:#e0f2fe;color:#0369a1;"><svg style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${orderEscape(w.assignedUserName)}</span>` : ''}
+                    ${w.reviewOpenedByName && !['completada','no_realizado'].includes(w.status) && w.reviewOpenedByName !== w.assignedUserName ? `<span class="order-checking-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;"><svg style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${w.reviewOpenedById === (currentActor.id || '') ? 'En atención personal' : `En atención: ${orderEscape(w.reviewOpenedByName)}`}</span>` : ''}
                   </div>
                 </td>
                 <td data-label="Tipo">${orderEscape(getOrderDisplayType(w))}</td>
@@ -2345,7 +2360,7 @@ function renderNetresEvidencePhotos() {
   }
   container.innerHTML = netresEvidencePhotos.map((photo, index) => `
     <div class="netres-evidence-item">
-      <img src="${orderEscape(photo)}" alt="Evidencia ${index + 1}">
+      <img src="${orderEscape(photo)}" alt="Evidencia ${index + 1}" style="cursor:zoom-in" onclick="openEvidenceGallery(netresEvidencePhotos, ${index})" title="Clic para ampliar y explorar evidencia">
       <button type="button" aria-label="Eliminar" onclick="removeNetresEvidencePhoto(${index})">&times;</button>
     </div>
   `).join('');
@@ -2417,15 +2432,15 @@ function openResolveNetworkModal(id) {
       ${isCheckingByOther ? `
         <div class="netres-checking-alert" style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:10px 14px;border-radius:10px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
           <div>
-            <strong>👀 ${orderEscape(order.reviewOpenedByName)} está checando este detalle</strong>
+            <strong>${orderEscape(order.reviewOpenedByName)} se encuentra atendiendo este detalle</strong>
             <div style="font-size:12px;color:#b45309;">${orderEscape(orderReviewOpenedSummary(order) || 'Iniciado recientemente')}</div>
           </div>
-          <button type="button" class="btn" style="background:#f59e0b;color:#fff;font-size:12px;font-weight:800;padding:6px 12px;border-radius:8px;border:none;cursor:pointer;" onclick="takeOverNetworkOrder('${order.id}')">✋ Retomar yo este reporte</button>
+          <button type="button" class="btn" style="background:#f59e0b;color:#fff;font-size:12px;font-weight:800;padding:6px 12px;border-radius:8px;border:none;cursor:pointer;" onclick="takeOverNetworkOrder('${order.id}')">Asignarme y continuar atención</button>
         </div>
       ` : (isAssignedToOther ? `
         <div class="netres-reassign-banner" style="background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;padding:8px 12px;border-radius:8px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-          <span>Este reporte estaba asignado a <strong>${orderEscape(order.assignedUserName || 'otro compañero')}</strong>. Puedes resolverlo directamente o retomarlo a tu cargo.</span>
-          <button type="button" class="btn" style="background:#0284c7;color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;border:none;cursor:pointer;" onclick="takeOverNetworkOrder('${order.id}')">✋ Retomar y ponérmelo a mí</button>
+          <span>Este reporte estaba asignado a <strong>${orderEscape(order.assignedUserName || 'otro compañero')}</strong>. Puedes resolverlo directamente o asumir la asignación.</span>
+          <button type="button" class="btn" style="background:#0284c7;color:#fff;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;border:none;cursor:pointer;" onclick="takeOverNetworkOrder('${order.id}')">Tomar asignación del reporte</button>
         </div>
       ` : '')}
       <div class="netres-summary-row">
@@ -2494,6 +2509,15 @@ async function submitNetworkResolution() {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle de red.', 'err');
 
+  const confirmed = await askConfirmation({
+    title: 'Confirmar resolución técnica',
+    message: `¿Deseas registrar la solución del reporte #${getOrderFolio(order)} (${order.clientName || 'Cliente'}) y notificar a Atención a clientes para su validación?`,
+    confirmText: 'Registrar y notificar',
+    cancelText: 'Continuar editando',
+    tone: 'ok'
+  });
+  if (!confirmed) return;
+
   const currentUser = getCurrentUser();
   const userName = currentUser.name || currentUser.username || 'Soporte';
   const now = new Date().toISOString();
@@ -2557,6 +2581,18 @@ async function startAttendingNetworkOrder(id) {
     markNotificationReadByOrderId(id);
   }
 
+  const isSentToAttention = ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(getOrderCategory(order));
+  const roleAction = isSentToAttention ? 'la atención de este requerimiento' : 'la atención técnica de este reporte';
+
+  const confirmed = await askConfirmation({
+    title: 'Iniciar atención',
+    message: `¿Deseas iniciar ${roleAction} para ${order.clientName || 'el cliente'} (#${getOrderFolio(order)})? El estado cambiará a "En atención".`,
+    confirmText: 'Sí, iniciar atención',
+    cancelText: 'Cancelar',
+    tone: 'ok'
+  });
+  if (!confirmed) return;
+
   const currentUser = getCurrentUser();
   const userName = currentUser.name || currentUser.username || 'Soporte';
   const now = new Date().toISOString();
@@ -2600,6 +2636,16 @@ async function startAttendingNetworkOrder(id) {
 async function takeOverNetworkOrder(id) {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle de red.', 'err');
+
+  const currentAttendant = order.reviewOpenedByName || order.assignedUserName || 'otro compañero';
+  const confirmed = await askConfirmation({
+    title: 'Reasignar atención del reporte',
+    message: `Este reporte se encuentra a cargo de ${currentAttendant}. ¿Deseas asumir la atención técnica del reporte #${getOrderFolio(order)}?`,
+    confirmText: 'Sí, asumir atención',
+    cancelText: 'Cancelar',
+    tone: 'warning'
+  });
+  if (!confirmed) return;
 
   const currentUser = getCurrentUser();
   const userName = currentUser.name || currentUser.username || 'Soporte';
@@ -2683,13 +2729,22 @@ async function submitNetworkReturn() {
   const reason = document.getElementById('netret-reason')?.value.trim();
   if (!id) return;
   if (!reason) {
-    notify('Escribe qué indicó el cliente o qué persiste.', 'err');
+    notify('Describe las observaciones del cliente o falla persistente.', 'err');
     document.getElementById('netret-reason')?.focus();
     return;
   }
 
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle.', 'err');
+
+  const confirmed = await askConfirmation({
+    title: 'Devolver reporte a Soporte técnico',
+    message: `El reporte #${getOrderFolio(order)} (${order.clientName || 'Cliente'}) volverá a Soporte técnico con tus observaciones para continuar la atención. ¿Deseas proceder?`,
+    confirmText: 'Sí, devolver a Soporte',
+    cancelText: 'Revisar observaciones',
+    tone: 'warning'
+  });
+  if (!confirmed) return;
 
   const currentUser = getCurrentUser();
   const userName = currentUser.name || currentUser.username || 'Atención a clientes';
@@ -2723,7 +2778,7 @@ async function submitNetworkReturn() {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify('Detalle devuelto a Soporte. Soporte ha sido notificado en tiempo real.', 'warn');
+  notify('Reporte devuelto a Soporte técnico. Se notificó al equipo en tiempo real.', 'warn');
   await loadOrderPage();
 }
 
@@ -2733,9 +2788,9 @@ async function confirmNetworkClientSatisfied(id) {
 
   const client = order.clientName || 'el cliente';
   const confirmed = await askConfirmation({
-    title: '¿Confirmar solución con el cliente?',
-    message: `¿Consultaste con ${client} y confirmó que el servicio de red quedó solucionado y funcionando correctamente?`,
-    confirmText: '✓ Sí, servicio solucionado',
+    title: 'Confirmar satisfacción del cliente',
+    message: `¿Has consultado con ${client} y confirmó que el servicio opera correctamente a su entera conformidad? El reporte #${getOrderFolio(order)} quedará cerrado definitivamente.`,
+    confirmText: 'Confirmar conformidad y cerrar',
     cancelText: 'Cancelar',
     tone: 'ok'
   });

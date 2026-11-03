@@ -367,3 +367,103 @@ html body .topbar.app-sidebar .nav .nb[href="historial.html"] .nav-emoji svg{
   opacity:1!important;
   filter:drop-shadow(0 2px 2px rgba(10,22,76,.38))!important;
 }
+
+/* Visualizador de evidencias: más amplio, centrado y con libre desplazamiento / arrastre */
+.evidence-viewer-mo {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483600 !important;
+  padding: 12px !important;
+  display: none;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(10, 20, 35, 0.85) !important;
+  backdrop-filter: blur(8px) !important;
+  overflow: hidden !important;
+}
+.evidence-viewer-mo.open {
+  display: flex !important;
+}
+.evidence-viewer-card {
+  box-sizing: border-box !important;
+  width: min(1500px, calc(100vw - 24px)) !important;
+  height: calc(100dvh - 24px) !important;
+  max-width: 98vw !important;
+  max-height: 98dvh !important;
+  border-radius: 20px !important;
+  overflow: hidden !important;
+  background: #0f172a !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 35px 90px rgba(0, 0, 0, 0.65) !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+.evidence-viewer-head {
+  flex: 0 0 auto !important;
+  min-height: 64px !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  padding: 0 20px !important;
+}
+.evidence-viewer-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  background: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+.evidence-viewer-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 100% !important;
+  min-height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: grab !important;
+  user-select: none !important;
+  touch-action: none !important;
+  padding: 0 !important;
+}
+.evidence-viewer-canvas:active {
+  cursor: grabbing !important;
+}
+.evidence-viewer-body img {
+  display: block !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: calc(100% - 32px) !important;
+  max-height: calc(100% - 32px) !important;
+  object-fit: contain !important;
+  border-radius: 10px !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5) !important;
+  user-select: none !important;
+  -webkit-user-drag: none !important;
+  transform-origin: center center !important;
+  transition: transform 0.05s ease-out !important;
+}
+.evidence-viewer-tools {
+  flex: 0 0 auto !important;
+  min-height: 52px !important;
+  background: #ffffff !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+.evidence-viewer-thumbs {
+  flex: 0 0 auto !important;
+  min-height: 72px !important;
+  background: #f8fafc !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+.btn-action-svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
+  display: inline-block;
+  vertical-align: middle;
+}

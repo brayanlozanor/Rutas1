@@ -67,15 +67,15 @@
     <section class="content-card orders-table-card"><div id="orders-table"></div></section>
   </div>
 
-  <div class="mo" id="wo-mo"><div class="md modal-wide wo-modal"><div class="modal-head"><div><h2 id="wo-modal-title">Agregar detalle manual</h2><p>Orden: cliente, categoría, detalle específico, pueblo, zona, tipo y prioridad.</p></div><button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('wo-mo')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><input id="wo-id" type="hidden"><input id="wo-node-id" type="hidden"><input id="wo-equipment-id" type="hidden"><div class="modal-grid"><div class="fi"><label>Nombre cliente</label><input id="wo-client" placeholder="Nombre del cliente"></div><div class="fi"><label>Ubicación opcional</label><input id="wo-location" class="mono" placeholder="Solo si el cliente/detalle tiene ubicación propia"></div></div><div class="fi"><label>Detalle</label><textarea id="wo-detail" rows="4" placeholder="Qué se va a revisar o cambiar"></textarea></div><div class="modal-grid"><div class="fi autocomplete-inline"><label>Pueblo</label><input id="wo-node" autocomplete="off" oninput="renderWONodeSuggestions(); updateWORelationInfo()" onfocus="renderWONodeSuggestions()" onblur="hideWONodeSuggestionsSoon()" placeholder="Busca un pueblo o escribe uno nuevo..."><div id="wo-node-suggestions" class="autocomplete-menu"></div></div><div class="fi"><label>Antena asignada</label><input id="wo-equipment" autocomplete="off" readonly placeholder="Se asigna automáticamente al elegir un pueblo"><div id="wo-equipment-suggestions" class="autocomplete-menu"></div></div></div><div id="wo-relation-info" class="relation-box"></div><div class="modal-grid"><div class="fi wo-zone-field"><label>Zona</label><select id="wo-zone"></select></div><div class="fi wo-assign-field" id="wo-assign-field"><label>Asignar a Soporte <span class="optional-label">(Específico)</span></label><select id="wo-assigned-user"><option value="">-- Sin asignar (Todo Soporte) --</option></select></div></div><div class="modal-grid"><div class="fi"><label>Tipo de trabajo</label><select id="wo-type"><option value="comunidad">🏘️ Comunidad</option><option value="torre">🗼 Torre</option><option value="troncal">🛤️ Troncal</option><option value="punto_venta">🏪 Punto de venta</option></select></div><div class="fi"><label>Prioridad y repetición</label><div class="wo-priority-row" style="display:flex;align-items:center;gap:8px;"><select id="wo-priority" style="flex:1;min-width:0;" onchange="onWOPriorityChange()"><option value="baja" selected>🟢 Baja</option><option value="media">🟡 Media</option><option value="alta">🔴 Alta</option><option value="muy_alta">🔥 Muy alta</option></select><div class="wo-priority-interval-box" style="display:inline-flex;align-items:center;gap:4px;background:#f8fafc;border:1px solid #cbd5e1;padding:0 8px;border-radius:8px;height:40px;flex-shrink:0;" title="Minutos a los que se repetirá la notificación si no se ha resuelto"><span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap;">Repetir c/</span><input type="number" id="wo-priority-minutes" min="1" max="1440" style="width:48px;height:28px;text-align:center;font-weight:800;font-size:13px;color:#0f172a;border:1px solid #94a3b8;border-radius:6px;background:#fff;padding:0 2px;" oninput="onWOPriorityMinutesInput()" onchange="onWOPriorityMinutesChange()"><span style="font-size:11px;font-weight:700;color:#64748b;">min</span></div></div></div></div><div class="card-actions"><button class="btn bc" onclick="saveWO()">Guardar detalle</button><button class="btn bgh" onclick="CM('wo-mo')">Cancelar</button></div></div></div>
+  <div class="mo" id="wo-mo"><div class="md modal-wide wo-modal"><div class="modal-head"><div><h2 id="wo-modal-title">Registrar detalle</h2><p>Captura los datos requeridos para la atención del reporte.</p></div><button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('wo-mo')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><input id="wo-id" type="hidden"><input id="wo-node-id" type="hidden"><input id="wo-equipment-id" type="hidden"><div class="modal-grid"><div class="fi"><label>Nombre del cliente</label><input id="wo-client" placeholder="Nombre completo del cliente"></div><div class="fi"><label>Ubicación (opcional)</label><input id="wo-location" class="mono" placeholder="Coordenadas o referencia de ubicación"></div></div><div class="fi"><label>Descripción del detalle</label><textarea id="wo-detail" rows="4" placeholder="Describe la falla reportada o el trabajo a realizar"></textarea></div><div class="modal-grid"><div class="fi autocomplete-inline"><label>Pueblo</label><input id="wo-node" autocomplete="off" oninput="renderWONodeSuggestions(); updateWORelationInfo()" onfocus="renderWONodeSuggestions()" onblur="hideWONodeSuggestionsSoon()" placeholder="Selecciona o escribe el pueblo..."><div id="wo-node-suggestions" class="autocomplete-menu"></div></div><div class="fi"><label>Antena asignada</label><input id="wo-equipment" autocomplete="off" readonly placeholder="Se asigna automáticamente al elegir un pueblo"><div id="wo-equipment-suggestions" class="autocomplete-menu"></div></div></div><div id="wo-relation-info" class="relation-box"></div><div class="modal-grid"><div class="fi wo-zone-field"><label>Zona</label><select id="wo-zone"></select></div><div class="fi wo-assign-field" id="wo-assign-field"><label>Asignación a Soporte técnico</label><select id="wo-assigned-user"><option value="">-- Sin asignar (Todo el equipo de Soporte) --</option></select></div></div><div class="modal-grid"><div class="fi"><label>Tipo de trabajo</label><select id="wo-type"><option value="comunidad">Comunidad</option><option value="torre">Torre</option><option value="troncal">Troncal</option><option value="punto_venta">Punto de venta</option></select></div><div class="fi"><label>Prioridad y frecuencia de recordatorio</label><div class="wo-priority-row" style="display:flex;align-items:center;gap:8px;"><select id="wo-priority" style="flex:1;min-width:0;" onchange="onWOPriorityChange()"><option value="baja" selected>Baja</option><option value="media">Media</option><option value="alta">Alta</option><option value="muy_alta">Muy alta</option></select><div class="wo-priority-interval-box" style="display:inline-flex;align-items:center;gap:4px;background:#f8fafc;border:1px solid #cbd5e1;padding:0 8px;border-radius:8px;height:40px;flex-shrink:0;" title="Intervalo en minutos para recordar atención pendiente"><span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap;">Recordar c/</span><input type="number" id="wo-priority-minutes" min="1" max="1440" style="width:48px;height:28px;text-align:center;font-weight:800;font-size:13px;color:#0f172a;border:1px solid #94a3b8;border-radius:6px;background:#fff;padding:0 2px;" oninput="onWOPriorityMinutesInput()" onchange="onWOPriorityMinutesChange()"><span style="font-size:11px;font-weight:700;color:#64748b;">min</span></div></div></div></div><div class="card-actions"><button class="btn bc" onclick="saveWO()">Guardar detalle</button><button class="btn bgh" onclick="CM('wo-mo')">Cancelar</button></div></div></div>
 
   <!-- Modal para que Soporte resuelva el detalle de red -->
   <div class="mo" id="network-resolve-mo">
     <div class="md modal-wide network-resolve-card">
       <div class="modal-head">
         <div>
-          <h2 id="netres-modal-title">🔧 Resolver detalle de red</h2>
-          <p id="netres-modal-subtitle">Registra la solución técnica y notifica en tiempo real a Atención a clientes.</p>
+          <h2 id="netres-modal-title">Resolver detalle de red</h2>
+          <p id="netres-modal-subtitle">Registra la solución técnica implementada y notifica a Atención a clientes.</p>
         </div>
         <button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('network-resolve-mo')">
           <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -85,24 +85,24 @@
       <div id="netres-order-summary" class="netres-summary-box"></div>
       <div class="fi">
         <label>Solución técnica aplicada <span class="required-indicator">*</span></label>
-        <textarea id="netres-solution" rows="4" placeholder="Describe los ajustes en Mikrotik, antenas, perfiles o cambios realizados para solucionar el detalle..."></textarea>
+        <textarea id="netres-solution" rows="4" placeholder="Describe los ajustes en MikroTik, perfiles, enlaces o acciones técnicas realizadas para solventar la falla..."></textarea>
       </div>
       <div class="fi">
-        <label>Evidencia opcional <span class="optional-indicator">(Captura de ping, Winbox o fotografía)</span></label>
+        <label>Evidencia técnica opcional <span class="optional-indicator">(Captura de pantalla, prueba de ping o fotografía)</span></label>
         <div class="netres-evidence-picker">
           <input type="file" id="netres-file-input" accept="image/*" style="display:none" onchange="handleNetresEvidenceFile(event)">
           <div class="netres-picker-bar">
             <button type="button" class="btn bgh" onclick="document.getElementById('netres-file-input').click()">
-              📷 Adjuntar imagen / captura
+              Adjuntar evidencia
             </button>
-            <span class="netres-picker-hint">O pega directamente una captura con <strong>Ctrl + V</strong></span>
+            <span class="netres-picker-hint">También puedes pegar una captura directamente con <strong>Ctrl + V</strong></span>
           </div>
           <div id="netres-evidence-preview" class="netres-evidence-grid"></div>
         </div>
       </div>
       <div class="card-actions">
         <button type="button" class="btn bgh" onclick="CM('network-resolve-mo')">Cancelar</button>
-        <button type="button" class="btn bc" onclick="submitNetworkResolution()">✓ Marcar como resuelto y notificar</button>
+        <button type="button" class="btn bc" onclick="submitNetworkResolution()">Guardar resolución y notificar</button>
       </div>
     </div>
   </div>
@@ -112,8 +112,8 @@
     <div class="md modal-compact network-return-card">
       <div class="modal-head">
         <div>
-          <h2>↩️ Devolver detalle a Soporte</h2>
-          <p>Consulta con el cliente y escribe qué problema sigue presentando.</p>
+          <h2>Devolver reporte a Soporte técnico</h2>
+          <p>Registra las observaciones del cliente para reabrir la atención técnica.</p>
         </div>
         <button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('network-return-mo')">
           <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -122,12 +122,12 @@
       <input id="netret-order-id" type="hidden">
       <div id="netret-order-summary" class="netres-summary-box"></div>
       <div class="fi">
-        <label>¿Qué indicó el cliente o qué falla continúa? <span class="required-indicator">*</span></label>
-        <textarea id="netret-reason" rows="4" placeholder="Ej: El cliente indica que sigue con cortes frecuentes y no puede ver videos..."></textarea>
+        <label>Observaciones del cliente o falla persistente <span class="required-indicator">*</span></label>
+        <textarea id="netret-reason" rows="4" placeholder="Especifica qué continúa fallando según lo indicado por el cliente..."></textarea>
       </div>
       <div class="card-actions">
         <button type="button" class="btn bgh" onclick="CM('network-return-mo')">Cancelar</button>
-        <button type="button" class="btn btn-warning-return" onclick="submitNetworkReturn()">↩ Devolver a Soporte</button>
+        <button type="button" class="btn btn-warning-return" onclick="submitNetworkReturn()">Confirmar devolución a Soporte</button>
       </div>
     </div>
   </div>

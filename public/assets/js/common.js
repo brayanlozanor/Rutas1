@@ -398,6 +398,16 @@ async function finishAdminDetailCompletion(includeInformation) {
 }
 
 
+let evidenceGallery = [];
+let evidenceGalleryIndex = 0;
+let evidenceZoom = 1;
+let evidencePanX = 0;
+let evidencePanY = 0;
+let isPanningEvidence = false;
+let evidencePointerStartX = 0;
+let evidencePointerStartY = 0;
+let evidenceGalleryVersion = 0;
+
 function ensureEvidenceModal() {
     let modal = document.getElementById('evidence-viewer-mo');
     if (modal) return modal;
@@ -408,48 +418,135 @@ function ensureEvidenceModal() {
         <div class="evidence-viewer-card" role="dialog" aria-modal="true" aria-labelledby="evidence-viewer-title" tabindex="-1">
             <header class="evidence-viewer-head">
                 <span class="evidence-viewer-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m5 17 4-4 3 3 3-4 4 5"/></svg></span>
-                <div><h2 id="evidence-viewer-title">Evidencia fotográfica</h2><p>Imagen adjunta al reporte</p></div>
+                <div>
+                    <h2 id="evidence-viewer-title">Visualizador de evidencia</h2>
+                    <p id="evidence-viewer-subtitle">Arrastra para desplazarte sobre la imagen · Rueda o controles para zoom</p>
+                </div>
                 <button type="button" class="evidence-viewer-close" onclick="closeEvidenceViewer()"><span>Cerrar</span><b aria-hidden="true">×</b></button>
             </header>
             <div class="evidence-viewer-body">
-                <div class="evidence-viewer-canvas"><img id="evidence-viewer-img" alt="Evidencia fotográfica" ondblclick="toggleEvidenceZoom()" title="Usa la rueda o haz doble clic para ampliar"></div>
+                <div class="evidence-viewer-canvas" id="evidence-viewer-canvas">
+                    <img id="evidence-viewer-img" alt="Evidencia fotográfica" draggable="false" ondblclick="toggleEvidenceZoom()" title="Haz doble clic o usa la rueda para zoom · Arrastra para mover">
+                </div>
                 <button type="button" class="evidence-nav evidence-prev" onclick="stepEvidenceGallery(-1)" aria-label="Foto anterior">&#8249;</button>
                 <button type="button" class="evidence-nav evidence-next" onclick="stepEvidenceGallery(1)" aria-label="Foto siguiente">&#8250;</button>
             </div>
             <div class="evidence-viewer-tools">
-                <div class="evidence-viewer-position"><span aria-hidden="true">▧</span><strong id="evidence-viewer-count">1 / 1</strong></div>
-                <div class="evidence-zoom-tools"><button type="button" onclick="zoomEvidence(-0.25)" title="Alejar" aria-label="Alejar">−</button><button id="evidence-zoom-value" type="button" onclick="resetEvidenceZoom()" title="Restablecer zoom">100%</button><button type="button" onclick="zoomEvidence(0.25)" title="Acercar" aria-label="Acercar">+</button></div>
-                <div class="evidence-file-tools"><button type="button" onclick="toggleEvidenceFullscreen()" title="Pantalla completa" aria-label="Pantalla completa">⛶</button><button type="button" onclick="downloadCurrentEvidence()" title="Descargar evidencia" aria-label="Descargar evidencia">⇩</button></div>
+                <div class="evidence-viewer-position"><span aria-hidden="true"><svg style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span><strong id="evidence-viewer-count">1 / 1</strong></div>
+                <div class="evidence-zoom-tools">
+                    <button type="button" onclick="zoomEvidence(-0.25)" title="Alejar" aria-label="Alejar">−</button>
+                    <button id="evidence-zoom-value" type="button" onclick="resetEvidenceZoom()" title="Restablecer vista original">100%</button>
+                    <button type="button" onclick="zoomEvidence(0.25)" title="Acercar" aria-label="Acercar">+</button>
+                </div>
+                <div class="evidence-file-tools">
+                    <button type="button" onclick="toggleEvidenceFullscreen()" title="Pantalla completa" aria-label="Pantalla completa"><svg style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+                    <button type="button" onclick="downloadCurrentEvidence()" title="Descargar imagen" aria-label="Descargar imagen"><svg style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+                </div>
             </div>
             <div id="evidence-viewer-thumbs" class="evidence-viewer-thumbs" aria-label="Miniaturas de evidencias"></div>
         </div>`;
     document.body.appendChild(modal);
+
     modal.addEventListener('click', event => {
         if (event.target === modal) closeEvidenceViewer();
     });
-    modal.querySelector('.evidence-viewer-body')?.addEventListener('wheel',event=>{event.preventDefault();zoomEvidence(event.deltaY<0?0.25:-0.25);},{passive:false});
+
+    const canvas = modal.querySelector('.evidence-viewer-canvas');
+    if (canvas) {
+        canvas.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            isPanningEvidence = true;
+            evidencePointerStartX = e.clientX - evidencePanX;
+            evidencePointerStartY = e.clientY - evidencePanY;
+            try { canvas.setPointerCapture?.(e.pointerId); } catch (_) {}
+            canvas.style.cursor = 'grabbing';
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (!isPanningEvidence) return;
+            evidencePanX = e.clientX - evidencePointerStartX;
+            evidencePanY = e.clientY - evidencePointerStartY;
+            const img = document.getElementById('evidence-viewer-img');
+            if (img) {
+                img.style.transform = `translate(${evidencePanX}px, ${evidencePanY}px) scale(${evidenceZoom})`;
+            }
+        });
+
+        const endPan = (e) => {
+            if (isPanningEvidence) {
+                isPanningEvidence = false;
+                if (canvas) canvas.style.cursor = 'grab';
+                try { canvas.releasePointerCapture?.(e.pointerId); } catch (_) {}
+            }
+        };
+
+        canvas.addEventListener('pointerup', endPan);
+        canvas.addEventListener('pointercancel', endPan);
+    }
+
+    modal.querySelector('.evidence-viewer-body')?.addEventListener('wheel', event => {
+        event.preventDefault();
+        zoomEvidence(event.deltaY < 0 ? 0.25 : -0.25);
+    }, { passive: false });
+
+    // Navegación rápida por teclado
+    modal.addEventListener('keydown', (e) => {
+        if (!modal.classList.contains('open')) return;
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeEvidenceViewer();
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            stepEvidenceGallery(-1);
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            stepEvidenceGallery(1);
+        } else if (e.key === '+' || e.key === '=') {
+            e.preventDefault();
+            zoomEvidence(0.25);
+        } else if (e.key === '-' || e.key === '_') {
+            e.preventDefault();
+            zoomEvidence(-0.25);
+        } else if (e.key === '0') {
+            e.preventDefault();
+            resetEvidenceZoom();
+        }
+    });
+
     return modal;
 }
-
-let evidenceGallery = [];
-let evidenceGalleryIndex = 0;
-let evidenceZoom = 1;
-let evidenceGalleryVersion = 0;
 
 function updateEvidenceViewer() {
     const img = document.getElementById('evidence-viewer-img');
     if (img) {
-        const currentSrc=evidenceGallery[evidenceGalleryIndex]||'';
-        if(img.getAttribute('src')!==currentSrc) img.src=currentSrc;
-        img.style.transform = `scale(${evidenceZoom})`;
+        const currentSrc = evidenceGallery[evidenceGalleryIndex] || '';
+        if (img.getAttribute('src') !== currentSrc) img.src = currentSrc;
+        img.style.transform = `translate(${evidencePanX}px, ${evidencePanY}px) scale(${evidenceZoom})`;
     }
     const count = document.getElementById('evidence-viewer-count');
     if (count) count.textContent = `${evidenceGalleryIndex + 1} / ${evidenceGallery.length || 1}`;
-    const zoomValue=document.getElementById('evidence-zoom-value');
-    if(zoomValue) zoomValue.textContent=`${Math.round(evidenceZoom*100)}%`;
+    const zoomValue = document.getElementById('evidence-zoom-value');
+    if (zoomValue) zoomValue.textContent = `${Math.round(evidenceZoom * 100)}%`;
     document.querySelectorAll('.evidence-nav').forEach(button => button.hidden = evidenceGallery.length < 2);
-    const thumbs=document.getElementById('evidence-viewer-thumbs');
-    if(thumbs){if(thumbs.dataset.galleryVersion!==String(evidenceGalleryVersion)){thumbs.replaceChildren();evidenceGallery.forEach((src,index)=>{const button=document.createElement('button');button.type='button';button.setAttribute('aria-label',`Ver evidencia ${index+1}`);button.onclick=()=>selectEvidenceGallery(index);const thumb=document.createElement('img');thumb.src=src;thumb.alt=`Miniatura ${index+1}`;button.appendChild(thumb);thumbs.appendChild(button);});thumbs.dataset.galleryVersion=String(evidenceGalleryVersion);}Array.from(thumbs.children).forEach((button,index)=>button.classList.toggle('active',index===evidenceGalleryIndex));}
+    const thumbs = document.getElementById('evidence-viewer-thumbs');
+    if (thumbs) {
+        if (thumbs.dataset.galleryVersion !== String(evidenceGalleryVersion)) {
+            thumbs.replaceChildren();
+            evidenceGallery.forEach((src, index) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.setAttribute('aria-label', `Ver evidencia ${index + 1}`);
+                button.onclick = () => selectEvidenceGallery(index);
+                const thumb = document.createElement('img');
+                thumb.src = src;
+                thumb.alt = `Miniatura ${index + 1}`;
+                button.appendChild(thumb);
+                thumbs.appendChild(button);
+            });
+            thumbs.dataset.galleryVersion = String(evidenceGalleryVersion);
+        }
+        Array.from(thumbs.children).forEach((button, index) => button.classList.toggle('active', index === evidenceGalleryIndex));
+    }
 }
 
 function openEvidenceGallery(items, index = 0) {
@@ -458,6 +555,8 @@ function openEvidenceGallery(items, index = 0) {
     evidenceGalleryVersion++;
     evidenceGalleryIndex = Math.max(0, Math.min(evidenceGallery.length - 1, Number(index) || 0));
     evidenceZoom = 1;
+    evidencePanX = 0;
+    evidencePanY = 0;
     const modal = ensureEvidenceModal();
     updateEvidenceViewer();
     modal.classList.add('open');
@@ -465,15 +564,19 @@ function openEvidenceGallery(items, index = 0) {
 }
 
 function closeEvidenceViewer() {
-    const modal=document.getElementById('evidence-viewer-mo');
-    if(modal) modal.classList.remove('open');
-    if(document.fullscreenElement?.closest?.('#evidence-viewer-mo')) void document.exitFullscreen?.();
-    evidenceZoom=1;
+    const modal = document.getElementById('evidence-viewer-mo');
+    if (modal) modal.classList.remove('open');
+    if (document.fullscreenElement?.closest?.('#evidence-viewer-mo')) void document.exitFullscreen?.();
+    evidenceZoom = 1;
+    evidencePanX = 0;
+    evidencePanY = 0;
 }
 
 function selectEvidenceGallery(index) {
-    evidenceGalleryIndex=Math.max(0,Math.min(evidenceGallery.length-1,Number(index)||0));
-    evidenceZoom=1;
+    evidenceGalleryIndex = Math.max(0, Math.min(evidenceGallery.length - 1, Number(index) || 0));
+    evidenceZoom = 1;
+    evidencePanX = 0;
+    evidencePanY = 0;
     updateEvidenceViewer();
 }
 
@@ -481,21 +584,31 @@ function stepEvidenceGallery(direction) {
     if (evidenceGallery.length < 2) return;
     evidenceGalleryIndex = (evidenceGalleryIndex + direction + evidenceGallery.length) % evidenceGallery.length;
     evidenceZoom = 1;
+    evidencePanX = 0;
+    evidencePanY = 0;
     updateEvidenceViewer();
 }
 
 function zoomEvidence(delta) {
-    evidenceZoom = Math.max(0.5, Math.min(4, evidenceZoom + delta));
+    evidenceZoom = Math.max(0.5, Math.min(5, evidenceZoom + delta));
     updateEvidenceViewer();
 }
 
 function resetEvidenceZoom() {
     evidenceZoom = 1;
+    evidencePanX = 0;
+    evidencePanY = 0;
     updateEvidenceViewer();
 }
 
 function toggleEvidenceZoom() {
-    evidenceZoom = evidenceZoom > 1 ? 1 : 2;
+    if (evidenceZoom > 1 || evidencePanX !== 0 || evidencePanY !== 0) {
+        evidenceZoom = 1;
+        evidencePanX = 0;
+        evidencePanY = 0;
+    } else {
+        evidenceZoom = 2;
+    }
     updateEvidenceViewer();
 }
 
@@ -1847,6 +1960,7 @@ function getNetopsAudioContext() {
 }
 
 function unlockNetopsAudioOnInteraction() {
+  if (typeof window === 'undefined') return;
   const unlock = () => {
     const ctx = getNetopsAudioContext();
     if (ctx && ctx.state === 'suspended') {
@@ -1854,7 +1968,7 @@ function unlockNetopsAudioOnInteraction() {
     }
   };
   ['pointerdown', 'keydown', 'touchstart'].forEach(evt => {
-    window.addEventListener(evt, unlock, { once: true, passive: true });
+    window.addEventListener(evt, unlock, { passive: true });
   });
 }
 if (typeof window !== 'undefined') {
@@ -1868,35 +1982,45 @@ function playSubtleNotificationTone() {
   try {
     const ctx = getNetopsAudioContext();
     if (!ctx) return;
+
+    const play = () => {
+      try {
+        const now = ctx.currentTime;
+
+        // Tono formal, corto y sutil (acorde armónico D5 -> A5 con envolvente limpia y sin distorsión)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(587.33, now); // D5
+        gain1.gain.setValueAtTime(0.0001, now);
+        gain1.gain.linearRampToValueAtTime(0.09, now + 0.015);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.30);
+
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880.0, now + 0.08); // A5
+        gain2.gain.setValueAtTime(0.0001, now + 0.08);
+        gain2.gain.linearRampToValueAtTime(0.10, now + 0.095);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(now + 0.08);
+        osc2.stop(now + 0.40);
+      } catch (err) {
+        console.warn('Audio play error:', err);
+      }
+    };
+
     if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
+      ctx.resume().then(play).catch(play);
+    } else {
+      play();
     }
-    const now = ctx.currentTime;
-
-    // Tono formal, corto y sutil (acorde armónico D5 -> A5 con envolvente limpia y sin distorsión)
-    const osc1 = ctx.createOscillator();
-    const gain1 = ctx.createGain();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(587.33, now); // D5
-    gain1.gain.setValueAtTime(0.0001, now);
-    gain1.gain.linearRampToValueAtTime(0.08, now + 0.012);
-    gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.26);
-    osc1.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc1.start(now);
-    osc1.stop(now + 0.28);
-
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(880.0, now + 0.07); // A5
-    gain2.gain.setValueAtTime(0.0001, now + 0.07);
-    gain2.gain.linearRampToValueAtTime(0.09, now + 0.082);
-    gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.36);
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.start(now + 0.07);
-    osc2.stop(now + 0.38);
   } catch (e) {
     console.warn('No se pudo reproducir el tono de notificación', e);
   }
@@ -2372,7 +2496,7 @@ function handleNetworkOrderEvent(payload) {
       // Requerimiento enviado por Soporte hacia Atención a clientes
       if (isAtencion) {
         notifyNetworkDetailEvent({
-          title: '📢 Nuevo requerimiento de Soporte',
+          title: 'Nuevo requerimiento de Soporte',
           message: `${order.clientName || 'Comunidad'} (${order.town || 'Red'}) · ${order.title || 'Solicitud de Atención a clientes'}`,
           type: 'new_order',
           orderId: order.id
@@ -2385,7 +2509,7 @@ function handleNetworkOrderEvent(payload) {
       if (shouldNotify) {
         const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
         notifyNetworkDetailEvent({
-          title: `🔔 Nuevo detalle de red${assignedNotice}`,
+          title: `Nuevo reporte de red${assignedNotice}`,
           message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · ${order.title || 'Reportado por Atención a clientes'}`,
           type: 'new_order',
           orderId: order.id
@@ -2398,8 +2522,8 @@ function handleNetworkOrderEvent(payload) {
     const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
     if (shouldNotify) {
       notifyNetworkDetailEvent({
-        title: '⚡ Soporte comenzó a atender tu reporte',
-        message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · Atendido por ${payload.byName || 'Soporte'}.`,
+        title: 'Soporte técnico ha iniciado la atención',
+        message: `${order.clientName || 'Cliente'} (${order.town || 'Red'}) · En atención por ${payload.byName || 'Soporte'}.`,
         type: 'attending',
         orderId: order.id
       });
@@ -2409,7 +2533,7 @@ function handleNetworkOrderEvent(payload) {
       // Atención respondió requerimiento de Soporte: notificar a Soporte
       if (isSoporte) {
         notifyNetworkDetailEvent({
-          title: '💬 Atención a clientes respondió requerimiento',
+          title: 'Atención a clientes atendió requerimiento',
           message: `${order.clientName || 'Comunidad'} · ${order.solution ? order.solution.slice(0, 65) + '...' : 'Revisa la respuesta.'}`,
           type: 'resolved',
           orderId: order.id
@@ -2422,7 +2546,7 @@ function handleNetworkOrderEvent(payload) {
       if (shouldNotify) {
         const solSnippet = order.solution ? `Solución: ${order.solution.slice(0, 65)}...` : 'Consulta con el cliente para validar.';
         notifyNetworkDetailEvent({
-          title: '✅ Soporte resolvió tu detalle de red',
+          title: 'Detalle resuelto por Soporte técnico',
           message: `${order.clientName || 'Cliente'} · ${solSnippet}`,
           type: 'resolved',
           orderId: order.id
@@ -2434,7 +2558,7 @@ function handleNetworkOrderEvent(payload) {
     if (isSupportToAttention) {
       if (isAtencion) {
         notifyNetworkDetailEvent({
-          title: '⚠️ Requerimiento devuelto por Soporte',
+          title: 'Requerimiento devuelto por Soporte',
           message: `${order.clientName || 'Comunidad'} · ${order.note ? order.note.slice(0, 65) + '...' : 'Se solicita aclaración.'}`,
           type: 'returned',
           orderId: order.id
@@ -2445,7 +2569,7 @@ function handleNetworkOrderEvent(payload) {
       if (shouldNotify) {
         const reasonSnippet = order.note ? `Motivo: ${order.note.slice(0, 65)}...` : 'El cliente indica que continúa la falla.';
         notifyNetworkDetailEvent({
-          title: '⚠️ Detalle devuelto por Atención a clientes',
+          title: 'Reporte devuelto a Soporte técnico',
           message: `${order.clientName || 'Cliente'} · ${reasonSnippet}`,
           type: 'returned',
           orderId: order.id
@@ -2457,7 +2581,7 @@ function handleNetworkOrderEvent(payload) {
     const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
     if (shouldNotify) {
       notifyNetworkDetailEvent({
-        title: '🎉 Detalle resuelto y conforme',
+        title: 'Reporte concluido a conformidad',
         message: `${order.clientName || 'Cliente'} confirmó que el servicio quedó funcionando.`,
         type: 'confirmed',
         orderId: order.id
@@ -2465,7 +2589,7 @@ function handleNetworkOrderEvent(payload) {
     }
   } else if (transition === 'retaken' && isSoporte && payload.byUserId !== user.id) {
     notifyNetworkDetailEvent({
-      title: '✋ Detalle retomado en Soporte',
+      title: 'Reporte reasignado en Soporte',
       message: `${payload.byName || 'Otro compañero'} retomó el reporte de ${order.clientName || 'Cliente'}.`,
       type: 'retaken',
       orderId: order.id
@@ -2536,7 +2660,7 @@ async function checkNetworkOrderNotifications() {
           if (isSupportToAttention) {
             if (userHasRole('atencion_clientes') && !isOwnCreator) {
               notifyNetworkDetailEvent({
-                title: '📢 Nuevo requerimiento de Soporte',
+                title: 'Nuevo requerimiento de Soporte',
                 message: `${client} (${place}) · ${orderTitle}`,
                 type: 'new_order',
                 orderId: order.id
@@ -2547,7 +2671,7 @@ async function checkNetworkOrderNotifications() {
             if (shouldNotifyNew) {
               const assignedNotice = hasAssignment ? ' (Asignado a ti)' : '';
               notifyNetworkDetailEvent({
-                title: `🔔 Nuevo detalle de red${assignedNotice}`,
+                title: `Nuevo reporte de red${assignedNotice}`,
                 message: `${client} (${place}) · ${orderTitle}`,
                 type: 'new_order',
                 orderId: order.id
@@ -2581,7 +2705,7 @@ async function checkNetworkOrderNotifications() {
             if (shouldNotifyAttending) {
               const actor = order.reviewOpenedByName || 'Soporte';
               notifyNetworkDetailEvent({
-                title: '⚡ Soporte comenzó a atender tu reporte',
+                title: 'Soporte técnico ha iniciado la atención',
                 message: `${client} (${place}) · Atendido por ${actor}.`,
                 type: 'attending',
                 orderId: order.id
@@ -2591,7 +2715,7 @@ async function checkNetworkOrderNotifications() {
             if (isSupportToAttention) {
               if (userHasRole('administrador', 'admin')) {
                 notifyNetworkDetailEvent({
-                  title: '💬 Atención a clientes respondió requerimiento',
+                  title: 'Atención a clientes atendió requerimiento',
                   message: `${client} · ${order.technicianReport?.solution ? order.technicianReport.solution.slice(0, 65) + '...' : 'Revisa la respuesta.'}`,
                   type: 'resolved',
                   orderId: order.id
@@ -2603,7 +2727,7 @@ async function checkNetworkOrderNotifications() {
               if (shouldNotifyResolved) {
                 const sol = order.technicianReport?.solution || '';
                 notifyNetworkDetailEvent({
-                  title: '✅ Soporte resolvió tu detalle de red',
+                  title: 'Detalle resuelto por Soporte técnico',
                   message: `${client} · ${sol ? 'Solución: ' + sol.slice(0, 65) + '...' : 'Consulta con el cliente para validar.'}`,
                   type: 'resolved',
                   orderId: order.id
@@ -2615,7 +2739,7 @@ async function checkNetworkOrderNotifications() {
             if (shouldNotifyReturned) {
               const lastNote = (Array.isArray(order.followUps) ? order.followUps.slice(-1)[0]?.note : '') || 'Continúa la falla';
               notifyNetworkDetailEvent({
-                title: '⚠️ Detalle devuelto por Atención a clientes',
+                title: 'Reporte devuelto a Soporte técnico',
                 message: `${client} · ${lastNote.slice(0, 65)}...`,
                 type: 'returned',
                 orderId: order.id
@@ -2625,7 +2749,7 @@ async function checkNetworkOrderNotifications() {
             const shouldNotifyConfirmed = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin');
             if (shouldNotifyConfirmed) {
               notifyNetworkDetailEvent({
-                title: '🎉 Detalle resuelto y conforme',
+                title: 'Reporte concluido a conformidad',
                 message: `${client} confirmó servicio restablecido.`,
                 type: 'confirmed',
                 orderId: order.id
