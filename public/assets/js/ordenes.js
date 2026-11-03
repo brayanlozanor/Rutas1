@@ -1430,13 +1430,13 @@ function orderFilters() {
 
 function getOrderLifecycleRank(order) {
   const status = String(order?.status || 'pendiente').toLowerCase();
-  // 1° Atender: pendientes y devueltos
-  if (status === 'pendiente' || status === 'devuelto_soporte') return 0;
-  // 2° Resolver: en atención (en revisión)
-  if (status === 'en_revision') return 1;
-  // 3° Por validar: resuelto por soporte, esperando validación
-  if (status === 'resuelto_soporte') return 2;
-  // 4° Hasta el último los completados (solucionados, no realizados, revisados)
+  // 1° Conforme y Devolver (reportes resueltos en espera de validación): prioridad máxima en ambos roles
+  if (status === 'resuelto_soporte') return 0;
+  // 2° Atender: pendientes y devueltos
+  if (status === 'pendiente' || status === 'devuelto_soporte') return 1;
+  // 3° Resolver: en atención (en revisión)
+  if (status === 'en_revision') return 2;
+  // 4° Hasta el final los completados (solucionados, no realizados, revisados)
   if (['completada', 'no_realizado', 'revisado'].includes(status)) return 4;
   return 3;
 }
