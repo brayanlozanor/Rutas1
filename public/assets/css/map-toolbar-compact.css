@@ -1,0 +1,67 @@
+/* Barra compacta del mapa: evita que controles y botones se estiren. */
+body.map-page .map-main-card .map-toolbar{
+  display:block!important;
+  padding:12px!important;
+  overflow-x:auto!important;
+}
+.map-page .map-toolbar-row{
+  display:flex!important;
+  width:100%!important;
+  min-width:0!important;
+  align-items:center!important;
+  gap:8px!important;
+}
+.map-page .map-toolbar-row>*{min-width:0!important;height:42px!important;min-height:42px!important;margin:0!important}
+.map-page .map-toolbar-row #map-view-filter{width:180px!important;flex:0 1 180px!important}
+.map-page .map-toolbar-row #map-zone-filter{width:200px!important;flex:0 1 200px!important}
+.map-page .map-toolbar-row #map-search{width:auto!important;flex:1 1 280px!important}
+.map-page .map-toolbar-row .map-label-toggle{width:110px!important;flex:0 0 110px!important;justify-content:center!important}
+.map-page .map-expand-button{background:#0874e8!important;color:#fff!important}
+  body.map-page .map-icon-button{
+    position:relative!important;
+    display:grid!important;
+    width:40px!important;
+    min-width:40px!important;
+    flex:0 0 40px!important;
+    padding:0!important;
+    place-items:center!important;
+    justify-self:center!important;
+  }
+  body.map-page .map-icon-button svg{
+    width:19px!important;
+    height:19px!important;
+    fill:none!important;
+    stroke:currentColor!important;
+    stroke-width:2!important;
+    stroke-linecap:round!important;
+    stroke-linejoin:round!important;
+  }
+
+@media (min-width:761px) and (max-width:1200px){
+  .map-page .map-toolbar-row #map-view-filter{width:145px!important;flex-basis:145px!important}
+  .map-page .map-toolbar-row #map-zone-filter{width:165px!important;flex-basis:165px!important}
+  .map-page .map-toolbar-row .map-label-toggle{width:96px!important;flex-basis:96px!important}
+}
+
+@media (max-width:760px){
+  .map-page .map-toolbar-row{
+    min-width:620px!important;
+  }
+  body.map-page .map-icon-button{width:38px!important;min-width:38px!important}
+}
+
+body.map-page.map-app-expanded:not(.tech-route-body):not(.login-page) #map-card.map-card.map-main-card{
+  top:0!important;
+  bottom:auto!important;
+  height:156.25dvh!important;
+  min-height:156.25dvh!important;
+  max-height:none!important;
+}
+body.map-page.map-app-expanded:not(.tech-route-body):not(.login-page) #map-card.map-card.map-main-card #map{
+  display:block!important;
+  height:calc(156.25dvh - 66px)!important;
+  min-height:0!important;
+  max-height:none!important;
+  flex:0 0 calc(156.25dvh - 66px)!important;
+  margin:0!important;
+}

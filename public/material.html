@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>WiFiMex · Material</title>
+  <link rel="icon" type="image/svg+xml" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+  <link rel="apple-touch-icon" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260902-edit-stock-v1">
+  <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3">
+  <link rel="stylesheet" href="assets/css/material-dispatches.css?v=20261031-subtle-badge-v1">
+  <script>try{document.documentElement.dataset.role=(JSON.parse(localStorage.getItem('user')||'{}').role||'').toLowerCase()}catch(e){}</script>
+</head>
+<body class="material-page" onload="initMaterialPage()">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <a href="mapa.html" class="logo-link"><div class="logo">WiFi<span>Mex</span></div></a>
+    <nav class="nav">
+      <a href="mapa.html" class="nb">Mapa Mikrotiks</a>
+      <a href="antenas.html" class="nb">Antenas</a>
+      <a href="nodos.html" class="nb">Pueblos</a>
+      <a href="planificar.html" class="nb">Planificar</a>
+      <a href="ordenes.html" class="nb">Ordenes</a>
+      <a href="material.html" class="nb active">Material</a>
+      <a href="tecnicos.html" class="nb">Usuarios</a>
+    </nav>
+    <div class="sbar">
+      <div class="user-pill" data-user-name>Sesión activa</div>
+      <button onclick="logout()" class="btn bgh">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <main class="material-dashboard">
+
+    <!-- ====================================================================
+         VISTA DEL TÉCNICO (Móvil)
+         ==================================================================== -->
+    <div id="technician-material-view" class="role-technician-only" style="display:none">
+      <header class="material-dashboard-head" style="margin-bottom:16px">
+        <div>
+          <h1>Mi Material y Entregas</h1>
+          <p>Confirma el material que recibes de soporte y realiza entregas cuando lo tengas en tu posesión.</p>
+        </div>
+      </header>
+
+      <!-- Banner de alerta de pendientes -->
+      <div id="tech-pending-alert" class="tech-material-alert" style="display:none">
+        <div class="tech-material-alert-content">
+          <span class="tech-material-alert-icon">🔔</span>
+          <span id="tech-pending-alert-text">Tienes acciones pendientes con soporte.</span>
+        </div>
+        <button class="tech-material-alert-btn" onclick="verPendientesTecnico()">Ver pendientes</button>
+      </div>
+
+      <!-- Segmented Tabs para Técnico -->
+      <div class="material-nav-tabs">
+        <button class="material-nav-tab active" id="tech-tab-pending_receipt" onclick="switchTechTab('pending_receipt')">
+          <span>📥 Por Recibir</span>
+          <span class="tab-badge" id="tech-badge-pending-receipt" style="display:none">0</span>
+        </button>
+        <button class="material-nav-tab" id="tech-tab-received" onclick="switchTechTab('received')">
+          <span>📦 En Posesión</span>
+          <span class="tab-badge" id="tech-badge-received" style="display:none">0</span>
+        </button>
+        <button class="material-nav-tab" id="tech-tab-pending_handover" onclick="switchTechTab('pending_handover')">
+          <span>📤 Por Confirmar Entrega</span>
+          <span class="tab-badge" id="tech-badge-pending-handover" style="display:none">0</span>
+        </button>
+        <button class="material-nav-tab" id="tech-tab-completed" onclick="switchTechTab('completed')">
+          <span>📜 Historial</span>
+        </button>
+      </div>
+
+      <!-- Contenedor de tarjetas del técnico -->
+      <div id="technician-dispatches-grid" class="dispatches-grid"></div>
+      <div class="emp" id="technician-dispatches-empty" style="display:none">
+        <h3 id="technician-empty-title">Sin movimientos en esta sección</h3>
+        <p id="technician-empty-desc">Todos tus materiales y confirmaciones están al día.</p>
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         VISTA DE ADMINISTRADOR / SOPORTE
+         ==================================================================== -->
+    <div id="admin-material-view" class="role-admin-only">
+      <!-- Pestañas de modo: Entregas a Técnicos vs Inventario -->
+      <div class="material-nav-tabs" style="max-width:540px;margin-bottom:24px">
+        <button class="material-nav-tab active" id="admin-tab-dispatches" onclick="switchAdminMainTab('dispatches')">
+          <span>🚚 Entregas y Recepciones a Técnicos</span>
+          <span class="tab-badge" id="admin-badge-pending" style="display:none">0</span>
+        </button>
+        <button class="material-nav-tab" id="admin-tab-catalog" onclick="switchAdminMainTab('catalog')">
+          <span>📦 Inventario</span>
+        </button>
+      </div>
+
+      <!-- SECCIÓN 1: Entregas y Recepciones a Técnicos -->
+      <section id="admin-section-dispatches">
+        <header class="material-dashboard-head">
+          <div>
+            <h1>Entregas y Recepciones de Técnicos</h1>
+            <p>Entrega varios materiales a la vez a técnicos y recibe material devuelto sobre envíos existentes.</p>
+          </div>
+          <div class="dispatches-actions-group">
+            <button class="btn bc" onclick="abrirEntrega()" style="min-height:44px;padding:0 18px;font-size:13px">＋ Entregar material</button>
+            <button class="btn bg2" onclick="abrirRecepcion()" style="min-height:44px;padding:0 18px;font-size:13px">↓ Recibir material</button>
+          </div>
+        </header>
+
+        <!-- Filtros superiores -->
+        <div class="dispatches-header-actions">
+          <div class="dispatches-filters-group">
+            <label class="material-search-box" style="width:230px">
+              <span>⌕</span>
+              <input id="dispatch-search" placeholder="Buscar por material, técnico..." oninput="filtrarDispatches()">
+            </label>
+            <label class="material-search-box" style="width:200px">
+              <span style="font-size:12px;font-weight:900;color:var(--mat-primary)">#</span>
+              <input id="dispatch-folio-filter" placeholder="Folio (ENT-... / REC-...)" oninput="filtrarDispatches()">
+            </label>
+            <select id="dispatch-tech-filter" class="dispatches-select-filter" onchange="filtrarDispatches()">
+              <option value="all">Todos los técnicos</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Chips de estado -->
+        <div class="dispatch-status-chips">
+          <button class="dispatch-chip active" id="chip-status-all" onclick="setDispatchFilterStatus('all')">
+            <span>Todos los envíos</span>
+            <span class="chip-count" id="count-status-all">0</span>
+          </button>
+          <button class="dispatch-chip" id="chip-status-pending_receipt" onclick="setDispatchFilterStatus('pending_receipt')">
+            <span>🟡 Pendientes por recibir (Técnico)</span>
+            <span class="chip-count" id="count-status-pending_receipt">0</span>
+          </button>
+          <button class="dispatch-chip" id="chip-status-received" onclick="setDispatchFilterStatus('received')">
+            <span>🟢 En posesión del técnico</span>
+            <span class="chip-count" id="count-status-received">0</span>
+          </button>
+          <button class="dispatch-chip" id="chip-status-pending_handover" onclick="setDispatchFilterStatus('pending_handover')">
+            <span>🟠 Por confirmar entrega (Técnico)</span>
+            <span class="chip-count" id="count-status-pending_handover">0</span>
+          </button>
+          <button class="dispatch-chip" id="chip-status-completed" onclick="setDispatchFilterStatus('completed')">
+            <span>🔵 Completados y cerrados</span>
+            <span class="chip-count" id="count-status-completed">0</span>
+          </button>
+        </div>
+
+        <!-- Grid de envíos -->
+        <div id="dispatches-grid" class="dispatches-grid"></div>
+        <div class="emp" id="dispatches-empty" style="display:none">
+          <h3>No se encontraron registros de entrega</h3>
+          <p>Utiliza el botón “＋ Entregar material” para registrar una entrega hacia un técnico.</p>
+        </div>
+      </section>
+
+      <!-- SECCIÓN 2: Inventario -->
+      <section id="admin-section-catalog" style="display:none">
+        <header class="material-dashboard-head">
+          <div>
+            <h1>Inventario</h1>
+            <p>Catálogo de materiales y productos registrados en el sistema.</p>
+          </div>
+          <div class="material-head-actions">
+            <button class="btn bc" onclick="agregarMaterial()" style="min-height:42px;padding:0 18px;font-size:13px">＋ Nuevo material</button>
+            <button class="btn bo2" onclick="abrirEntrada()" style="min-height:42px;padding:0 18px;font-size:13px">↓ Registrar entrada</button>
+          </div>
+        </header>
+
+        <div class="inventory-main-layout">
+          <!-- Bloque Superior: Acciones Rápidas (Principales) + Estadísticas -->
+          <div class="inventory-primary-bar">
+            <!-- Acciones Rápidas (Principales) -->
+            <div class="inventory-quick-panel">
+              <div class="inventory-quick-title">⚡ Acciones rápidas</div>
+              <div class="inventory-quick-grid">
+                <button type="button" class="inventory-hero-card card-add" onclick="agregarMaterial()">
+                  <div class="hero-icon">＋</div>
+                  <div>
+                    <strong>Agregar nuevo material</strong>
+                    <small>Registrar artículo, unidad y fotografía</small>
+                  </div>
+                </button>
+                <button type="button" class="inventory-hero-card card-entry" onclick="abrirEntrada()">
+                  <div class="hero-icon">↓</div>
+                  <div>
+                    <strong>Registrar entrada</strong>
+                    <small>Sumar existencias recibidas de un producto</small>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Estadísticas (Productos, Stock bajo, Sin stock) -->
+            <div class="inventory-quick-panel">
+              <div class="inventory-quick-title">📊 Resumen de catálogo</div>
+              <div class="inventory-kpis-clean">
+                <article class="inventory-kpi-clean kpi-products">
+                  <div class="kpi-icon">◇</div>
+                  <div>
+                    <strong id="material-total">0</strong>
+                    <b>Productos</b>
+                    <small>Registrados en catálogo</small>
+                  </div>
+                </article>
+                <article class="inventory-kpi-clean kpi-low">
+                  <div class="kpi-icon">!</div>
+                  <div>
+                    <strong id="material-low">0</strong>
+                    <b>Stock bajo</b>
+                    <small>Menor al mínimo deseado</small>
+                  </div>
+                </article>
+                <article class="inventory-kpi-clean kpi-empty">
+                  <div class="kpi-icon">✕</div>
+                  <div>
+                    <strong id="material-empty-count">0</strong>
+                    <b>Sin stock</b>
+                    <small>Existencia en cero</small>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </div>
+
+          <!-- Catálogo de Materiales (Tabla completa) -->
+          <section class="material-catalog material-catalog-full">
+            <div class="material-catalog-tools">
+              <label class="material-search-box catalog-search" style="flex:1;max-width:380px">
+                <span>⌕</span>
+                <input id="material-table-search" placeholder="Buscar por nombre o descripción..." oninput="syncMaterialSearch(this.value)">
+              </label>
+              <select id="material-status-filter" onchange="resetMaterialPagination()" style="width:180px">
+                <option value="all">Todos los estados</option>
+                <option value="available">Disponible</option>
+                <option value="low">Stock bajo</option>
+                <option value="empty">Sin stock</option>
+              </select>
+            </div>
+            <div class="material-table-head">
+              <span>Material</span>
+              <span>SKU</span>
+              <span>Stock actual</span>
+              <span>Estado</span>
+              <span>Acciones</span>
+            </div>
+            <div id="material-grid" class="material-table-body"></div>
+            <div class="emp" id="material-empty" style="display:none">
+              <h3>No hay materiales registrados</h3>
+              <p>Agrega materiales al catálogo para utilizarlos en entregas y órdenes.</p>
+            </div>
+            <footer class="material-table-foot">
+              <span id="material-table-count">0 materiales</span>
+              <button class="btn bo2" onclick="agregarMaterial()">＋ Agregar material</button>
+            </footer>
+          </section>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- ====================================================================
+       MODAL: ENTREGAR MATERIAL A TÉCNICO (MÚLTIPLES MATERIALES)
+       ==================================================================== -->
+  <div class="mo" id="deliver-material-mo">
+    <div class="md" style="max-width:580px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--mat-border); padding-bottom:12px">
+        <div>
+          <div class="mt2" style="margin:0">Entregar material a técnico</div>
+          <small style="color:var(--mat-muted);font-weight:600">Puedes agregar varios materiales en una sola entrega.</small>
+        </div>
+        <button class="btn bsm bgh" onclick="CM('deliver-material-mo')">✕</button>
+      </div>
+
+      <div class="fi">
+        <label>Técnico receptor <b>Obligatorio</b></label>
+        <select id="deliver-tech" style="height:44px;font-size:13px"></select>
+      </div>
+
+      <div style="margin:16px 0 8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <label style="font-size:11px;font-weight:800;color:var(--mat-muted);text-transform:uppercase">Materiales a entregar</label>
+          <button type="button" class="btn bo2 bsm" onclick="addDeliverRow()" style="padding:4px 10px;font-size:11px">＋ Agregar otro material</button>
+        </div>
+        <div id="deliver-items-list" class="deliver-items-list">
+          <!-- Filas dinámicas -->
+        </div>
+      </div>
+
+      <div class="fi">
+        <label>Folio de orden o referencia <span>Opcional</span></label>
+        <input id="deliver-reference" placeholder="Ej: OT-4501, Proyecto Cuautla...">
+      </div>
+
+      <div class="fi">
+        <label>Observaciones / Notas adicionales <span>Opcional</span></label>
+        <textarea id="deliver-notes" rows="2" placeholder="Detalles de la entrega"></textarea>
+      </div>
+
+      <div class="material-form-actions" style="margin-top:20px">
+        <button class="btn bc bfu" id="deliver-submit-btn" onclick="guardarEntrega()" style="min-height:46px;font-size:14px">Confirmar y entregar al técnico</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL: EDITAR ENVÍO DE MATERIAL (MÚLTIPLES MATERIALES)
+       ==================================================================== -->
+  <div class="mo" id="edit-dispatch-mo">
+    <div class="md" style="max-width:580px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--mat-border); padding-bottom:12px">
+        <div>
+          <div class="mt2" style="margin:0">Editar envío de material</div>
+          <small style="color:var(--mat-muted);font-weight:600">Modifica los materiales o cantidades entregadas.</small>
+        </div>
+        <button class="btn bsm bgh" onclick="CM('edit-dispatch-mo')">✕</button>
+      </div>
+
+      <input type="hidden" id="edit-dispatch-id">
+
+      <div id="edit-dispatch-rejected-banner" style="display:none;background:#fff1f2;border:1px solid #fecdd3;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px"></div>
+
+      <div class="fi">
+        <label>Técnico receptor</label>
+        <select id="edit-dispatch-tech" style="height:44px;font-size:13px"></select>
+      </div>
+
+      <div style="margin:16px 0 8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <label style="font-size:11px;font-weight:800;color:var(--mat-muted);text-transform:uppercase">Materiales de la entrega</label>
+          <button type="button" class="btn bo2 bsm" onclick="addEditRow()" style="padding:4px 10px;font-size:11px">＋ Agregar otro material</button>
+        </div>
+        <div id="edit-items-list" class="deliver-items-list">
+          <!-- Filas dinámicas -->
+        </div>
+      </div>
+
+      <div class="fi">
+        <label>Referencia / Folio</label>
+        <input id="edit-dispatch-reference" placeholder="Ej: OT-4501">
+      </div>
+
+      <div class="fi">
+        <label>Observaciones</label>
+        <textarea id="edit-dispatch-notes" rows="2"></textarea>
+      </div>
+
+      <div class="dispatch-edited-warning" style="margin:12px 0 6px">
+        <div class="dispatch-edited-badge">Aviso al técnico</div>
+        <p>Al guardar cambios, el técnico recibirá una <b>notificación de que el envío fue editado</b> y deberá confirmar los materiales actualizados.</p>
+      </div>
+
+      <div class="material-form-actions" style="margin-top:16px">
+        <button class="btn bc bfu" onclick="guardarEdicionEnvio()" style="min-height:46px;font-size:14px">Guardar cambios en el envío</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL: RECIBIR MATERIAL DE TÉCNICO (Solo sobre envíos YA recibidos)
+       ==================================================================== -->
+  <div class="mo" id="receive-material-mo">
+    <div class="md" style="max-width:580px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--mat-border); padding-bottom:12px">
+        <div>
+          <div class="mt2" style="margin:0">Recibir material de técnico</div>
+          <small style="color:var(--mat-muted);font-weight:600">Solo se puede recibir material que el técnico ya haya aceptado recibir.</small>
+        </div>
+        <button class="btn bsm bgh" onclick="CM('receive-material-mo')">✕</button>
+      </div>
+
+      <!-- Selección del Técnico -->
+      <div class="fi">
+        <label>1. Selecciona el técnico <b>Obligatorio</b></label>
+        <select id="receive-tech" onchange="onReceiveTechChanged()" style="height:44px;font-size:13px"></select>
+      </div>
+
+      <!-- Alerta cuando no hay envíos previamente recibidos -->
+      <div id="receive-empty-warning" class="receive-empty-warning" style="display:none">
+        <span style="font-size:22px">⛔</span>
+        <div>
+          <strong>No se puede generar un formato de recepción vacío</strong>
+          <span id="receive-empty-warning-text">Este técnico no tiene materiales recibidos en su posesión para entregar. Solo se puede recibir material sobre un envío que el técnico ya haya confirmado haber recibido previamente en su perfil.</span>
+        </div>
+      </div>
+
+      <!-- Formulario cuando SÍ hay envíos previos recibidos -->
+      <div id="receive-dispatch-form-fields" style="display:none">
+        <div id="receive-dispatch-rejected-banner" style="display:none;background:#fff1f2;border:1px solid #fecdd3;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px"></div>
+
+        <div class="fi">
+          <label>2. Selecciona el envío a recibir / liquidar <b>Obligatorio</b></label>
+          <select id="receive-dispatch-select" onchange="onReceiveDispatchSelected()" style="height:44px;font-size:13px;font-weight:600"></select>
+        </div>
+
+        <!-- Tarjeta informativa del envío seleccionado -->
+        <div id="receive-dispatch-summary" class="selected-dispatch-summary">
+          <h4 id="receive-summary-mat-name">Materiales de la entrega</h4>
+          <div class="selected-dispatch-grid">
+            <div>Fecha de envío: <strong id="receive-summary-date">-</strong></div>
+            <div>Entregado por: <strong id="receive-summary-admin">-</strong></div>
+            <div>Aceptado por técnico: <strong id="receive-summary-accepted-date">-</strong></div>
+          </div>
+        </div>
+
+        <div style="margin:14px 0 8px">
+          <label style="font-size:11px;font-weight:800;color:var(--mat-muted);text-transform:uppercase;display:block;margin-bottom:8px">Desglose de recepción por cada material</label>
+          <div id="receive-items-breakdown-container"></div>
+        </div>
+
+        <div class="fi">
+          <label>Orden, folio o explicación</label>
+          <input id="receive-reference" placeholder="Ej: OT-1024 o motivo de uso">
+        </div>
+
+        <div class="fi">
+          <label>Observaciones de recepción</label>
+          <textarea id="receive-notes" rows="2" placeholder="Estado del material recibido"></textarea>
+        </div>
+
+        <div class="material-form-actions" style="margin-top:20px">
+          <button class="btn bg2 bfu" id="receive-submit-btn" onclick="guardarRecepcion()" style="min-height:46px;font-size:14px">Registrar recepción de material</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL: TÉCNICO ENTREGA / DEVUELVE MATERIAL A SOPORTE
+       ==================================================================== -->
+  <div class="mo" id="tech-return-material-mo">
+    <div class="md" style="max-width:540px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--mat-border); padding-bottom:12px">
+        <div>
+          <div class="mt2" style="margin:0">Entregar material a soporte</div>
+          <small style="color:var(--mat-muted);font-weight:600">Devuelve o entrega material que ya recibiste y tienes en tu posesión.</small>
+        </div>
+        <button class="btn bsm bgh" onclick="CM('tech-return-material-mo')">✕</button>
+      </div>
+
+      <input type="hidden" id="tech-return-dispatch-id">
+      <div id="tech-return-summary" class="selected-dispatch-summary"></div>
+
+      <div style="margin:14px 0 8px">
+        <label style="font-size:11px;font-weight:800;color:var(--mat-muted);text-transform:uppercase;display:block;margin-bottom:8px">Cantidades a entregar / devolver</label>
+        <div id="tech-return-items-container"></div>
+      </div>
+
+      <div class="fi">
+        <label>Orden o motivo de entrega</label>
+        <input id="tech-return-reference" placeholder="Ej: Devolución sobrante, OT-402...">
+      </div>
+
+      <div class="fi">
+        <label>Observaciones</label>
+        <textarea id="tech-return-notes" rows="2" placeholder="Detalles de la entrega a soporte"></textarea>
+      </div>
+
+      <div class="material-form-actions" style="margin-top:20px">
+        <button class="btn bc bfu" onclick="guardarEntregaTecnicoASoporte()" style="min-height:46px;font-size:14px">Confirmar entrega a soporte</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL: AGREGAR / EDITAR MATERIAL EN CATÁLOGO
+       ==================================================================== -->
+  <div class="mo" id="material-mo">
+    <div class="md" style="max-width:520px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px">
+        <div class="mt2" id="material-modal-title">Nuevo Material</div>
+        <button class="btn bsm bgh" onclick="CM('material-mo')">Cerrar</button>
+      </div>
+
+      <div class="fi">
+        <label>Nombre del Material</label>
+        <input id="mat-nombre" type="text" placeholder="Ej: Cable UTP Cat6, Antena 5GHz...">
+      </div>
+
+      <div class="fi material-photo-field">
+        <label>Foto del material <b>Obligatoria</b></label>
+        <label class="material-photo-upload" for="mat-foto"><input id="mat-foto" type="file" accept="image/*" hidden onchange="seleccionarFotoMaterial(this.files)"><span id="mat-foto-placeholder">＋ Seleccionar foto</span><img id="mat-foto-preview" alt="Vista previa del material" hidden></label>
+        <small>Debe verse claramente el artículo que se está inventariando.</small>
+      </div>
+
+      <div class="row2">
+        <div class="fi">
+          <label id="mat-cantidad-label">Cantidad inicial</label>
+          <input id="mat-cantidad" type="number" value="10" min="0" step="0.01">
+        </div>
+        <div class="fi">
+          <label>Unidad</label>
+          <select id="mat-unidad" onchange="actualizarUnidadMaterial()">
+            <option value="pieza">Pieza</option>
+            <option value="unidad">Unidad</option>
+            <option value="paquete">Paquete</option>
+            <option value="rollo">Rollo</option>
+            <option value="metro">Metro</option>
+            <option value="kg">Kg</option>
+            <option value="caja">Caja</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="fi" id="mat-package-size-field" hidden>
+        <label>Unidades que contiene cada paquete o caja</label>
+        <input id="mat-package-size" type="number" value="1" min="1" step="1">
+      </div>
+
+      <div class="fi">
+        <label>Existencia mínima deseada</label>
+        <input id="mat-minimo" type="number" value="0" min="0" step="0.01">
+      </div>
+
+      <div class="fi">
+        <label>Descripcion / Especificaciones</label>
+        <textarea id="mat-desc" rows="3" placeholder="Ej: Cable ethernet blindado, longitud 305m..."></textarea>
+      </div>
+
+      <div class="material-form-actions">
+        <button class="btn bc bfu" onclick="guardarMaterial()">Guardar material</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL: REGISTRAR ENTRADA A ALMACÉN
+       ==================================================================== -->
+  <div class="mo" id="entry-mo"><div class="md material-movement-modal">
+    <div class="material-modal-head"><div><div class="mt2">Registrar entrada</div><small>Agrega nueva existencia al almacén sin modificar el historial anterior.</small></div><button class="btn bsm bgh" onclick="CM('entry-mo')">Cerrar</button></div>
+    <div class="fi"><label>Material</label><select id="entry-material" onchange="actualizarEntradaInfo()"></select></div>
+    <div class="row2"><div class="fi"><label>Cantidad recibida</label><input id="entry-qty" type="number" min="0.01" step="0.01" value="1"></div><div class="fi"><label>Referencia</label><input id="entry-reference" placeholder="Factura, proveedor o lote"></div></div>
+    <div class="fi"><label>Observaciones</label><textarea id="entry-reason" rows="2" placeholder="Opcional"></textarea></div>
+    <div id="entry-info" class="inventory-transfer-info"></div>
+    <button class="btn bc bfu" onclick="guardarEntrada()">Guardar entrada</button>
+  </div></div>
+
+  <!-- ====================================================================
+       MODAL: VER DETALLE COMPLETO DE ORDEN (ENT / REC)
+       ==================================================================== -->
+  <div class="mo" id="dispatch-detail-modal">
+    <div class="md" style="max-width:640px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--mat-border); padding-bottom:12px">
+        <div>
+          <div class="mt2" id="detail-modal-title" style="margin:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">Detalle de Envío</div>
+          <small id="detail-modal-subtitle" style="color:var(--mat-muted);font-weight:600">Información completa de entrega y recepción</small>
+        </div>
+        <button class="btn bsm bgh" onclick="CM('dispatch-detail-modal')">✕</button>
+      </div>
+
+      <div id="dispatch-detail-modal-body"></div>
+
+      <div class="material-form-actions" id="dispatch-detail-modal-actions" style="margin-top:20px;display:flex;gap:10px;justify-content:flex-end;align-items:center;flex-wrap:wrap">
+        <button class="btn bsm bgh" onclick="CM('dispatch-detail-modal')">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <datalist id="material-names-datalist"></datalist>
+
+  <div class="nt" id="nt"></div>
+
+  <script src="assets/js/api.js?v=20260831-global-loading-map-height-v10"></script>
+  <script src="assets/js/common.js?v=20261031-disputes-v1"></script>
+  <script src="assets/js/material.js?v=20261031-disputes-v2"></script>
+  <script src="assets/js/material-dashboard.js?v=20261030-inventory-redesign-v5"></script>
+</body>
+</html>

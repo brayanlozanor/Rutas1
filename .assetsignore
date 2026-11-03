@@ -1,0 +1,12 @@
+.git
+.git/**
+.wrangler
+.wrangler/**
+.env
+.dev.vars
+node_modules
+node_modules/**
+README*.txt
+backup_*.sql
+backup_*.json
+*.csv

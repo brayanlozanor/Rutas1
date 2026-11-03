@@ -1,0 +1,34 @@
+.env
+.dev.vars
+node_modules/
+.wrangler/
+backups/
+
+.dev.vars*
+!.dev.vars.example
+!.env.example
+
+# Credenciales, exportaciones y respaldos locales
+.env.*
+!.env.example
+archive/data/
+/backup-*.sql
+/data-relational-*.sql
+/recovered-planning-*.sql
+/restore-missing-plans-*.sql
+/rutas-d1-actual.sql
+/expected-counts.json
+
+# Copias de despliegue, verificaciones y registros locales
+/.deploy-current-ui/
+/.v128-ui/
+/.verify-*/
+/.verify-*.css
+/.wrangler-*/
+/.backend-version-metadata.json
+*.log
+
+# Herramientas de verificacion de copias temporales
+/wrangler.sync-only.jsonc
+/wrangler.v128-modules.jsonc
+/scripts/test-v128-*.cjs

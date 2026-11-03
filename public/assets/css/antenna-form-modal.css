@@ -1,0 +1,154 @@
+/* Formulario de alta/edicion de antenas. Aislado de los estilos globales de modales. */
+#antena-mo {
+  position: fixed !important;
+  inset: 0 !important;
+  display: none;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 24px !important;
+  overflow: auto;
+  background: rgba(12, 30, 54, .62) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+#antena-mo.open { display: flex !important; }
+
+#antena-mo > .md {
+  width: min(880px, calc(100vw - 48px)) !important;
+  max-width: 880px !important;
+  max-height: calc(100dvh - 48px) !important;
+  margin: auto !important;
+  padding: 0 !important;
+  overflow: auto !important;
+  border: 1px solid #d5e2ef !important;
+  border-radius: 22px !important;
+  background: #fff !important;
+  box-shadow: 0 30px 85px rgba(7, 25, 50, .32) !important;
+}
+
+#antena-mo .modal-head {
+  position: relative;
+  min-height: 112px;
+  margin: 0 !important;
+  padding: 25px 82px 23px 112px !important;
+  align-items: center !important;
+  border-bottom: 1px solid #dce7f2 !important;
+  background: linear-gradient(110deg, #fff 55%, #f2f8ff) !important;
+}
+
+#antena-mo .modal-head::before {
+  content: "";
+  position: absolute;
+  left: 28px;
+  top: 24px;
+  width: 62px;
+  height: 62px;
+  border-radius: 16px;
+  background: #0874e8 url('../icons/antenna-module-256-v1.png') center/cover no-repeat;
+  box-shadow: 0 10px 22px rgba(22, 112, 234, .25);
+}
+
+#antena-mo .modal-head::after {
+  content: "";
+  position: absolute;
+  left: 43px;
+  top: 39px;
+  width: 32px;
+  height: 32px;
+  background: #fff;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 8v12M8 20h8M9.5 11.5a3.5 3.5 0 0 1 5 0M7 8.5a7 7 0 0 1 10 0'/%3E%3Ccircle cx='12' cy='8.5' r='1.2'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 8v12M8 20h8M9.5 11.5a3.5 3.5 0 0 1 5 0M7 8.5a7 7 0 0 1 10 0'/%3E%3Ccircle cx='12' cy='8.5' r='1.2'/%3E%3C/g%3E%3C/svg%3E") center/contain no-repeat;
+}
+#antena-mo .modal-head::after{display:none!important}
+
+#antena-mo .modal-head h2 { margin: 0 !important; color: #10203c !important; font-size: 25px !important; }
+#antena-mo .modal-head p { margin: 5px 0 0 !important; color: #61728a !important; font-size: 12px !important; }
+
+#antena-mo .modal-head > .btn {
+  position: absolute;
+  top: 29px;
+  right: 28px;
+  display: grid !important;
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  min-height: 46px !important;
+  padding: 0 !important;
+  place-items: center;
+  border: 1px solid #d7e2ed !important;
+  border-radius: 50% !important;
+  background: #fff !important;
+  color: transparent !important;
+  font-size: 0 !important;
+}
+
+#antena-mo .modal-head > .btn::before { content: "\00d7"; color: #263a55; font: 400 29px/1 Arial; }
+
+#antena-mo > .md > .modal-grid,
+#antena-mo > .md > .fi,
+#antena-mo > .md > .card-actions { margin-left: 28px !important; margin-right: 28px !important; }
+#antena-mo > .md > .modal-grid:first-of-type { margin-top: 22px !important; }
+#antena-mo .modal-grid { gap: 14px !important; }
+#antena-mo .fi { position:relative!important; margin-bottom: 14px !important; }
+#antena-mo .fi:after{content:"";position:absolute;left:10px;top:29px;width:34px;height:34px;border-radius:8px;background:#eef5fc;pointer-events:none}#antena-mo .fi:before{content:"⌁";position:absolute;z-index:1;left:20px;top:38px;color:#72839a;font:700 17px/1 Arial;pointer-events:none}#antena-mo .fi:has(#ant-ip):before{content:"▦"}#antena-mo .fi:has(#ant-type):before{content:"♜"}#antena-mo .fi:has(#ant-zone-preview):before{content:"▣";color:#5f83ba}#antena-mo .fi:has(#ant-lat):before,#antena-mo .fi:has(#ant-lng):before{content:"⌖"}#antena-mo .fi:has(#ant-notes):before{content:"▤"}#antena-mo .fi input,#antena-mo .fi select,#antena-mo .fi textarea{padding-left:55px!important}
+#antena-mo .fi label { margin-bottom: 7px !important; color: #445b78 !important; font-size: 11px !important; letter-spacing: .045em; }
+#antena-mo .fi input,
+#antena-mo .fi select,
+#antena-mo .fi textarea {
+  min-height: 49px !important;
+  border: 1px solid #cfddeb !important;
+  border-radius: 11px !important;
+  background: #fbfdff !important;
+  font-size: 13px !important;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+#antena-mo .fi textarea { min-height: 76px !important; resize: vertical; }
+#antena-mo .fi input:focus,
+#antena-mo .fi select:focus,
+#antena-mo .fi textarea:focus { border-color: #1680ef !important; background: #fff !important; box-shadow: 0 0 0 4px rgba(22, 128, 239, .12) !important; }
+#antena-mo #ant-zone-preview { background: #f1f6fb !important; color: #61728a !important; }
+
+#antena-mo > .md > .card-actions {
+  display: grid !important;
+  grid-template-columns: 1.35fr 1fr !important;
+  gap: 12px !important;
+  margin-top: 4px !important;
+  margin-bottom: 26px !important;
+}
+#antena-mo .card-actions .btn { width: 100% !important; min-height: 50px !important; border-radius: 11px !important; font-size: 13px !important; }
+#antena-mo .card-actions .bc { background: linear-gradient(135deg, #1683f5, #1466e7) !important; box-shadow: 0 9px 20px rgba(20, 105, 231, .2) !important; }
+.antenna-zone-note{margin:2px 28px 18px!important;padding:13px 16px;border:1px solid #bcd8f5;border-radius:10px;background:#eef6ff;color:#315f91;font-size:10px;font-weight:800}
+
+@media(min-width:981px){body:not(.sidebar-collapsed) #antena-mo{right:0!important;left:var(--sidebar-open)!important;width:auto!important}body.sidebar-collapsed #antena-mo{right:0!important;left:var(--sidebar-closed)!important;width:auto!important}}
+
+html:has(#antena-mo.open), body:has(#antena-mo.open) { overflow: hidden !important; }
+
+@media (max-width: 760px) {
+  #antena-mo { align-items: flex-start !important; padding: 10px !important; }
+  #antena-mo > .md { width: calc(100vw - 20px) !important; max-height: calc(100dvh - 20px) !important; }
+  #antena-mo .modal-head { min-height: 92px; padding: 18px 64px 18px 82px !important; }
+  #antena-mo .modal-head::before { left: 18px; top: 20px; width: 52px; height: 52px; }
+  #antena-mo .modal-head::after { left: 30px; top: 32px; width: 28px; height: 28px; }
+  #antena-mo .modal-head > .btn { top: 23px; right: 16px; }
+  #antena-mo .modal-head h2 { font-size: 20px !important; }
+  #antena-mo .modal-head p { font-size: 10px !important; }
+  #antena-mo > .md > .modal-grid,
+  #antena-mo > .md > .fi,
+  #antena-mo > .md > .card-actions { margin-left: 16px !important; margin-right: 16px !important; }
+  #antena-mo .modal-grid { grid-template-columns: 1fr !important; }
+  #antena-mo > .md > .card-actions { grid-template-columns: 1fr !important; margin-bottom: 18px !important; }
+  .antenna-zone-note{margin-right:16px!important;margin-left:16px!important}
+}
+
+/* El zoom de escritorio tambien escala position:fixed; se compensa para cubrir el viewport real. */
+@media (min-width: 901px) {
+  body.antennas-page #antena-mo {
+    inset: 0 !important;
+    left: 0 !important;
+    right: auto !important;
+    width: 125vw !important;
+    height: 125dvh !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
+  }
+}

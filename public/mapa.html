@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>WiFiMex &middot; Mapa Mikrotiks</title>
+  <link rel="icon" type="image/svg+xml" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+  <style>
+    :root{--sidebar-open:316px;--sidebar-closed:92px}
+    html,body{min-height:100%;margin:0}
+    body.sidebar-collapsed{display:block;padding-left:var(--sidebar-closed);overflow-x:hidden;background:#eef5fb}
+    body:not(.sidebar-collapsed){display:block;padding-left:var(--sidebar-open);overflow-x:hidden;background:#eef5fb}
+    .topbar{position:fixed;left:0;top:0;bottom:0;width:var(--sidebar-closed);height:100vh;height:100dvh;z-index:5000;margin:0;background:#082f50;overflow:hidden;transform:none;transition:none;animation:none}
+    body:not(.sidebar-collapsed) .topbar{width:var(--sidebar-open)}
+    .page-shell{box-sizing:border-box;width:100%;margin:0;padding:16px 24px 28px;transition:none;transform:none}
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260902-evidence-viewer-v1">
+  <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3">
+  <link rel="stylesheet" href="assets/css/map-toolbar-compact.css?v=20260812-leaflet-height-v8">
+  <link rel="stylesheet" href="assets/css/map-responsive.css?v=20260823-attention-labels-v5">
+  <script>try{document.documentElement.dataset.role=(JSON.parse(localStorage.getItem('user')||'{}').role||'').toLowerCase()}catch(e){}</script>
+</head>
+<body class="map-page">
+  <script>if(localStorage.getItem('netops_menu_open_v3')==='0')document.body.classList.add('sidebar-collapsed')</script>
+  <div class="topbar">
+    <a href="mapa.html" class="logo-link"><div class="logo">WiFi<span>Mex</span></div></a>
+    <nav class="nav">
+      <a href="mapa.html" class="nb active">Mapa Mikrotiks</a>
+      <a href="antenas.html" class="nb">Antenas</a>
+      <a href="nodos.html" class="nb">Pueblos</a>
+      <a href="planificar.html" class="nb">Planificar</a>
+      <a href="ordenes.html" class="nb">Ordenes</a>
+      <a href="material.html" class="nb">Material</a>
+      <a href="tecnicos.html" class="nb">Usuarios</a>
+    </nav>
+    <div class="sbar"><div class="user-pill" data-user-name>Sesion activa</div><button class="btn bgh" onclick="logout()">Cerrar sesion</button></div>
+  </div>
+
+  <div class="page-shell wide-shell map-page-shell">
+    <section class="hero-panel compact-hero map-main-hero">
+      <div>
+        <div class="section-chip">Mapa / Mapa Mikrotiks</div>
+        <h1>Mapa general</h1>
+        <p>Visualiza la ubicaci&oacute;n de tus equipos en la red.<br>Los colores indican la prioridad de los detalles pendientes.</p>
+      </div>
+      <div class="stats-grid compact-stats map-main-stats">
+        <div class="stat-card map-stat-equipment"><span class="map-stat-icon"><svg viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="10" rx="2"/><path d="M7 12h.01M10 12h.01M13 12h.01M6 18v2M18 18v2M12 8V4M9 4h6"/></svg></span><div><div class="label">Antenas</div><strong id="map-stat-equipment">0</strong></div></div>
+        <div class="stat-card map-stat-nodes"><span class="map-stat-icon"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg></span><div><div class="label">Pueblos</div><strong id="map-stat-nodes">0</strong></div></div>
+        <div class="stat-card map-stat-visible"><span class="map-stat-icon"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></span><div><div class="label">Visibles</div><strong id="map-stat-visible">0</strong></div></div>
+        <div class="stat-card map-stat-critical"><span class="map-stat-icon"><svg viewBox="0 0 24 24"><path d="M10.3 3.6 2.2 18a2 2 0 0 0 1.8 3h16a2 2 0 0 0 1.8-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span><div><div class="label">Críticos</div><strong id="map-stat-critical">0</strong></div></div>
+      </div>
+    </section>
+
+    <section class="content-card map-card map-main-card" id="map-card">
+      <div class="map-toolbar">
+        <div class="map-toolbar-row">
+          <select id="map-view-filter" onchange="updateMapMarkers()" class="search-input" data-map-admin-only><option value="both">Ver ambos</option><option value="equipment">Solo Mikrotiks</option><option value="nodes">Solo nodos</option></select>
+          <select id="map-zone-filter" onchange="updateMapMarkers()" class="search-input"></select>
+          <input id="map-search" list="map-search-options" class="search-input" placeholder="Buscar antena, IP, nodo o pueblo..." oninput="debounceAction('map-search', updateMapMarkers, 160)"><datalist id="map-search-options"></datalist>
+          <label class="inline-pill map-label-toggle"><input type="checkbox" id="map-show-labels" onchange="updateMapMarkers()"> <span id="map-label-text">Nombres</span></label>
+          <label class="inline-pill map-links-toggle" data-map-admin-only style="display:none"><input type="checkbox" id="map-show-links" checked onchange="updateMapMarkers()"> Uniones</label>
+          <button class="btn bo2 map-icon-button map-center-button" onclick="centerDefaultMap()" title="Centrar mapa" aria-label="Centrar mapa"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
+          <button class="btn bc map-expand-button map-icon-button" onclick="toggleMapFullscreen()" title="Agrandar mapa" aria-label="Agrandar mapa"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"/></svg></button>
+        </div>
+      </div>
+      <div id="map"></div>
+      <section class="content-card small-help map-color-help">
+      <strong>Estado:</strong><span><i class="map-color-dot critical"></i> Crítico</span><span><i class="map-color-dot high"></i> Atención</span><span><i class="map-color-dot medium"></i> Pendiente</span><span><i class="map-color-dot low"></i> Despejado</span>
+      </section>
+    </section>
+  </div>
+
+  <div class="nt" id="nt"></div>
+<script src="assets/js/api.js?v=20260831-global-loading-map-height-v10"></script>
+  <script src="assets/js/common.js?v=20260902-evidence-viewer-v2"></script>
+  <script>initCommon();</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="assets/js/mapa.js?v=20260826-detail-flow-v1"></script>
+  <script>requestAnimationFrame(function(){ setTimeout(initMapaPage, 0); });</script>
+</body>
+</html>

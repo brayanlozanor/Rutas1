@@ -1,0 +1,11 @@
+/* Paginación compartida para las tarjetas de Antenas y Pueblos. */
+.inventory-page .inventory-pagination{display:flex;min-height:60px;align-items:center;justify-content:space-between;gap:18px;margin:16px -2px -2px;padding:9px 16px;border:1px solid #e0e9f2;border-radius:10px;background:#fff;color:#405672;font-size:10px;font-weight:600;box-shadow:0 3px 12px rgba(20,45,75,.04)}
+.inventory-page .inventory-page-nav{display:flex;align-items:center;gap:9px}
+.inventory-page .inventory-page-button{display:grid;width:32px;height:32px;place-items:center;padding:0;border:1px solid #d5e0eb;border-radius:7px;background:#fff;color:#35506f;font-size:18px;line-height:1;cursor:pointer;transition:.15s ease}
+.inventory-page .inventory-page-button:hover:not(:disabled){border-color:#0874e8;background:#edf6ff;color:#0874e8}
+.inventory-page .inventory-page-button:disabled{background:#f6f8fa;color:#b2beca;cursor:not-allowed}
+.inventory-page .inventory-page-indicator{padding-left:5px;color:#74869b;font-size:9px}
+.inventory-page .inventory-page-size{display:flex;align-items:center;gap:9px;white-space:nowrap}
+.inventory-page .inventory-page-size select{width:72px;height:36px;padding:0 10px;border:1px solid #d8e2ec;border-radius:7px;background:#f8fafc;color:#233b59;font-size:10px;font-weight:800;outline:0;cursor:pointer}
+.inventory-page .inventory-page-size select:focus{border-color:#0874e8;box-shadow:0 0 0 3px rgba(8,116,232,.1)}
+@media(max-width:620px){.inventory-page .inventory-pagination{align-items:flex-start;flex-direction:column;padding:12px}.inventory-page .inventory-page-nav{flex-wrap:wrap}.inventory-page .inventory-page-indicator{width:100%;padding-left:0}.inventory-page .inventory-page-size{width:100%;justify-content:space-between}}

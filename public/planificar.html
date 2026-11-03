@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>WiFiMex · Planificar</title>
+    <link rel="icon" type="image/svg+xml" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+  <link rel="apple-touch-icon" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260902-evidence-viewer-v1">
+  <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3">
+  <link rel="stylesheet" href="assets/css/plan-reference.css?v=20260812-layout-restored-v1">
+  <link rel="stylesheet" href="assets/css/plan-detail-report.css?v=20260812-editor-font-v1">
+  <link rel="stylesheet" href="assets/css/detail-view-toggle.css?v=20260823-completion-options-v22">
+  <link rel="stylesheet" href="assets/css/plan-stop-cards.css?v=20260902-plan-status-v1">
+  <link rel="stylesheet" href="assets/css/plan-stop-detail-grid.css?v=20260826-client-detail-v1">
+  <link rel="stylesheet" href="assets/css/plan-stop-card-exact.css?v=20260823-role-actions-v2">
+  <link rel="stylesheet" href="assets/css/technician-dashboard.css?v=20260809-tech-summary-wide-v15">
+  <link rel="stylesheet" href="assets/css/technician-view-modes.css?v=20260824-tech-completed-edit-v11">
+  <link rel="stylesheet" href="assets/css/plan-ui-v2.css?v=20260823-stop-modal-responsive-v4">
+  <link rel="stylesheet" href="assets/css/material-dispatches.css?v=20261030-v2">
+  <script>try{document.documentElement.dataset.role=(JSON.parse(localStorage.getItem('user')||'{}').role||'').toLowerCase()}catch(e){}</script>
+</head>
+<body class="planificar-page" onload="initPlanificarPage()">
+  <script>if(localStorage.getItem('netops_menu_open_v3')==='0')document.body.classList.add('sidebar-collapsed')</script>
+  <div class="topbar">
+    <a href="mapa.html" class="logo-link"><div class="logo">WiFi<span>Mex</span></div></a>
+    <nav class="nav">
+      <a href="mapa.html" class="nb">Mapa Mikrotiks</a>
+      <a href="antenas.html" class="nb">Antenas</a>
+      <a href="nodos.html" class="nb">Pueblos</a>
+      <a href="planificar.html" class="nb active">Planificar</a>
+      <a href="ordenes.html" class="nb">Ordenes</a>
+      <a href="material.html" class="nb">Material</a>
+      <a href="tecnicos.html" class="nb">Usuarios</a>
+    </nav>
+    <div class="sbar">
+      <div class="user-pill" data-user-name>Sesión activa</div>
+      <button onclick="logout()" class="btn bgh">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="ct" style="width:100%">
+      <div id="plan-panel" class="panel active" style="height:100%;overflow:auto">
+        <div class="hero-panel compact-hero">
+          <div><div class="section-chip">Planificar / Rutas</div><h1>Planificador de campo</h1><p>Organiza rutas por técnico con mapa, detalles pendientes y plan general.</p></div>
+        </div>
+
+        <div class="plan-kpi-bar">
+          <div class="plan-kpi kpi-stops"><span class="plan-kpi-icon">&#9679;</span><span class="plan-kpi-copy"><strong id="plan-kpi-stops">0</strong><small>paradas</small></span></div>
+          <div class="plan-kpi kpi-total"><span class="plan-kpi-icon">&#10003;</span><span class="plan-kpi-copy"><strong id="plan-kpi-total">0</strong><small>detalles totales</small></span></div>
+          <div class="plan-kpi kpi-done"><span class="plan-kpi-icon">&#10003;</span><span class="plan-kpi-copy"><strong id="plan-kpi-done">0</strong><small>completados</small></span></div>
+          <div class="plan-kpi kpi-pending"><span class="plan-kpi-icon">&#9675;</span><span class="plan-kpi-copy"><strong id="plan-kpi-pending">0</strong><small>faltantes</small></span></div>
+          <div class="plan-kpi kpi-progress"><span class="plan-kpi-ring" id="plan-kpi-ring">0%</span><span class="plan-kpi-copy"><strong id="plan-kpi-percent">0%</strong><small id="plan-kpi-progress-label">0 de 0 completados</small></span></div>
+        </div>
+
+        <section id="plan-calendar" class="plan-calendar" aria-label="Calendario de planes"></section>
+
+        <div class="plan-shell">
+          <aside class="plan-sidebar">
+            <div class="sbt">Tecnico</div>
+            <div class="fi">
+              <select id="plan-tech" onchange="selectPlanTech(this.value)"></select>
+            </div>
+            <div id="general-plan-tools">
+              <div class="sbt">Plan General</div>
+              <div class="fi">
+                <select id="general-plan-select" onchange="selectGeneralPlan(this.value)"></select>
+              </div>
+              <div class="sbt">Asignar este plan a técnico</div>
+              <div class="fi">
+                <select id="general-plan-assignee" onchange="assignGeneralPlanToTech(this.value)"></select>
+              </div>
+              <div class="plan-sidebar-action-row">
+                <button class="btn bc plan-action-button" onclick="createGeneralPlan()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>Nuevo</span></button>
+                <button class="btn br plan-action-button" data-admin-only onclick="deleteGeneralPlan()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 10v7M14 10v7"/></svg></span><span>Eliminar</span></button>
+              </div>
+              <button class="btn bgh bfu plan-action-button" data-admin-only onclick="deletePastGeneralPlans()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M3 4l2-2M3 2l2 2"/></svg></span><span>Eliminar planes pasados</span></button>
+            </div>
+            <button class="btn bc bfu plan-action-button" data-admin-only onclick="openPlanStopModal()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12Z"/><path d="M12 6v6M9 9h6"/></svg></span><span>Agregar parada</span></button>
+            <button class="btn bgh bfu plan-action-button" onclick="openWeeklyRouteModal()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M4 6l5-2 6 2 5-2v14l-5 2-6-2-5 2zM9 4v14M15 6v14"/></svg></span><span>Ver ruta semanal</span></button>
+            <button class="btn bc bfu plan-action-button plan-week-action" data-admin-only onclick="openAdminWeekPlanner()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4zM8 3v5M16 3v5M4 10h16M8 14h3M13 14h3"/></svg></span><span>Organizar por semana</span></button>
+            <select id="plan-day" onchange="selectPlanDay(this.value)" hidden aria-hidden="true">
+              <option value="general">General</option>
+            </select>
+          </aside>
+
+          <section class="plan-board">
+            <div class="sh" style="border-bottom:none">
+              <h2 id="plan-title">Plan semanal</h2>
+            </div>
+            <div class="plan-command-bar">
+              <input id="plan-stop-search" class="search-input" placeholder="Buscar cliente, nodo o antena..." oninput="renderPlanDays()">
+              <button class="btn bgh" onclick="togglePlanMapSize()">Vista mapa</button>
+              <button class="btn bc" data-admin-only onclick="openPlanStopModal()">+ Agregar parada</button>
+            </div>
+            <div id="plan-days" class="plan-days"></div>
+          </section>
+          <aside id="plan-map-box" class="plan-map-panel">
+            <div class="plan-map-panel-head"><strong>Vista del plan</strong></div>
+            <div id="plan-map" class="plan-map"></div>
+            <div class="plan-map-legend">
+              <span><i style="background:#0984e3"></i> Parada</span>
+              <span><i style="background:#2ecc71"></i> Sitio / Antena</span>
+              <span><i style="background:#94a3b8"></i> Ruta planificada</span>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="mo" id="plan-material-mo">
+    <div class="md" style="max-width:720px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:1px solid var(--bo);padding-bottom:10px">
+        <div>
+          <div class="mt2" style="margin:0">Material del plan</div>
+          <div id="plan-material-modal-sub" style="font-size:12px;color:var(--mu);font-weight:700">Edita el material que debe llevar el técnico.</div>
+        </div>
+        <button class="btn bsm bgh" onclick="CM('plan-material-mo')">Cerrar</button>
+      </div>
+      <div class="fi">
+        <label>Material requerido</label>
+        <textarea id="plan-material-summary" rows="7" placeholder="Ej: 2 radios, 4 POE, 1 rollo de cable, conectores..." oninput="markPlanMaterialDirty()"></textarea>
+      </div>
+      <div class="help-box">Este material se mostrará en el plan y en la interfaz del técnico. Puedes editarlo después desde este mismo botón.</div>
+      <div class="card-actions" style="margin-top:14px">
+        <button class="btn bc" onclick="savePlanMaterialSummary()">Guardar material</button>
+        <button class="btn bgh" onclick="CM('plan-material-mo')">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo" id="plan-stop-mo">
+    <div class="md md-wide">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:1px solid var(--bo);padding-bottom:10px">
+        <div>
+          <div class="mt2" style="margin:0">Agregar parada al plan</div>
+          <div style="font-size:12px;color:var(--mu);font-weight:700" id="plan-modal-sub"></div>
+        </div>
+        <button class="btn bsm bgh" onclick="CM('plan-stop-mo')">Cerrar</button>
+      </div>
+
+      <div class="row2">
+        <div class="fi">
+          <label>Tipo de parada</label>
+          <select id="stop-type" onchange="toggleStopType()">
+            <option value="equipment">Antena / torre registrada</option>
+            <option value="manual">Comunidad / punto manual</option>
+          </select>
+        </div>
+        <div class="fi">
+          <label>Asignar a técnico / plan</label>
+          <select id="stop-tech-target"></select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="fi">
+          <label>Dia</label>
+          <select id="stop-day">
+            <option value="general">General</option>
+          </select>
+        </div>
+        <div class="fi">
+          <label>Material estimado para esta parada</label>
+          <input id="stop-material" list="material-list" placeholder="Ej: radio, POE, cable, conectores...">
+          <datalist id="material-list"></datalist>
+        </div>
+      </div>
+
+      <div id="equipment-fields">
+        <div class="fi">
+          <label>Buscar antena / torre</label>
+          <input id="stop-equipment-search" list="equipment-list" placeholder="Escribe nombre o IP..." oninput="selectEquipmentFromInput()">
+          <datalist id="equipment-list"></datalist>
+        </div>
+        <div id="equipment-preview" class="ib" style="display:none"></div>
+        <div id="equipment-details"></div>
+      </div>
+
+      <div id="manual-fields" style="display:none">
+        <div class="fi">
+          <label>Nombre de comunidad / localidad</label>
+          <input id="manual-name" placeholder="Ej: Comunidad El Mirador">
+        </div>
+        <div class="row2">
+          <div class="fi"><label>Latitud</label><input id="manual-lat" class="mono" placeholder="17.550000"></div>
+          <div class="fi"><label>Longitud</label><input id="manual-lng" class="mono" placeholder="-99.500000"></div>
+        </div>
+        <div class="ib">Puedes escribir coordenadas o capturarlas dando clic en el mapa.</div>
+        <div id="capture-map" class="plan-map" style="height:280px"></div>
+      </div>
+
+      <div class="fi">
+        <label>Detalle nuevo / notas de trabajo</label>
+        <textarea id="stop-notes" rows="3" placeholder="Ej: Revisar potencia, cambiar POE, preguntar por cliente sin servicio..."></textarea>
+      </div>
+      <div class="fi">
+        <label>Nombre del cliente (si aplica)</label>
+        <input id="stop-detail-client" placeholder="Nombre del cliente">
+      </div>
+      <div class="fi"><label>Numero telefonico <span class="optional-label">Opcional</span></label><input id="stop-detail-phone" type="tel" placeholder="Numero de telefono (opcional)"></div>
+      <div class="fi">
+        <label>Ubicacion del detalle (opcional)</label>
+        <input id="stop-detail-location" class="mono" placeholder="18.09563, -99.19604">
+      </div>
+      <div class="row2">
+        <div class="fi">
+          <label>Tipo de trabajo</label>
+          <select id="stop-visit-type">
+            <option value="comunidad">Comunidad</option>
+            <option value="torre">Torre</option>
+            <option value="troncal">Troncal</option>
+            <option value="punto_venta">Punto de venta</option>
+          </select>
+        </div>
+        <div class="fi">
+          <label>Prioridad si se crea detalle</label>
+          <select id="stop-priority">
+            <option value="baja" selected>Baja</option>
+            <option value="media">Media</option>
+            <option value="alta">Alta</option>
+            <option value="muy_alta">Muy alta</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button class="btn bgh" onclick="CM('plan-stop-mo')">Cancelar</button>
+        <button class="btn bc" onclick="savePlanStop()">Guardar parada</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo" id="plan-edit-mo">
+    <div class="md md-wide">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:1px solid var(--bo);padding-bottom:10px">
+        <div>
+          <div class="mt2" style="margin:0">Editar parada</div>
+          <div style="font-size:12px;color:var(--mu);font-weight:700" id="edit-stop-sub"></div>
+        </div>
+        <button class="btn bsm bgh" onclick="CM('plan-edit-mo')">Cerrar</button>
+      </div>
+
+      <div class="row2">
+        <div class="fi">
+          <label>Tecnico / plan</label>
+          <select id="edit-stop-tech"></select>
+        </div>
+        <div class="fi">
+          <label>Dia</label>
+          <select id="edit-stop-day">
+            <option value="general">General</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="fi">
+        <label>Nombre de la parada</label>
+        <input id="edit-stop-name">
+      </div>
+      <div class="fi">
+        <label>Notas de la parada</label>
+        <textarea id="edit-stop-notes" rows="3"></textarea>
+      </div>
+      <div class="fi">
+        <label>Material estimado / asignado</label>
+        <input id="edit-stop-material" list="material-list" placeholder="Material que debe llevar el técnico">
+      </div>
+
+      <div class="sbt">Detalles ligados</div>
+      <div id="edit-stop-details"></div>
+
+      <div style="margin-top:14px;padding:14px;border:1px dashed var(--bo);border-radius:16px;background:rgba(9,132,227,.04)">
+        <div class="sbt">Agregar detalle nuevo</div>
+        <div class="fi">
+          <label>Titulo</label>
+          <textarea id="new-detail-title" rows="2" placeholder="Ej: Revisar potencia, cambiar radio, validar cliente..."></textarea>
+        </div>
+        <div class="fi">
+          <label>Nombre del cliente (si aplica)</label>
+          <input id="new-detail-client" placeholder="Nombre del cliente">
+        </div>
+        <div class="fi"><label>Numero telefonico <span class="optional-label">Opcional</span></label><input id="new-detail-phone" type="tel" placeholder="Numero de telefono (opcional)"></div>
+        <div class="fi">
+          <label>Ubicacion del detalle (opcional)</label>
+          <input id="new-detail-location" class="mono" placeholder="18.09563, -99.19604">
+        </div>
+        <div class="row2">
+          <div class="fi">
+            <label>Tipo</label>
+            <select id="new-detail-type">
+              <option value="comunidad">Comunidad</option>
+              <option value="torre">Torre</option>
+              <option value="troncal">Troncal</option>
+              <option value="punto_venta">Punto de venta</option>
+            </select>
+          </div>
+          <div class="fi">
+            <label>Prioridad</label>
+            <select id="new-detail-priority">
+              <option value="baja" selected>Baja</option>
+              <option value="media">Media</option>
+              <option value="alta">Alta</option>
+              <option value="muy_alta">Muy alta</option>
+            </select>
+          </div>
+        </div>
+        <div class="fi">
+          <label>Material sugerido para este detalle</label>
+          <input id="new-detail-material" list="material-list" placeholder="Ej: 1 radio, 2 conectores, 10 m cable...">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+        <button class="btn bgh" onclick="CM('plan-edit-mo')">Cancelar</button>
+        <button class="btn bc" onclick="saveStopEdits()">Guardar cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo" id="plan-route-mo">
+    <div class="md route-full-modal">
+      <div class="route-full-head">
+        <div>
+          <div class="mt2" style="margin:0">Ruta semanal ordenada</div>
+          <div id="plan-route-sub" class="route-full-sub"></div>
+        </div>
+        <div class="route-full-actions">
+          <button class="btn bsm bg2" onclick="exportWeeklyRouteExcel()">Exportar Excel</button>
+          <button class="btn bsm bgh" onclick="closeWeeklyRouteModal()">Cerrar</button>
+        </div>
+      </div>
+      <div class="route-full-body">
+        <div id="plan-route-full-map" class="route-full-map"></div>
+        <div id="plan-route-list" class="route-stop-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo" id="plan-week-planner-mo">
+    <div class="md plan-week-planner-modal">
+      <div class="plan-week-planner-head">
+        <div>
+          <div class="mt2" style="margin:0">Organizar paradas por semana</div>
+          <div id="plan-week-planner-sub">Arrastra cada parada al día en que debe verla el técnico.</div>
+        </div>
+        <button class="btn bsm bgh" type="button" onclick="closeAdminWeekPlanner()">Cerrar</button>
+      </div>
+      <div class="plan-week-nav">
+        <button class="plan-week-nav-button" type="button" onclick="shiftAdminPlannerWeek(-1)" aria-label="Semana anterior"><b>&#8249;</b><span>Anterior</span></button>
+        <div class="plan-week-nav-range"><small>Semana seleccionada</small><strong id="plan-week-range"></strong></div>
+        <button class="plan-week-nav-button next" type="button" onclick="shiftAdminPlannerWeek(1)" aria-label="Semana siguiente"><span>Siguiente</span><b>&#8250;</b></button>
+      </div>
+      <div class="plan-week-workspace">
+        <div id="plan-week-board" class="plan-week-board"></div>
+        <aside class="plan-week-map-panel">
+          <div class="plan-week-map-head">
+            <div><strong>Vista de la ruta</strong><small id="plan-week-map-info">Selecciona una vista</small></div>
+            <div id="plan-week-map-scope" class="plan-week-map-calendar" role="group" aria-label="Ruta que se muestra"></div>
+          </div>
+          <div id="plan-week-route-map" class="plan-week-route-map"></div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo plan-dialog-overlay" id="plan-create-mo">
+    <div class="md plan-dialog-card plan-create-card">
+      <div class="plan-dialog-head"><span class="plan-dialog-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM9 2v4M15 2v4M5 8h14M12 12v5M9.5 14.5h5"/></svg></span><div><h2>Crear nuevo plan</h2><p>Registra un nombre claro para identificar la planificación.</p></div><button type="button" class="plan-dialog-close" aria-label="Cerrar" onclick="closeCreateGeneralPlanModal()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <div class="plan-dialog-body"><label class="plan-dialog-field" for="plan-create-name"><span>Nombre del plan</span><input id="plan-create-name" maxlength="80" autocomplete="off" placeholder="Ej. Ruta Costa - Semana 34" onkeydown="if(event.key==='Enter'){event.preventDefault();saveNewGeneralPlan()}"><small>La fecha de creación se agregará automáticamente.</small></label><div class="plan-create-preview"><span>Fecha</span><strong id="plan-create-date"></strong></div></div>
+      <div class="plan-dialog-actions"><button type="button" class="btn bgh" onclick="closeCreateGeneralPlanModal()">Cancelar</button><button type="button" class="btn bc plan-action-button" onclick="saveNewGeneralPlan()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>Crear plan</span></button></div>
+    </div>
+  </div>
+
+  <div class="mo plan-dialog-overlay" id="plan-assignment-mo">
+    <div class="md plan-dialog-card plan-assignment-card">
+      <div class="plan-dialog-head"><span class="plan-dialog-icon assignment"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"/><path d="M5 19c0-4 2.5-7 7-7s7 3 7 7M17 11l2 2 3-4"/></svg></span><div><h2 id="plan-assignment-title">Asignar técnico</h2><p id="plan-assignment-message">Confirma la asignación de esta ruta.</p></div><button type="button" class="plan-dialog-close" aria-label="Cerrar" onclick="resolvePlanAssignment(false)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <div class="plan-assignment-summary"><div><small>Plan</small><strong id="plan-assignment-plan"></strong></div><span class="plan-assignment-arrow">→</span><div><small>Técnico</small><strong id="plan-assignment-tech"></strong></div></div>
+      <div id="plan-assignment-warning" class="plan-assignment-warning" hidden></div>
+      <div class="plan-dialog-actions"><button type="button" class="btn bgh" onclick="resolvePlanAssignment(false)">Cancelar</button><button type="button" id="plan-assignment-confirm" class="btn bc plan-action-button" onclick="resolvePlanAssignment(true)"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></span><span>Confirmar asignación</span></button></div>
+    </div>
+  </div>
+
+  <div class="mo" id="plan-tech-qr-mo">
+    <div class="md" style="max-width:520px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px">
+        <div>
+          <div class="mt2" style="margin:0">QR para tecnico</div>
+          <div id="plan-tech-qr-sub" style="font-size:12px;color:var(--mu);font-weight:700;margin-top:4px"></div>
+        </div>
+        <button class="btn bsm bgh" onclick="CM('plan-tech-qr-mo')">Cerrar</button>
+      </div>
+      <div class="tech-qr-grid">
+        <img id="plan-tech-qr-img" alt="QR ruta tecnico" class="tech-qr-img">
+        <div>
+          <div class="ib">El tecnico escanea el codigo, entra con su usuario y contraseña, y ve la ruta con mapa, detalles e historial. Solo puede mover el orden.</div>
+          <input id="plan-tech-route-link" class="mono" readonly style="width:100%;margin:8px 0">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn bc" onclick="openPlanTechRouteLink()">Abrir</button>
+            <button class="btn bgh" onclick="copyPlanTechRouteLink()">Copiar link</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Automático para Recepción de Material en Perfil de Técnico -->
+  <div class="mo" id="tech-pending-material-prompt-mo">
+    <div class="tech-pending-material-card" role="dialog" aria-modal="true">
+      <div class="tech-pending-material-head">
+        <div class="tech-pending-material-icon">📦</div>
+        <div class="tech-pending-material-title">
+          <h2 id="tech-pending-prompt-title">Entrega de material pendiente</h2>
+          <p id="tech-pending-prompt-desc">Soporte te ha entregado material. Confirma la recepción para poder utilizarlo en tu jornada.</p>
+        </div>
+      </div>
+      <div id="tech-pending-prompt-content" class="tech-pending-dispatches-list"></div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button type="button" class="btn bgh bfu" onclick="CM('tech-pending-material-prompt-mo')" style="min-height:46px;font-size:13px">Revisar más tarde</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="nt" id="nt"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="assets/js/api.js?v=20260831-plan-map-parity-v11"></script>
+  <script src="assets/js/common.js?v=20261031-disputes-v1"></script>
+  <script src="assets/js/planificar.js?v=20261031-disputes-v1"></script>
+</body>
+</html>

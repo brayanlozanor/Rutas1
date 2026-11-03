@@ -1,0 +1,316 @@
+/* Responsive layout for the main map dashboard. Kept page-specific so other
+   modules can migrate independently without changing their current layout. */
+body.map-page,
+body.map-page *{box-sizing:border-box}
+
+body.map-page .map-page-shell{
+  width:100%;
+  max-width:none;
+  min-width:0;
+}
+
+body.map-page .map-main-hero,
+body.map-page .map-main-stats,
+body.map-page .map-main-card,
+body.map-page .map-toolbar-row{min-width:0}
+
+body.map-page:not(.tech-route-body):not(.login-page) .map-main-card:not(.map-fullscreen) #map{
+  width:100%;
+  height:clamp(460px,68dvh,820px)!important;
+  min-height:460px!important;
+}
+
+/* Desktop uses a global 80% zoom, so 125dvh is the real visible height.
+   The map row consumes every pixel left below the dashboard header. */
+@media (min-width:901px){
+  body.map-page .map-page-shell{
+    display:grid!important;
+    height:125dvh!important;
+    min-height:125dvh!important;
+    padding-bottom:16px!important;
+    grid-template-rows:auto minmax(0,1fr)!important;
+    gap:16px!important;
+    overflow:hidden!important;
+  }
+  body.map-page .map-main-card{
+    display:flex!important;
+    min-height:0!important;
+    flex-direction:column!important;
+  }
+  body.map-page .map-main-card .map-toolbar{flex:0 0 auto!important}
+  body.map-page:not(.tech-route-body):not(.login-page) .map-main-card:not(.map-fullscreen) #map{
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    flex:1 1 0!important;
+  }
+}
+
+@media (min-width:901px) and (max-width:1280px){
+  body.map-page:not(.sidebar-collapsed){--sidebar-open:250px}
+  body.map-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero.map-main-hero{
+    grid-template-columns:1fr!important;
+    gap:18px!important;
+  }
+  body.map-page:not(.tech-route-body):not(.login-page) .compact-stats.map-main-stats{
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  }
+}
+
+@media (min-width:761px) and (max-width:900px){
+  body.map-page{--sidebar-open:250px;--sidebar-closed:68px}
+  body.map-page .map-page-shell{padding:14px 16px 24px}
+  body.map-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero.map-main-hero{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:16px!important;
+  }
+  body.map-page:not(.tech-route-body):not(.login-page) .compact-stats.map-main-stats{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  body.map-page .map-toolbar-row{flex-wrap:wrap!important}
+  body.map-page .map-toolbar-row #map-search{
+    order:3;
+    width:100%!important;
+    flex-basis:100%!important;
+  }
+  body.map-page:not(.tech-route-body):not(.login-page) .map-main-card:not(.map-fullscreen) #map{height:62dvh!important;min-height:430px!important}
+}
+
+@media (max-width:760px){
+  body.map-page{--sidebar-open:240px!important;--sidebar-closed:56px!important}
+
+  /* The compact rail reserves space; the expanded menu floats over the page. */
+  body.map-page:not(.tech-route-body),
+  body.map-page:not(.sidebar-collapsed):not(.tech-route-body),
+  body.map-page.sidebar-collapsed:not(.tech-route-body){
+    width:auto!important;
+    min-width:0!important;
+    padding-left:var(--sidebar-closed)!important;
+    overflow-x:hidden!important;
+  }
+  body.map-page .topbar.app-sidebar,
+  body.map-page .topbar.app-sidebar.menu-open{
+    width:min(var(--sidebar-open),calc(100vw - 20px))!important;
+    min-width:0!important;
+    max-width:calc(100vw - 20px)!important;
+    box-shadow:10px 0 32px rgba(15,39,66,.18)!important;
+  }
+  body.map-page.sidebar-collapsed .topbar.app-sidebar{
+    width:var(--sidebar-closed)!important;
+    min-width:var(--sidebar-closed)!important;
+    padding-right:6px!important;
+    padding-left:6px!important;
+    box-shadow:3px 0 14px rgba(15,39,66,.08)!important;
+  }
+
+  body.map-page .map-page-shell{padding:10px 10px 20px!important}
+  body.map-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero.map-main-hero{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    gap:14px!important;
+    margin-bottom:12px!important;
+    padding:16px 12px!important;
+    border-radius:18px!important;
+  }
+  body.map-page:not(.tech-route-body):not(.login-page) .map-main-hero h1{font-size:22px!important;line-height:1.15}
+  body.map-page:not(.tech-route-body):not(.login-page) .map-main-hero p{font-size:12px!important;line-height:1.5}
+  body.map-page:not(.tech-route-body):not(.login-page) .compact-stats.map-main-stats{
+    display:grid!important;
+    width:100%!important;
+    margin:0!important;
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;
+  }
+  body.map-page:not(.tech-route-body):not(.login-page) .compact-stats.map-main-stats .stat-card{
+    min-width:0!important;
+    min-height:78px!important;
+    padding:10px!important;
+    border-radius:14px!important;
+  }
+  body.map-page:not(.tech-route-body):not(.login-page) .map-main-stats .stat-card strong{font-size:22px!important}
+  body.map-page:not(.tech-route-body):not(.login-page) .map-main-stats .stat-card .label{font-size:9px!important}
+  body.map-page:not(.tech-route-body):not(.login-page) .map-main-stats .map-stat-icon{
+    width:38px!important;
+    height:38px!important;
+    flex:0 0 38px!important;
+  }
+
+  body.map-page .map-main-card{border-radius:16px!important}
+  body.map-page .map-main-card .map-toolbar{
+    padding:8px!important;
+    overflow:visible!important;
+  }
+  body.map-page .map-toolbar-row{
+    display:grid!important;
+    min-width:0!important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) 42px 42px!important;
+    gap:7px!important;
+  }
+  body.map-page .map-toolbar-row>*{
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+  }
+  body.map-page .map-toolbar-row #map-view-filter,
+  body.map-page .map-toolbar-row #map-zone-filter{
+    width:100%!important;
+    flex:none!important;
+  }
+  body.map-page .map-toolbar-row #map-search{
+    grid-column:1/-1;
+    grid-row:1;
+    width:100%!important;
+    flex:none!important;
+  }
+  body.map-page .map-toolbar-row #map-view-filter{grid-column:1/3;grid-row:2}
+  body.map-page .map-toolbar-row #map-zone-filter{grid-column:3/5;grid-row:2}
+  body.map-page .map-toolbar-row .map-label-toggle{
+    grid-column:1/3;
+    grid-row:3;
+    width:100%!important;
+    flex:none!important;
+  }
+  body.map-page .map-toolbar-row .map-center-button{grid-column:3;grid-row:3}
+  body.map-page .map-toolbar-row .map-expand-button{grid-column:4;grid-row:3}
+  body.map-page .map-toolbar-row .map-icon-button{
+    width:42px!important;
+    min-width:42px!important;
+    max-width:42px!important;
+  }
+  body.map-page:not(.tech-route-body):not(.login-page) .map-main-card:not(.map-fullscreen) #map{
+    width:100%!important;
+    height:clamp(360px,58dvh,620px)!important;
+    min-height:360px!important;
+  }
+  body.map-page:not(.tech-route-body):not(.login-page) .map-color-help{
+    display:flex!important;
+    right:8px!important;
+    bottom:28px!important;
+    padding:8px 10px!important;
+    border-radius:12px!important;
+    font-size:9px!important;
+  }
+
+  body.map-page.map-app-expanded:not(.tech-route-body):not(.login-page) #map-card.map-card.map-main-card,
+  body.sidebar-collapsed.map-page.map-app-expanded:not(.tech-route-body):not(.login-page) #map-card.map-card.map-main-card{
+    inset:0 0 0 var(--sidebar-closed)!important;
+    width:auto!important;
+    height:100dvh!important;
+    min-height:100dvh!important;
+    max-height:100dvh!important;
+  }
+  body.map-page.map-app-expanded #map-card #map{
+    height:auto!important;
+    min-height:0!important;
+    flex:1 1 0!important;
+  }
+}
+
+@media (min-width:361px) and (max-width:480px){
+  body.map-page:not(.tech-route-body):not(.login-page) .compact-stats.map-main-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+
+@media (max-width:360px){
+  body.map-page:not(.tech-route-body):not(.login-page) .compact-stats.map-main-stats{grid-template-columns:1fr!important}
+  body.map-page:not(.tech-route-body):not(.login-page) .map-main-stats .stat-card{min-height:68px!important}
+  body.map-page .map-main-hero p br{display:none}
+}
+
+@media (max-height:620px) and (max-width:760px){
+  body.map-page:not(.tech-route-body):not(.login-page) .map-main-card:not(.map-fullscreen) #map{height:70dvh!important;min-height:300px!important}
+}
+
+@media (prefers-reduced-motion:reduce){
+  body.map-page *,body.map-page *::before,body.map-page *::after{
+    scroll-behavior:auto!important;
+    transition-duration:.01ms!important;
+    animation-duration:.01ms!important;
+    animation-iteration-count:1!important;
+  }
+}
+
+/* Vista de atención a clientes: solo información y controles autorizados. */
+html[data-role="atencion_clientes"] body.map-page [data-map-admin-only],
+html[data-role="atencion_clientes"] body.map-page .map-plan-toggle,
+html[data-role="atencion_clientes"] body.map-page #map-plan-select,
+html[data-role="atencion_clientes"] body.map-page .map-links-toggle,
+html[data-role="atencion_clientes"] body.map-page .map-legend-equipment{display:none!important}
+
+html[data-role="atencion_clientes"] body.map-page .map-main-card .map-toolbar{
+  display:block!important;
+  width:100%!important;
+  min-width:0!important;
+  height:auto!important;
+  min-height:0!important;
+  overflow:visible!important;
+}
+html[data-role="atencion_clientes"] body.map-page .map-toolbar-row{
+  display:grid!important;
+  width:100%!important;
+  min-width:0!important;
+  height:auto!important;
+  min-height:0!important;
+  grid-template-columns:minmax(160px,220px) minmax(220px,1fr) minmax(145px,auto) 42px 42px!important;
+  grid-auto-rows:42px!important;
+  align-items:center!important;
+  gap:8px!important;
+}
+html[data-role="atencion_clientes"] body.map-page .map-toolbar-row>*{
+  box-sizing:border-box!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  grid-column:auto!important;
+  grid-row:auto!important;
+}
+html[data-role="atencion_clientes"] body.map-page #map-zone-filter{grid-column:1!important}
+html[data-role="atencion_clientes"] body.map-page #map-search{grid-column:2!important}
+html[data-role="atencion_clientes"] body.map-page .map-label-toggle{display:flex!important;grid-column:3!important;justify-content:center!important}
+html[data-role="atencion_clientes"] body.map-page .map-center-button{grid-column:4!important}
+html[data-role="atencion_clientes"] body.map-page .map-expand-button{grid-column:5!important}
+
+@media(min-width:761px) and (max-width:1200px){
+  html[data-role="atencion_clientes"] body.map-page .map-page-shell{padding:14px 16px 20px!important}
+  html[data-role="atencion_clientes"] body.map-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero.map-main-hero{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+    min-height:0!important;
+    gap:16px!important;
+    margin-bottom:12px!important;
+    padding:18px 20px!important;
+  }
+  html[data-role="atencion_clientes"] body.map-page .map-main-hero>div:first-child{padding-left:92px!important}
+  html[data-role="atencion_clientes"] body.map-page .map-main-hero h1{font-size:30px!important;margin-bottom:6px!important}
+  html[data-role="atencion_clientes"] body.map-page .map-main-hero p{font-size:13px!important;line-height:1.45!important}
+  html[data-role="atencion_clientes"] body.map-page:not(.tech-route-body):not(.login-page) .compact-stats.map-main-stats{
+    width:100%!important;
+    margin:0!important;
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    gap:10px!important;
+  }
+  html[data-role="atencion_clientes"] body.map-page .map-main-stats .stat-card{
+    min-width:0!important;
+    min-height:82px!important;
+    padding:12px 14px 18px!important;
+  }
+  html[data-role="atencion_clientes"] body.map-page .map-main-stats .map-stat-icon{width:46px!important;height:46px!important}
+  html[data-role="atencion_clientes"] body.map-page .map-main-stats strong{font-size:25px!important}
+}
+
+@media(max-width:760px){
+  html[data-role="atencion_clientes"] body.map-page .map-toolbar-row{
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) 42px 42px!important;
+    grid-template-rows:42px 42px 42px!important;
+    min-height:142px!important;
+  }
+  html[data-role="atencion_clientes"] body.map-page #map-search{grid-column:1/-1!important;grid-row:1!important}
+  html[data-role="atencion_clientes"] body.map-page #map-zone-filter{grid-column:1/-1!important;grid-row:2!important}
+  html[data-role="atencion_clientes"] body.map-page .map-label-toggle{grid-column:1/3!important;grid-row:3!important}
+  html[data-role="atencion_clientes"] body.map-page .map-center-button{grid-column:3!important;grid-row:3!important}
+  html[data-role="atencion_clientes"] body.map-page .map-expand-button{grid-column:4!important;grid-row:3!important}
+}
+
+@media(max-width:480px){
+  html[data-role="atencion_clientes"] body.map-page:not(.tech-route-body):not(.login-page) .compact-stats.map-main-stats{grid-template-columns:1fr!important}
+}

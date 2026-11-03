@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <script>window.location.replace('planificar.html');</script>
+  <title>WiFiMex · Ruta técnico</title>
+    <link rel="icon" type="image/svg+xml" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+  <link rel="apple-touch-icon" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260902-evidence-viewer-v1">
+  <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3">
+  <script>try{document.documentElement.dataset.role=(JSON.parse(localStorage.getItem('user')||'{}').role||'').toLowerCase()}catch(e){}</script>
+  <link rel="stylesheet" href="assets/css/tecnico-ruta.css?v=20260803-official-logo">
+</head>
+<body onload="initTechRoutePage()" class="tech-route-body">
+  <section id="tech-login-view" class="tech-login-view" style="display:none!important">
+    <div class="tech-login-card">
+      <div class="tech-login-brand">
+        <div class="logo">WiFi<span>Mex</span></div>
+        <span>Ruta segura</span>
+      </div>
+      <h1>Acceso de técnico</h1>
+      <p id="tech-login-sub">Inicia sesión para consultar tu ruta asignada.</p>
+      <div class="tech-login-fields">
+        <div class="fi">
+          <label>Usuario</label>
+          <input id="tech-login-user" name="tech-route-user" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Usuario">
+        </div>
+        <div class="fi password-field">
+          <label>Contraseña</label>
+          <input id="tech-login-pass" name="tech-route-pass" type="password" autocomplete="new-password" autocapitalize="none" spellcheck="false" placeholder="Contraseña">
+          <button type="button" class="btn bgh password-toggle" onclick="toggleTechPassword('tech-login-pass', this)">Ver</button>
+        </div>
+      </div>
+      <button type="button" class="btn bc bfu tech-login-submit" onclick="loginTechRoute()">Entrar a mi ruta</button>
+      <div id="tech-login-error" class="tech-login-error"></div>
+    </div>
+  </section>
+
+  <div class="tech-route-shell" id="tech-route-shell" style="display:none">
+    <div class="tech-only-topbar">
+      <button type="button" class="tech-icon-button" aria-label="Abrir menú" onclick="toggleTechMobileMenu()">☰</button>
+      <a href="tecnico-ruta.html?plan=general" class="tech-brand" aria-label="WiFiMex">WiFi<span>Mex</span></a>
+      <div class="tech-top-actions">
+        <span class="tech-sync-dot" id="tech-sync-dot" title="Estado de sincronización"></span>
+        <button type="button" class="tech-avatar-button" aria-label="Cuenta" onclick="toggleTechMobileMenu()">●</button>
+      </div>
+    </div>
+    <aside class="tech-mobile-menu" id="tech-mobile-menu" aria-hidden="true">
+      <div><strong id="tech-menu-user">Técnico</strong><small>Cuenta de técnico</small></div>
+      <button type="button" onclick="reloadTechRoute();toggleTechMobileMenu(false)">Actualizar ruta</button>
+      <button type="button" class="danger" onclick="logoutTechRoute()">Cerrar sesión</button>
+    </aside>
+    <header class="tech-route-head tech-route-hero">
+      <div>
+        <span class="tech-route-eyebrow">Mi ruta asignada</span>
+        <div class="logo">WiFi<span>Mex</span></div>
+        <h1 id="tech-route-title">Ruta del tecnico</h1>
+        <div id="tech-route-sub" class="tech-route-sub"></div>
+      </div>
+      <div class="tech-route-head-actions">
+        <span id="tech-session-label" class="badge bty"></span>
+      </div>
+    </header>
+
+    <section id="tech-plan-picker" class="tech-plan-picker" style="display:none"></section>
+
+    <section class="tech-route-map-wrap">
+      <div id="tech-route-map"></div>
+      <button type="button" class="tech-map-open" onclick="openTechRouteMapConfirm()">Ver ruta completa</button>
+    </section>
+
+    <section class="tech-route-summary" id="tech-route-summary"></section>
+
+    <main id="tech-route-list" class="tech-route-list"></main>
+
+    <nav class="tech-bottom-nav" aria-label="Navegación principal">
+      <button type="button" onclick="scrollTechHome()"><span>⌂</span>Inicio</button>
+      <button type="button" class="active" onclick="scrollTechStops()"><span>▰</span>Ruta</button>
+      <button type="button" onclick="scrollTechReports()"><span>▥</span>Reportes</button>
+      <button type="button" onclick="toggleTechMobileMenu()"><span>•••</span>Más</button>
+    </nav>
+  </div>
+
+
+
+  <div class="mo" id="tech-detail-report-mo">
+    <div class="md tech-report-modal">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;border-bottom:1px solid var(--bo);padding-bottom:10px">
+        <div>
+          <div class="mt2" style="margin:0" id="tech-detail-report-title">Reporte del detalle</div>
+          <div id="tech-detail-report-sub" style="font-size:12px;color:var(--mu);font-weight:700;margin-top:4px"></div>
+        </div>
+        <button class="btn bsm bgh" onclick="CM('tech-detail-report-mo')">Cerrar</button>
+      </div>
+      <div class="fi" id="tech-report-solution-box">
+        <label>Solución realizada</label>
+        <textarea id="tech-report-solution" rows="4" placeholder="Qué hiciste, qué quedó funcionando, valores o pruebas..."></textarea>
+      </div>
+      <div class="fi" id="tech-report-material-box">
+        <label>Material ocupado (se descontará de lo que llevas)</label>
+        <div id="tech-material-rows"></div>
+        <div class="tech-material-choice"><button type="button" class="btn bgh" onclick="addTechMaterialRow()">+ Agregar material</button><button type="button" id="tech-no-material-btn" class="btn tech-no-material" onclick="toggleTechNoMaterial()">No se usó nada</button></div>
+      </div>
+      <div class="fi" id="tech-report-reason-box" style="display:none">
+        <label>Por qué no se terminó</label>
+        <textarea id="tech-report-reason" rows="3" placeholder="Ej: faltó material, no había acceso, clima, torre cerrada..."></textarea>
+      </div>
+      <div class="fi" id="tech-report-photo-box">
+        <label>Foto de evidencia</label>
+        <div class="tech-photo-actions">
+          <label class="tech-photo-upload" for="tech-report-photo-camera">
+            <span class="tech-photo-icon">Cam</span>
+            <span><strong>Tomar foto</strong><small>Usar camara</small></span>
+          </label>
+          <label class="tech-photo-upload" for="tech-report-photo-gallery">
+            <span class="tech-photo-icon">Img</span>
+            <span><strong>Subir de galeria</strong><small id="tech-photo-file-label">Puedes elegir varias fotos</small></span>
+          </label>
+        </div>
+        <input id="tech-report-photo-camera" type="file" accept="image/*" capture="environment" multiple onchange="previewTechReportPhoto('tech-report-photo-camera')">
+        <input id="tech-report-photo-gallery" type="file" accept="image/*" multiple onchange="previewTechReportPhoto('tech-report-photo-gallery')">
+        <div id="tech-report-photo-preview" class="tech-photo-preview"></div>
+      </div>      <div class="card-actions tech-report-actions">
+        <button id="tech-report-save-done" class="btn bg2" onclick="saveTechDetailReport('terminado')">Terminar detalle</button>
+        <button id="tech-report-save-no" class="btn ba" onclick="saveTechDetailReport('no_realizado')">No se pudo terminar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo" id="tech-map-confirm-mo">
+    <div class="md tech-confirm-modal">
+      <div class="mh">
+        <div>
+          <div class="mt2">Ver ruta completa</div>
+          <div class="tech-confirm-sub">El mapa se abrirá en pantalla completa para moverlo y revisarlo mejor.</div>
+        </div>
+        <button class="btn bsm bgh" onclick="CM('tech-map-confirm-mo')">Cerrar</button>
+      </div>
+      <div class="card-actions">
+        <button class="btn bc" onclick="openTechFullscreenMap()">Abrir mapa</button>
+        <button class="btn bgh" onclick="CM('tech-map-confirm-mo')">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo tech-map-fullscreen" id="tech-map-full-mo">
+    <div class="tech-map-full-panel">
+      <div class="tech-map-full-head">
+        <strong>Ruta completa</strong>
+        <button class="btn bgh" onclick="closeTechFullscreenMap()">Salir del mapa</button>
+      </div>
+      <div id="tech-route-map-full"></div>
+    </div>
+  </div>
+
+  <div class="nt" id="nt"></div>
+
+<script src="assets/js/api.js?v=20260831-global-loading-map-height-v10"></script>
+  <script src="assets/js/common.js?v=20260902-evidence-viewer-v2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="assets/js/tecnico-ruta.js?v=20260902-evidence-viewer-v1"></script>
+</body>
+</html>

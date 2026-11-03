@@ -1,0 +1,334 @@
+/* Compacta solo el menu lateral y mantiene visibles sus iconos. */
+@media (min-width:761px){
+  /* La barra siempre ocupa exactamente toda la altura visible. */
+  .topbar.app-sidebar{
+    top:0!important;
+    bottom:auto!important;
+    height:100dvh!important;
+    min-height:100dvh!important;
+    max-height:none!important;
+  }
+  .topbar.app-sidebar:after{
+    bottom:0!important;
+  }
+  .topbar.app-sidebar .logo-link{min-height:96px!important;padding:14px 14px 8px!important}
+  .topbar.app-sidebar .logo{grid-template-columns:56px minmax(0,1fr)!important}
+  .topbar.app-sidebar .logo:before{width:56px!important;height:47px!important;border-radius:13px!important}
+  .topbar.app-sidebar .logo:after{font-size:14px!important}
+  .topbar.app-sidebar .nav,.topbar.app-sidebar.menu-open .nav{gap:3px!important;padding:10px 13px 6px!important;overflow-y:hidden!important}
+  .topbar.app-sidebar .nav:before{padding-bottom:7px!important;margin-bottom:5px!important}
+  .topbar.app-sidebar .nav .nb{min-height:42px!important;padding:5px 10px!important;gap:9px!important}
+  .topbar.app-sidebar .nav .nb .nav-emoji{width:38px!important;height:38px!important;flex:0 0 38px!important;border-radius:11px!important;opacity:1!important;visibility:visible!important;filter:none!important}
+  .topbar.app-sidebar .nav .nb .nav-emoji svg{width:23px!important;height:23px!important;opacity:1!important;visibility:visible!important;stroke:#fff!important}
+  .topbar.app-sidebar .nav .nb .nav-emoji img{opacity:1!important;visibility:visible!important;filter:none!important}
+  .topbar.app-sidebar .sbar{margin:0 13px 10px!important;padding:8px!important;gap:5px!important}
+  .topbar.app-sidebar .sbar .user-pill{min-height:32px!important;padding:6px 8px!important}
+  .topbar.app-sidebar .sbar .btn{min-height:34px!important;padding:6px 8px!important}
+
+  body.sidebar-collapsed .topbar.app-sidebar .logo-link{min-height:64px!important;padding:8px!important}
+  body.sidebar-collapsed .topbar.app-sidebar .logo{width:50px!important}
+  body.sidebar-collapsed .topbar.app-sidebar .logo:before{width:50px!important;height:40px!important}
+  body.sidebar-collapsed #mobile-menu-toggle{top:62px!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav{flex:1 1 auto!important;margin:36px 0 0!important;padding:0 9px 5px!important;gap:5px!important;overflow:hidden!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb{width:48px!important;height:48px!important;min-width:48px!important;min-height:48px!important;flex:0 0 48px!important;border-radius:13px!important;opacity:1!important;visibility:visible!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji{width:44px!important;height:44px!important;flex:0 0 44px!important;border-radius:12px!important;opacity:1!important;visibility:visible!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji svg{width:24px!important;height:24px!important;opacity:1!important;visibility:visible!important;stroke:#fff!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji img{opacity:1!important;visibility:visible!important;filter:none!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb:nth-child(1) .nav-emoji,
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb:nth-child(2) .nav-emoji,
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb:nth-child(5) .nav-emoji{background:linear-gradient(145deg,#18bdff 0%,#0874ef 48%,#064bd1 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(0,30,130,.28),0 7px 15px rgba(8,83,190,.28)!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb:nth-child(3) .nav-emoji{background:linear-gradient(145deg,#58ec59 0%,#23c244 48%,#07952a 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(0,105,36,.28),0 7px 15px rgba(20,172,56,.27)!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb:nth-child(4) .nav-emoji{background:linear-gradient(145deg,#ffd83f 0%,#ffad0a 48%,#f07900 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.78),inset 0 -5px 10px rgba(184,74,0,.26),0 7px 15px rgba(231,135,0,.28)!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb:nth-child(6) .nav-emoji{background:linear-gradient(145deg,#c36df2 0%,#8a47dc 48%,#6120bd 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(76,14,147,.28),0 7px 15px rgba(112,50,193,.28)!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb:nth-child(7) .nav-emoji{background:linear-gradient(145deg,#ff6079 0%,#f02a51 48%,#ca103a 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(142,5,43,.28),0 7px 15px rgba(217,26,67,.27)!important}
+  body.sidebar-collapsed .topbar.app-sidebar .sbar{width:48px!important;min-height:48px!important;margin:auto auto 12px!important}
+  body.sidebar-collapsed .topbar.app-sidebar .sbar .btn{width:48px!important;height:48px!important;min-width:48px!important;min-height:48px!important;border-radius:13px!important}
+}
+
+/* El acceso de Usuarios conserva su identidad aun cuando no es la pagina activa. */
+html body .topbar.app-sidebar .nav .nb[href="tecnicos.html"],
+html body .topbar.app-sidebar .nav .nb[href="usuarios.html"]{opacity:1!important;visibility:visible!important}
+html body .topbar.app-sidebar .nav .nb[href="tecnicos.html"] .nav-emoji,
+html body .topbar.app-sidebar .nav .nb[href="usuarios.html"] .nav-emoji{
+  opacity:1!important;
+  visibility:visible!important;
+  filter:none!important;
+  border-color:rgba(255,255,255,.72)!important;
+  background:linear-gradient(145deg,#ff6079 0%,#f02a51 48%,#ca103a 100%)!important;
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(142,5,43,.28),0 7px 15px rgba(217,26,67,.27)!important;
+}
+html body .topbar.app-sidebar .nav .nb[href="tecnicos.html"] .nav-emoji:after,
+html body .topbar.app-sidebar .nav .nb[href="usuarios.html"] .nav-emoji:after{background:linear-gradient(180deg,rgba(255,117,137,.68),rgba(197,9,53,.3))!important}
+html body .topbar.app-sidebar .nav .nb[href="tecnicos.html"] .nav-emoji svg,
+html body .topbar.app-sidebar .nav .nb[href="usuarios.html"] .nav-emoji svg{opacity:1!important;visibility:visible!important;stroke:#fff!important;filter:drop-shadow(0 2px 2px rgba(88,0,25,.3))!important}
+
+/* Identidad estable para los dos modulos administrativos. El color no debe
+   depender de su posicion: Historial se inserto antes de Usuarios. */
+.topbar.app-sidebar .nav .nb[href="historial.html"] .nav-emoji,
+.topbar.app-sidebar .nav .nb[href="historial.html"]:is(.active,:hover) .nav-emoji{
+  opacity:1!important;
+  visibility:visible!important;
+  filter:none!important;
+  color:#fff!important;
+  border-color:rgba(255,255,255,.72)!important;
+  background:linear-gradient(145deg,#9b5de5 0%,#6936c7 52%,#43208e 100%)!important;
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.78),inset 0 -5px 10px rgba(55,18,126,.34),0 7px 16px rgba(82,42,158,.32)!important;
+}
+.topbar.app-sidebar .nav .nb[href="historial.html"] .nav-emoji:after{
+  background:linear-gradient(180deg,rgba(190,132,249,.72),rgba(74,35,166,.3))!important;
+}
+.topbar.app-sidebar .nav .nb[href="tecnicos.html"] .nav-emoji,
+.topbar.app-sidebar .nav .nb[href="usuarios.html"] .nav-emoji,
+.topbar.app-sidebar .nav .nb[href="tecnicos.html"]:is(.active,:hover) .nav-emoji,
+.topbar.app-sidebar .nav .nb[href="usuarios.html"]:is(.active,:hover) .nav-emoji{
+  opacity:1!important;
+  visibility:visible!important;
+  filter:none!important;
+  background:linear-gradient(145deg,#ff6079 0%,#f02a51 48%,#ca103a 100%)!important;
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(142,5,43,.28),0 7px 15px rgba(217,26,67,.27)!important;
+}
+.topbar.app-sidebar .nav .nb[href="tecnicos.html"] .nav-emoji:after,
+.topbar.app-sidebar .nav .nb[href="usuarios.html"] .nav-emoji:after{
+  background:linear-gradient(180deg,rgba(255,117,137,.68),rgba(197,9,53,.3))!important;
+}
+
+/* Colores por modulo: no dependen de la posicion que tenga el enlace. */
+.topbar.app-sidebar .nav .nb[href="dashboard.html"] .nav-emoji,
+.topbar.app-sidebar .nav .nb[href="mapa.html"] .nav-emoji,
+.topbar.app-sidebar .nav .nb[href="antenas.html"] .nav-emoji,
+.topbar.app-sidebar .nav .nb[href="ordenes.html"] .nav-emoji{background:linear-gradient(145deg,#18bdff 0%,#0874ef 48%,#064bd1 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(0,30,130,.28),0 7px 15px rgba(8,83,190,.28)!important}
+.topbar.app-sidebar .nav .nb[href="nodos.html"] .nav-emoji{background:linear-gradient(145deg,#58ec59 0%,#23c244 48%,#07952a 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(0,105,36,.28),0 7px 15px rgba(20,172,56,.27)!important}
+.topbar.app-sidebar .nav .nb[href="planificar.html"] .nav-emoji{background:linear-gradient(145deg,#ffd83f 0%,#ffad0a 48%,#f07900 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.78),inset 0 -5px 10px rgba(184,74,0,.26),0 7px 15px rgba(231,135,0,.28)!important}
+.topbar.app-sidebar .nav .nb[href="material.html"] .nav-emoji{background:linear-gradient(145deg,#be66ee 0%,#8541d6 50%,#5d20b5 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.76),inset 0 -5px 10px rgba(71,13,139,.3),0 7px 15px rgba(105,47,188,.29)!important}
+.topbar.app-sidebar .nav .nb[href="historial.html"] .nav-emoji{background:linear-gradient(145deg,#9b5de5 0%,#6936c7 52%,#43208e 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.78),inset 0 -5px 10px rgba(55,18,126,.34),0 7px 16px rgba(82,42,158,.32)!important}
+.topbar.app-sidebar .nav .nb[href="tecnicos.html"] .nav-emoji,
+.topbar.app-sidebar .nav .nb[href="usuarios.html"] .nav-emoji{background:linear-gradient(145deg,#ff6079 0%,#f02a51 48%,#ca103a 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(142,5,43,.28),0 7px 15px rgba(217,26,67,.27)!important}
+.topbar.app-sidebar .nav .nb[href="dashboard.html"] .nav-emoji svg,
+.topbar.app-sidebar .nav .nb[href="material.html"] .nav-emoji svg,
+.topbar.app-sidebar .nav .nb[href="historial.html"] .nav-emoji svg{position:relative!important;z-index:2!important;fill:none!important;stroke:#fff!important;stroke-width:2!important;opacity:1!important;filter:drop-shadow(0 2px 2px rgba(0,24,90,.34))!important}
+
+/* En escritorio el sitio usa zoom .8. El modo cerrado necesita compensar
+   también el ajuste que Chromium aplica a las unidades del viewport. */
+@media (min-width:901px){
+  .topbar.app-sidebar{
+    height:125dvh!important;
+    min-height:125dvh!important;
+  }
+  body.sidebar-collapsed .topbar.app-sidebar{
+    height:156.25dvh!important;
+    min-height:156.25dvh!important;
+  }
+  body.sidebar-collapsed .topbar.app-sidebar .sbar{
+    position:absolute!important;
+    z-index:2!important;
+    right:auto!important;
+    bottom:calc(31.25dvh + 18px)!important;
+    left:19px!important;
+    margin:0!important;
+  }
+  body.sidebar-collapsed .topbar.app-sidebar:after{
+    position:absolute!important;
+    z-index:3!important;
+    right:auto!important;
+    bottom:31.25dvh!important;
+    left:0!important;
+    width:var(--sidebar-closed)!important;
+  }
+}
+
+/* El zoom no debe activar el antiguo menú móvil oscuro. En anchos reducidos
+   se conserva exactamente la misma barra blanca, abierta o compacta. */
+@media (max-width:760px){
+  /* Sin el zoom .8 del escritorio, reducimos las medidas al 80% para que
+     el menú conserve exactamente el mismo tamaño visual. */
+  :root{--sidebar-open:235px!important;--sidebar-closed:62px!important}
+  body:not(.tech-route-body):not(.login-page),
+  body:not(.sidebar-collapsed):not(.tech-route-body):not(.login-page){padding-left:var(--sidebar-open)!important}
+  body.sidebar-collapsed:not(.tech-route-body):not(.login-page){padding-left:var(--sidebar-closed)!important}
+
+  .topbar.app-sidebar,
+  .topbar.app-sidebar.menu-open{
+    position:fixed!important;
+    inset:0 auto 0 0!important;
+    box-sizing:border-box!important;
+    display:flex!important;
+    width:var(--sidebar-open)!important;
+    min-width:var(--sidebar-open)!important;
+    max-width:var(--sidebar-open)!important;
+    height:100dvh!important;
+    min-height:100dvh!important;
+    padding:0 14px!important;
+    flex-direction:column!important;
+    align-items:stretch!important;
+    overflow:hidden!important;
+    border:0!important;
+    border-right:1px solid #dfe6ef!important;
+    background:#fff!important;
+    box-shadow:4px 0 18px rgba(18,42,76,.04)!important;
+  }
+  body.sidebar-collapsed .topbar.app-sidebar{
+    width:var(--sidebar-closed)!important;
+    min-width:var(--sidebar-closed)!important;
+    max-width:var(--sidebar-closed)!important;
+    padding:0!important;
+    align-items:center!important;
+  }
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .logo-link{min-height:118px!important;padding:19px 11px 14px!important}
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .logo,
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .logo:before{width:176px!important}
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .logo:before{height:66px!important}
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .sidebar-toggle{top:22px!important;right:-14px!important;width:30px!important;height:30px!important;min-width:30px!important;min-height:30px!important}
+  .topbar.app-sidebar .nav,
+  .topbar.app-sidebar.menu-open .nav{
+    position:static!important;
+    display:flex!important;
+    width:100%!important;
+    min-width:0!important;
+    margin:0!important;
+    padding:16px 0 10px!important;
+    flex:1 1 auto!important;
+    flex-direction:column!important;
+    align-items:stretch!important;
+    gap:5px!important;
+    overflow:hidden auto!important;
+    background:transparent!important;
+  }
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .nav:before{margin:0 11px 8px!important;padding-bottom:10px!important;font-size:8px!important}
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .nav .nb{height:43px!important;min-height:43px!important;padding:0 11px!important;font-size:11px!important}
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .nav .nb .nav-emoji{width:30px!important;height:30px!important;flex-basis:30px!important;border-radius:9px!important}
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .nav .nb .nav-emoji svg{width:19px!important;height:19px!important}
+  .topbar.app-sidebar .sbar,
+  .topbar.app-sidebar.menu-open .sbar{
+    display:grid!important;
+    margin:auto 0 14px!important;
+    padding:11px!important;
+    border:1px solid #dfe6ef!important;
+    border-radius:14px!important;
+    background:#fff!important;
+    box-shadow:0 8px 24px rgba(18,42,76,.08)!important;
+  }
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .sbar .user-pill{min-height:46px!important;padding:5px 2px!important}
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .sbar .btn{min-height:35px!important}
+  body.sidebar-collapsed .topbar.app-sidebar .logo-link{min-height:64px!important;padding:8px!important}
+  body.sidebar-collapsed .topbar.app-sidebar .logo{width:50px!important}
+  body.sidebar-collapsed .topbar.app-sidebar .logo:before{width:50px!important;height:40px!important}
+  body.sidebar-collapsed #mobile-menu-toggle{top:62px!important;right:50%!important;left:auto!important;width:42px!important;height:42px!important;min-width:42px!important;min-height:42px!important;transform:translateX(50%)!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav{display:flex!important;margin:36px 0 0!important;padding:0 7px 5px!important;gap:5px!important;align-items:center!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb{display:grid!important;width:48px!important;height:48px!important;min-width:48px!important;min-height:48px!important;padding:0!important;place-items:center!important;font-size:0!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji{width:44px!important;height:44px!important;flex:0 0 44px!important;border-radius:12px!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji svg{width:24px!important;height:24px!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb,
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji,
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji svg,
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji img{
+    opacity:1!important;
+    visibility:visible!important;
+    filter:none!important;
+  }
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb[href="dashboard.html"] .nav-emoji,
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb[href="mapa.html"] .nav-emoji,
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb[href="antenas.html"] .nav-emoji,
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb[href="ordenes.html"] .nav-emoji{
+    background:linear-gradient(145deg,#18bdff 0%,#0874ef 48%,#064bd1 100%)!important;
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(0,30,130,.28),0 7px 15px rgba(8,83,190,.28)!important;
+  }
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb[href="nodos.html"] .nav-emoji{
+    background:linear-gradient(145deg,#58ec59 0%,#23c244 48%,#07952a 100%)!important;
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(0,105,36,.28),0 7px 15px rgba(20,172,56,.27)!important;
+  }
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb[href="planificar.html"] .nav-emoji{
+    background:linear-gradient(145deg,#ffd83f 0%,#ffad0a 48%,#f07900 100%)!important;
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.78),inset 0 -5px 10px rgba(184,74,0,.26),0 7px 15px rgba(231,135,0,.28)!important;
+  }
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb[href="material.html"] .nav-emoji{
+    background:linear-gradient(145deg,#c36df2 0%,#8a47dc 48%,#6120bd 100%)!important;
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(76,14,147,.28),0 7px 15px rgba(112,50,193,.28)!important;
+  }
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb[href="tecnicos.html"] .nav-emoji,
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb[href="usuarios.html"] .nav-emoji{
+    background:linear-gradient(145deg,#ff6079 0%,#f02a51 48%,#ca103a 100%)!important;
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(142,5,43,.28),0 7px 15px rgba(217,26,67,.27)!important;
+  }
+  body.sidebar-collapsed .topbar.app-sidebar .sbar{display:flex!important;width:48px!important;min-height:48px!important;margin:auto auto 12px!important;padding:0!important;border:0!important;box-shadow:none!important}
+  body.sidebar-collapsed .topbar.app-sidebar .sbar .user-pill{display:none!important}
+  body.sidebar-collapsed .topbar.app-sidebar .sbar .btn{display:grid!important;width:48px!important;height:48px!important;min-width:48px!important;min-height:48px!important;padding:0!important;place-items:center!important;font-size:0!important}
+}
+
+/* El menu admite todos los modulos a zoom 100%; usuario y salida quedan fijos abajo. */
+.topbar.app-sidebar .nav,
+.topbar.app-sidebar.menu-open .nav{min-height:0!important;flex:1 1 auto!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain!important}
+.topbar.app-sidebar .sbar{flex:0 0 auto!important}
+@media (min-width:761px){
+  .topbar.app-sidebar .nav,
+  .topbar.app-sidebar.menu-open .nav{
+    min-height:0!important;
+    flex:1 1 auto!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain!important;
+    scrollbar-width:thin!important;
+    scrollbar-color:#bfd0e0 transparent!important;
+  }
+  .topbar.app-sidebar .nav::-webkit-scrollbar{width:5px}
+  .topbar.app-sidebar .nav::-webkit-scrollbar-track{background:transparent}
+  .topbar.app-sidebar .nav::-webkit-scrollbar-thumb{border-radius:99px;background:#bfd0e0}
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .sbar{position:static!important;flex:0 0 auto!important;margin-top:auto!important}
+}
+
+/* Atención a clientes: menú compacto idéntico a la referencia y sin huecos. */
+html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb.role-hidden-nav,
+html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[hidden]{
+  display:none!important;
+  width:0!important;
+  height:0!important;
+  min-width:0!important;
+  min-height:0!important;
+  flex:0 0 0!important;
+  margin:0!important;
+  padding:0!important;
+  overflow:hidden!important;
+  visibility:hidden!important;
+}
+html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[href="dashboard.html"] .nav-emoji,
+html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[href="mapa.html"] .nav-emoji,
+html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[href="planificar.html"] .nav-emoji{
+  background:linear-gradient(145deg,#18bdff 0%,#0874ef 48%,#064bd1 100%)!important;
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(0,30,130,.28),0 7px 15px rgba(8,83,190,.28)!important;
+}
+html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[href="nodos.html"] .nav-emoji{
+  background:linear-gradient(145deg,#ffd83f 0%,#ffad0a 48%,#f07900 100%)!important;
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.78),inset 0 -5px 10px rgba(184,74,0,.26),0 7px 15px rgba(231,135,0,.28)!important;
+}
+html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[href="ordenes.html"] .nav-emoji{
+  background:linear-gradient(145deg,#c36df2 0%,#8a47dc 48%,#6120bd 100%)!important;
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(76,14,147,.28),0 7px 15px rgba(112,50,193,.28)!important;
+}
+html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[href="historial.html"] .nav-emoji,
+html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[href="historial.html"]:is(.active,:hover) .nav-emoji{
+  background:linear-gradient(145deg,#ff6079 0%,#f02a51 48%,#ca103a 100%)!important;
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(142,5,43,.28),0 7px 15px rgba(217,26,67,.27)!important;
+}
+
+/* Ajuste final de Historial: acabado sólido y legible en todos los roles. */
+html body .topbar.app-sidebar .nav .nb[href="historial.html"] .nav-emoji,
+html body .topbar.app-sidebar .nav .nb[href="historial.html"]:is(.active,:hover) .nav-emoji{
+  opacity:1!important;
+  visibility:visible!important;
+  filter:none!important;
+  color:#fff!important;
+  border-color:rgba(255,255,255,.78)!important;
+  background:linear-gradient(145deg,#5aa7ff 0%,#365ed8 50%,#26338f 100%)!important;
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.82),inset 0 -6px 11px rgba(20,33,112,.3),0 7px 16px rgba(43,73,164,.32)!important;
+}
+html body .topbar.app-sidebar .nav .nb[href="historial.html"] .nav-emoji:after{
+  background:linear-gradient(180deg,rgba(111,194,255,.72),rgba(31,53,145,.3))!important;
+}
+html body .topbar.app-sidebar .nav .nb[href="historial.html"] .nav-emoji svg{
+  position:relative!important;
+  z-index:2!important;
+  fill:none!important;
+  stroke:#fff!important;
+  stroke-width:2!important;
+  opacity:1!important;
+  filter:drop-shadow(0 2px 2px rgba(10,22,76,.38))!important;
+}

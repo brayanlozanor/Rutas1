@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "netops-api",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-23",
+  "observability": {
+    "enabled": true
+  },
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "netops-db",
+      "database_id": "233e0a4f-79b7-4268-a280-61d670b1624c"
+    }
+  ],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}

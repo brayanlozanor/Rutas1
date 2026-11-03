@@ -1,0 +1,331 @@
+/* Detalles dentro de cada parada: faltantes y completados en tarjetas. */
+.planificar-page .plan-stop-details-panel,.planificar-page .stop-resolved-panel{margin-top:12px!important;padding:10px!important;border:1px solid #d7e3ed!important;border-radius:10px!important;background:#f8fafc!important}
+.planificar-page .plan-detail-group{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;width:100%!important}
+.planificar-page .plan-detail-group>strong{grid-column:1/-1;padding:0 2px;color:#536982;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.planificar-page .stop-resolved-panel{display:grid!important;height:auto!important;min-height:0!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-auto-rows:max-content!important;align-content:start!important;align-items:start!important;gap:6px!important;padding:7px!important}
+.planificar-page .stop-resolved-panel[hidden]{display:none!important}
+.planificar-page .plan-detail-row{position:relative!important;display:flex!important;min-height:150px!important;padding:14px!important;flex-direction:column!important;justify-content:space-between!important;gap:10px!important;border:1px solid #f0c985!important;border-left:1px solid #f0c985!important;border-radius:10px!important;background:#fffaf2!important;box-shadow:none!important}
+.planificar-page .plan-detail-row:before{content:"!";position:absolute;top:13px;left:13px;display:grid;width:30px;height:30px;place-items:center;border-radius:50%;background:#ff8a00;color:#fff;font-size:16px;font-weight:900}
+.planificar-page .plan-detail-row .plan-detail-main{padding-left:42px!important}
+.planificar-page .plan-detail-row.done{border-color:#9bdcb9!important;background:#f3fff8!important}
+.planificar-page .plan-detail-row.done:before{content:"✓";background:#0fbc6b}
+.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary{box-sizing:border-box!important;height:82px!important;min-height:82px!important;max-height:82px!important;align-self:start!important;overflow:hidden!important;padding:7px 40px!important;justify-content:center!important;gap:3px!important}.planificar-page .plan-detail-row.completed-summary:before{top:8px!important;left:8px!important;width:24px!important;height:24px!important;font-size:13px!important}.planificar-page .plan-detail-row.completed-summary .plan-detail-main{display:grid!important;grid-template-columns:58px minmax(0,1fr)!important;grid-template-rows:auto auto auto!important;align-content:center!important;gap:1px 6px!important;width:100%!important;padding:0!important}.planificar-page .plan-detail-row.completed-summary .detail-status-line,.planificar-page .plan-detail-row.completed-summary .detail-client-line{grid-column:1/-1}.planificar-page .plan-detail-row.completed-summary .detail-status-line{justify-content:flex-start!important;align-items:center!important;gap:4px!important}.planificar-page .plan-detail-row.completed-summary .detail-folio{font-size:10px!important}.planificar-page .plan-detail-row.completed-summary .plan-category-badge{padding:2px 5px!important;font-size:6px!important}.planificar-page .plan-detail-row.completed-summary .detail-client-line{min-height:10px!important;font-size:8px!important}.planificar-page .plan-detail-row.completed-summary .detail-client-line.is-empty{display:none!important}.planificar-page .plan-detail-row.completed-summary .order-location-link,.planificar-page .plan-detail-row.completed-summary .order-location-muted{align-self:center!important;margin:0!important;padding:2px 5px!important;font-size:7px!important;line-height:1!important}.planificar-page .plan-detail-row.completed-summary .plan-detail-actions{position:absolute;right:7px;top:50%;margin:0!important;transform:translateY(-50%)}.planificar-page .plan-detail-row.completed-summary .plan-detail-open{display:grid!important;width:28px!important;height:28px!important;min-width:28px!important;min-height:28px!important;place-items:center!important;padding:0!important;border-color:#bfd3ea!important;background:#fff!important;color:#0874e8!important}.planificar-page .plan-detail-row.completed-summary .plan-detail-open:before{content:none!important}.planificar-page .plan-detail-row.completed-summary .plan-detail-open svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.9}.planificar-page .plan-detail-row.completed-summary .plan-detail-open span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.planificar-page .plan-detail-row.not-done{border-color:#f0c985!important;background:#fffaf2!important}
+.planificar-page .detail-status-line{flex-wrap:wrap!important}.planificar-page .detail-folio{color:#0874e8!important;font-size:11px!important;font-weight:900!important}.planificar-page .plan-category-badge{padding:5px 8px!important;border-radius:6px!important;font-size:8px!important}
+.planificar-page .detail-client-line,.planificar-page .detail-title-line{font-size:11px!important}.planificar-page .plan-detail-main small{font-size:10px!important}
+.planificar-page .plan-detail-actions{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:7px!important;margin-top:auto!important}.planificar-page .plan-detail-actions .btn{min-height:34px!important;padding:6px 10px!important;border-radius:8px!important;font-size:9px!important}
+.planificar-page .plan-detail-open{width:38px!important;min-width:38px!important;padding:0!important;color:transparent!important;font-size:0!important}.planificar-page .plan-detail-open:before{content:"◉";color:#0874e8;font-size:15px}
+.planificar-page .plan-detail-open{display:grid!important;place-items:center!important;color:#0874e8!important}.planificar-page .plan-detail-open:before{content:none!important}.planificar-page .plan-detail-open svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.9}.planificar-page .plan-detail-open span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.planificar-page .plan-detail-row.pending-summary{min-height:112px!important;padding:10px 12px 48px 48px!important}.planificar-page .plan-detail-row.pending-summary:before{top:11px!important;left:11px!important;width:27px!important;height:27px!important;font-size:15px!important}.planificar-page .plan-detail-row.pending-summary .plan-detail-main{display:grid!important;grid-template-rows:22px minmax(24px,auto) 22px!important;align-content:start!important;gap:3px!important;padding:0!important}.planificar-page .plan-detail-row.pending-summary .detail-status-line{justify-content:flex-start!important;align-items:center!important;gap:5px!important}.planificar-page .plan-detail-row.pending-summary .priority-badge{padding:3px 6px!important;font-size:7px!important}.planificar-page .plan-detail-row.pending-summary .detail-folio{font-size:11px!important}.planificar-page .plan-detail-row.pending-summary .plan-category-badge{padding:3px 6px!important;font-size:7px!important}.planificar-page .plan-detail-row.pending-summary .detail-client-line{display:none!important}.planificar-page .plan-detail-row.pending-summary .detail-title-line{align-self:center!important;overflow:hidden!important;font-size:9px!important;line-height:1.3!important}.planificar-page .plan-detail-row.pending-summary .plan-detail-main>small{display:none!important}.planificar-page .plan-detail-row.pending-summary .order-location-link,.planificar-page .plan-detail-row.pending-summary .order-location-muted{justify-self:start!important;align-self:center!important;margin:0!important;padding:3px 6px!important;font-size:8px!important;line-height:1.1!important}.planificar-page .plan-detail-row.pending-summary .plan-detail-actions{position:absolute!important;right:11px!important;bottom:9px!important;gap:6px!important;margin:0!important}.planificar-page .plan-detail-row.pending-summary .plan-detail-actions .btn{width:36px!important;height:32px!important;min-width:36px!important;min-height:32px!important;padding:0!important;font-size:8px!important}.planificar-page .plan-detail-row.pending-summary .plan-detail-actions .plan-detail-open{font-size:0!important}
+.planificar-page .admin-tech-report{margin:5px 0 0!important;padding:8px!important;border:1px solid #a7dfbf!important;border-radius:8px!important;background:#f0fbf5!important}.planificar-page .admin-tech-report-copy{font-size:9px!important}
+@media(max-width:900px){.planificar-page .plan-detail-group,.planificar-page .stop-resolved-panel{grid-template-columns:1fr!important}.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary{height:82px!important;min-height:82px!important;max-height:82px!important;padding:7px 40px!important}.planificar-page .plan-detail-row.completed-summary:before{left:8px!important}.planificar-page .plan-detail-row.completed-summary .plan-detail-actions{right:7px}}
+
+/* Pendientes compactos y resistentes al zoom del navegador. */
+.planificar-page .plan-stop-details-panel{
+  container-type:inline-size!important;
+  height:auto!important;
+  min-height:0!important;
+  align-items:start!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-group{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  grid-auto-rows:max-content!important;
+  align-content:start!important;
+  align-items:start!important;
+  gap:8px!important;
+}
+.planificar-page .plan-detail-row.pending-summary{
+  box-sizing:border-box!important;
+  width:100%!important;
+  height:96px!important;
+  min-height:96px!important;
+  max-height:96px!important;
+  align-self:start!important;
+  overflow:hidden!important;
+  padding:8px 104px 8px 42px!important;
+  justify-content:center!important;
+  gap:2px!important;
+}
+.planificar-page .plan-detail-row.pending-summary:before{
+  top:9px!important;
+  left:9px!important;
+  width:25px!important;
+  height:25px!important;
+  font-size:13px!important;
+}
+.planificar-page .plan-detail-row.pending-summary .plan-detail-main{
+  display:flex!important;
+  min-width:0!important;
+  height:100%!important;
+  padding:0!important;
+  flex-direction:column!important;
+  justify-content:center!important;
+  gap:4px!important;
+}
+.planificar-page .plan-detail-row.pending-summary .detail-status-line{
+  display:flex!important;
+  min-width:0!important;
+  align-items:center!important;
+  flex-wrap:wrap!important;
+  gap:4px!important;
+}
+.planificar-page .plan-detail-row.pending-summary .detail-title-line{
+  display:-webkit-box!important;
+  min-width:0!important;
+  max-height:28px!important;
+  overflow:hidden!important;
+  font-size:9px!important;
+  line-height:1.35!important;
+  overflow-wrap:anywhere!important;
+  -webkit-box-orient:vertical!important;
+  -webkit-line-clamp:2!important;
+}
+.planificar-page .plan-detail-row.pending-summary .plan-detail-actions{
+  position:absolute!important;
+  right:8px!important;
+  bottom:8px!important;
+  display:flex!important;
+  width:auto!important;
+  grid-template-columns:none!important;
+  gap:5px!important;
+  margin:0!important;
+}
+.planificar-page .plan-detail-row.pending-summary .plan-detail-actions .btn{
+  width:29px!important;
+  height:29px!important;
+  min-width:29px!important;
+  min-height:29px!important;
+  padding:0!important;
+  border-radius:7px!important;
+  font-size:7px!important;
+}
+.planificar-page .plan-detail-row.pending-summary .plan-detail-actions .plan-detail-open svg{
+  width:16px!important;
+  height:16px!important;
+}
+@container (max-width:760px){
+  .planificar-page .plan-stop-details-panel .plan-detail-group{grid-template-columns:1fr!important}
+}
+@container (max-width:420px){
+  .planificar-page .plan-detail-row.pending-summary{
+    height:auto!important;
+    min-height:104px!important;
+    max-height:none!important;
+    padding-right:8px!important;
+    padding-bottom:42px!important;
+  }
+  .planificar-page .plan-detail-row.pending-summary .plan-detail-actions{right:8px!important;bottom:7px!important}
+}
+
+/* Paridad visual: pendientes con el mismo tamaño que completados. */
+.planificar-page .plan-stop-details-panel .plan-detail-group{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:6px!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-group>strong{
+  grid-column:1/-1!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-group>.plan-detail-row:last-child:nth-child(even){
+  grid-column:1/-1!important;
+  width:calc(50% - 3px)!important;
+  justify-self:center!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary{
+  height:82px!important;
+  min-height:82px!important;
+  max-height:82px!important;
+  padding:7px 98px 7px 40px!important;
+  justify-content:center!important;
+  border-color:#f0b45d!important;
+  background:#fffaf2!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary:before{
+  top:8px!important;
+  left:8px!important;
+  width:24px!important;
+  height:24px!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-main{
+  display:grid!important;
+  height:auto!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  grid-template-rows:auto auto!important;
+  align-content:center!important;
+  gap:4px!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .detail-status-line{
+  display:flex!important;
+  min-width:0!important;
+  flex-wrap:wrap!important;
+  gap:4px!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .detail-title-line,
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .detail-client-line,
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-main>small{
+  display:none!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .order-location-link,
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .order-location-muted{
+  justify-self:start!important;
+  margin:0!important;
+  padding:2px 5px!important;
+  font-size:7px!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-actions{
+  right:7px!important;
+  bottom:auto!important;
+  top:50%!important;
+  transform:translateY(-50%)!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-actions .btn{
+  width:27px!important;
+  height:28px!important;
+  min-width:27px!important;
+  min-height:28px!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-actions .plan-detail-done,
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-actions .plan-detail-delete{
+  display:grid!important;
+  place-items:center!important;
+  padding:0!important;
+  color:#fff!important;
+  font-size:0!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-actions .plan-detail-done svg,
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-actions .plan-detail-delete svg{
+  display:block!important;
+  width:16px!important;
+  height:16px!important;
+  fill:none!important;
+  stroke:currentColor!important;
+  stroke-width:2!important;
+  stroke-linecap:round!important;
+  stroke-linejoin:round!important;
+}
+@container (max-width:520px){
+  .planificar-page .plan-stop-details-panel .plan-detail-group{grid-template-columns:1fr!important}
+  .planificar-page .plan-stop-details-panel .plan-detail-group>.plan-detail-row:last-child:nth-child(even){width:100%!important}
+}
+
+/* Pendientes con la misma cuadricula y alineacion que los completados. */
+.planificar-page .plan-stop-details-panel .plan-detail-group{
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  align-items:stretch!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-group>.plan-detail-row,
+.planificar-page .plan-stop-details-panel .plan-detail-group>.plan-detail-row:last-child:nth-child(even){
+  grid-column:auto!important;
+  width:100%!important;
+  min-width:0!important;
+  justify-self:stretch!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary{
+  height:82px!important;
+  min-height:82px!important;
+  max-height:82px!important;
+  padding:7px 98px 7px 40px!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-main{
+  width:100%!important;
+  min-width:0!important;
+  justify-self:stretch!important;
+  align-items:start!important;
+  justify-items:start!important;
+  text-align:left!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .detail-status-line{
+  width:100%!important;
+  justify-content:flex-start!important;
+  align-items:center!important;
+  text-align:left!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .order-location-link,
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .order-location-muted{
+  justify-self:start!important;
+}
+@container (max-width:620px){
+  .planificar-page .plan-stop-details-panel .plan-detail-group{grid-template-columns:minmax(0,1fr)!important}
+  .planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary{
+    height:auto!important;
+    min-height:116px!important;
+    max-height:none!important;
+    padding:9px 9px 48px 40px!important;
+  }
+  .planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-actions{
+    top:auto!important;
+    right:8px!important;
+    bottom:8px!important;
+    transform:none!important;
+    flex-wrap:wrap!important;
+  }
+}
+
+/* Cliente y detalle siempre visibles en pendientes y resueltos. */
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary,
+.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary{
+  height:auto!important;
+  min-height:126px!important;
+  max-height:none!important;
+  overflow:visible!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary{
+  padding:9px 98px 9px 40px!important;
+}
+.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary{
+  padding:9px 42px 9px 40px!important;
+  justify-content:center!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-main,
+.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary .plan-detail-main{
+  display:flex!important;
+  width:100%!important;
+  min-width:0!important;
+  height:auto!important;
+  flex-direction:column!important;
+  align-items:flex-start!important;
+  justify-content:center!important;
+  gap:4px!important;
+  padding:0!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .detail-status-line,
+.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary .detail-status-line{
+  width:100%!important;
+  grid-column:auto!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .detail-client-line,
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .detail-title-line,
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-main>small,
+.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary .detail-client-line,
+.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary .detail-title-line,
+.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary .plan-detail-main>small{
+  display:block!important;
+  width:100%!important;
+  min-height:0!important;
+  margin:0!important;
+  overflow:visible!important;
+  color:#10233f!important;
+  font-size:9px!important;
+  line-height:1.35!important;
+  text-decoration:none!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+}
+.planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .detail-client-line,
+.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary .detail-client-line{
+  grid-column:auto!important;
+  color:#52647a!important;
+}
+.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary .detail-client-line.is-empty{
+  display:block!important;
+}
+.planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary .plan-detail-actions{
+  right:7px!important;
+}
+@media(max-width:900px){
+  .planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary{
+    height:auto!important;
+    min-height:126px!important;
+    max-height:none!important;
+    padding:9px 42px 9px 40px!important;
+  }
+}

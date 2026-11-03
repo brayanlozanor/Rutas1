@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>WiFiMex &middot; Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260902-evidence-viewer-v1">
+  <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3">
+  <link rel="stylesheet" href="assets/css/admin-analytics.css?v=20260902-dashboard-metrics-v3">
+  <script>try{document.documentElement.dataset.role=(JSON.parse(localStorage.getItem('user')||'{}').role||'').toLowerCase()}catch(e){}</script>
+</head>
+<body class="admin-analytics-page dashboard-page" onload="initAdminDashboard()">
+  <script>if(localStorage.getItem('netops_menu_open_v3')==='0')document.body.classList.add('sidebar-collapsed')</script>
+  <div class="topbar"><a href="mapa.html" class="logo-link"><div class="logo">WiFi<span>Mex</span></div></a><nav class="nav"></nav><div class="sbar"><div class="user-pill" data-user-name>Sesión activa</div><button onclick="logout()" class="btn bgh">Cerrar sesión</button></div></div>
+
+  <main class="analytics-shell dashboard-shell">
+    <header class="dashboard-heading">
+      <div><h1>Dashboard general</h1><p>Monitorea detalles físicos creados, solucionados y la distribución entre técnicos y oficina.</p></div>
+      <div class="dashboard-updated-card"><span class="dashboard-line-icon dashboard-icon-blue" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M18.5 5.5 21 5v3"/></svg></span><div><small>Actualizado</small><strong id="dashboard-updated-at">Ahora</strong></div><i aria-hidden="true"></i></div>
+    </header>
+
+    <section class="dashboard-filter-bar" aria-label="Filtros del dashboard">
+      <span class="dashboard-filter-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4 2v-8Z"/></svg></span>
+      <label class="dashboard-date-field"><span>Desde</span><input id="dashboard-from" type="date" onchange="loadDashboardData()"></label><span class="dashboard-date-divider" aria-hidden="true">–</span><label class="dashboard-date-field"><span>Hasta</span><input id="dashboard-to" type="date" onchange="loadDashboardData()"></label>
+      <label class="dashboard-select-field"><span>Técnico</span><select id="dashboard-tech" onchange="renderAdminDashboard()"><option value="">Todos los técnicos</option></select></label>
+      <label class="dashboard-select-field dashboard-secondary-filter"><span>Zona</span><select id="dashboard-zone" onchange="renderAdminDashboard()"><option value="">Todas las zonas</option></select></label>
+      <label class="dashboard-select-field dashboard-secondary-filter"><span>Origen</span><select id="dashboard-origin" onchange="renderAdminDashboard()"><option value="">Todos</option><option value="equipment">Antenas</option><option value="node">Pueblos</option><option value="manual">Generales</option></select></label>
+      <button class="dashboard-reset" type="button" onclick="resetDashboardFilters()"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg><span>Restablecer</span></button>
+    </section>
+
+    <section class="dashboard-primary-kpis" aria-label="Indicadores generales">
+      <article class="dashboard-kpi-card kpi-blue"><span class="dashboard-kpi-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5h4"/></svg></span><div><strong id="dashboard-done-today">0</strong><small>Completados hoy</small></div></article>
+      <article class="dashboard-kpi-card kpi-green"><span class="dashboard-kpi-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></span><div><strong id="dashboard-done-week">0</strong><small>Esta semana</small></div><em id="dashboard-week-trend" class="dashboard-trend">vs. semana anterior</em></article>
+      <article class="dashboard-kpi-card kpi-violet"><span class="dashboard-kpi-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01"/></svg></span><div><strong id="dashboard-done-month">0</strong><small>Este mes</small></div><em id="dashboard-month-trend" class="dashboard-trend">vs. mes anterior</em></article>
+      <article class="dashboard-kpi-card kpi-orange"><span class="dashboard-kpi-icon"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></span><div><strong id="dashboard-total-details">0</strong><small>Detalles físicos totales</small></div></article>
+    </section>
+
+    <section class="dashboard-period-kpis" aria-label="Resumen del periodo">
+      <article><span class="dashboard-line-icon dashboard-icon-blue"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/></svg></span><div><strong id="dashboard-period-added">0</strong><small>Agregados hoy</small></div></article>
+      <article><span class="dashboard-line-icon dashboard-icon-green"><svg viewBox="0 0 24 24"><path d="m14 6 4-4 4 4-4 4M18 2v5a5 5 0 0 1-5 5H9"/><path d="m10 18-4 4-4-4 4-4M6 22v-5a5 5 0 0 1 5-5h4"/></svg></span><div><strong id="dashboard-period-solved">0</strong><small>Agregados este mes</small></div></article>
+      <article><span class="dashboard-line-icon dashboard-icon-orange"><svg viewBox="0 0 24 24"><path d="M6 2h12M6 22h12M8 2c0 5 8 5 8 10s-8 5-8 10M16 2c0 5-8 5-8 10s8 5 8 10"/></svg></span><div><strong id="dashboard-period-pending">0</strong><small>Pendientes físicos actuales</small></div></article>
+      <article><span class="dashboard-line-icon dashboard-icon-violet"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="m14 10 6-6M16 4h4v4"/></svg></span><div><strong id="dashboard-period-rate">0</strong><small>Solucionados totales <b id="dashboard-period-goal-label">Histórico</b></small></div></article>
+    </section>
+
+    <section class="dashboard-insights-grid">
+      <article class="dashboard-panel dashboard-performance-panel"><header><div><span class="dashboard-panel-icon dashboard-icon-blue"><svg viewBox="0 0 24 24"><path d="m4 16 5-5 4 3 7-8M16 6h4v4"/></svg></span><div><h2 id="dashboard-performance-title">Rendimiento semanal</h2><p id="dashboard-daily-caption">Detalles solucionados por día</p></div></div><label class="dashboard-period-control"><span>Período</span><select data-dashboard-period onchange="setDashboardPeriod(this.value)"><option value="day">Este día</option><option value="week" selected>Esta semana</option><option value="fortnight">Esta quincena</option><option value="month">Este mes</option></select></label></header><div id="dashboard-daily-chart" class="dashboard-line-chart"></div><div class="dashboard-chart-legend"><i></i> Solucionados</div></article>
+
+      <article class="dashboard-panel dashboard-compliance-panel"><header><div><span class="dashboard-panel-icon dashboard-icon-violet"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="m14 10 6-6M16 4h4v4"/></svg></span><div><h2>Cumplimiento del período</h2></div></div></header><div class="dashboard-goal-editor"><label><span>Meta mensual</span><input id="dashboard-monthly-goal" type="number" min="1" max="100000" step="1" value="350" inputmode="numeric"></label><button id="dashboard-save-goal" type="button" onclick="saveDashboardGoal()">Guardar</button></div><div id="dashboard-compliance-ring" class="dashboard-compliance-ring" style="--rate:0deg"><div><strong id="dashboard-compliance-value">0%</strong><span>Cumplimiento actual</span><small id="dashboard-ring-goal">Meta: 0</small></div></div><div class="dashboard-compliance-goal"><strong id="dashboard-compliance-count">0 / 0</strong><span id="dashboard-compliance-goal-label">Meta del período</span></div><p id="dashboard-goal-guidance" class="dashboard-goal-guidance">Meta semanal: 88</p></article>
+
+      <article class="dashboard-panel dashboard-tech-panel"><header><div><span class="dashboard-panel-icon dashboard-icon-blue"><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><div><h2>Distribución de soluciones</h2></div></div><label class="dashboard-period-control"><span>Período</span><select data-dashboard-period onchange="setDashboardPeriod(this.value)"><option value="day">Este día</option><option value="week" selected>Esta semana</option><option value="fortnight">Esta quincena</option><option value="month">Este mes</option></select></label></header><div id="dashboard-tech-table" class="dashboard-tech-table"></div></article>
+    </section>
+  </main>
+
+  <div class="nt" id="nt"></div>
+<script src="assets/js/api.js?v=20260831-global-loading-map-height-v10"></script>
+  <script src="assets/js/common.js?v=20260902-evidence-viewer-v2"></script>
+  <script src="assets/js/dashboard.js?v=20260902-installations-completed-v1"></script>
+</body>
+</html>

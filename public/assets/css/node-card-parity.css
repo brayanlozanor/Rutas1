@@ -1,0 +1,10 @@
+/* Las tarjetas de pueblos comparten las medidas compactas de las antenas. */
+.nodes-page .list-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))!important;gap:12px!important}
+.nodes-page .entity-card.pueblo-card{min-height:0!important;padding:14px!important;border-radius:12px!important}
+.nodes-page .pueblo-card .entity-title{min-height:44px!important;margin-bottom:7px!important}
+.nodes-page .pueblo-card .entity-title h3{font-size:14px!important}
+.nodes-page .pueblo-card .badge{font-size:8px!important}
+.nodes-page .pueblo-card .meta-list{margin:0 0 10px!important}
+.nodes-page .pueblo-card .meta-row{min-height:30px!important;padding:6px 0!important;font-size:10px!important}
+.nodes-page .pueblo-card .meta-row strong{max-width:70%!important}
+.nodes-page .pueblo-card .node-icon-actions{margin-top:9px!important;padding-top:10px!important}

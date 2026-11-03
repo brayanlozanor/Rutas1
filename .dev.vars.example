@@ -1,0 +1,3 @@
+# Copia este archivo como .dev.vars para desarrollo local.
+# Usa una cadena aleatoria de al menos 32 caracteres y no la subas a Git.
+AUTH_SECRET=reemplaza-esto-por-un-secreto-local-aleatorio

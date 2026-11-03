@@ -1,0 +1,43 @@
+/* Composicion final de cada parada segun la referencia. */
+.planificar-page .stop-card{padding:18px!important}
+.planificar-page .stop-card-heading{display:grid;grid-template-columns:44px minmax(0,1fr) 30px;align-items:start;gap:12px}
+.planificar-page .stop-sequence{display:grid;width:40px;height:40px;place-items:center;border:1px solid #b9d5f3;border-radius:50%;background:#f5f9ff;color:#0874e8;font-size:16px;font-weight:900}
+.planificar-page .stop-heading-copy{min-width:0}.planificar-page .stop-card-heading .stop-title{margin:1px 0 5px!important;font-size:18px!important}.planificar-page .stop-card-heading .stop-meta{font-size:11px!important}
+.planificar-page .stop-card-heading .stop-drag-handle{position:static!important;width:30px;height:38px;margin-top:-2px}
+.planificar-page .stop-state-row{margin:10px 0 0 56px!important}
+.planificar-page .plan-stop-date-editor{position:relative;min-height:62px;padding:10px 12px 10px 58px!important;align-items:center!important}.planificar-page .plan-stop-date-editor:before{content:"▣";position:absolute;left:17px;top:50%;display:grid;width:31px;height:31px;place-items:center;border-radius:8px;background:#eaf4ff;color:#0874e8;font-size:17px;transform:translateY(-50%)}.planificar-page .plan-stop-date-editor>span{font-size:11px!important}.planificar-page .plan-stop-date-editor>span strong{margin-top:3px;font-size:12px!important}.planificar-page .plan-stop-date-editor input{min-width:145px!important}
+.planificar-page .stop-history-insight{position:relative;width:max-content;max-width:100%;min-height:36px;margin-top:10px!important;padding:8px 12px 8px 52px!important}.planificar-page .stop-history-insight:before{content:"▥";position:absolute;left:10px;top:50%;display:grid;width:30px;height:30px;place-items:center;border-radius:8px;background:#eaf4ff;color:#0874e8;font-size:16px;transform:translateY(-50%)}
+.planificar-page .stop-actions{justify-content:flex-start!important}.planificar-page .stop-actions .stop-order-badge{width:42px;height:38px;flex-basis:42px}.planificar-page .stop-actions .btn{position:relative;width:42px!important;height:38px!important;min-width:42px!important;min-height:38px!important;padding:0!important;border-radius:8px!important;color:transparent!important;font-size:0!important}.planificar-page .stop-actions .btn:before{position:absolute;inset:0;display:grid;place-items:center;color:currentColor;font-size:17px!important}.planificar-page .stop-actions .stop-action-pending{color:#0874e8!important}.planificar-page .stop-actions .stop-action-pending:before{content:"◉"}.planificar-page .stop-actions .stop-action-completed{border-color:#abe1c1!important;background:#f1fbf5!important;color:#12a660!important}.planificar-page .stop-actions .stop-action-completed:before{content:"✓"}.planificar-page .stop-actions .stop-action-release{color:#718399!important}.planificar-page .stop-actions .stop-action-release:before{content:"↪"}.planificar-page .stop-actions .stop-action-edit{border-color:#b8d6f5!important;background:#f5faff!important;color:#0874e8!important}.planificar-page .stop-actions .stop-action-edit:before{content:"✎"}.planificar-page .stop-actions .stop-action-delete{color:#e5243f!important}.planificar-page .stop-actions .stop-action-delete:before{content:"⌫"}.planificar-page .stop-actions .btn:disabled{color:#a7b2bf!important}
+@media(max-width:700px){.planificar-page .stop-card{padding:13px!important}.planificar-page .stop-card-heading{grid-template-columns:36px minmax(0,1fr) 26px;gap:8px}.planificar-page .stop-sequence{width:34px;height:34px}.planificar-page .stop-card-heading .stop-title{font-size:14px!important}.planificar-page .stop-state-row{margin-left:44px!important}.planificar-page .plan-stop-date-editor{padding-left:48px!important}.planificar-page .plan-stop-date-editor:before{left:9px}.planificar-page .stop-actions{display:flex!important;flex-wrap:wrap!important}}
+
+/* Acciones finales de la parada: el orden se controla arrastrando. */
+.planificar-page .stop-card-heading{grid-template-columns:minmax(0,1fr) 30px!important}
+.planificar-page .stop-sequence,.planificar-page .stop-order-badge{display:none!important}
+.planificar-page .stop-state-row{margin-left:0!important}
+.planificar-page .stop-actions{gap:6px!important}
+.planificar-page .stop-actions .btn{width:38px!important;height:36px!important;min-width:38px!important;min-height:36px!important;border-radius:8px!important}
+.planificar-page .stop-actions .btn:before{font-size:18px!important}
+.planificar-page .stop-actions .stop-action-release{border-color:#ccd5df!important;background:#fafbfc!important;color:#8b99aa!important}.planificar-page .stop-actions .stop-action-release:before{content:"↪"}
+.planificar-page .stop-actions .stop-action-edit{border-color:#1680f5!important;background:#fff!important;color:#0874e8!important}.planificar-page .stop-actions .stop-action-edit:before{content:"✎"}
+.planificar-page .stop-actions .stop-action-delete{border-color:#ffb9c0!important;background:#fff7f8!important;color:#e5243f!important}.planificar-page .stop-actions .stop-action-delete:before{content:"⌫"}
+.planificar-page .stop-actions .stop-action-completed{border-color:#27983f!important;background:#f5fff7!important;color:#0baa2f!important}.planificar-page .stop-actions .stop-action-completed:before{content:"✓"}
+.planificar-page .stop-actions .stop-action-pending{border-color:#ffad3d!important;background:#fffaf2!important;color:#f28a00!important}.planificar-page .stop-actions .stop-action-pending:before{content:"◷"}
+@media(max-width:700px){.planificar-page .stop-card-heading{grid-template-columns:minmax(0,1fr) 26px!important}.planificar-page .stop-actions .btn{width:44px!important;height:42px!important;min-width:44px!important;min-height:42px!important}}
+
+/* Botones cuadrados con iconos vectoriales, como la referencia. */
+.planificar-page .stop-actions{align-items:center!important;padding-top:13px!important;border-top:1px solid #d9e4ee!important}
+.planificar-page .stop-actions .btn{display:grid!important;width:38px!important;height:36px!important;min-width:38px!important;min-height:36px!important;place-items:center!important;padding:0!important;border-width:1px!important;border-style:solid!important;border-radius:8px!important;box-shadow:none!important;color:inherit!important}
+.planificar-page .stop-actions .btn:before{content:none!important}
+.planificar-page .stop-actions .btn svg{display:block;width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.planificar-page .stop-actions .stop-action-release{border-color:#cbd4df!important;background:#fafbfc!important;color:#91a0b2!important}
+.planificar-page .stop-actions .stop-action-edit{border-color:#1680f5!important;background:#fff!important;color:#0874e8!important}
+.planificar-page .stop-actions .stop-action-delete{border-color:#ffb4bd!important;background:#fff8f9!important;color:#ea1c32!important}
+.planificar-page .stop-actions .stop-action-completed{border-color:#23963d!important;background:#f7fff8!important;color:#09a82d!important}
+.planificar-page .stop-actions .stop-action-pending{border-color:#ffae38!important;background:#fffaf2!important;color:#f28a00!important}
+.planificar-page .stop-actions .btn:disabled{border-color:#d9e0e8!important;background:#fafbfc!important;color:#aab5c2!important;opacity:.7!important}
+@media(max-width:700px){.planificar-page .stop-actions{gap:6px!important}.planificar-page .stop-actions .btn{width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important}.planificar-page .stop-actions .btn svg{width:18px;height:18px}}
+
+/* Atención a clientes consulta y actualiza paradas, pero no administra su estructura. */
+html[data-role="atencion_clientes"] body.planificar-page [data-admin-only]{display:none!important}
+html[data-role="atencion_clientes"] body.planificar-page .plan-command-bar{grid-template-columns:minmax(180px,1fr) auto!important}
+@media(max-width:850px){html[data-role="atencion_clientes"] body.planificar-page .plan-command-bar{grid-template-columns:1fr!important}}

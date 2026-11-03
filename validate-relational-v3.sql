@@ -1,0 +1,17 @@
+SELECT 'users' entity, (SELECT count(*) FROM users) relational_count
+UNION ALL SELECT 'technicians',(SELECT count(*) FROM technicians)
+UNION ALL SELECT 'equipment',(SELECT count(*) FROM equipment)
+UNION ALL SELECT 'equipment_radios',(SELECT count(*) FROM equipment_radios)
+UNION ALL SELECT 'nodes',(SELECT count(*) FROM nodes)
+UNION ALL SELECT 'equipment_nodes',(SELECT count(*) FROM equipment_nodes)
+UNION ALL SELECT 'work_orders',(SELECT count(*) FROM work_orders)
+UNION ALL SELECT 'work_order_reports',(SELECT count(*) FROM work_order_reports)
+UNION ALL SELECT 'routes',(SELECT count(*) FROM routes)
+UNION ALL SELECT 'route_points',(SELECT count(*) FROM route_points)
+UNION ALL SELECT 'plans',(SELECT count(*) FROM plans)
+UNION ALL SELECT 'plan_stops',(SELECT count(*) FROM plan_stops)
+UNION ALL SELECT 'plan_stop_orders',(SELECT count(*) FROM plan_stop_orders)
+UNION ALL SELECT 'deletion_requests',(SELECT count(*) FROM deletion_requests)
+UNION ALL SELECT 'audit_log',(SELECT count(*) FROM audit_log)
+UNION ALL SELECT 'tech_access_log',(SELECT count(*) FROM tech_access_log)
+UNION ALL SELECT 'migration_rejects',(SELECT count(*) FROM migration_rejects);

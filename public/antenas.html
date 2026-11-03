@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>WiFiMex &middot; Antenas</title>
+  <link rel="icon" type="image/svg+xml" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260902-evidence-viewer-v1">
+  <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3">
+  <link rel="stylesheet" href="assets/css/antenna-form-modal.css?v=20260823-viewport-fix-v3">
+  <link rel="stylesheet" href="assets/css/antenna-detail-modal.css?v=20260812-zoom-responsive-v1">
+  <link rel="stylesheet" href="assets/css/detail-view-toggle.css?v=20260829-icon-alignment-v2">
+  <link rel="stylesheet" href="assets/css/inventory-pagination.css?v=20260823-v1">
+  <script>try{document.documentElement.dataset.role=(JSON.parse(localStorage.getItem('user')||'{}').role||'').toLowerCase()}catch(e){}</script>
+</head>
+<body class="inventory-page antennas-page" onload="initAntenasPage()">
+  <script>if(localStorage.getItem('netops_menu_open_v3')==='0')document.body.classList.add('sidebar-collapsed')</script>
+  <div class="topbar">
+    <a href="mapa.html" class="logo-link"><div class="logo">WiFi<span>Mex</span></div></a>
+        <nav class="nav">
+      <a href="mapa.html" class="nb">Mapa Mikrotiks</a>
+      <a href="antenas.html" class="nb active">Antenas</a>
+      <a href="nodos.html" class="nb">Pueblos</a>
+      <a href="planificar.html" class="nb">Planificar</a>
+      <a href="ordenes.html" class="nb">Ordenes</a>
+      <a href="material.html" class="nb">Material</a>
+      <a href="tecnicos.html" class="nb">Usuarios</a>
+    </nav>
+    <div class="sbar"><div class="user-pill" data-user-name>Sesion activa</div><button class="btn bgh" onclick="logout()">Cerrar sesion</button></div>
+  </div>
+
+  <div class="page-shell wide-shell inventory-shell">
+    <section class="hero-panel compact-hero inventory-hero">
+      <div><div class="section-chip">Antenas / Gestion</div><h1>Antenas y detalles</h1><p>La zona de cada antena se asigna automaticamente por ubicacion. El color se calcula por los detalles pendientes.</p></div>
+      <div class="stats-grid compact-stats inventory-stats"><div class="stat-card stat-total"><span class="inventory-stat-icon">&#9673;</span><div><div class="label">Antenas</div><strong id="ant-total">0</strong></div></div><div class="stat-card stat-critical"><span class="inventory-stat-icon">!</span><div><div class="label">Críticas</div><strong id="ant-critical">0</strong></div></div><div class="stat-card stat-warning"><span class="inventory-stat-icon">!</span><div><div class="label">Atención</div><strong id="ant-warning">0</strong></div></div><div class="stat-card stat-clear"><span class="inventory-stat-icon">&#10003;</span><div><div class="label">Despejadas</div><strong id="ant-clear">0</strong></div></div></div>
+    </section>
+
+    <section class="content-card inventory-content">
+      <div class="toolbar inventory-toolbar">
+        <button class="btn bc" onclick="openAntennaModal()">+ Nueva antena</button>
+        <input id="ant-search" list="ant-search-options" class="search-input" placeholder="Buscar por nombre, IP o zona..." oninput="debounceAction('antenas-search', resetAntennaPagination)"><datalist id="ant-search-options"></datalist>
+        <select id="ant-filter-zone" class="search-input" onchange="resetAntennaPagination()"></select>
+        <select id="ant-filter-priority" class="search-input" onchange="resetAntennaPagination()"><option value="all">Todas las prioridades</option><option value="critico">Criticas</option><option value="atencion">Atencion</option><option value="pendiente">Pendientes</option><option value="despejado">Despejadas</option></select>
+      </div>
+      <div class="small-help inventory-help"><strong>Prioridad:</strong><span><i class="map-color-dot critical"></i> Crítico</span><span><i class="map-color-dot high"></i> Atención</span><span><i class="map-color-dot medium"></i> Pendiente</span><span><i class="map-color-dot low"></i> Despejada</span></div>
+      <div id="antenas-grid"></div>
+    </section>
+  </div>
+
+  <div class="mo" id="antena-mo"><div class="md modal-wide antenna-edit-modal"><div class="modal-head"><div><h2 id="ant-form-title">Registrar antena</h2><p>La zona se calcula automáticamente a partir de la latitud y longitud.</p></div><button class="btn bgh" onclick="CM('antena-mo')">Cerrar</button></div><div class="modal-grid"><div class="fi"><label>Nombre</label><input id="ant-name" placeholder="R73-Atetetla"></div><div class="fi"><label>IP MikroTik</label><input id="ant-ip" placeholder="10.248.0.x"></div></div><div class="fi"><label>SSID</label><input id="ant-ssid" placeholder="SSID si existe"></div><div class="modal-grid"><div class="fi"><label>Tipo</label><select id="ant-type"><option value="mikrotik">Mikrotik</option><option value="tower">Torre</option><option value="sector">Sector</option><option value="ptp">PTP</option><option value="ptmp">PTMP</option><option value="balancer">Balanceador</option><option value="antenna">Cliente</option></select></div><div class="fi"><label>Zona automática</label><input id="ant-zone-preview" readonly placeholder="Se calcula por ubicación"></div></div><div class="modal-grid"><div class="fi"><label>Latitud</label><input id="ant-lat" oninput="previewAntennaZone()" placeholder="16.000000"></div><div class="fi"><label>Longitud</label><input id="ant-lng" oninput="previewAntennaZone()" placeholder="-99.000000"></div></div><div class="fi"><label>Notas</label><textarea id="ant-notes" placeholder="Observaciones o referencia"></textarea></div><div class="antenna-zone-note">La zona se actualiza automáticamente cada vez que cambias la latitud o longitud.</div><div class="card-actions"><button class="btn bc" onclick="saveAntenna()">Guardar antena</button><button class="btn bgh" onclick="CM('antena-mo')">Cerrar</button></div></div></div>
+
+  <div class="mo" id="ant-detail-mo"><div class="md modal-wide"><div class="modal-head"><div><h2 id="ant-detail-title">Detalles</h2><p id="ant-detail-sub">Detalles pendientes de esta antena.</p></div><button class="btn bgh" onclick="CM('ant-detail-mo')">Cerrar</button></div><div class="entity-detail-kind-tabs" role="tablist"><button id="ant-detail-kind-physical" class="is-active" onclick="selectAntennaDetailKind('physical')">Detalles físicos</button><button id="ant-detail-kind-network" onclick="selectAntennaDetailKind('network')">Detalles de red</button></div><div class="modal-grid"><section><h3 id="ant-detail-form-title">Agregar detalle</h3><div id="ant-detail-links" class="relation-box"></div><div class="fi"><label>Este detalle corresponde a</label><select id="ant-detail-target"><option value="equipment">Esta antena</option></select><small class="field-help">Elige la antena o uno de sus nodos vinculados. En Planificar aparecerán como paradas separadas.</small></div><div class="fi"><label>Nombre cliente</label><input id="ant-detail-client" placeholder="Nombre del cliente"></div><div class="fi"><label>Detalle</label><textarea id="ant-detail-text" placeholder="Que se va a revisar o cambiar"></textarea></div><div class="fi"><label>Ubicacion del detalle (opcional)</label><input id="ant-detail-location" class="mono" placeholder="17.273400 -98.788000 o link de Maps"></div><div class="modal-grid"><div class="fi"><label>Zona</label><select id="ant-detail-zone"></select></div><div class="fi"><label>Tipo de trabajo</label><select id="ant-detail-type"><option value="torre">Torre</option><option value="troncal">Troncal</option><option value="comunidad">Comunidad</option><option value="punto_venta">Punto de venta</option></select></div></div><div class="fi"><label>Prioridad</label><select id="ant-detail-priority"><option value="baja">Baja</option><option value="media" selected>Media</option><option value="alta">Alta</option><option value="muy_alta">Muy alta</option></select></div><button id="ant-detail-save-btn" class="btn bc bfu" onclick="saveAntennaDetail()">Guardar detalle</button></section><section><h3>Detalles registrados</h3><div id="ant-detail-list" class="detail-list"></div></section></div></div></div>
+
+  <div class="nt" id="nt"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="assets/js/api.js?v=20260831-global-loading-map-height-v10"></script><script src="assets/js/common.js?v=20260902-evidence-viewer-v2"></script><script src="assets/js/antenas.js?v=20260902-evidence-viewer-v1"></script>
+</body>
+</html>

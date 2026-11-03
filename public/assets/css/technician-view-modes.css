@@ -1,0 +1,263 @@
+/* Modos exclusivos del tecnico: detalles o mapa */
+body.plan-technician-view[data-tech-view="details"] .tech-route-map-card{display:none!important}
+html[data-role="tecnico"] body.plan-technician-view[data-tech-view="details"] .plan-shell{grid-template-columns:minmax(0,1fr)!important;grid-template-areas:"toolbar" "kpis" "agenda" "daymap"!important;max-width:850px!important}
+body.plan-technician-view[data-tech-view="map"] .tech-calendar-toolbar,
+body.plan-technician-view[data-tech-view="map"] .plan-kpi-bar,
+body.plan-technician-view[data-tech-view="map"] .plan-calendar,
+body.plan-technician-view[data-tech-view="map"] .tech-today-board,
+body.plan-technician-view[data-tech-view="map"] .tech-day-map-card{display:none!important}
+html[data-role="tecnico"] body.plan-technician-view[data-tech-view="map"] .plan-shell{display:flex!important;width:100%!important;max-width:850px!important;margin:0 auto!important;padding:18px 18px 92px!important;flex-direction:column!important}
+body.plan-technician-view[data-tech-view="map"] .tech-route-map-card{display:block!important;position:relative!important;width:100%!important;max-width:none!important;margin:0!important;order:2!important;border-radius:24px!important}
+body.plan-technician-view[data-tech-view="map"] .plan-map-panel-head{min-height:68px!important;padding:16px 22px!important}
+body.plan-technician-view[data-tech-view="map"] .plan-map{width:100%!important;height:360px!important;min-height:360px!important}
+body.plan-technician-view[data-tech-view="map"] .plan-map-legend{display:none!important}
+.plan-technician-view .tech-header-logout svg{width:24px;height:24px;fill:none;stroke:#e5263f;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}.plan-technician-view .tech-header-logout{border-color:#ffcbd2!important;background:#fff4f5!important}.plan-technician-view .tech-header-logout:hover{background:#ffe8eb!important}
+
+/* Formulario visual de nueva instalacion */
+body.plan-technician-view .tech-installation-modal{width:min(700px,calc(100vw - 28px))!important;max-width:700px!important;padding:28px!important;border:0!important;border-radius:28px!important;background:#fff!important;box-shadow:0 28px 80px rgba(16,38,74,.24)!important}
+body.plan-technician-view .tech-installation-modal .fi{margin-bottom:19px!important}
+body.plan-technician-view .tech-installation-modal .fi>label{margin-bottom:8px!important;color:#10264a!important;font-size:13px!important;font-weight:900!important}
+body.plan-technician-view .tech-installation-modal input,body.plan-technician-view .tech-installation-modal textarea{min-height:58px!important;padding:15px 18px!important;border:1px solid #cbd8e7!important;border-radius:17px!important;background:#fff!important;color:#10264a!important;font-size:16px!important;box-shadow:none!important}
+body.plan-technician-view .tech-installation-modal textarea{min-height:150px!important;resize:vertical}
+body.plan-technician-view #tech-install-location,body.plan-technician-view #tech-install-town{padding-left:53px!important;background-repeat:no-repeat!important;background-position:18px center!important;background-size:24px 24px!important}
+body.plan-technician-view #tech-install-location{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230874e8' stroke-width='2.3'%3E%3Cpath d='M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z'/%3E%3Ccircle cx='12' cy='10' r='2.5'/%3E%3C/svg%3E")!important}
+body.plan-technician-view #tech-install-town{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230874e8' stroke-width='2.3' stroke-linecap='round'%3E%3Ccircle cx='10' cy='10' r='6'/%3E%3Cpath d='m15 15 6 6'/%3E%3C/svg%3E")!important}
+body.plan-technician-view .tech-evidence-box{margin:24px 0!important;padding:23px!important;border:2px dashed #93bfff!important;border-radius:22px!important;background:#fbfdff!important}
+body.plan-technician-view .tech-evidence-box>strong{padding-left:48px!important;font-size:20px!important;line-height:38px!important;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230874e8' stroke-width='2'%3E%3Cpath d='M4 7h3l2-3h6l2 3h3v13H4Z'/%3E%3Ccircle cx='12' cy='13' r='4'/%3E%3C/svg%3E") left center/38px 38px no-repeat!important}
+body.plan-technician-view .tech-evidence-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:14px!important;margin-top:18px!important}
+body.plan-technician-view .tech-evidence-actions .btn{display:flex!important;min-height:58px!important;align-items:center!important;justify-content:center!important;border-radius:16px!important;font-size:15px!important;font-weight:900!important}
+body.plan-technician-view .tech-install-evidence-preview>span{padding:55px 15px 15px!important;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='1.7'%3E%3Crect x='4' y='5' width='16' height='14' rx='2'/%3E%3Ccircle cx='9' cy='10' r='2'/%3E%3Cpath d='m5 17 5-5 3 3 2-2 4 4'/%3E%3C/svg%3E") center 8px/48px 48px no-repeat!important;font-size:15px!important}
+body.plan-technician-view .tech-installation-modal>button:last-child{min-height:62px!important;border-radius:17px!important;background:linear-gradient(135deg,#075fe5,#087cf0)!important;font-size:17px!important;box-shadow:0 12px 26px rgba(8,110,231,.25)!important}
+@media(max-width:760px){html[data-role="tecnico"] body.plan-technician-view[data-tech-view="map"] .plan-shell{padding:10px 10px 82px!important}body.plan-technician-view[data-tech-view="map"] .tech-route-map-card{border-radius:20px!important}body.plan-technician-view[data-tech-view="map"] .plan-map{height:330px!important;min-height:330px!important}body.plan-technician-view .tech-installation-modal{padding:20px!important;border-radius:22px!important}body.plan-technician-view .tech-installation-head{align-items:flex-start}body.plan-technician-view .tech-evidence-actions{grid-template-columns:1fr 1fr!important}body.plan-technician-view .tech-evidence-box{padding:17px!important}}
+
+.tech-route-overview{display:none;order:1;width:100%;padding:20px;border:1px solid #d7e4ef;border-radius:22px;background:#fff;box-shadow:0 10px 28px rgba(29,64,105,.1)}body.plan-technician-view[data-tech-view="map"] .tech-route-overview{display:block}.tech-route-overview-head span{color:#0874e8;font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.tech-route-overview-head h2{margin:4px 0;color:#10264a}.tech-route-overview-head small{color:#6c8099;font-weight:800}.tech-route-overview-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}.tech-route-overview-kpis div{display:grid;min-height:82px;place-content:center;border-radius:14px;background:#eef7ff;text-align:center}.tech-route-overview-kpis strong{color:#0868bd;font-size:25px}.tech-route-overview-kpis small{color:#60758d;font-size:9px;font-weight:900;text-transform:uppercase}.tech-route-stop-names{display:grid;gap:8px}.tech-route-stop-names>div{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:9px;padding:10px;border:1px solid #dce7f0;border-radius:12px}.tech-route-stop-names>div>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;background:#0874e8;color:#fff;font-weight:900}.tech-route-stop-names strong{color:#10264a;font-size:13px}.tech-route-stop-names small{color:#697d94;font-size:10px;font-weight:800}
+.tech-install-location-button{width:100%!important;margin-top:8px!important;min-height:46px!important}.tech-installation-modal .fi:has(#tech-install-town){position:relative}.tech-install-town-suggestions{display:none;position:absolute;z-index:20;right:0;left:0;top:calc(100% - 12px);padding:6px;border:1px solid #cbdbea;border-radius:14px;background:#fff;box-shadow:0 18px 45px rgba(16,38,74,.2)}.tech-install-town-suggestions.open{display:grid}.tech-install-town-suggestions button{padding:11px 13px;border:0;border-bottom:1px solid #e6edf4;background:#fff;color:#10264a;text-align:left;font:800 14px Manrope,sans-serif}.tech-install-town-suggestions button:last-child{border-bottom:0}.tech-install-summary-folio{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:13px 0;padding:13px 16px;border:2px solid #87bfe8;border-radius:14px;background:#eaf5ff}.tech-install-summary-folio small{color:#58728b;font-weight:900;text-transform:uppercase}.tech-install-summary-folio strong{color:#0564b5;font-size:22px;letter-spacing:.05em}
+@media(max-width:560px){.tech-route-overview{padding:15px}.tech-route-overview-kpis{gap:5px}.tech-route-overview-kpis div{min-height:70px}.tech-route-overview-kpis strong{font-size:20px}.tech-route-stop-names>div{grid-template-columns:34px minmax(0,1fr)}.tech-route-stop-names small{grid-column:2}.tech-install-town-suggestions{top:calc(100% - 8px)}}
+
+/* Indicadores alineados como los dias del calendario */
+html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-day,html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general{display:grid!important;width:100%!important;gap:5px!important;padding:9px!important;overflow:visible!important;background:#fff!important}
+html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-day{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-day .plan-kpi,html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general .plan-kpi{display:flex!important;min-width:0!important;min-height:98px!important;align-items:center!important;justify-content:center!important;flex-direction:column!important;gap:4px!important;padding:8px 4px!important;border:0!important;border-radius:13px!important;text-align:center!important}
+html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-day .plan-kpi-copy,html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general .plan-kpi-copy{display:flex!important;min-width:0!important;align-items:center!important;flex-direction:column!important;text-align:center!important}
+html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-day .plan-kpi-copy strong,html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general .plan-kpi-copy strong{font-size:22px!important;line-height:1!important}
+html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-day .plan-kpi-copy small,html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general .plan-kpi-copy small{font-size:8px!important;line-height:1.15!important;text-align:center!important}
+@media(max-width:430px){html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general{gap:3px!important;padding:7px 4px!important}html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general .plan-kpi{padding:7px 2px!important}html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general .plan-kpi-icon{width:30px!important;height:30px!important;font-size:12px!important}html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general .plan-kpi-copy strong{font-size:18px!important}html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general .plan-kpi-copy small{font-size:6.5px!important}}
+
+/* Evita que el ultimo KPI ocupe una fila completa en celular */
+html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-day>.plan-kpi,html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-general>.plan-kpi{grid-column:auto!important;grid-row:auto!important}
+
+.tech-completion-modal{max-height:calc(100dvh - 24px)!important;overflow-y:auto!important}.tech-coordinate-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px}.tech-coordinate-row .btn{min-height:58px!important;white-space:nowrap}.tech-completion-modal .tech-evidence-box{border-color:#ef9b35!important;background:#fffaf2!important}.tech-completion-modal .tech-evidence-box>strong{color:#a85200!important}
+@media(max-width:600px){.tech-coordinate-row{grid-template-columns:1fr}.tech-coordinate-row .btn{width:100%!important}.tech-completion-modal{padding:17px!important}.tech-completion-modal .row2{grid-template-columns:1fr!important}}
+
+.tech-completion-summary-mo{z-index:12500!important;padding:16px!important;background:rgba(12,31,55,.48)!important;backdrop-filter:blur(14px)!important;-webkit-backdrop-filter:blur(14px)!important}.tech-completion-summary-card{width:min(680px,calc(100vw - 24px));max-height:calc(100dvh - 28px);padding:24px;overflow-y:auto;border:2px solid #8fc7ee;border-radius:24px;background:#fff;box-shadow:0 30px 90px rgba(5,25,48,.35);color:#10264a}.tech-summary-report-head{display:flex;align-items:center;gap:14px;padding-bottom:15px;border-bottom:1px solid #d9e7f2}.tech-summary-report-check{display:grid;width:54px;height:54px;place-items:center;border-radius:50%;background:#dcf8e9;color:#0aa35d;font-size:29px;font-weight:900}.tech-summary-report-head small{color:#0874e8;font-size:10px;font-weight:900;letter-spacing:.12em}.tech-summary-report-head h2{margin:3px 0 0;font-size:25px}.tech-summary-report-progress{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;margin:16px 0;padding:14px;border:1px solid #b9d9f1;border-radius:15px;background:#eef8ff}.tech-summary-report-progress strong{font-size:27px}.tech-summary-report-progress span{font-size:11px;font-weight:900}.tech-summary-report-progress b{padding:7px 9px;border-radius:99px;background:#fff0dd;color:#b66300;font-size:10px}.tech-summary-report-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.tech-summary-report-grid>div,.tech-summary-report-detail{padding:11px 12px;border:1px solid #d5e3ee;border-radius:12px;background:#f9fcff}.tech-summary-report-grid small,.tech-summary-report-detail small{display:block;margin-bottom:4px;color:#6b7f96;font-size:8px;font-weight:900;text-transform:uppercase}.tech-summary-report-grid strong,.tech-summary-report-detail strong{display:block;overflow-wrap:anywhere;font-size:12px;line-height:1.4}.tech-summary-report-detail{margin-top:9px}.tech-summary-report-photos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:10px}.tech-summary-report-photos img{width:100%;height:105px;border:1px solid #bad1e3;border-radius:10px;object-fit:cover}.tech-summary-report-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding-top:13px;border-top:1px solid #d9e7f2}.tech-summary-report-footer span{color:#657b94;font-size:9px;font-weight:900;text-transform:capitalize}
+@media(max-width:560px){.tech-completion-summary-card{padding:17px;border-radius:20px}.tech-summary-report-head h2{font-size:21px}.tech-summary-report-progress{grid-template-columns:auto 1fr}.tech-summary-report-progress b{grid-column:1/-1;text-align:center}.tech-summary-report-grid{grid-template-columns:1fr}.tech-summary-report-photos{grid-template-columns:1fr 1fr}.tech-summary-report-photos img{height:115px}.tech-summary-report-footer{align-items:stretch;flex-direction:column}.tech-summary-report-footer .btn{width:100%!important}}
+
+/* Confirmaciones y reportes compactos del técnico */
+.tech-incomplete-reason-mo{z-index:12600!important;padding:16px!important;background:rgba(12,31,55,.5)!important;backdrop-filter:blur(12px)}
+.tech-incomplete-reason-card{width:min(470px,calc(100vw - 28px))!important;padding:27px!important;border:1px solid #d9e6f1!important;border-radius:24px!important;text-align:center!important;box-shadow:0 28px 80px rgba(5,25,48,.3)!important}
+.tech-incomplete-icon{display:grid;width:52px;height:52px;margin:0 auto 12px;place-items:center;border-radius:50%;background:#fff0dc;color:#c66a00;font-size:27px;font-weight:900}.tech-incomplete-reason-card h2{margin:0;color:#10264a}.tech-incomplete-reason-card p{margin:8px 0 15px;color:#687b91;font-size:13px}.tech-incomplete-reason-card textarea{width:100%;min-height:115px;padding:14px;border:1px solid #c6d6e5;border-radius:15px;font:inherit;resize:vertical}.tech-incomplete-reason-card>small{display:block;min-height:20px;margin:5px;color:#c62828;font-weight:800}.tech-incomplete-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.tech-incomplete-actions .btn{min-height:48px!important;border-radius:13px!important}
+.plan-technician-view .plan-detail-group{display:grid;gap:8px}.plan-technician-view .plan-detail-group.completed{margin-top:12px;padding-top:12px;border-top:1px solid #d8e4ee}.plan-technician-view .plan-detail-group>strong{color:#5d728a;font-size:11px;text-transform:uppercase;letter-spacing:.06em}.detail-folio,.order-folio{display:inline-flex;padding:4px 7px;border-radius:7px;background:#e9f4ff;color:#0868bd;font-size:10px;font-weight:900;letter-spacing:.04em}
+.tech-completion-summary-card{padding:18px!important}.tech-summary-report-head{padding-bottom:10px!important}.tech-summary-report-progress{margin:10px 0!important;padding:10px!important}.tech-summary-report-grid{gap:6px!important}.tech-summary-report-grid>div,.tech-summary-report-detail{padding:8px 10px!important}.tech-summary-report-detail{margin-top:6px!important}.tech-summary-report-photos{gap:5px!important;margin-top:7px!important}.tech-summary-report-photos img{height:76px!important}.tech-summary-report-footer{margin-top:10px!important;padding-top:9px!important}.tech-summary-report-footer>div{display:flex;gap:8px;flex-wrap:wrap}.tech-whatsapp-share{background:#20b85a!important;color:#fff!important}
+.tech-summary-report-attended{position:relative!important;padding-right:150px!important}.tech-summary-folio{position:absolute;top:50%;right:12px;transform:translateY(-50%);display:inline-flex;padding:8px 12px;border:2px solid #86bde7;border-radius:10px;background:#e8f4ff;color:#0564b5;font-size:17px;font-weight:900;letter-spacing:.05em}.plan-technician-view .mo.open{backdrop-filter:blur(14px)!important;-webkit-backdrop-filter:blur(14px)!important;background:rgba(16,35,63,.48)!important}
+@media(max-width:560px){.tech-completion-summary-card{max-height:calc(100dvh - 14px)!important;padding:13px!important}.tech-summary-report-head{gap:9px!important}.tech-summary-report-check{width:42px!important;height:42px!important;font-size:23px!important}.tech-summary-report-progress{grid-template-columns:auto 1fr auto!important}.tech-summary-report-progress b{grid-column:auto!important}.tech-summary-report-grid{grid-template-columns:1fr 1fr!important}.tech-summary-report-photos{grid-template-columns:repeat(4,1fr)!important}.tech-summary-report-photos img{height:64px!important}.tech-summary-report-footer{gap:7px!important}.tech-summary-report-footer>div{display:grid;grid-template-columns:1fr auto}.tech-incomplete-reason-card{padding:20px!important}.tech-incomplete-actions{grid-template-columns:1fr}.tech-summary-report-attended{padding-right:125px!important}.tech-summary-folio{right:8px;padding:7px 8px;font-size:14px}}
+
+.tech-route-stop-names>button{display:grid;width:100%;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:9px;padding:10px;border:1px solid #dce7f0;border-radius:12px;background:#fff;text-align:left;cursor:pointer}.tech-route-stop-names>button:hover{border-color:#8fc5ed;background:#f4faff}.tech-route-stop-names>button>span{display:grid;width:34px;height:34px;place-items:center;border-radius:50%;background:#0874e8;color:#fff;font-weight:900}.tech-antenna-location{display:inline-flex!important;width:fit-content;margin-top:8px;padding:7px 10px;border-radius:999px;background:#eaf5ff;font-size:10px;font-weight:900;text-decoration:none}
+.tech-add-menu-card{width:min(560px,calc(100vw - 24px))!important}.tech-add-menu-options{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.tech-add-menu-options button{display:grid;min-height:175px;place-items:center;padding:20px;border:2px solid #cfe0ef;border-radius:20px;background:#f9fcff;color:#10264a;cursor:pointer;text-align:center}.tech-add-menu-options button:hover{border-color:#0874e8;background:#eef7ff}.tech-add-menu-options button>span{display:grid;width:48px;height:48px;place-items:center;border-radius:50%;background:#0874e8;color:#fff;font-size:24px;font-weight:900}.tech-add-menu-options strong{font-size:17px}.tech-add-menu-options small{color:#687c93;font-weight:700;line-height:1.4}
+@media(max-width:560px){.tech-route-stop-names>button{grid-template-columns:34px minmax(0,1fr)}.tech-route-stop-names>button small{grid-column:2}.tech-add-menu-options{grid-template-columns:1fr}.tech-add-menu-options button{min-height:135px}}
+
+/* Los controles del técnico deben describir su acción, no verse como iconos vacíos. */
+html[data-role="tecnico"] body.plan-technician-view .stop-actions{
+  display:flex!important;
+  grid-template-columns:none!important;
+  align-items:stretch!important;
+  flex-wrap:wrap!important;
+  gap:8px!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .stop-actions .stop-action-pending,
+html[data-role="tecnico"] body.plan-technician-view .stop-actions .plan-resolved-toggle{
+  display:inline-flex!important;
+  width:auto!important;
+  min-width:170px!important;
+  min-height:42px!important;
+  height:42px!important;
+  flex:1 1 170px!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:0 16px!important;
+  border:1px solid #ffae38!important;
+  border-radius:10px!important;
+  background:#fff7e8!important;
+  color:#b76400!important;
+  font-size:12px!important;
+  font-weight:900!important;
+  line-height:1.2!important;
+  white-space:normal!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .stop-actions .plan-resolved-toggle{
+  border-color:#80c998!important;
+  background:#f1fbf5!important;
+  color:#078a42!important;
+}
+@media(max-width:520px){
+  html[data-role="tecnico"] body.plan-technician-view .stop-actions .stop-action-pending,
+  html[data-role="tecnico"] body.plan-technician-view .stop-actions .plan-resolved-toggle{width:100%!important;flex-basis:100%!important}
+}
+
+/* Informacion operativa visible directamente en cada detalle pendiente del tecnico. */
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.pending-summary{
+  height:auto!important;
+  min-height:168px!important;
+  max-height:none!important;
+  padding:12px 12px 12px 48px!important;
+  overflow:visible!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-main{
+  display:grid!important;
+  height:auto!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  grid-template-rows:auto!important;
+  align-content:start!important;
+  gap:7px!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.pending-summary .detail-client-line,
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.pending-summary .detail-title-line,
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-main>small{
+  display:block!important;
+  width:100%!important;
+  margin:0!important;
+  overflow:visible!important;
+  color:#10233f!important;
+  font-size:11px!important;
+  line-height:1.4!important;
+  white-space:normal!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.pending-summary .detail-client-line{
+  color:#52647a!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.pending-summary .order-location-link,
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.pending-summary .order-location-muted{
+  display:inline-flex!important;
+  width:fit-content!important;
+  max-width:100%!important;
+  margin:0!important;
+  padding:5px 8px!important;
+  font-size:9px!important;
+  line-height:1.25!important;
+  white-space:normal!important;
+}
+
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-actions{
+  position:static!important;
+  display:grid!important;
+  width:100%!important;
+  grid-template-columns:38px minmax(108px,1fr) minmax(118px,1fr)!important;
+  align-items:stretch!important;
+  justify-content:stretch!important;
+  gap:8px!important;
+  margin:5px 0 0!important;
+  transform:none!important;
+}
+
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.completed-summary{
+  height:auto!important;
+  min-height:156px!important;
+  max-height:none!important;
+  padding:12px 12px 12px 48px!important;
+  overflow:visible!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.completed-summary .plan-detail-main{
+  display:grid!important;
+  width:100%!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  grid-template-rows:auto!important;
+  align-content:start!important;
+  gap:7px!important;
+  padding:0!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.completed-summary .detail-status-line,
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.completed-summary .detail-client-line{
+  grid-column:auto!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.completed-summary .detail-client-line.is-empty{
+  display:block!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.completed-summary .detail-modified-line{
+  display:block!important;
+  width:100%!important;
+  color:#6b7280!important;
+  font-size:10px!important;
+  font-weight:800!important;
+  line-height:1.35!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.completed-summary .plan-detail-actions{
+  position:static!important;
+  display:grid!important;
+  width:100%!important;
+  grid-template-columns:38px minmax(140px,1fr)!important;
+  gap:8px!important;
+  margin:5px 0 0!important;
+  transform:none!important;
+}
+
+/* Acciones exclusivas del tecnico, legibles y sin cuadros abreviados. */
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions{
+  display:flex!important;
+  right:10px!important;
+  bottom:9px!important;
+  left:48px!important;
+  top:auto!important;
+  align-items:stretch!important;
+  justify-content:flex-end!important;
+  flex-wrap:wrap!important;
+  gap:7px!important;
+  transform:none!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .tech-detail-finish,
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .tech-detail-incomplete,
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .tech-detail-edit{
+  display:inline-flex!important;
+  width:auto!important;
+  min-width:104px!important;
+  min-height:36px!important;
+  height:auto!important;
+  align-items:center!important;
+  justify-content:center!important;
+  padding:7px 11px!important;
+  border-radius:9px!important;
+  color:#fff!important;
+  font-size:10px!important;
+  font-weight:900!important;
+  line-height:1.2!important;
+  white-space:normal!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .tech-detail-finish{
+  border-color:#0a9f59!important;
+  background:#0a9f59!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .tech-detail-incomplete{
+  border-color:#e98300!important;
+  background:#e98300!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .tech-detail-edit{
+  border-color:#0874e8!important;
+  background:#0874e8!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .tech-detail-finish-later{
+  min-width:138px!important;
+}
+@media(max-width:430px){
+  html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-actions{
+    display:grid!important;
+    grid-template-columns:36px minmax(0,1fr) minmax(0,1fr)!important;
+  }
+  html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .tech-detail-finish,
+  html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .tech-detail-incomplete,
+  html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .tech-detail-edit{
+    width:100%!important;
+    min-width:0!important;
+  }
+  html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .tech-detail-finish-later{
+    grid-column:2/-1!important;
+  }
+}

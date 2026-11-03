@@ -1,0 +1,29 @@
+/* Planificador fijo en escritorio: solo la lista central de paradas se desplaza. */
+@media (min-width:1351px) and (min-height:700px){
+  body.planificar-page:not(.plan-technician-view){height:100dvh!important;min-height:0!important;overflow:hidden!important}
+  body.planificar-page:not(.plan-technician-view)>.main,
+  body.planificar-page:not(.plan-technician-view)>.main>.ct{height:100dvh!important;min-height:0!important;overflow:hidden!important}
+  body.planificar-page:not(.plan-technician-view) #plan-panel{box-sizing:border-box!important;display:flex!important;height:100dvh!important;min-height:0!important;flex-direction:column!important;overflow:hidden!important}
+  body.planificar-page:not(.plan-technician-view) .hero-panel,
+  body.planificar-page:not(.plan-technician-view) .plan-kpi-bar,
+  body.planificar-page:not(.plan-technician-view) .plan-calendar{flex:0 0 auto!important}
+
+  body.planificar-page:not(.plan-technician-view) .plan-shell{box-sizing:border-box!important;display:grid!important;min-height:0!important;flex:1 1 auto!important;grid-template-columns:240px minmax(480px,1fr) minmax(330px,390px)!important;align-items:stretch!important;overflow:hidden!important;padding-bottom:16px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-sidebar,
+  body.planificar-page:not(.plan-technician-view) .plan-board,
+  body.planificar-page:not(.plan-technician-view) .plan-map-panel{box-sizing:border-box!important;height:100%!important;min-height:0!important}
+
+  body.planificar-page:not(.plan-technician-view) .plan-sidebar{position:static!important;overflow:hidden!important}
+  body.planificar-page:not(.plan-technician-view) .plan-board{display:flex!important;flex-direction:column!important;overflow:hidden!important}
+  body.planificar-page:not(.plan-technician-view) .plan-board>.sh,
+  body.planificar-page:not(.plan-technician-view) .plan-command-bar{flex:0 0 auto!important}
+  body.planificar-page:not(.plan-technician-view) .plan-days{min-height:0!important;flex:1 1 auto!important;overflow-x:hidden!important;overflow-y:auto!important;padding-right:5px!important;padding-bottom:8px!important;overscroll-behavior:contain!important;scrollbar-gutter:stable!important}
+  body.planificar-page:not(.plan-technician-view) .plan-days::-webkit-scrollbar{width:8px}
+  body.planificar-page:not(.plan-technician-view) .plan-days::-webkit-scrollbar-track{border-radius:99px;background:#edf2f7}
+  body.planificar-page:not(.plan-technician-view) .plan-days::-webkit-scrollbar-thumb{border-radius:99px;background:#b7c8d9}
+
+  body.planificar-page:not(.plan-technician-view) .plan-map-panel{position:static!important;display:flex!important;flex-direction:column!important;overflow:hidden!important}
+  body.planificar-page:not(.plan-technician-view) .plan-map-panel-head,
+  body.planificar-page:not(.plan-technician-view) .plan-map-legend{flex:0 0 auto!important}
+  body.planificar-page:not(.plan-technician-view) .plan-map-panel .plan-map{width:100%!important;height:auto!important;min-height:0!important;flex:1 1 auto!important;margin:0!important;border-radius:0!important}
+}

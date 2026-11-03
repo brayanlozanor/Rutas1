@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>WiFiMex &middot; Acceso</title>
+  <link rel="icon" type="image/svg+xml" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800;900&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260902-evidence-viewer-v1">
+  <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260823-login-exclusion-v15">
+  <link rel="stylesheet" href="assets/css/login-redesign.css?v=20260823-mobile-fit-v4">
+</head>
+<body class="login-page">
+  <main class="login-shell">
+    <section class="login-card login-modern">
+      <aside class="login-side">
+        <div class="login-side-content">
+          <div class="login-logo-card"><img src="assets/brand/wifimex-logo.jpg" alt="WiFi-Mex Servicio de Internet"></div>
+          <h1>WiFiMex</h1>
+          <p>Operaci&oacute;n de pueblos, &oacute;rdenes, mapas y rutas en una sola plataforma.</p>
+          <div class="login-feature-list">
+            <div class="login-feature feature-blue"><span class="feature-symbol">&#128279;</span><div><strong>Pueblos y red</strong><small>Monitorea y gestiona tu red</small></div></div>
+            <div class="login-feature feature-orange"><span class="feature-symbol">&#128203;</span><div><strong>&Oacute;rdenes</strong><small>Crea, asigna y da seguimiento</small></div></div>
+            <div class="login-feature feature-green"><span class="feature-symbol">&#9679;</span><div><strong>Mapas y rutas</strong><small>Visualiza cobertura y recorridos</small></div></div>
+            <div class="login-feature feature-red"><span class="feature-symbol">&#9823;</span><div><strong>T&eacute;cnicos</strong><small>Administra y coordina equipos</small></div></div>
+          </div>
+        </div>
+        <div class="login-network-art" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      </aside>
+
+      <section class="login-form-panel">
+        <div class="login-security-mark" aria-hidden="true"><svg viewBox="0 0 64 64"><path d="M32 5 53 14v15c0 14-8.5 24-21 30C19.5 53 11 43 11 29V14Z"/><rect x="22" y="28" width="20" height="17" rx="3"/><path d="M26 28v-5a6 6 0 0 1 12 0v5"/></svg></div>
+        <h2>Iniciar sesi&oacute;n</h2>
+        <p class="login-sub">Entra con tu usuario asignado. Tus cambios se guardan en la nube para todos los equipos.</p>
+
+        <form id="loginForm" autocomplete="on">
+          <div class="fi">
+            <label>Usuario</label>
+            <input id="username" name="username" autocomplete="username" placeholder="Tu usuario">
+          </div>
+          <div class="fi password-wrap">
+            <label>Contrase&ntilde;a</label>
+            <div class="password-input-shell">
+              <span class="password-lock-icon" aria-hidden="true"></span>
+              <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Tu contrase&ntilde;a">
+              <button type="button" class="password-eye-btn" onclick="togglePassword(this)" aria-label="Mostrar contrase&ntilde;a" title="Mostrar contrase&ntilde;a"><span class="eye-icon" aria-hidden="true"></span></button>
+            </div>
+          </div>
+          <div class="login-options"><label><input type="checkbox" checked> Recordarme en este dispositivo</label></div>
+          <button class="btn bc bfu login-submit" type="submit"><span>Entrar</span><span aria-hidden="true">&rarr;</span></button>
+        </form>
+
+        <div class="login-divider"><span>o</span></div>
+        <p class="login-authorized">&#128274;&nbsp; Acceso exclusivo para personal autorizado.</p>
+      </section>
+    </section>
+  </main>
+
+  <div class="nt" id="nt"></div>
+<script src="assets/js/api.js?v=20260831-global-loading-map-height-v10"></script>
+  <script src="assets/js/common.js?v=20260902-dashboard-home-v1"></script>
+  <script src="assets/js/login.js?v=20260902-dashboard-home-v1"></script>
+</body>
+</html>

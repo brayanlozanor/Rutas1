@@ -1,0 +1,101 @@
+/* Apariencia del planificador basada en la referencia aprobada. */
+body.planificar-page:not(.plan-technician-view) #plan-panel{padding:8px 0 0!important;background:#f4f7fb!important}
+body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero{box-sizing:border-box!important;width:auto!important;min-height:96px!important;margin:0 18px 10px!important;padding:17px 30px!important;border:1px solid #e3eaf2!important;border-radius:12px!important;background:#fff!important;box-shadow:0 4px 15px rgba(18,42,76,.05)!important}
+body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero h1{margin:0 0 5px!important;font-size:30px!important;line-height:1.1!important}
+body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero p{font-size:12px!important}
+body.planificar-page:not(.plan-technician-view) .hero-panel .module-hero-icon{left:10px;width:58px;height:58px;border-radius:15px}
+body.planificar-page:not(.plan-technician-view) .hero-panel>div:first-child{padding-left:82px!important}
+
+body.planificar-page:not(.plan-technician-view) .plan-kpi-bar{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:12px!important;margin:0 18px 12px!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
+body.planificar-page:not(.plan-technician-view) .plan-kpi{box-sizing:border-box;justify-content:flex-start!important;min-height:88px!important;padding:14px 20px!important;border:1px solid #dfe7ef!important;border-radius:10px!important;background:#fff!important;box-shadow:0 4px 13px rgba(18,42,76,.06)!important}
+body.planificar-page:not(.plan-technician-view) .plan-kpi-icon,
+body.planificar-page:not(.plan-technician-view) .plan-kpi-ring{width:48px;height:48px;flex-basis:48px}
+body.planificar-page:not(.plan-technician-view) .plan-kpi strong{font-size:23px!important}
+body.planificar-page:not(.plan-technician-view) .plan-kpi small{font-size:10px!important}
+
+body.planificar-page:not(.plan-technician-view) .plan-calendar{box-sizing:border-box!important;margin:0 18px 12px!important;padding:11px 13px!important;border:1px solid #dce5ee!important;border-radius:11px!important;background:#fff!important;box-shadow:0 4px 14px rgba(18,42,76,.06)!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar.is-collapsed{margin:0 18px 12px!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-head{align-items:center!important;margin-bottom:9px!important;padding:0 0 8px!important;border-bottom:1px solid #e2e9f0!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-head .section-chip{display:flex!important;align-items:center!important;gap:7px;color:#102b50!important;font-size:14px!important;font-weight:900!important;text-transform:none!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-head .section-chip:before{content:"▣";display:grid;width:23px;height:23px;place-items:center;border-radius:6px;background:#eaf4ff;color:#0874e8;font-size:13px}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-head h2,
+body.planificar-page:not(.plan-technician-view) .plan-calendar-week-range{display:none!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions{gap:8px!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-total,
+body.planificar-page:not(.plan-technician-view) .plan-calendar-help,
+body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn{min-height:32px!important;padding:6px 10px!important;border-radius:7px!important;font-size:9px!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-dashboard{grid-template-columns:repeat(7,minmax(125px,1fr))!important;gap:7px!important;padding:0 0 2px!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-dashboard-card{min-height:112px!important;padding:10px!important;border-width:1px!important;border-left-width:1px!important;border-radius:9px!important;box-shadow:0 2px 7px rgba(16,43,75,.04)!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-dashboard-card.today.active{outline:0!important;border:2px solid #19a867!important;background:#effbf5!important;box-shadow:0 4px 12px rgba(7,153,92,.12)!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-date{font-size:9px!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-detail-count{margin-top:4px!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-detail-count b{font-size:17px!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-status{margin-top:5px!important}
+body.planificar-page:not(.plan-technician-view) .plan-calendar-status span{padding:4px 6px!important;font-size:7px!important}
+
+body.planificar-page:not(.plan-technician-view) .plan-shell{grid-template-columns:220px minmax(480px,1fr) minmax(350px,430px)!important;gap:9px!important;padding:0 18px 14px!important}
+body.planificar-page:not(.plan-technician-view) .plan-sidebar,
+body.planificar-page:not(.plan-technician-view) .plan-map-panel{border-radius:10px!important;box-shadow:0 4px 14px rgba(18,42,76,.06)!important}
+body.planificar-page:not(.plan-technician-view) .plan-sidebar{position:static!important;padding:12px!important}
+body.planificar-page:not(.plan-technician-view) .plan-map-panel{position:static!important}
+body.planificar-page:not(.plan-technician-view) .plan-days{overflow:visible!important;scrollbar-gutter:auto!important}
+body.planificar-page:not(.plan-technician-view) .plan-board>.sh{min-height:38px!important;padding:0 4px 5px!important}
+body.planificar-page:not(.plan-technician-view) .plan-board>.sh h2{font-size:16px!important}
+body.planificar-page:not(.plan-technician-view) .plan-command-bar{margin-bottom:7px!important;padding:6px!important}
+body.planificar-page:not(.plan-technician-view) .plan-command-bar .search-input,
+body.planificar-page:not(.plan-technician-view) .plan-command-bar .btn{min-height:35px!important;height:35px!important}
+body.planificar-page:not(.plan-technician-view) .plan-map-panel-head{padding:9px 11px!important}
+body.planificar-page:not(.plan-technician-view) .plan-map-legend{gap:8px!important;padding:7px 6px!important}
+
+@media(max-width:1350px){
+  body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero{margin-right:12px!important;margin-left:12px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-kpi-bar{grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:8px!important;margin-right:12px!important;margin-left:12px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-kpi{min-height:76px!important;padding:10px 12px!important;gap:9px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-kpi-icon,
+  body.planificar-page:not(.plan-technician-view) .plan-kpi-ring{width:42px!important;height:42px!important;flex-basis:42px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-kpi strong{font-size:20px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-kpi.kpi-progress{grid-column:auto!important}
+  body.planificar-page:not(.plan-technician-view) .plan-calendar{margin-right:12px!important;margin-left:12px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-shell{
+    grid-template-columns:210px minmax(0,1fr)!important;
+    grid-template-areas:"sidebar board" "map map"!important;
+    padding-right:12px!important;
+    padding-left:12px!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-sidebar{grid-area:sidebar!important}
+  body.planificar-page:not(.plan-technician-view) .plan-board{grid-area:board!important}
+  body.planificar-page:not(.plan-technician-view) .plan-map-panel{grid-area:map!important;height:360px!important}
+}
+@media(min-width:901px) and (max-width:1350px){
+  body.planificar-page:not(.plan-technician-view) .plan-shell{
+    grid-template-columns:190px minmax(0,1fr) minmax(270px,320px)!important;
+    grid-template-areas:"sidebar board map"!important;
+    align-items:start!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-map-panel{
+    height:auto!important;
+    min-width:0!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-map-panel .plan-map{
+    height:calc(125dvh - 300px)!important;
+    min-height:420px!important;
+  }
+}
+@media(max-width:900px){
+  body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero{min-height:88px!important;padding:15px 20px!important}
+  body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero h1{font-size:26px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-kpi-bar{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body.planificar-page:not(.plan-technician-view) .plan-kpi.kpi-progress{grid-column:1/-1!important}
+  body.planificar-page:not(.plan-technician-view) .plan-shell{grid-template-columns:1fr!important;grid-template-areas:"sidebar" "board" "map"!important}
+  body.planificar-page:not(.plan-technician-view) .plan-sidebar{margin-bottom:0!important}
+}
+@media(max-width:700px){
+  body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero{padding:16px!important}
+  body.planificar-page:not(.plan-technician-view) .hero-panel>div:first-child{padding-left:70px!important}
+  body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero h1{font-size:22px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-kpi-bar{grid-template-columns:1fr 1fr!important;gap:8px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-kpi{min-height:72px!important;padding:10px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-kpi.kpi-progress{grid-column:1/-1!important}
+  body.planificar-page:not(.plan-technician-view) .plan-map-panel{height:auto!important}
+}
+.plan-stop-picker-card{box-sizing:border-box!important;width:min(780px,calc(100vw - 32px))!important;max-height:calc(100dvh - 32px)!important;margin:auto!important;padding:28px 32px!important;overflow:auto!important;border:1px solid #d9e3ed!important;border-radius:20px!important;background:#fff!important;box-shadow:0 28px 80px rgba(12,35,64,.28)!important}.plan-stop-picker-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:22px}.plan-stop-picker-head h2{margin:0;color:#102b55;font-size:25px}.plan-stop-picker-head p{margin:5px 0 0;color:#64758e;font-size:14px;font-weight:700}.plan-stop-picker-close{display:grid;width:42px;height:42px;flex:0 0 42px;place-items:center;border:1px solid #d7e2ed;border-radius:11px;background:#fff;color:#40516a;font-size:25px;cursor:pointer}.plan-stop-picker-tabs{display:grid;grid-template-columns:1fr 1fr;margin-bottom:16px}.plan-stop-picker-tabs button{min-height:48px;border:1px solid #d2dce8;background:#fff;color:#526079;font:800 16px Manrope,Inter,sans-serif;cursor:pointer}.plan-stop-picker-tabs button:first-child{border-radius:10px 0 0 10px}.plan-stop-picker-tabs button:last-child{border-radius:0 10px 10px 0}.plan-stop-picker-tabs button.active{position:relative;z-index:1;border-color:#0874e8;color:#0874e8;background:#f7fbff;box-shadow:inset 0 0 0 1px #0874e8}.plan-stop-picker-search{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;min-height:54px;border:2px solid #0874e8;border-radius:11px;background:#fff}.plan-stop-picker-search span{display:grid;place-items:center;color:#0874e8;font-size:21px}.plan-stop-picker-search input{width:100%;min-width:0;border:0!important;outline:0!important;background:transparent!important;color:#102b55;font:600 16px Manrope,Inter,sans-serif!important}.plan-stop-picker-filters{display:flex;gap:10px;margin:14px 0}.plan-stop-picker-filters button{padding:8px 18px;border:1px solid #d4deea;border-radius:22px;background:#fff;color:#526079;font:700 13px Manrope,Inter,sans-serif}.plan-stop-picker-filters button.active{border-color:#dbeaff;background:#edf5ff;color:#0874e8}.plan-stop-picker-divider{height:1px;margin:15px 0;background:#dce5ee}.plan-stop-picker-label{display:block;margin-bottom:9px;color:#60718a;font-size:13px}.plan-stop-picker-results{display:grid;gap:7px;max-height:330px;overflow:auto}.plan-stop-picker-result{display:grid;grid-template-columns:46px minmax(0,1fr) 36px;align-items:center;gap:12px;min-height:60px;padding:7px 12px;border:1px solid #d7e1ec;border-radius:10px;background:#fff}.plan-stop-picker-result>span{display:grid;width:42px;height:42px;place-items:center;border-radius:12px;background:#eaf3ff;color:#0874e8;font-size:20px}.plan-stop-picker-result>span.node{background:#e9f8ef;color:#16a662}.plan-stop-picker-result div{min-width:0}.plan-stop-picker-result b,.plan-stop-picker-result small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.plan-stop-picker-result b{color:#102b55;font-size:14px}.plan-stop-picker-result small{margin-top:3px;color:#64758e;font-size:12px}.plan-stop-picker-result>button{display:grid;width:34px;height:34px;place-items:center;border:1px solid #a9cdf7;border-radius:50%;background:#fff;color:#0874e8;font-size:25px;line-height:1;cursor:pointer}.plan-stop-picker-result.selected{border-color:#b7d5f8;background:#f7fbff}.plan-stop-picker-add{width:100%;margin-top:12px!important}@media(max-width:650px){.plan-stop-picker-card{width:calc(100vw - 14px)!important;max-height:calc(100dvh - 14px)!important;padding:18px 14px!important}.plan-stop-picker-head h2{font-size:20px}.plan-stop-picker-head p{font-size:11px}.plan-stop-picker-tabs button{font-size:13px}.plan-stop-picker-result{grid-template-columns:40px minmax(0,1fr) 34px;padding:6px 8px}.plan-stop-picker-result>span{width:36px;height:36px}.plan-stop-picker-results{max-height:45dvh}}
