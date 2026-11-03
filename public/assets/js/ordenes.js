@@ -1056,7 +1056,7 @@ async function openWO(id = '') {
       document.getElementById('wo-zone').value = w.region || target.zone || '';
       document.getElementById('wo-type').value = w.visitType || 'comunidad';
       document.getElementById('wo-priority').value = w.priority || 'media';
-      updateWOPriorityReminderHint();
+      updateWOPriorityReminderHint(w.reminderIntervalMin);
       const report = w.technicianReport || {};
       woEvidencePhotos = [...new Set([...(Array.isArray(report.evidencePhotos) ? report.evidencePhotos : []),report.evidencePhoto].filter(Boolean))].slice(0,6);
     }
@@ -1068,39 +1068,37 @@ async function openWO(id = '') {
   OM('wo-mo');
 }
 
-function updateWOPriorityReminderHint() {
+function onWOPriorityChange(explicitMins) {
   const prioSelect = document.getElementById('wo-priority');
-  const hintEl = document.getElementById('wo-priority-interval-hint');
-  if (!prioSelect || !hintEl) return;
+  const minutesInput = document.getElementById('wo-priority-minutes');
+  if (!prioSelect || !minutesInput) return;
   const prio = prioSelect.value || 'media';
-  if (typeof getPriorityReminderLabel === 'function') {
-    hintEl.textContent = `⚙️ ${getPriorityReminderLabel(prio)} (Clic para ajustar minutos)`;
+  if (explicitMins && Number(explicitMins) > 0) {
+    minutesInput.value = Number(explicitMins);
+    return;
+  }
+  const intervals = typeof getPriorityReminderMinutes === 'function' ? getPriorityReminderMinutes() : { baja: 45, media: 30, alta: 20, muy_alta: 10 };
+  const mins = intervals[prio] || (prio === 'baja' ? 45 : prio === 'media' ? 30 : prio === 'alta' ? 20 : 10);
+  minutesInput.value = mins;
+}
+
+function onWOPriorityMinutesInput() {
+  const prioSelect = document.getElementById('wo-priority');
+  const minutesInput = document.getElementById('wo-priority-minutes');
+  if (!prioSelect || !minutesInput) return;
+  const prio = prioSelect.value || 'media';
+  const val = parseInt(minutesInput.value, 10);
+  if (!isNaN(val) && val > 0 && typeof setPriorityReminderMinutes === 'function') {
+    setPriorityReminderMinutes({ [prio]: val });
   }
 }
 
-async function openPriorityIntervalConfig() {
-  const intervals = typeof getPriorityReminderMinutes === 'function' ? getPriorityReminderMinutes() : { baja: 45, media: 30, alta: 20, muy_alta: 10 };
-  const baja = prompt('Minutos para prioridad BAJA:', intervals.baja || 45);
-  if (baja === null) return;
-  const media = prompt('Minutos para prioridad MEDIA:', intervals.media || 30);
-  if (media === null) return;
-  const alta = prompt('Minutos para prioridad ALTA:', intervals.alta || 20);
-  if (alta === null) return;
-  const muyAlta = prompt('Minutos para prioridad MUY ALTA:', intervals.muy_alta || 10);
-  if (muyAlta === null) return;
+function onWOPriorityMinutesChange() {
+  onWOPriorityMinutesInput();
+}
 
-  const updated = {
-    baja: Math.max(1, parseInt(baja, 10) || 45),
-    media: Math.max(1, parseInt(media, 10) || 30),
-    alta: Math.max(1, parseInt(alta, 10) || 20),
-    muy_alta: Math.max(1, parseInt(muyAlta, 10) || 10)
-  };
-
-  if (typeof setPriorityReminderMinutes === 'function') {
-    setPriorityReminderMinutes(updated);
-  }
-  updateWOPriorityReminderHint();
-  notify('Frecuencias de recordatorio actualizadas correctamente.', 'ok');
+function updateWOPriorityReminderHint(explicitMins) {
+  onWOPriorityChange(explicitMins);
 }
 
 function clearWOForm() {
@@ -1164,6 +1162,12 @@ async function saveWO() {
   const assignedOption = assignSelect && assignSelect.selectedIndex >= 0 ? assignSelect.options[assignSelect.selectedIndex] : null;
   const assignedUserName = (isNetwork && assignedUserId) ? (assignedOption?.getAttribute('data-name') || assignedOption?.text?.replace(/^👤\s*/, '') || '') : '';
 
+  const selectedPriority = document.getElementById('wo-priority')?.value || 'media';
+  const customReminderMins = parseInt(document.getElementById('wo-priority-minutes')?.value, 10);
+  if (!isNaN(customReminderMins) && customReminderMins > 0 && typeof setPriorityReminderMinutes === 'function') {
+    setPriorityReminderMinutes({ [selectedPriority]: customReminderMins });
+  }
+
   const payload = {
     clientName: document.getElementById('wo-client').value.trim(),
     clientPhone: document.getElementById('wo-phone')?.value.trim() || '',
@@ -1180,7 +1184,8 @@ async function saveWO() {
     town: node?.town || typedNode,
     region,
     visitType: document.getElementById('wo-type').value,
-    priority: document.getElementById('wo-priority').value,
+    priority: selectedPriority,
+    reminderIntervalMin: (!isNaN(customReminderMins) && customReminderMins > 0) ? customReminderMins : undefined,
     // Para órdenes de NODO solo guardamos lat/lng cuando el usuario capturó ubicación válida.
     // No usamos la ubicación del nodo porque la orden puede ser de un cliente o referencia distinta.
     lat: parsed.lat || '',

@@ -2021,7 +2021,9 @@ function checkPriorityUnresolvedReminders(orders = []) {
     if (!shouldRemindMe) continue;
 
     const prio = String(order.priority || 'media').toLowerCase();
-    const intervalMins = Number(intervals[prio]) || DEFAULT_PRIORITY_MINUTES[prio] || 30;
+    const intervalMins = (Number(order.reminderIntervalMin) > 0)
+      ? Number(order.reminderIntervalMin)
+      : (Number(intervals[prio]) || DEFAULT_PRIORITY_MINUTES[prio] || 30);
     const intervalMs = intervalMins * 60 * 1000;
 
     const key = `${order.id}_${user.id || user.username}_${order.status}`;
