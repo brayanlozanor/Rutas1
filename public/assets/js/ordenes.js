@@ -424,34 +424,19 @@ function setupOrderControls() {
       if (!event.target.closest('.order-filter-menu-wrap')) closeOrderFilterMenus();
     });
   }
-  const detailField = document.getElementById('wo-detail')?.closest('.fi');
-  const firstModalGrid = document.querySelector('#wo-mo .modal-grid');
-  if (firstModalGrid && !document.getElementById('wo-detail-kind')) {
-    firstModalGrid.insertAdjacentHTML('beforebegin', '<div class="fi wo-detail-kind-field"><label>Tipo de detalle</label><div id="wo-detail-kind-label" class="wo-detail-kind-readonly">Detalle físico</div><input id="wo-detail-kind" type="hidden" value="physical"></div>');
-  }
-  if (detailField && !document.getElementById('wo-category')) {
-    detailField.insertAdjacentHTML('beforebegin', '<div class="fi wo-category-field"><label>Categoría</label><select id="wo-category" required></select></div>');
-    const label = detailField.querySelector('label');
-    if (label) label.textContent = 'Detalle específico';
-    const textarea = document.getElementById('wo-detail');
-    if (textarea) textarea.placeholder = 'Describe exactamente lo que sucede, horario, alcance, equipo o referencia...';
-  }
   const duplicateTownField = document.getElementById('wo-town')?.closest('.fi');
   if (duplicateTownField) duplicateTownField.remove();
   document.getElementById('wo-zone')?.closest('.fi')?.classList.add('wo-zone-field');
-  const equipmentField = document.getElementById('wo-equipment')?.closest('.fi');
-  if (equipmentField) equipmentField.remove();
-  const relationBox = document.getElementById('wo-relation-info');
-  if (relationBox) relationBox.remove();
-  const actions = document.querySelector('#wo-mo .card-actions');
-  if (actions && !document.getElementById('wo-evidence-zone')) {
-    actions.insertAdjacentHTML('beforebegin', `<section id="wo-evidence-zone" class="wo-evidence-zone" tabindex="0">
-      <input id="wo-evidence-input" type="file" accept="image/*" multiple hidden onchange="addWOEvidenceFiles(this.files);this.value=''">
-      <div class="wo-evidence-copy"><strong>Adjuntar evidencias <span>Opcional</span></strong><small>Arrastra imágenes aquí, selecciónalas o pega una captura con Ctrl + V. Máximo 6.</small></div>
-      <label class="btn bgh wo-evidence-button" for="wo-evidence-input">Seleccionar imágenes</label>
-      <div id="wo-evidence-preview" class="wo-evidence-preview"></div>
-    </section>`);
+  const equipmentInput = document.getElementById('wo-equipment');
+  if (equipmentInput) {
+    equipmentInput.readOnly = true;
+    equipmentInput.placeholder = 'Se asigna automáticamente al elegir un pueblo';
+    equipmentInput.removeAttribute('oninput');
+    equipmentInput.removeAttribute('onfocus');
+    equipmentInput.removeAttribute('onblur');
   }
+  const equipmentField = document.getElementById('wo-equipment-field') || document.getElementById('wo-equipment')?.closest('.fi');
+  if (equipmentField) equipmentField.classList.add('wo-equipment-readonly');
   bindWOEvidenceEvents();
   syncWODetailKindField(document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind);
   if (typeof applyRoleFormVisibility === 'function') applyRoleFormVisibility();
@@ -538,6 +523,15 @@ function updateOrderDetailTabs() {
     tab?.classList.toggle('is-active',active);
     tab?.setAttribute('aria-selected',String(active));
   });
+  const heroTitle = document.getElementById('orders-hero-title');
+  const heroSub = document.getElementById('orders-hero-subtitle');
+  if (activeOrderDetailKind === 'physical') {
+    if (heroTitle) heroTitle.textContent = 'Detalles físicos';
+    if (heroSub) heroSub.textContent = 'Administra, prioriza y consulta los detalles de trabajo de campo y pueblos.';
+  } else {
+    if (heroTitle) heroTitle.textContent = 'Detalles de red';
+    if (heroSub) heroSub.textContent = 'Administra, prioriza y atiende los reportes y requerimientos de red.';
+  }
   const newButton = document.querySelector('.order-new-button');
   if (newButton) newButton.setAttribute('aria-label',`Nuevo ${labels[activeOrderDetailKind].toLowerCase().replace(/s$/,'')}`);
   if (typeof updateActiveNavLink === 'function') updateActiveNavLink();
@@ -815,12 +809,35 @@ async function chooseWONode(id) {
   delete document.getElementById('wo-node').dataset.newNodeName;
   document.getElementById('wo-node').classList.remove('wo-new-node-selected');
   const saveButton = document.querySelector('#wo-mo .card-actions .bc');
-  if (saveButton) saveButton.textContent = 'Guardar detalle';
-  document.getElementById('wo-zone').value = n.zone || '';
+  if (saveButton && (!document.getElementById('wo-detail-kind') || document.getElementById('wo-detail-kind').value !== 'network')) {
+    saveButton.textContent = 'Guardar detalle';
+  }
+  if (document.getElementById('wo-zone')) document.getElementById('wo-zone').value = n.zone || '';
   // Importante: en órdenes por nodo NO se autollenan coordenadas del nodo.
   // La ubicación de la tabla debe ser solo la que el usuario capture en "Ubicación".
-  if (document.getElementById('wo-equipment-id')) document.getElementById('wo-equipment-id').value = '';
-  if (document.getElementById('wo-equipment')) document.getElementById('wo-equipment').value = '';
+  const isNetwork = (document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind) === 'network';
+  if (!isNetwork) {
+    if (document.getElementById('wo-equipment-id')) document.getElementById('wo-equipment-id').value = '';
+    if (document.getElementById('wo-equipment')) document.getElementById('wo-equipment').value = 'Consultando antenas vinculadas...';
+    try {
+      const data = await fetchDataPage('equipment',{nodeIds:n.id,paged:'1',windowed:'1',limit:100,offset:0});
+      mergeOrderLookupRecords('equipment',data.equipment);
+    } catch (error) {
+      console.warn('No se pudieron consultar las antenas del pueblo',error);
+    }
+    const linked = getNodeLinkedEquipment(n.id);
+    if (document.getElementById('wo-equipment')) {
+      document.getElementById('wo-equipment').value = linked.length
+        ? linked.map(item => item.name || item.ip || 'Antena').join(', ')
+        : 'Sin antena vinculada';
+    }
+    if (linked.length === 1 && document.getElementById('wo-equipment-id')) {
+      document.getElementById('wo-equipment-id').value = linked[0].id;
+    }
+  } else {
+    if (document.getElementById('wo-equipment-id')) document.getElementById('wo-equipment-id').value = '';
+    if (document.getElementById('wo-equipment')) document.getElementById('wo-equipment').value = '';
+  }
   const menu = document.getElementById('wo-node-suggestions');
   if (menu) menu.classList.remove('open');
   updateWORelationInfo();
@@ -997,8 +1014,37 @@ function chooseWOEquipment(id, fillZone = true) {
 function updateWORelationInfo() {
   const box = document.getElementById('wo-relation-info');
   if (!box) return;
-  box.style.display = 'none';
-  box.textContent = '';
+  const isNetwork = (document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind) === 'network';
+  if (isNetwork) {
+    box.style.display = 'none';
+    box.textContent = '';
+    return;
+  }
+  const node = getSelectedNodeByHiddenId();
+  const eq = getSelectedEquipmentByHiddenId();
+  const lines = [];
+  if (eq) {
+    const eqLabel = getEquipmentRelationLabel(eq.id);
+    if (eqLabel && eqLabel !== 'Sin pueblos vinculados') lines.push(eqLabel);
+  }
+  if (node) {
+    const nodeLabel = getNodeRelationLabel(node.id);
+    if (nodeLabel && nodeLabel !== 'Sin antena vinculada') lines.push(nodeLabel);
+  }
+  const newNodeName = document.getElementById('wo-node')?.dataset.newNodeName || '';
+  box.classList.toggle('is-new-node', Boolean(newNodeName));
+  if (newNodeName) {
+    box.style.display = 'block';
+    box.textContent = `Pueblo nuevo listo: “${newNodeName}”. Selecciona su zona y guarda el detalle.`;
+  } else if (lines.length) {
+    box.style.display = 'block';
+    box.textContent = lines.join(' | ');
+  } else if (!node && !eq) {
+    box.style.display = 'block';
+    box.textContent = 'Selecciona un pueblo registrado o usa la opción “Agregar pueblo”. La antena se asignará automáticamente.';
+  } else {
+    box.style.display = 'none';
+  }
 }
 
 function syncWOFromNode() {
@@ -1147,83 +1193,249 @@ async function ensureOrderRelationRecords(order) {
 function applyRoleFormVisibility() {
   const isSoporte = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
   const isAtencion = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
-  const isNetworkOrder = (document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind) === 'network';
+  const kindVal = document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind;
+  const isNetworkOrder = kindVal === 'network';
 
   const clientInput = document.getElementById('wo-client');
-  const clientFi = clientInput?.closest('.fi');
-  const clientGrid = clientFi?.closest('.modal-grid');
-  const phoneFi = document.getElementById('wo-phone')?.closest('.fi');
+  const clientFi = clientInput?.closest('.fi') || document.getElementById('wo-client-field');
+  const clientGrid = clientFi?.closest('.modal-grid') || document.getElementById('wo-client-grid');
+  const phoneFi = document.getElementById('wo-phone')?.closest('.fi') || document.getElementById('wo-phone-field');
+  const locationFi = document.getElementById('wo-location')?.closest('.fi') || document.getElementById('wo-location-field');
   const nodeInput = document.getElementById('wo-node');
-  const nodeFi = nodeInput?.closest('.fi');
-  const nodeGrid = nodeFi?.closest('.modal-grid');
+  const nodeFi = nodeInput?.closest('.fi') || document.getElementById('wo-node-field');
+  const nodeGrid = nodeFi?.closest('.modal-grid') || document.getElementById('wo-node-equipment-grid');
+  const equipmentFi = document.getElementById('wo-equipment')?.closest('.fi') || document.getElementById('wo-equipment-field');
   const relationInfo = document.getElementById('wo-relation-info');
   const zoneInput = document.getElementById('wo-zone');
-  const zoneFi = zoneInput?.closest('.fi');
-  const zoneGrid = zoneFi?.closest('.modal-grid');
+  const zoneFi = zoneInput?.closest('.fi') || document.getElementById('wo-zone-field');
   const assignFi = document.getElementById('wo-assign-field');
-  const typeFi = document.getElementById('wo-type')?.closest('.fi');
+  const typeFi = document.getElementById('wo-type')?.closest('.fi') || document.getElementById('wo-type-field');
+  const priorityFi = document.getElementById('wo-priority')?.closest('.fi') || document.getElementById('wo-priority-field');
+  const priorityIntervalBox = document.getElementById('wo-priority-interval-box');
+  const priorityLabel = priorityFi?.querySelector('label') || document.getElementById('wo-priority-label');
   const evidenceZone = document.getElementById('wo-evidence-zone');
-  const detailKindFi = document.querySelector('#wo-mo .wo-detail-kind-field');
+  const detailKindFi = document.querySelector('#wo-mo .wo-detail-kind-field') || document.getElementById('wo-detail-kind-container');
 
-  const categoryFi = document.getElementById('wo-category')?.closest('.fi');
-  const categoryLabel = categoryFi?.querySelector('label');
-  const detailFi = document.getElementById('wo-detail')?.closest('.fi');
-  const detailLabel = detailFi?.querySelector('label');
+  const categoryFi = document.getElementById('wo-category')?.closest('.fi') || document.getElementById('wo-category-field');
+  const categoryLabel = categoryFi?.querySelector('label') || document.getElementById('wo-category-label');
+  const detailFi = document.getElementById('wo-detail')?.closest('.fi') || document.getElementById('wo-detail-field');
+  const detailLabel = detailFi?.querySelector('label') || document.getElementById('wo-detail-label');
   const detailTextarea = document.getElementById('wo-detail');
   const modalTitle = document.getElementById('wo-modal-title');
-  const modalSub = document.querySelector('#wo-mo .modal-head p');
+  const modalSub = document.querySelector('#wo-mo .modal-head p') || document.getElementById('wo-modal-subtitle');
   const saveBtn = document.querySelector('#wo-mo .card-actions .bc');
 
-  // En ambas partes ya no es necesario elegir la zona de donde es, debe estar relacionado al pueblo
-  if (zoneFi) zoneFi.style.display = 'none';
+  if (!isNetworkOrder) {
+    // ==========================================
+    // DETALLE FÍSICO (Comunidad, antenas, campo)
+    // ==========================================
+    if (detailKindFi) detailKindFi.style.display = '';
+    const detailKindLabel = document.getElementById('wo-detail-kind-label');
+    if (detailKindLabel) detailKindLabel.textContent = 'Detalle físico';
 
-  if (isSoporte && isNetworkOrder) {
-    // Como Soporte: solo requiere Categoría y Texto (además de prioridad/repetición)
+    if (modalTitle) modalTitle.textContent = editingWOId ? 'Editar detalle físico' : 'Agregar detalle manual';
+    if (modalSub) modalSub.textContent = 'Orden: cliente, categoría, detalle específico, pueblo, zona, tipo y prioridad.';
+    if (saveBtn) saveBtn.textContent = 'Guardar detalle';
+
+    // Cliente y teléfono (2 columnas en modal-grid)
+    if (clientGrid) clientGrid.style.display = '';
+    if (clientFi) {
+      clientFi.style.display = '';
+      const cLabel = clientFi.querySelector('label');
+      if (cLabel) cLabel.textContent = 'NOMBRE CLIENTE';
+    }
+    if (clientInput) clientInput.placeholder = 'Nombre del cliente';
+
+    if (phoneFi) {
+      phoneFi.style.display = '';
+      const pLabel = phoneFi.querySelector('label');
+      if (pLabel) pLabel.textContent = 'NUMERO TELEFONICO OPCIONAL';
+      const pInput = document.getElementById('wo-phone');
+      if (pInput) pInput.placeholder = 'Numero de telefono (opcional)';
+    }
+
+    // Ubicación opcional (1 columna)
+    if (locationFi) {
+      locationFi.style.display = '';
+      const lLabel = locationFi.querySelector('label');
+      if (lLabel) lLabel.textContent = 'UBICACIÓN OPCIONAL';
+      const lInput = document.getElementById('wo-location');
+      if (lInput) lInput.placeholder = 'Solo si el cliente/detalle tiene ubicación propia';
+    }
+
+    // Categoría
+    if (categoryFi) categoryFi.style.display = '';
+    if (categoryLabel) categoryLabel.textContent = 'CATEGORÍA';
+
+    // Detalle específico
+    if (detailFi) detailFi.style.display = '';
+    if (detailLabel) detailLabel.textContent = 'DETALLE ESPECÍFICO';
+    if (detailTextarea) detailTextarea.placeholder = 'Describe exactamente lo que sucede, horario, alcance, equipo o referencia...';
+
+    // Pueblo y Antena asignada (grid de 2 columnas)
+    if (nodeGrid) {
+      nodeGrid.style.display = 'grid';
+      nodeGrid.style.gridTemplateColumns = '1fr 1fr';
+    }
+    if (nodeFi) {
+      nodeFi.style.display = '';
+      nodeFi.style.gridColumn = '';
+      const nLabel = nodeFi.querySelector('label');
+      if (nLabel) nLabel.textContent = 'PUEBLO';
+    }
+    if (nodeInput) nodeInput.placeholder = 'Busca un pueblo o escribe uno nuevo...';
+
+    if (equipmentFi) {
+      equipmentFi.style.display = '';
+      const eLabel = equipmentFi.querySelector('label');
+      if (eLabel) eLabel.textContent = 'ANTENA ASIGNADA';
+      const eInput = document.getElementById('wo-equipment');
+      if (eInput) {
+        eInput.readOnly = true;
+        eInput.placeholder = 'Se asigna automáticamente al elegir un pueblo';
+      }
+    }
+
+    // Relation info box
+    if (relationInfo) {
+      relationInfo.style.display = '';
+      updateWORelationInfo();
+    }
+
+    // Zona (visible y editable en detalles físicos)
+    if (zoneFi) {
+      zoneFi.style.display = '';
+      const zLabel = zoneFi.querySelector('label');
+      if (zLabel) zLabel.textContent = 'ZONA';
+    }
+
+    // Asignación (OCULTO en detalles físicos)
+    if (assignFi) assignFi.style.display = 'none';
+
+    // Tipo de trabajo y Prioridad
+    if (typeFi) {
+      typeFi.style.display = '';
+      const tLabel = typeFi.querySelector('label');
+      if (tLabel) tLabel.textContent = 'TIPO DE TRABAJO';
+    }
+    if (priorityFi) {
+      priorityFi.style.display = '';
+      if (priorityLabel) priorityLabel.textContent = 'PRIORIDAD';
+    }
+    // Ocultar caja de intervalo/recordatorio en físicos
+    if (priorityIntervalBox) priorityIntervalBox.style.display = 'none';
+
+    // Evidencias (OPCIONAL en detalles físicos)
+    if (evidenceZone) {
+      evidenceZone.style.display = '';
+      const evidenceCopy = document.querySelector('#wo-evidence-zone .wo-evidence-copy strong');
+      if (evidenceCopy) {
+        evidenceCopy.innerHTML = 'Adjuntar evidencias <span class="optional-label" style="font-weight:normal;color:#64748b;margin-left:4px;">Opcional</span>';
+      }
+    }
+    return;
+  }
+
+  // ==========================================
+  // DETALLES DE RED
+  // ==========================================
+  if (detailKindFi) detailKindFi.style.display = 'none';
+  if (equipmentFi) equipmentFi.style.display = 'none';
+  if (relationInfo) relationInfo.style.display = 'none';
+  if (zoneFi) zoneFi.style.display = 'none';
+  if (priorityIntervalBox) priorityIntervalBox.style.display = 'inline-flex';
+
+  if (isSoporte) {
+    // ------------------------------------------
+    // SOPORTE -> ATENCIÓN
+    // ------------------------------------------
     if (clientGrid) clientGrid.style.display = 'none';
     if (phoneFi) phoneFi.style.display = 'none';
+    if (locationFi) locationFi.style.display = 'none';
     if (nodeGrid) nodeGrid.style.display = 'none';
-    if (relationInfo) relationInfo.style.display = 'none';
-    if (zoneGrid) zoneGrid.style.display = 'none';
+    if (typeFi) typeFi.style.display = 'none';
+    if (evidenceZone) evidenceZone.style.display = 'none';
+
     if (assignFi) {
       assignFi.style.display = '';
       assignFi.style.gridColumn = '1 / -1';
     }
-    if (typeFi) typeFi.style.display = 'none';
-    if (evidenceZone) evidenceZone.style.display = 'none';
-    if (detailKindFi) detailKindFi.style.display = 'none';
+    const assignLabel = document.getElementById('wo-assign-label');
+    if (assignLabel) assignLabel.textContent = 'Asignación a Atención a clientes';
 
     if (categoryLabel) categoryLabel.textContent = 'Categoría del requerimiento';
     if (detailLabel) detailLabel.textContent = 'Mensaje / Requerimiento para Atención a clientes';
     if (detailTextarea) detailTextarea.placeholder = 'Describe lo que necesitas consultar o solicitar a Atención a clientes...';
+    if (priorityLabel) priorityLabel.textContent = 'Prioridad y frecuencia de recordatorio';
 
     if (modalTitle) modalTitle.textContent = editingWOId ? 'Editar requerimiento para Atención a clientes' : 'Nuevo requerimiento para Atención a clientes';
     if (modalSub) modalSub.textContent = 'Envía un requerimiento o consulta rápida a Atención a clientes.';
     if (saveBtn) saveBtn.textContent = editingWOId ? 'Actualizar requerimiento' : 'Enviar a Atención a clientes';
   } else {
-    // Como Atención a clientes (u otros): todos los campos completos excepto zona (que viene del pueblo) y evidencia obligatoria
+    // ------------------------------------------
+    // ATENCIÓN -> SOPORTE
+    // ------------------------------------------
     if (clientGrid) clientGrid.style.display = '';
-    if (phoneFi) phoneFi.style.display = '';
-    if (nodeGrid) nodeGrid.style.display = '';
-    if (relationInfo) relationInfo.style.display = '';
-    if (zoneGrid) {
-      zoneGrid.style.display = '';
-      zoneGrid.style.gridTemplateColumns = '1fr';
+    if (clientFi) {
+      clientFi.style.display = '';
+      const cLabel = clientFi.querySelector('label');
+      if (cLabel) cLabel.textContent = 'Nombre del cliente';
     }
-    if (assignFi) {
-      assignFi.style.display = '';
-      assignFi.style.gridColumn = '1 / -1';
+    if (clientInput) clientInput.placeholder = 'Nombre completo del cliente';
+
+    if (phoneFi) {
+      phoneFi.style.display = '';
+      const pLabel = phoneFi.querySelector('label');
+      if (pLabel) pLabel.textContent = 'Numero telefonico';
+      const pInput = document.getElementById('wo-phone');
+      if (pInput) pInput.placeholder = 'Numero de telefono (opcional)';
     }
-    if (typeFi) typeFi.style.display = '';
-    if (evidenceZone) evidenceZone.style.display = '';
-    if (detailKindFi) detailKindFi.style.display = '';
+
+    if (locationFi) {
+      locationFi.style.display = '';
+      const lLabel = locationFi.querySelector('label');
+      if (lLabel) lLabel.textContent = 'Ubicación (opcional)';
+      const lInput = document.getElementById('wo-location');
+      if (lInput) lInput.placeholder = 'Coordenadas o referencia de ubicación';
+    }
 
     if (categoryLabel) categoryLabel.textContent = 'Categoría';
     if (detailLabel) detailLabel.textContent = 'Detalle específico';
     if (detailTextarea) detailTextarea.placeholder = 'Describe exactamente lo que reportó el cliente...';
 
-    const evidenceCopy = document.querySelector('#wo-evidence-zone .wo-evidence-copy strong');
-    if (evidenceCopy) {
-      evidenceCopy.innerHTML = 'Adjuntar evidencias <span class="required-indicator" style="color:#ef4444;font-weight:700;margin-left:4px;">* Obligatorio</span>';
+    // En red para atención, pueblo va a ancho completo, sin antena
+    if (nodeGrid) {
+      nodeGrid.style.display = '';
+      nodeGrid.style.gridTemplateColumns = '1fr';
+    }
+    if (nodeFi) {
+      nodeFi.style.display = '';
+      nodeFi.style.gridColumn = '1 / -1';
+      const nLabel = nodeFi.querySelector('label');
+      if (nLabel) nLabel.textContent = 'Pueblo';
+    }
+    if (nodeInput) nodeInput.placeholder = 'Busca un pueblo o escribe uno nuevo...';
+
+    if (assignFi) {
+      assignFi.style.display = '';
+      assignFi.style.gridColumn = '1 / -1';
+    }
+    const assignLabel = document.getElementById('wo-assign-label');
+    if (assignLabel) assignLabel.textContent = 'Asignación a Soporte técnico';
+
+    if (typeFi) {
+      typeFi.style.display = '';
+      const tLabel = typeFi.querySelector('label');
+      if (tLabel) tLabel.textContent = 'Tipo de trabajo';
+    }
+    if (priorityLabel) priorityLabel.textContent = 'Prioridad y frecuencia de recordatorio';
+
+    if (evidenceZone) {
+      evidenceZone.style.display = '';
+      const evidenceCopy = document.querySelector('#wo-evidence-zone .wo-evidence-copy strong');
+      if (evidenceCopy) {
+        evidenceCopy.innerHTML = 'Adjuntar evidencias <span class="required-indicator" style="color:#ef4444;font-weight:700;margin-left:4px;">* Obligatorio</span>';
+      }
     }
 
     if (modalTitle) modalTitle.textContent = editingWOId ? 'Editar reporte para Soporte' : 'Nuevo reporte de red para Soporte';
@@ -1355,7 +1567,8 @@ function showWOFieldError(fieldId,message) {
 async function saveWO() {
   const isSoporte = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
   const isAtencion = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
-  const isNetwork = isSoporte || document.getElementById('wo-detail-kind')?.value === 'network';
+  const kindVal = document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind;
+  const isNetwork = kindVal === 'network';
 
   let node = findNodeFromInput();
   const equipment = getSelectedEquipmentByHiddenId();
@@ -1366,7 +1579,14 @@ async function saveWO() {
   const specificDetail = document.getElementById('wo-detail')?.value.trim() || '';
   const region = document.getElementById('wo-zone')?.value || node?.zone || equipment?.region || '';
 
-  if (isSoporte && isNetwork) {
+  if (!isNetwork) {
+    if (!document.getElementById('wo-client')?.value.trim()) return showWOFieldError('wo-client', 'Escribe el nombre del cliente.');
+    if (!category) return showWOFieldError('wo-category', 'Selecciona la categoría del detalle.');
+    if (!specificDetail) return showWOFieldError('wo-detail', 'Escribe el detalle específico del problema.');
+    if (!typedNode) return showWOFieldError('wo-node', 'Busca un pueblo o escribe uno nuevo.');
+    if (!node) return showWOFieldError('wo-node', 'Selecciona un pueblo registrado o pulsa “Agregar pueblo” para crearlo.');
+    // En detalles físicos las evidencias son opcionales
+  } else if (isSoporte) {
     if (!category) return showWOFieldError('wo-category', 'Selecciona la categoría del requerimiento.');
     if (!specificDetail) return showWOFieldError('wo-detail', 'Escribe el texto o mensaje del requerimiento para Atención a clientes.');
   } else {
@@ -1375,9 +1595,8 @@ async function saveWO() {
     if (!specificDetail) return showWOFieldError('wo-detail', 'Escribe el detalle específico del problema.');
     if (!typedNode) return showWOFieldError('wo-node', 'Busca un pueblo o escribe uno nuevo.');
     if (!node) return showWOFieldError('wo-node', 'Selecciona un pueblo registrado o pulsa “Agregar pueblo” para crearlo.');
-    // La zona se toma automáticamente del pueblo relacionado; si no tiene zona asignada se omite
 
-    // Evidencia obligatoria al subir reporte para Atención a clientes
+    // Evidencia obligatoria al subir reporte de red para Atención a clientes
     const existingEvidences = (existingWO?.technicianReport?.evidencePhotos || []).filter(Boolean);
     if (!woEvidencePhotos.length && !existingEvidences.length) {
       notify('Como Atención a clientes es obligatorio adjuntar al menos una evidencia fotográfica o captura.', 'err');
@@ -1394,13 +1613,35 @@ async function saveWO() {
   const effectiveDetail = specificDetail || orderCategoryLabel(category);
   const assignedUserId = isNetwork ? (document.getElementById('wo-assigned-user')?.value.trim() || '') : '';
   const assignedUserName = isNetwork ? (document.getElementById('wo-assigned-names')?.value.trim() || '') : '';
-  const targetRole = isSoporte ? 'atencion_clientes' : 'soporte';
-  const originRole = isSoporte ? 'soporte' : 'atencion_clientes';
+  const targetRole = isNetwork ? (isSoporte ? 'atencion_clientes' : 'soporte') : '';
+  const originRole = isNetwork ? (isSoporte ? 'soporte' : 'atencion_clientes') : '';
 
   const selectedPriority = document.getElementById('wo-priority')?.value || 'media';
-  const customReminderMins = parseInt(document.getElementById('wo-priority-minutes')?.value, 10);
-  if (!isNaN(customReminderMins) && customReminderMins > 0 && typeof setPriorityReminderMinutes === 'function') {
+  const customReminderMins = isNetwork ? parseInt(document.getElementById('wo-priority-minutes')?.value, 10) : undefined;
+  if (isNetwork && !isNaN(customReminderMins) && customReminderMins > 0 && typeof setPriorityReminderMinutes === 'function') {
     setPriorityReminderMinutes({ [selectedPriority]: customReminderMins });
+  }
+
+  // Antena asignada vinculada para órdenes físicas
+  let linkedEquipmentId = '';
+  let linkedEquipmentName = '';
+  if (!isNetwork) {
+    if (equipment?.id) {
+      linkedEquipmentId = equipment.id;
+      linkedEquipmentName = equipment.name || '';
+    } else if (node?.id) {
+      const linked = getNodeLinkedEquipment(node.id);
+      if (linked.length) {
+        linkedEquipmentId = linked.map(e => e.id).join(',');
+        linkedEquipmentName = linked.map(e => e.name || e.ip || 'Antena').join(', ');
+      }
+    }
+    if (!linkedEquipmentId && document.getElementById('wo-equipment-id')?.value) {
+      linkedEquipmentId = document.getElementById('wo-equipment-id').value;
+    }
+    if (!linkedEquipmentName && document.getElementById('wo-equipment')?.value) {
+      linkedEquipmentName = document.getElementById('wo-equipment').value;
+    }
   }
 
   const payload = {
@@ -1421,8 +1662,8 @@ async function saveWO() {
     nodeCode: (isSoporte && isNetwork) ? (node?.nodeCode || typedNode || 'REQ') : (node?.nodeCode || typedNode),
     nodeName: (isSoporte && isNetwork) ? (node ? getNodeLabel(node) : (typedNode || 'Atención a clientes')) : (node ? getNodeLabel(node) : typedNode),
     town: (isSoporte && isNetwork) ? (node?.town || typedNode || 'General') : (node?.town || typedNode),
-    region: (isSoporte && isNetwork) ? (region || 'General') : region,
-    visitType: (!isSoporte && document.getElementById('wo-type')?.value) ? document.getElementById('wo-type').value : 'comunidad',
+    region: (isSoporte && isNetwork) ? (region || 'General') : (region || node?.zone || ''),
+    visitType: (!isNetwork && document.getElementById('wo-type')?.value) ? document.getElementById('wo-type').value : (isNetwork && !isSoporte && document.getElementById('wo-type')?.value ? document.getElementById('wo-type').value : 'comunidad'),
     priority: selectedPriority,
     reminderIntervalMin: (!isNaN(customReminderMins) && customReminderMins > 0) ? customReminderMins : undefined,
     // Para órdenes de NODO solo guardamos lat/lng cuando el usuario capturó ubicación válida.
@@ -1430,8 +1671,8 @@ async function saveWO() {
     lat: (!isSoporte || !isNetwork) ? (parsed.lat || '') : '',
     lng: (!isSoporte || !isNetwork) ? (parsed.lng || '') : '',
     status: existingWO?.status || 'pendiente',
-    equipmentId: (!isSoporte || !isNetwork) ? (equipment?.id || '') : '',
-    equipmentName: (!isSoporte || !isNetwork) ? (equipment?.name || '') : ''
+    equipmentId: linkedEquipmentId,
+    equipmentName: linkedEquipmentName
   };
   const existingReport = existingWO?.technicianReport;
   if (woEvidencePhotos.length || existingReport) {

@@ -44,10 +44,7 @@
 }
 
 .orders-page .order-detail-tabs {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  margin-left: 98px
+  display: none !important;
 }
 
 .orders-page .order-detail-tab {
@@ -829,7 +826,7 @@
   }
 
   .orders-page .order-detail-tabs {
-    margin-left: 0
+    display: none !important;
   }
 
   .orders-page .order-detail-tab {
@@ -1919,6 +1916,18 @@
   background: #f5f8fb !important;
   color: #5c7189 !important;
   cursor: not-allowed
+}
+
+.orders-page #wo-mo .wo-node-equipment-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 760px) {
+  .orders-page #wo-mo .wo-node-equipment-grid {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 .orders-page .wo-zone-field {

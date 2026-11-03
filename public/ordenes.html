@@ -28,9 +28,9 @@
       <div class="orders-hero-main">
         <div class="orders-hero-copy">
           <span class="module-hero-icon orders-module-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h5M10 12h6M10 16h6M10 8h1"/></svg></span>
-          <div><h1>Centro de órdenes</h1><p>Administra, prioriza y consulta los detalles de trabajo de toda la red.</p></div>
+          <div><h1 id="orders-hero-title">Centro de órdenes</h1><p id="orders-hero-subtitle">Administra, prioriza y consulta los detalles de trabajo de toda la red.</p></div>
         </div>
-        <div class="order-detail-tabs" role="tablist" aria-label="Tipo de detalle">
+        <div class="order-detail-tabs" role="tablist" aria-label="Tipo de detalle" style="display: none !important;">
           <button id="order-tab-network" class="order-detail-tab" type="button" role="tab" aria-selected="false" onclick="selectOrderDetailKind('network')"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><path d="M12 7v4M5 16v-3h14v3"/></svg> Detalles de red</button>
           <button id="order-tab-physical" class="order-detail-tab is-active" type="button" role="tab" aria-selected="true" onclick="selectOrderDetailKind('physical')"><svg viewBox="0 0 24 24"><path d="M14 6a4 4 0 0 0-5 5L3 17l4 4 6-6a4 4 0 0 0 5-5l-3 3-4-4z"/></svg> Detalles físicos</button>
         </div>
@@ -67,7 +67,133 @@
     <section class="content-card orders-table-card"><div id="orders-table"></div></section>
   </div>
 
-  <div class="mo" id="wo-mo"><div class="md modal-wide wo-modal"><div class="modal-head"><div><h2 id="wo-modal-title">Registrar detalle</h2><p>Captura los datos requeridos para la atención del reporte.</p></div><button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('wo-mo')"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><input id="wo-id" type="hidden"><input id="wo-node-id" type="hidden"><input id="wo-equipment-id" type="hidden"><div class="modal-grid"><div class="fi"><label>Nombre del cliente</label><input id="wo-client" placeholder="Nombre completo del cliente"></div><div class="fi"><label>Ubicación (opcional)</label><input id="wo-location" class="mono" placeholder="Coordenadas o referencia de ubicación"></div></div><div class="fi"><label>Descripción del detalle</label><textarea id="wo-detail" rows="4" placeholder="Describe la falla reportada o el trabajo a realizar"></textarea></div><div class="modal-grid"><div class="fi autocomplete-inline" style="grid-column:1 / -1"><label>Pueblo</label><input id="wo-node" autocomplete="off" oninput="renderWONodeSuggestions()" onfocus="renderWONodeSuggestions()" onblur="hideWONodeSuggestionsSoon()" placeholder="Selecciona o escribe el pueblo..."><div id="wo-node-suggestions" class="autocomplete-menu"></div></div></div><div class="modal-grid"><div class="fi wo-zone-field"><label>Zona</label><select id="wo-zone"></select></div><div class="fi wo-assign-field" id="wo-assign-field"><label id="wo-assign-label">Asignación a Soporte técnico</label><div class="wo-multi-assign-wrapper" id="wo-multi-assign-wrapper"><div class="wo-assign-quick-bar"><button type="button" class="wo-assign-all-btn is-active" id="wo-assign-all-btn" onclick="toggleWOAssignAll()"><svg style="width:14px;height:14px;fill:currentColor;" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg><span id="wo-assign-all-text">Todo el equipo (Sin asignar específico)</span></button><span class="wo-assign-hint">O elige uno o varios miembros:</span></div><div class="wo-assign-users-grid" id="wo-assign-users-grid"></div><input type="hidden" id="wo-assigned-user" value=""><input type="hidden" id="wo-assigned-names" value=""></div></div></div><div class="modal-grid"><div class="fi"><label>Tipo de trabajo</label><select id="wo-type"><option value="comunidad">Comunidad</option><option value="torre">Torre</option><option value="troncal">Troncal</option><option value="punto_venta">Punto de venta</option></select></div><div class="fi"><label>Prioridad y frecuencia de recordatorio</label><div class="wo-priority-row" style="display:flex;align-items:center;gap:8px;"><select id="wo-priority" style="flex:1;min-width:0;" onchange="onWOPriorityChange()"><option value="baja" selected>Baja</option><option value="media">Media</option><option value="alta">Alta</option><option value="muy_alta">Muy alta</option></select><div class="wo-priority-interval-box" style="display:inline-flex;align-items:center;gap:4px;background:#f8fafc;border:1px solid #cbd5e1;padding:0 8px;border-radius:8px;height:40px;flex-shrink:0;" title="Intervalo en minutos para recordar atención pendiente"><span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap;">Recordar c/</span><input type="number" id="wo-priority-minutes" min="1" max="1440" style="width:48px;height:28px;text-align:center;font-weight:800;font-size:13px;color:#0f172a;border:1px solid #94a3b8;border-radius:6px;background:#fff;padding:0 2px;" oninput="onWOPriorityMinutesInput()" onchange="onWOPriorityMinutesChange()"><span style="font-size:11px;font-weight:700;color:#64748b;">min</span></div></div></div></div><div class="card-actions"><button class="btn bc" onclick="saveWO()">Guardar detalle</button><button class="btn bgh" onclick="CM('wo-mo')">Cancelar</button></div></div></div>
+  <div class="mo" id="wo-mo">
+    <div class="md modal-wide wo-modal">
+      <div class="modal-head">
+        <div>
+          <h2 id="wo-modal-title">Agregar detalle manual</h2>
+          <p id="wo-modal-subtitle">Orden: cliente, categoría, detalle específico, pueblo, zona, tipo y prioridad.</p>
+        </div>
+        <button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('wo-mo')">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <input id="wo-id" type="hidden">
+      <input id="wo-node-id" type="hidden">
+      <input id="wo-equipment-id" type="hidden">
+
+      <div class="fi wo-detail-kind-field" id="wo-detail-kind-container">
+        <label id="wo-detail-kind-title">TIPO DE DETALLE</label>
+        <div id="wo-detail-kind-label" class="wo-detail-kind-readonly">Detalle físico</div>
+        <input id="wo-detail-kind" type="hidden" value="physical">
+      </div>
+
+      <div class="modal-grid" id="wo-client-grid">
+        <div class="fi" id="wo-client-field">
+          <label id="wo-client-label">NOMBRE CLIENTE</label>
+          <input id="wo-client" placeholder="Nombre del cliente">
+        </div>
+        <div class="fi" id="wo-phone-field">
+          <label id="wo-phone-label">NUMERO TELEFONICO OPCIONAL</label>
+          <input id="wo-phone" type="tel" placeholder="Numero de telefono (opcional)">
+        </div>
+      </div>
+
+      <div class="fi" id="wo-location-field">
+        <label id="wo-location-label">UBICACIÓN OPCIONAL</label>
+        <input id="wo-location" class="mono" placeholder="Solo si el cliente/detalle tiene ubicación propia">
+      </div>
+
+      <div class="fi wo-category-field" id="wo-category-field">
+        <label id="wo-category-label">CATEGORÍA</label>
+        <select id="wo-category" required></select>
+      </div>
+
+      <div class="fi" id="wo-detail-field">
+        <label id="wo-detail-label">DETALLE ESPECÍFICO</label>
+        <textarea id="wo-detail" rows="4" placeholder="Describe exactamente lo que sucede, horario, alcance, equipo o referencia..."></textarea>
+      </div>
+
+      <div class="modal-grid wo-node-equipment-grid" id="wo-node-equipment-grid">
+        <div class="fi autocomplete-inline" id="wo-node-field">
+          <label id="wo-node-label">PUEBLO</label>
+          <input id="wo-node" autocomplete="off" oninput="renderWONodeSuggestions(); updateWORelationInfo()" onfocus="renderWONodeSuggestions()" onblur="hideWONodeSuggestionsSoon()" placeholder="Busca un pueblo o escribe uno nuevo...">
+          <div id="wo-node-suggestions" class="autocomplete-menu"></div>
+        </div>
+        <div class="fi wo-equipment-field wo-equipment-readonly" id="wo-equipment-field">
+          <label id="wo-equipment-label">ANTENA ASIGNADA</label>
+          <input id="wo-equipment" autocomplete="off" readonly placeholder="Se asigna automáticamente al elegir un pueblo">
+          <div id="wo-equipment-suggestions" class="autocomplete-menu"></div>
+        </div>
+      </div>
+
+      <div id="wo-relation-info" class="relation-box"></div>
+
+      <div class="fi wo-zone-field" id="wo-zone-field">
+        <label id="wo-zone-label">ZONA</label>
+        <select id="wo-zone"></select>
+      </div>
+
+      <div class="fi wo-assign-field" id="wo-assign-field">
+        <label id="wo-assign-label">Asignación a Soporte técnico</label>
+        <div class="wo-multi-assign-wrapper" id="wo-multi-assign-wrapper">
+          <div class="wo-assign-quick-bar">
+            <button type="button" class="wo-assign-all-btn is-active" id="wo-assign-all-btn" onclick="toggleWOAssignAll()">
+              <svg style="width:14px;height:14px;fill:currentColor;" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+              <span id="wo-assign-all-text">Todo el equipo (Sin asignar específico)</span>
+            </button>
+            <span class="wo-assign-hint">O elige uno o varios miembros:</span>
+          </div>
+          <div class="wo-assign-users-grid" id="wo-assign-users-grid"></div>
+          <input type="hidden" id="wo-assigned-user" value="">
+          <input type="hidden" id="wo-assigned-names" value="">
+        </div>
+      </div>
+
+      <div class="modal-grid" id="wo-type-priority-grid">
+        <div class="fi" id="wo-type-field">
+          <label id="wo-type-label">TIPO DE TRABAJO</label>
+          <select id="wo-type">
+            <option value="comunidad">Comunidad</option>
+            <option value="torre">Torre</option>
+            <option value="troncal">Troncal</option>
+            <option value="punto_venta">Punto de venta</option>
+          </select>
+        </div>
+        <div class="fi" id="wo-priority-field">
+          <label id="wo-priority-label">PRIORIDAD</label>
+          <div class="wo-priority-row" style="display:flex;align-items:center;gap:8px;">
+            <select id="wo-priority" style="flex:1;min-width:0;" onchange="onWOPriorityChange()">
+              <option value="baja" selected>Baja</option>
+              <option value="media">Media</option>
+              <option value="alta">Alta</option>
+              <option value="muy_alta">Muy alta</option>
+            </select>
+            <div class="wo-priority-interval-box" id="wo-priority-interval-box" style="display:inline-flex;align-items:center;gap:4px;background:#f8fafc;border:1px solid #cbd5e1;padding:0 8px;border-radius:8px;height:40px;flex-shrink:0;" title="Intervalo en minutos para recordar atención pendiente">
+              <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap;">Recordar c/</span>
+              <input type="number" id="wo-priority-minutes" min="1" max="1440" style="width:48px;height:28px;text-align:center;font-weight:800;font-size:13px;color:#0f172a;border:1px solid #94a3b8;border-radius:6px;background:#fff;padding:0 2px;" oninput="onWOPriorityMinutesInput()" onchange="onWOPriorityMinutesChange()">
+              <span style="font-size:11px;font-weight:700;color:#64748b;">min</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <section id="wo-evidence-zone" class="wo-evidence-zone" tabindex="0">
+        <input id="wo-evidence-input" type="file" accept="image/*" multiple hidden onchange="addWOEvidenceFiles(this.files);this.value=''">
+        <div class="wo-evidence-copy">
+          <strong>Adjuntar evidencias <span class="optional-label" style="font-weight:normal;color:#64748b;margin-left:4px;">Opcional</span></strong>
+          <small>Arrastra imágenes aquí, selecciónalas o pega una captura con Ctrl + V. Máximo 6.</small>
+        </div>
+        <label class="btn bgh wo-evidence-button" for="wo-evidence-input">Seleccionar imágenes</label>
+        <div id="wo-evidence-preview" class="wo-evidence-preview"></div>
+      </section>
+
+      <div class="card-actions">
+        <button class="btn bc" onclick="saveWO()">Guardar detalle</button>
+        <button class="btn bgh" onclick="CM('wo-mo')">Cancelar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal para que Soporte resuelva el detalle de red -->
   <div class="mo" id="network-resolve-mo">
