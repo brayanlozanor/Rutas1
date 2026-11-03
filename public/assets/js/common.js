@@ -1375,22 +1375,18 @@ const DETAIL_CATEGORIES_BY_KIND = {
     ['otro_red', 'Otro de red']
   ],
   support_to_attention: [
-    ['preguntar_luz', '⚡ Preguntar si hay luz en comunidad'],
-    ['verificar_cliente', '📞 Contactar cliente por falla general'],
-    ['confirmar_servicio', '📶 Validar calidad con clientes clave'],
-    ['reporte_zona', '⚠️ Aviso de afectación o mantenimiento'],
-    ['otro_soporte', '📌 Otro requerimiento para Atención']
+    ['preguntar_luz', 'Preguntar si hay luz en comunidad'],
+    ['verificar_cliente', 'Contactar cliente por falla general'],
+    ['confirmar_servicio', 'Validar calidad con clientes clave'],
+    ['reporte_zona', 'Aviso de afectación o mantenimiento'],
+    ['otro_soporte', 'Otro requerimiento para Atención']
   ]
 };
 const DETAIL_CATEGORIES = [...DETAIL_CATEGORIES_BY_KIND.physical,...DETAIL_CATEGORIES_BY_KIND.network,...DETAIL_CATEGORIES_BY_KIND.support_to_attention];
 
 function detailCategoriesForKind(kind) {
-  const isSoporte = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
   if (kind === 'network') {
-    if (isSoporte) {
-      return DETAIL_CATEGORIES_BY_KIND.support_to_attention;
-    }
-    return DETAIL_CATEGORIES_BY_KIND.network;
+    return [...DETAIL_CATEGORIES_BY_KIND.network, ...DETAIL_CATEGORIES_BY_KIND.support_to_attention];
   }
   return DETAIL_CATEGORIES_BY_KIND.physical;
 }

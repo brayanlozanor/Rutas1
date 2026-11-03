@@ -64,11 +64,11 @@ const ORDER_CATEGORIES_BY_KIND = {
     ['otro_red', 'Otro de red']
   ],
   support_to_attention: [
-    ['preguntar_luz', '⚡ Preguntar si hay luz en comunidad'],
-    ['verificar_cliente', '📞 Contactar cliente por falla general'],
-    ['confirmar_servicio', '📶 Validar calidad con clientes clave'],
-    ['reporte_zona', '⚠️ Aviso de afectación o mantenimiento'],
-    ['otro_soporte', '📌 Otro requerimiento para Atención']
+    ['preguntar_luz', 'Preguntar si hay luz en comunidad'],
+    ['verificar_cliente', 'Contactar cliente por falla general'],
+    ['confirmar_servicio', 'Validar calidad con clientes clave'],
+    ['reporte_zona', 'Aviso de afectación o mantenimiento'],
+    ['otro_soporte', 'Otro requerimiento para Atención']
   ]
 };
 const ORDER_CATEGORIES = [...ORDER_CATEGORIES_BY_KIND.physical,...ORDER_CATEGORIES_BY_KIND.network,...ORDER_CATEGORIES_BY_KIND.support_to_attention];
@@ -181,13 +181,9 @@ function orderCategoryLabel(value) {
 }
 
 function orderCategoriesForKind(kind) {
-  const isSoporte = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
   if (kind === 'network') {
-    if (isSoporte) {
-      // Como soporte solo creo detalles que van dirigidos a Atención a clientes
-      return ORDER_CATEGORIES_BY_KIND.support_to_attention;
-    }
-    return ORDER_CATEGORIES_BY_KIND.network;
+    // Se muestran todas las categorías de red y soporte sin filtrar por área
+    return [...ORDER_CATEGORIES_BY_KIND.network, ...ORDER_CATEGORIES_BY_KIND.support_to_attention];
   }
   return ORDER_CATEGORIES_BY_KIND.physical;
 }
