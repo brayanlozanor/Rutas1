@@ -13,7 +13,8 @@ import {
   deletePlans,
   deleteRecord,
   getDashboardGoal,
-  setDashboardGoal
+  setDashboardGoal,
+  ensureRelationalSchema
 } from './relational-store.js';
 
 const CORS = {
@@ -202,6 +203,13 @@ export default {
     try {
       if (request.method === 'POST' && !hasTrustedOrigin(request)) {
         return json({ok:false,success:false,error:'Origen de solicitud no permitido',errorType:'AUTORIZACION',errorCode:'ORIGIN_NOT_ALLOWED',requestId},403);
+      }
+      if (url.pathname.startsWith('/api/')) {
+        try {
+          await ensureRelationalSchema(env);
+        } catch (schemaErr) {
+          console.warn('[Worker] ensureRelationalSchema error:', schemaErr);
+        }
       }
       if (request.method === 'POST' && url.pathname === '/api/login') {
         if (!sessionSecret(env)) {

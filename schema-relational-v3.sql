@@ -144,12 +144,16 @@ CREATE TABLE IF NOT EXISTS work_orders (
     title TEXT NOT NULL,
     category TEXT,
     detail_kind TEXT NOT NULL DEFAULT 'physical',
+    target_role TEXT,
+    origin_role TEXT,
     review_opened_at TEXT,
     review_opened_by TEXT,
     reviewed_at TEXT,
     last_resent_at TEXT,
     follow_ups_json TEXT,
     source_order_id TEXT,
+    assigned_user_id TEXT,
+    assigned_user_name TEXT,
     description TEXT,
   legacy_desc TEXT,
   client_name TEXT,
@@ -188,6 +192,9 @@ CREATE INDEX IF NOT EXISTS idx_work_orders_node ON work_orders(node_id);
 CREATE INDEX IF NOT EXISTS idx_work_orders_status ON work_orders(status);
 CREATE INDEX IF NOT EXISTS idx_work_orders_created_at ON work_orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_work_orders_detail_kind ON work_orders(detail_kind);
+CREATE INDEX IF NOT EXISTS idx_work_orders_target_role ON work_orders(target_role);
+CREATE INDEX IF NOT EXISTS idx_work_orders_origin_role ON work_orders(origin_role);
+CREATE INDEX IF NOT EXISTS idx_work_orders_assigned_user ON work_orders(assigned_user_id);
 CREATE TABLE IF NOT EXISTS work_order_reports (
   id TEXT PRIMARY KEY,
   work_order_id TEXT NOT NULL UNIQUE,

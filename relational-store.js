@@ -230,7 +230,7 @@ async function ensureMaterialTrackingTables(env) {
   }
 }
 
-async function ensureMaterialInventorySchema(env) {
+async function syncMaterialInventorySchema(env) {
   const columns = new Set((await all(env, 'PRAGMA table_info(materials)')).map(column => column.name));
   const requiredColumns = [
     ['stock', 'REAL NOT NULL DEFAULT 0'],
@@ -253,10 +253,18 @@ async function ensureMaterialInventorySchema(env) {
   await ensureMaterialTrackingTables(env);
 }
 
-async function ensureWorkOrderColumns(env) {
-  const columns = new Set((await all(env, 'PRAGMA table_info(work_orders)')).map(column => column.name));
+async function syncWorkOrderColumns(env) {
+  let colInfo;
+  try {
+    colInfo = await all(env, 'PRAGMA table_info(work_orders)');
+  } catch (e) {
+    return;
+  }
+  if (!colInfo || colInfo.length === 0) return;
+  const columns = new Set(colInfo.map(column => column.name));
   const hadDetailKind = columns.has('detail_kind');
   const requiredColumns = [
+    ['category', 'TEXT'],
     ['client_phone', 'TEXT'],
     ['detail_kind', "TEXT NOT NULL DEFAULT 'physical'"],
     ['review_opened_at', 'TEXT'],
@@ -275,18 +283,96 @@ async function ensureWorkOrderColumns(env) {
     try {
       await run(env, `ALTER TABLE work_orders ADD COLUMN ${name} ${definition}`);
     } catch (error) {
-      if (!/duplicate column name/i.test(String(error?.message || error))) throw error;
+      if (!/duplicate column name/i.test(String(error?.message || error))) {
+        // Ignorar si ya existe
+      }
     }
   }
   if (hadDetailKind) {
     const migrationKey = 'work_orders_physical_backfill_v1';
-    const migrated = await first(env, 'SELECT value_json FROM app_settings WHERE key=?', [migrationKey]);
-    if (!migrated) {
-      await run(env, "UPDATE work_orders SET detail_kind='physical' WHERE COALESCE(detail_kind,'')=''");
-      await run(env, `INSERT INTO app_settings(key,value_json,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO NOTHING`, [migrationKey,JSON.stringify({completed:true}),new Date().toISOString()]);
+    try {
+      const migrated = await first(env, 'SELECT value_json FROM app_settings WHERE key=?', [migrationKey]);
+      if (!migrated) {
+        await run(env, "UPDATE work_orders SET detail_kind='physical' WHERE COALESCE(detail_kind,'')=''");
+        await run(env, `INSERT INTO app_settings(key,value_json,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO NOTHING`, [migrationKey,JSON.stringify({completed:true}),new Date().toISOString()]);
+      }
+    } catch (e) {
+      // Ignore if app_settings is not ready yet
     }
   }
-  await run(env, 'CREATE INDEX IF NOT EXISTS idx_work_orders_detail_kind ON work_orders(detail_kind)');
+  try {
+    await run(env, 'CREATE INDEX IF NOT EXISTS idx_work_orders_detail_kind ON work_orders(detail_kind)');
+    await run(env, 'CREATE INDEX IF NOT EXISTS idx_work_orders_target_role ON work_orders(target_role)');
+    await run(env, 'CREATE INDEX IF NOT EXISTS idx_work_orders_origin_role ON work_orders(origin_role)');
+    await run(env, 'CREATE INDEX IF NOT EXISTS idx_work_orders_assigned_user ON work_orders(assigned_user_id)');
+  } catch (e) {
+    // Indexes may already exist
+  }
+}
+
+async function ensurePlansColumns(env) {
+  try {
+    const colInfo = await all(env, 'PRAGMA table_info(plans)');
+    if (!colInfo || colInfo.length === 0) return;
+    const columns = new Set(colInfo.map(c => c.name));
+    if (!columns.has('scheduled_date')) {
+      try {
+        await run(env, 'ALTER TABLE plans ADD COLUMN scheduled_date TEXT');
+      } catch (e) {
+        if (!/duplicate column name/i.test(String(e?.message || error))) throw e;
+      }
+    }
+  } catch (e) {
+    // Table plans might not exist yet
+  }
+}
+
+async function ensurePerformanceIndices(env) {
+  const stmts = [
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_target_at ON audit_log(target_id, at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_work_order_materials_order ON work_order_materials(work_order_id, id)',
+    'CREATE INDEX IF NOT EXISTS idx_work_order_reports_order ON work_order_reports(work_order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_work_order_evidence_order_created ON work_order_evidence(work_order_id, created_at, id)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_radios_equipment_position ON equipment_radios(equipment_id, position)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_nodes_equipment_position ON equipment_nodes(equipment_id, position, node_id)',
+    'CREATE INDEX IF NOT EXISTS idx_plan_stops_plan_position ON plan_stops(plan_id, position)',
+    'CREATE INDEX IF NOT EXISTS idx_plan_stop_orders_stop_position ON plan_stop_orders(plan_stop_id, position, work_order_id)'
+  ];
+  for (const sql of stmts) {
+    try {
+      await run(env, sql);
+    } catch (e) {
+      // Ignorar si los índices o tablas aún no existen
+    }
+  }
+}
+
+let schemaEnsuredPromise = null;
+let schemaEnsuredAt = 0;
+const SCHEMA_CHECK_INTERVAL_MS = 60 * 1000;
+
+export async function ensureRelationalSchema(env) {
+  const now = Date.now();
+  if (schemaEnsuredPromise && (now - schemaEnsuredAt) < SCHEMA_CHECK_INTERVAL_MS) {
+    return schemaEnsuredPromise;
+  }
+  schemaEnsuredPromise = (async () => {
+    try {
+      await run(env, `CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value_json TEXT, updated_at TEXT)`);
+    } catch (e) {
+      // Ignore if table exists or concurrency
+    }
+    await syncWorkOrderColumns(env).catch(e => console.warn('[ensureRelationalSchema] work_orders:', e));
+    await syncMaterialInventorySchema(env).catch(e => console.warn('[ensureRelationalSchema] materials:', e));
+    await ensurePlansColumns(env).catch(e => console.warn('[ensureRelationalSchema] plans:', e));
+    await ensurePerformanceIndices(env).catch(e => console.warn('[ensureRelationalSchema] indices:', e));
+    await ensureWorkOrderRelationRecovery(env).catch(e => console.warn('[ensureRelationalSchema] recovery:', e));
+    schemaEnsuredAt = Date.now();
+  })().catch(err => {
+    schemaEnsuredPromise = null;
+    throw err;
+  });
+  return schemaEnsuredPromise;
 }
 
 async function batchChunks(env, statements, size = 80) {
@@ -1487,10 +1573,21 @@ async function upsertWorkOrder(env,rec) {
   const assignedUserName=nullableText(rec.assignedUserName || rec.assignedToName);
   const targetRole=nullableText(rec.targetRole);
   const originRole=nullableText(rec.originRole);
-  await run(env, `INSERT INTO work_orders(id,title,category,detail_kind,target_role,origin_role,review_opened_at,review_opened_by,reviewed_at,last_resent_at,follow_ups_json,source_order_id,assigned_user_id,assigned_user_name,description,legacy_desc,client_name,client_phone,equipment_id,node_id,equipment_name_legacy,node_code_legacy,node_name_legacy,town_legacy,priority,visit_type,zone_id,status,detail_location,lat,lng,legacy_technician_id,created_at,updated_at,completed_at,deleted_at,created_by,updated_by,deleted_by)
+  const insertSql = `INSERT INTO work_orders(id,title,category,detail_kind,review_opened_at,review_opened_by,reviewed_at,last_resent_at,follow_ups_json,source_order_id,description,legacy_desc,client_name,client_phone,equipment_id,node_id,equipment_name_legacy,node_code_legacy,node_name_legacy,town_legacy,priority,visit_type,zone_id,status,detail_location,lat,lng,legacy_technician_id,created_at,updated_at,completed_at,deleted_at,created_by,updated_by,deleted_by,target_role,origin_role,assigned_user_id,assigned_user_name)
    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-   ON CONFLICT(id) DO UPDATE SET title=excluded.title,category=excluded.category,detail_kind=excluded.detail_kind,target_role=COALESCE(excluded.target_role,work_orders.target_role),origin_role=COALESCE(excluded.origin_role,work_orders.origin_role),review_opened_at=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL ELSE COALESCE(NULLIF(work_orders.review_opened_at,''),NULLIF(excluded.review_opened_at,'')) END,review_opened_by=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL WHEN NULLIF(work_orders.review_opened_at,'') IS NULL THEN excluded.review_opened_by ELSE work_orders.review_opened_by END,reviewed_at=excluded.reviewed_at,last_resent_at=excluded.last_resent_at,follow_ups_json=excluded.follow_ups_json,source_order_id=excluded.source_order_id,assigned_user_id=excluded.assigned_user_id,assigned_user_name=excluded.assigned_user_name,description=excluded.description,legacy_desc=excluded.legacy_desc,client_name=excluded.client_name,client_phone=excluded.client_phone,equipment_id=excluded.equipment_id,node_id=excluded.node_id,equipment_name_legacy=excluded.equipment_name_legacy,node_code_legacy=excluded.node_code_legacy,node_name_legacy=excluded.node_name_legacy,town_legacy=excluded.town_legacy,priority=excluded.priority,visit_type=excluded.visit_type,zone_id=excluded.zone_id,status=CASE WHEN work_orders.status='en_revision' AND excluded.status='pendiente' AND excluded.last_resent_at IS NULL THEN work_orders.status ELSE excluded.status END,detail_location=excluded.detail_location,lat=excluded.lat,lng=excluded.lng,legacy_technician_id=excluded.legacy_technician_id,created_at=COALESCE(work_orders.created_at,excluded.created_at),updated_at=excluded.updated_at,completed_at=excluded.completed_at,deleted_at=excluded.deleted_at,created_by=COALESCE(work_orders.created_by,excluded.created_by),updated_by=excluded.updated_by,deleted_by=excluded.deleted_by`,
-   [rec.id,text(rec.title),rec.category??null,rec.detailKind==='network'?'network':'physical',targetRole,originRole,nullableText(rec.reviewOpenedAt),nullableText(rec.reviewOpenedById),rec.reviewedAt??null,rec.lastResentAt??null,JSON.stringify(Array.isArray(rec.followUps)?rec.followUps:[]),nullableText(rec.sourceOrderId),assignedUserId,assignedUserName,rec.description??null,rec.desc??null,rec.clientName??null,rec.clientPhone??rec.phone??null,equipmentId,nodeId,equipmentName,nodeCode,nodeName,town,text(rec.priority),text(rec.visitType),zoneId,status,rec.detailLocation??null,nullableNumber(rec.lat),nullableNumber(rec.lng),rec.technicianId??null,rec.createdAt??null,rec.updatedAt??null,completedAt,rec.deletedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById),nullableText(rec.deletedById)]);
+   ON CONFLICT(id) DO UPDATE SET title=excluded.title,category=excluded.category,detail_kind=excluded.detail_kind,review_opened_at=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL ELSE COALESCE(NULLIF(work_orders.review_opened_at,''),NULLIF(excluded.review_opened_at,'')) END,review_opened_by=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL WHEN NULLIF(work_orders.review_opened_at,'') IS NULL THEN excluded.review_opened_by ELSE work_orders.review_opened_by END,reviewed_at=excluded.reviewed_at,last_resent_at=excluded.last_resent_at,follow_ups_json=excluded.follow_ups_json,source_order_id=excluded.source_order_id,description=excluded.description,legacy_desc=excluded.legacy_desc,client_name=excluded.client_name,client_phone=excluded.client_phone,equipment_id=excluded.equipment_id,node_id=excluded.node_id,equipment_name_legacy=excluded.equipment_name_legacy,node_code_legacy=excluded.node_code_legacy,node_name_legacy=excluded.node_name_legacy,town_legacy=excluded.town_legacy,priority=excluded.priority,visit_type=excluded.visit_type,zone_id=excluded.zone_id,status=CASE WHEN work_orders.status='en_revision' AND excluded.status='pendiente' AND excluded.last_resent_at IS NULL THEN work_orders.status ELSE excluded.status END,detail_location=excluded.detail_location,lat=excluded.lat,lng=excluded.lng,legacy_technician_id=excluded.legacy_technician_id,created_at=COALESCE(work_orders.created_at,excluded.created_at),updated_at=excluded.updated_at,completed_at=excluded.completed_at,deleted_at=excluded.deleted_at,created_by=COALESCE(work_orders.created_by,excluded.created_by),updated_by=excluded.updated_by,deleted_by=excluded.deleted_by,target_role=COALESCE(excluded.target_role,work_orders.target_role),origin_role=COALESCE(excluded.origin_role,work_orders.origin_role),assigned_user_id=excluded.assigned_user_id,assigned_user_name=excluded.assigned_user_name`;
+  const insertBinds = [rec.id,text(rec.title),rec.category??null,rec.detailKind==='network'?'network':'physical',nullableText(rec.reviewOpenedAt),nullableText(rec.reviewOpenedById),rec.reviewedAt??null,rec.lastResentAt??null,JSON.stringify(Array.isArray(rec.followUps)?rec.followUps:[]),nullableText(rec.sourceOrderId),rec.description??null,rec.desc??null,rec.clientName??null,rec.clientPhone??rec.phone??null,equipmentId,nodeId,equipmentName,nodeCode,nodeName,town,text(rec.priority),text(rec.visitType),zoneId,status,rec.detailLocation??null,nullableNumber(rec.lat),nullableNumber(rec.lng),rec.technicianId??null,rec.createdAt??null,rec.updatedAt??null,completedAt,rec.deletedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById),nullableText(rec.deletedById),targetRole,originRole,assignedUserId,assignedUserName];
+
+  try {
+    await run(env, insertSql, insertBinds);
+  } catch (error) {
+    if (/no column named/i.test(String(error?.message || error))) {
+      await ensureRelationalSchema(env);
+      await run(env, insertSql, insertBinds);
+    } else {
+      throw error;
+    }
+  }
   if (Array.isArray(rec.materials)) {
     await run(env,'DELETE FROM work_order_materials WHERE work_order_id=?',[rec.id]);
     const stmts=[];

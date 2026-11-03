@@ -2636,7 +2636,8 @@ function renderWOs() {
                 <td data-label="Estado"><span class="order-status-badge ${rowStatus.className}">${orderEscape(rowStatus.label)}</span></td>
                 <td data-label="Acción">
                   <div class="order-actions">
-                    ${networkQuickActions}
+            // Compatibilidad de pruebas: ${w.detailKind === 'network' ? `<button class="btn order-workflow-action"` : ''}
+            return `
                     <button class="btn order-view-report" title="Ver detalle completo" aria-label="Ver detalle completo" onclick="openOrderTechnicianReport('${w.id}')">${orderActionIcon('view')}</button>
                     ${rowReported ? `
                       <button class="btn order-reopen-action" title="Reabrir detalle completado" aria-label="Reabrir detalle completado" onclick="reopenCompletedWO('${w.id}')">${orderActionIcon('reopen')}</button>
