@@ -2443,6 +2443,66 @@ async function sendWOToPhysical(id) {
   await saveOrderWorkflow(order,'envió detalle a físicos','El mismo folio fue enviado a Detalles físicos.');
 }
 
+async function promptSendNetworkToPhysical(id) {
+  const order = (state.workOrders || []).find(item => item.id === id && !item.deletedAt);
+  if (!order) return notify('No se encontró el detalle solicitado.', 'err');
+
+  const client = order.clientName || 'el cliente';
+  const folio = getOrderFolio(order);
+  const promptMessage = `Derivar folio ${folio} (${client}) directo a Detalles Físicos.\n\nEscribe el motivo o instrucción para la visita en campo:`;
+  const defaultNote = 'Requiere visita presencial para revisión física en sitio.';
+  const reason = window.prompt(promptMessage, defaultNote);
+  if (reason === null) return;
+  const note = reason.trim() || defaultNote;
+
+  const previousCategory = orderCategoryLabel(getOrderCategory(order));
+  const previousDetail = order.description || order.title || '';
+  const currentUser = getCurrentUser();
+  const userName = currentUser.name || currentUser.username || 'Atención a clientes';
+  const now = new Date().toISOString();
+
+  order.detailKind = 'physical';
+  order.category = 'otro';
+  order.title = note;
+  order.description = note;
+  order.status = 'pendiente';
+  order.completedAt = '';
+  order.reviewOpenedAt = '';
+  order.reviewOpenedById = '';
+  order.reviewOpenedByName = '';
+  order.reviewOpenedByUsername = '';
+  order.reviewedAt = '';
+  order.lastResentAt = now;
+  order.updatedAt = now;
+  order.updatedById = currentUser.id || '';
+
+  resetOrderReportForResend(order);
+  appendSharedNetworkFollowUp(
+    order,
+    'physical',
+    'Derivado a Detalle Físico',
+    `${note} · Solicitado por: ${userName} · Origen: ${previousCategory}${previousDetail ? ` · Reporte original: ${previousDetail}` : ''}`
+  );
+  setUpdatedAudit(order, 'derivó detalle de red a detalles físicos para visita en campo');
+
+  const saved = await saveRecord('workOrders', order);
+  if (!saved) {
+    notify('No se pudo derivar la orden a detalles físicos. Intente nuevamente.', 'err');
+    return;
+  }
+
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(order, 'sent_to_physical');
+    }
+  } catch (e) {
+    console.warn('broadcastNetworkOrderChange error:', e);
+  }
+
+  notify(`El folio ${folio} fue transferido a Detalles Físicos exitosamente.`, 'ok');
+  await loadOrderPage();
+}
+
 async function openWOCopy(id) {
   const source = (state.workOrders || []).find(item => item.id === id && !item.deletedAt);
   if (!source) return;
@@ -2715,7 +2775,19 @@ async function openOrderTechnicianReport(orderId) {
         <div class="evidence-strip-empty">Sin evidencias fotográficas adjuntas.</div>
       `}
     </section>
-    ${!completed ? (order.status === 'resuelto_soporte' ? '<div class="order-report-pending" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0"><strong>✓ Resuelto por Soporte:</strong> En espera de que Atención a clientes confirme la satisfacción con el cliente.</div>' : (order.status === 'devuelto_soporte' ? `<div class="order-report-pending" style="background:#fff1f2;color:#be123c;border-color:#fecdd3"><strong>⚠️ Devuelto a Soporte:</strong> ${orderEscape(order.returnReason || 'Atención a clientes indicó que el cliente sigue presentando fallas.')}${order.returnByName ? `<div style="font-size:12px;margin-top:5px;color:#9f1239;">Devuelto por: <strong>${orderEscape(order.returnByName)}</strong></div>` : ''}</div>` : '<div class="order-report-pending">Esta orden sigue pendiente. Se muestran los datos capturados al registrarla.</div>')) : ''}`;
+    ${!completed ? (order.status === 'resuelto_soporte' ? '<div class="order-report-pending" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0"><strong>✓ Resuelto por Soporte:</strong> En espera de que Atención a clientes confirme la satisfacción con el cliente.</div>' : (order.status === 'devuelto_soporte' ? `<div class="order-report-pending" style="background:#fff1f2;color:#be123c;border-color:#fecdd3"><strong>⚠️ Devuelto a Soporte:</strong> ${orderEscape(order.returnReason || 'Atención a clientes indicó que el cliente sigue presentando fallas.')}${order.returnByName ? `<div style="font-size:12px;margin-top:5px;color:#9f1239;">Devuelto por: <strong>${orderEscape(order.returnByName)}</strong></div>` : ''}</div>` : '<div class="order-report-pending">Esta orden sigue pendiente. Se muestran los datos capturados al registrarla.</div>')) : ''}` +
+    ((order.detailKind === 'network' && (userHasRole('atencion_clientes') || userHasRole('administrador', 'admin')) && (order.status === 'resuelto_soporte' || order.status === 'no_realizado')) ? `
+      <div class="order-report-conclude-actions" style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0;flex-wrap:wrap;">
+        ${order.status === 'resuelto_soporte' ? `
+          <button type="button" class="btn net-btn-confirm" onclick="requestCloseOrderReport();confirmNetworkClientSatisfied('${order.id}')" title="Confirmar satisfacción del cliente y concluir reporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Conforme</button>
+          <button type="button" class="btn net-btn-return" onclick="requestCloseOrderReport();openReturnNetworkModal('${order.id}')" title="Devolver reporte a Soporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
+        ` : `
+          <button type="button" class="btn net-btn-confirm" onclick="requestCloseOrderReport();confirmNetworkUnresolvableConcluded('${order.id}')" title="Concluir trámite formalmente"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Concluir</button>
+          <button type="button" class="btn net-btn-return" onclick="requestCloseOrderReport();openReturnNetworkModal('${order.id}')" title="Devolver reporte a Soporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
+        `}
+        <button type="button" class="btn net-btn-physical" onclick="requestCloseOrderReport();promptSendNetworkToPhysical('${order.id}')" title="Derivar este reporte directo a Detalles Físicos"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Enviar a Detalles Físicos</button>
+      </div>
+    ` : '');
   OM('order-tech-report-mo');
 }
 
@@ -2869,6 +2941,7 @@ function renderWOs() {
                     networkQuickActions = `
                       <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Confirmar satisfacción del cliente y concluir reporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Conforme</button>
                       <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Devolver reporte a Soporte por falla persistente o inconformidad"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
+                      <button type="button" class="btn net-btn-physical" onclick="promptSendNetworkToPhysical('${w.id}')" title="Derivar este reporte directo a Detalles Físicos"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> A Físicos</button>
                     `;
                   } else {
                     networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Atención a clientes valide la conformidad con el cliente">Por validar</span>`;
@@ -2879,6 +2952,7 @@ function renderWOs() {
                   networkQuickActions = `
                     <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkUnresolvableConcluded('${w.id}')" title="Concluir trámite indicando imposibilidad técnica"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Concluir</button>
                     <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Devolver reporte a Soporte con nuevas observaciones"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
+                    <button type="button" class="btn net-btn-physical" onclick="promptSendNetworkToPhysical('${w.id}')" title="Derivar este reporte directo a Detalles Físicos"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> A Físicos</button>
                   `;
                 } else {
                   networkQuickActions = `<span class="net-pill-waiting" style="background:#fef2f2;color:#b91c1c;border-color:#fecdd3;" title="Soporte reportó imposibilidad técnica para solucionar este reporte">No realizado</span>`;

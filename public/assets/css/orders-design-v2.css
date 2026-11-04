@@ -625,7 +625,7 @@
   gap: 7px !important
 }
 
-.orders-page .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend) {
+.orders-page .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend):not(.net-btn-physical) {
   display: grid !important;
   width: 32px !important;
   height: 32px !important;
@@ -976,7 +976,7 @@
     flex-wrap: nowrap !important
   }
 
-  .orders-page .orders-table-card .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend) {
+  .orders-page .orders-table-card .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend):not(.net-btn-physical) {
     flex: 0 0 32px !important;
     width: 32px !important;
     min-width: 32px !important
@@ -2531,6 +2531,35 @@
 
 .orders-page .order-actions .net-btn-return:hover {
   background: #ffe4e6 !important;
+  transform: translateY(-1px) !important;
+}
+
+.orders-page .order-actions .net-btn-physical {
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: 29px !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 0 8px !important;
+  border-radius: 7px !important;
+  background: #eff6ff !important;
+  border: 1px solid #93c5fd !important;
+  color: #1d4ed8 !important;
+  font-size: 10.5px !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  box-shadow: 0 2px 5px rgba(29, 78, 216, 0.15) !important;
+  transition: transform 0.15s, background 0.15s !important;
+}
+
+.orders-page .order-actions .net-btn-physical:hover {
+  background: #dbeafe !important;
+  border-color: #3b82f6 !important;
+  color: #1e40af !important;
   transform: translateY(-1px) !important;
 }
 

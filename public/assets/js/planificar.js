@@ -916,11 +916,11 @@ function renderTechnicianRouteOverview() {
             <div class="tech-route-stop-item ${isExpanded ? 'expanded' : ''}">
                 <button type="button" class="tech-route-stop-btn ${isExpanded ? 'active' : ''}" onclick="toggleTechnicianRouteStopDetails('${escapeAttr(stop.id)}')">
                     <span>${index + 1}</span>
-                    <div class="tech-route-stop-info">
-                        <strong>${escapeHtml(stopName)}</strong>
-                        <small>${progress.done}/${progress.total} detalles hechos</small>
+                    <strong class="tech-stop-name">${escapeHtml(stopName)}</strong>
+                    <div class="tech-stop-badge-col">
+                        <small class="tech-stop-progress-text">${progress.done}/${progress.total} detalles hechos</small>
+                        <svg class="tech-chevron-icon ${isExpanded ? 'open' : ''}" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </div>
-                    <svg class="tech-chevron-icon ${isExpanded ? 'open' : ''}" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
                 ${detailsHtml}
             </div>
@@ -2754,13 +2754,13 @@ async function dropPlanStop(event, day, targetId) {
 }
 
 function getTechnicianStopName(stop, equipment, node) {
+    if (equipment || stop?.type === 'equipment' || stop?.equipmentId) {
+        return `Antena de "${equipment?.name || stop?.name || 'Sin nombre'}"`;
+    }
     if (node || stop?.type === 'node' || stop?.nodeId) {
         const raw = node?.town || node?.name || stop?.town || stop?.name || 'Pueblo';
         const clean = String(raw).replace(/^\s*R\s*\d+\s*[·:._-]*\s*/i, '').trim() || String(raw).trim();
         return `Pueblo ${clean}`;
-    }
-    if (equipment || stop?.type === 'equipment' || stop?.equipmentId) {
-        return `Antena de "${equipment?.name || stop?.name || 'Sin nombre'}"`;
     }
     return stop?.name || 'Parada';
 }
@@ -3587,9 +3587,10 @@ async function reportPlanDetailIncomplete(detailId, stopId) {
     const now = new Date().toISOString();
     const actor = getCurrentUser();
     const attempt = { type:'detalle', reason, at:now, byId:actor.id || '', byName:actor.name || actor.username || '' };
-    // Se considera atendido en estadisticas, aunque el tecnico puede
-    // terminarlo posteriormente desde la lista de no realizados.
+    // Se considera atendido en estadisticas, registrado formalmente en detalles fisicos
+    // y disponible para envio de reporte por WhatsApp.
     detail.status = 'no_realizado';
+    detail.detailKind = 'physical';
     detail.completedAt = now;
     detail.updatedAt = now;
     detail.technicianReport = { ...(detail.technicianReport || {}), result:'no_realizado', reason, completedAt:now, completedBy:actor.id || '', completedByName:actor.name || actor.username || '' };
@@ -3600,7 +3601,8 @@ async function reportPlanDetailIncomplete(detailId, stopId) {
     const saved = await saveDB();
     if (!saved) return notify('No se pudo guardar el reporte en la nube.', 'err');
     renderPlan();
-    notify('Se ha registrado el motivo de no conclusión. El detalle permanece disponible para su posterior atención.', 'ok');
+    openTechnicianCompletionSummary(detail);
+    notify('Se ha registrado en Detalles Físicos y se generó el reporte para WhatsApp.', 'ok');
 }
 
 async function reportWholeStopIncomplete(stopId) {
@@ -6407,7 +6409,7 @@ function openTechnicianCompletionForm(detailId) {
     technicianCompletionPhotos = getAdminTechReportPhotos(detail.technicianReport || {}).slice(0, 6);
     let modal = document.getElementById('tech-completion-mo');
     if (!modal) {
-        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-completion-mo"><div class="md tech-installation-modal tech-completion-modal"><div class="tech-installation-head"><div><div class="mt2">Terminar detalle</div><small>Completa el reporte antes de marcar el trabajo como terminado.</small></div><button class="btn bsm bgh" type="button" onclick="CM('tech-completion-mo')">Cerrar</button></div><div class="row2"><div class="fi"><label>Nombre del cliente</label><input id="tech-completion-client" placeholder="Nombre completo"></div><div class="fi"><label>Número telefónico</label><input id="tech-completion-phone" type="tel" inputmode="tel" placeholder="Ej. 747 123 4567"></div></div><div class="fi"><label>Ubicación en coordenadas</label><div class="tech-coordinate-row"><input id="tech-completion-location" class="mono" placeholder="18.09563, -99.19604"><button class="btn bgh" type="button" onclick="useCurrentTechnicianCoordinates()">Usar mi ubicación</button></div></div><div class="fi"><label>¿Qué se hizo en el detalle?</label><textarea id="tech-completion-work" rows="4" placeholder="Describe el trabajo realizado"></textarea></div><div class="fi"><label>Observaciones <span class="optional-label">Opcional</span></label><textarea id="tech-completion-notes" rows="3" placeholder="Observaciones adicionales"></textarea></div><div class="tech-evidence-box"><strong>Evidencias obligatorias</strong><small>Agrega al menos una fotografía. Máximo 6.</small><div class="tech-evidence-actions"><label class="btn bc">Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">Seleccionar de galería<input type="file" accept="image/*" multiple onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label></div><div id="tech-completion-evidence-preview" class="tech-install-evidence-preview"></div></div><button class="btn bc bfu" type="button" onclick="saveTechnicianCompletion()">Guardar y marcar como terminado</button></div></div>`);
+        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-completion-mo"><div class="md tech-installation-modal tech-completion-modal"><div class="tech-installation-head"><div><div class="mt2">Terminar detalle</div><small>Completa el reporte antes de marcar el trabajo como terminado.</small></div><button class="btn bsm bgh" type="button" onclick="CM('tech-completion-mo')">Cerrar</button></div><div class="row2"><div class="fi"><label>Nombre del cliente</label><input id="tech-completion-client" placeholder="Nombre completo"></div><div class="fi"><label>Número telefónico</label><input id="tech-completion-phone" type="tel" inputmode="tel" placeholder="Ej. 747 123 4567"></div></div><div class="fi"><label>Ubicación en coordenadas</label><div class="tech-coordinate-row"><input id="tech-completion-location" class="mono" placeholder="18.09563, -99.19604"><button class="btn bgh" type="button" onclick="useCurrentTechnicianCoordinates()">Usar mi ubicación</button></div></div><div class="fi"><label>¿Qué se hizo en el detalle?</label><textarea id="tech-completion-work" rows="4" placeholder="Describe el trabajo realizado"></textarea></div><div class="fi"><label>Observaciones <span class="optional-label">Opcional</span></label><textarea id="tech-completion-notes" rows="3" placeholder="Observaciones adicionales"></textarea></div><div class="tech-evidence-box"><strong>Evidencias obligatorias</strong><small>Agrega al menos una fotografía. Máximo 6.</small><div class="tech-evidence-actions"><label class="btn bc">Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">Seleccionar de galería<input type="file" accept="image/*" multiple onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label></div><div id="tech-completion-evidence-preview" class="tech-install-evidence-preview"></div></div><div class="tech-completion-actions-row" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;"><button class="btn bc bfu" type="button" style="flex:1 1 200px;" onclick="saveTechnicianCompletion()">Guardar y marcar como terminado</button><button class="btn ba tech-modal-btn-incomplete" type="button" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:800;padding:0 18px;min-height:50px;border-radius:14px;cursor:pointer;" onclick="markCurrentDetailIncompleteFromModal()">No concluido / No realizado</button></div></div></div>`);
         modal = document.getElementById('tech-completion-mo');
     }
     const completionPhone = document.getElementById('tech-completion-phone');
@@ -6416,7 +6418,9 @@ function openTechnicianCompletionForm(detailId) {
     if (completionPhone) completionPhone.placeholder = 'Ej. 747 123 4567 (opcional)';
     const modalTitle = modal.querySelector('.tech-installation-head .mt2');
     const modalSubtitle = modal.querySelector('.tech-installation-head small');
-    const saveButton = modal.querySelector('.tech-completion-modal > button:last-child');
+    const saveButton = modal.querySelector('.tech-completion-actions-row button.bfu') || modal.querySelector('.tech-completion-modal > button:last-child');
+    const incompleteBtn = modal.querySelector('.tech-modal-btn-incomplete');
+    if (incompleteBtn) incompleteBtn.style.display = editingCompleted ? 'none' : 'inline-flex';
     if (modalTitle) modalTitle.textContent = editingCompleted ? 'Editar detalle terminado' : 'Terminar detalle';
     if (modalSubtitle) modalSubtitle.textContent = editingCompleted
         ? 'Corrige la información necesaria. Se registrará la fecha y hora de modificación.'
@@ -6429,6 +6433,14 @@ function openTechnicianCompletionForm(detailId) {
     document.getElementById('tech-completion-notes').value = detail.technicianReport?.observations || '';
     renderTechnicianCompletionPhotos();
     OM('tech-completion-mo');
+}
+
+function markCurrentDetailIncompleteFromModal() {
+    const detailId = technicianCompletionDetailId;
+    if (!detailId) return;
+    const stop = getPlanStopsForView('general').find(s => (s.detailIds || []).includes(detailId));
+    CM('tech-completion-mo');
+    reportPlanDetailIncomplete(detailId, stop?.id || '');
 }
 
 function useCurrentTechnicianCoordinates() {
@@ -6494,6 +6506,7 @@ async function saveTechnicianCompletion() {
     detail.lat = Number(coordinates[1]);
     detail.lng = Number(coordinates[2]);
     detail.status = 'completada';
+    detail.detailKind = 'physical';
     detail.folio = getDetailFolio(detail);
     detail.completedAt = editingCompleted && originalCompletedAt ? originalCompletedAt : now;
     detail.updatedAt = now;
@@ -6546,6 +6559,9 @@ function openTechnicianCompletionSummary(detail) {
     const town = getTechnicianReportTown(detail);
     const photos = getAdminTechReportPhotos(report);
     const user = getCurrentUser();
+    const isNoDone = detail.status === 'no_realizado' || report.result === 'no_realizado';
+    const isInstallation = detail.category === 'instalacion';
+
     let modal = document.getElementById('tech-completion-summary-mo');
     if (!modal) {
         document.body.insertAdjacentHTML('beforeend', '<div class="mo tech-completion-summary-mo" id="tech-completion-summary-mo"><div class="tech-completion-summary-card" id="tech-completion-summary-card"></div></div>');
@@ -6553,8 +6569,13 @@ function openTechnicianCompletionSummary(detail) {
     }
     const card = document.getElementById('tech-completion-summary-card');
     if (!card) return;
-    card.innerHTML = `<div class="tech-summary-report-head"><span class="tech-summary-report-check">✓</span><div><small>REPORTE DE AVANCE</small><h2>Detalle terminado</h2></div></div>
-        <div class="tech-summary-report-progress"><strong>${completed} de ${dayDetails.length}</strong><span>detalles completados hoy</span><b>${pending} pendiente${pending === 1 ? '' : 's'}</b></div>
+
+    const checkIcon = isNoDone
+        ? `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`
+        : `<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.8" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
+
+    card.innerHTML = `<div class="tech-summary-report-head"><span class="tech-summary-report-check ${isNoDone ? 'is-unsolved' : ''}">${checkIcon}</span><div><small>${isNoDone ? 'REPORTE DE INCIDENCIA' : (isInstallation ? 'NUEVA ORDEN REGISTRADA' : 'REPORTE DE AVANCE')}</small><h2>${isNoDone ? 'Detalle no realizado' : (isInstallation ? 'Nueva instalación' : 'Detalle terminado')}</h2></div></div>
+        <div class="tech-summary-report-progress"><strong>${completed} de ${dayDetails.length}</strong><span>detalles procesados hoy</span><b>${pending} pendiente${pending === 1 ? '' : 's'}</b></div>
         <div class="tech-summary-report-grid">
             <div><small>Técnico</small><strong>${escapeHtml(user.name || user.nombre || user.username || 'Técnico')}</strong></div>
             <div><small>Fecha y hora</small><strong>${escapeHtml(new Date(report.completedAt || detail.completedAt || Date.now()).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'}))}</strong></div>
@@ -6563,11 +6584,17 @@ function openTechnicianCompletionSummary(detail) {
             <div><small>Pueblo o comunidad</small><strong>${escapeHtml(town)}</strong></div>
             <div><small>Ubicación</small><strong>${escapeHtml(detail.detailLocation || report.location || 'Sin ubicación')}</strong></div>
         </div>
-        <div class="tech-summary-report-detail tech-summary-report-attended"><small>Detalle atendido</small><span class="tech-summary-folio">${escapeHtml(getDetailFolio(detail))}</span><strong>${escapeHtml(requestedDetail)}</strong></div>
+        <div class="tech-summary-report-detail tech-summary-report-attended"><small>Detalle reportado</small><span class="tech-summary-folio">${escapeHtml(getDetailFolio(detail))}</span><strong>${escapeHtml(requestedDetail)}</strong></div>
+        ${isNoDone ? `
+            <div class="tech-summary-report-detail" style="border-left:4px solid #ef4444;background:#fef2f2;padding:12px 14px;border-radius:10px;">
+                <small style="color:#b91c1c;font-weight:900;">Motivo de no conclusión / imposibilidad</small>
+                <strong style="color:#991b1b;font-size:14px;display:block;margin-top:3px;">${escapeHtml(report.reason || 'Sin motivo especificado')}</strong>
+            </div>
+        ` : ''}
         ${completedWork ? `<div class="tech-summary-report-detail"><small>Trabajo realizado</small><strong>${escapeHtml(completedWork)}</strong></div>` : ''}
         ${report.observations ? `<div class="tech-summary-report-detail"><small>Observaciones</small><strong>${escapeHtml(report.observations)}</strong></div>` : ''}
         ${photos.length ? `<div class="tech-summary-report-photos">${photos.slice(0,4).map((photo,index) => `<img src="${escapeAttr(photo)}" alt="Evidencia ${index + 1}">`).join('')}</div>` : ''}
-        <div class="tech-summary-report-footer"><span>WiFiMex · Avance del ${escapeHtml(formatCalendarDate(date))}</span><div><button type="button" class="btn bgh" onclick="copyTechnicianOrderNumber('${escapeAttr(detail.id)}')">Copiar orden</button><button type="button" class="btn tech-whatsapp-share" onclick="shareTechnicianCompletion('${escapeAttr(detail.id)}')">Compartir evidencia</button><button type="button" class="btn bgh" onclick="CM('tech-completion-summary-mo')">Cerrar</button></div></div>`;
+        <div class="tech-summary-report-footer"><span>WiFiMex · ${isNoDone ? 'Incidencia' : 'Avance'} del ${escapeHtml(formatCalendarDate(date))}</span><div><button type="button" class="btn bgh" onclick="copyTechnicianOrderNumber('${escapeAttr(detail.id)}')">Copiar orden</button><button type="button" class="btn tech-whatsapp-share" onclick="shareTechnicianCompletion('${escapeAttr(detail.id)}')">Compartir reporte WhatsApp</button><button type="button" class="btn bgh" onclick="CM('tech-completion-summary-mo')">Cerrar</button></div></div>`;
     OM('tech-completion-summary-mo');
 }
 
@@ -6648,6 +6675,7 @@ async function createTechnicianSummaryImage(detail) {
     const report = detail.technicianReport || {};
     const user = getCurrentUser();
     const isInstallation = detail.category === 'instalacion';
+    const isNoDone = detail.status === 'no_realizado' || report.result === 'no_realizado';
     const requestedDetail = getTechnicianReportRequestedText(detail);
     const completedWork = getTechnicianReportCompletedWork(detail, requestedDetail);
     const town = getTechnicianReportTown(detail);
@@ -6655,12 +6683,19 @@ async function createTechnicianSummaryImage(detail) {
     canvas.width = 1080;
     canvas.height = 1700;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#eaf4fb'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = isNoDone ? '#fff1f2' : '#eaf4fb'; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#ffffff'; ctx.fillRect(54, 48, 972, canvas.height - 96);
-    ctx.fillStyle = '#0aa35d'; ctx.beginPath(); ctx.arc(126, 130, 48, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif'; ctx.fillText('✓', 108, 148);
-    ctx.fillStyle = '#0874e8'; ctx.font = 'bold 23px sans-serif'; ctx.fillText(isInstallation ? 'NUEVA ORDEN REGISTRADA' : 'REPORTE DE AVANCE', 202, 107);
-    ctx.fillStyle = '#10264a'; ctx.font = 'bold 48px sans-serif'; ctx.fillText(isInstallation ? 'Nueva instalación' : 'Detalle terminado', 202, 162);
+    if (isNoDone) {
+        ctx.fillStyle = '#dc2626'; ctx.beginPath(); ctx.arc(126, 130, 48, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif'; ctx.fillText('!', 116, 148);
+        ctx.fillStyle = '#b91c1c'; ctx.font = 'bold 23px sans-serif'; ctx.fillText('REPORTE DE INCIDENCIA', 202, 107);
+        ctx.fillStyle = '#10264a'; ctx.font = 'bold 48px sans-serif'; ctx.fillText('Detalle no realizado', 202, 162);
+    } else {
+        ctx.fillStyle = '#0aa35d'; ctx.beginPath(); ctx.arc(126, 130, 48, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif'; ctx.fillText('V', 108, 148);
+        ctx.fillStyle = '#0874e8'; ctx.font = 'bold 23px sans-serif'; ctx.fillText(isInstallation ? 'NUEVA ORDEN REGISTRADA' : 'REPORTE DE AVANCE', 202, 107);
+        ctx.fillStyle = '#10264a'; ctx.font = 'bold 48px sans-serif'; ctx.fillText(isInstallation ? 'Nueva instalación' : 'Detalle terminado', 202, 162);
+    }
     ctx.fillStyle = '#d8e7f2'; ctx.fillRect(84, 204, 912, 2);
     const fields = isInstallation ? [
         ['NÚMERO DE ORDEN', getDetailFolio(detail)],
@@ -6671,6 +6706,15 @@ async function createTechnicianSummaryImage(detail) {
         ['PUEBLO O COMUNIDAD', town],
         ['UBICACIÓN', detail.detailLocation || 'Sin ubicación'],
         ['DETALLES DE LA INSTALACIÓN', report.solution || 'Sin observaciones adicionales']
+    ] : (isNoDone ? [
+        ['FOLIO DEL DETALLE', getDetailFolio(detail)],
+        ['TÉCNICO', user.name || user.nombre || user.username || 'Técnico'],
+        ['FECHA Y HORA', new Date(report.completedAt || detail.completedAt || Date.now()).toLocaleString('es-MX')],
+        ['CLIENTE', detail.clientName || 'Sin nombre'],
+        ['PUEBLO O COMUNIDAD', town],
+        ['UBICACIÓN', detail.detailLocation || report.location || 'Sin ubicación'],
+        ['DETALLE NO CONCLUIDO', requestedDetail],
+        ['MOTIVO DE NO CONCLUSIÓN', report.reason || 'Sin motivo especificado']
     ] : [
         ['FOLIO DEL DETALLE', getDetailFolio(detail)],
         ['TÉCNICO', user.name || user.nombre || user.username || 'Técnico'],
@@ -6680,14 +6724,14 @@ async function createTechnicianSummaryImage(detail) {
         ['UBICACIÓN', detail.detailLocation || report.location || 'Sin ubicación'],
         ['DETALLE ATENDIDO', requestedDetail],
         ...(completedWork ? [['TRABAJO REALIZADO', completedWork]] : [])
-    ];
+    ]);
     let y = 244;
     fields.forEach(([label, value], index) => {
-        const boxHeight = index >= (isInstallation ? 7 : 5) ? 132 : 104;
-        ctx.fillStyle = index === 0 ? '#e9f4ff' : '#f8fbfe'; ctx.fillRect(84, y, 912, boxHeight);
-        ctx.fillStyle = '#667b92'; ctx.font = 'bold 20px sans-serif'; ctx.fillText(label, 108, y + 31);
-        ctx.fillStyle = index === 0 ? '#0868bd' : '#10264a'; ctx.font = index === 0 ? 'bold 39px sans-serif' : 'bold 28px sans-serif';
-        drawSummaryWrappedText(ctx, value, 108, y + 72, 852, 34, index >= (isInstallation ? 7 : 5) ? 2 : 1);
+        const boxHeight = index >= (isInstallation ? 7 : (isNoDone ? 6 : 5)) ? 132 : 104;
+        ctx.fillStyle = index === 0 ? (isNoDone ? '#fee2e2' : '#e9f4ff') : '#f8fbfe'; ctx.fillRect(84, y, 912, boxHeight);
+        ctx.fillStyle = isNoDone && index === 0 ? '#b91c1c' : '#667b92'; ctx.font = 'bold 20px sans-serif'; ctx.fillText(label, 108, y + 31);
+        ctx.fillStyle = index === 0 ? (isNoDone ? '#991b1b' : '#0868bd') : '#10264a'; ctx.font = index === 0 ? 'bold 39px sans-serif' : 'bold 28px sans-serif';
+        drawSummaryWrappedText(ctx, value, 108, y + 72, 852, 34, index >= (isInstallation ? 7 : (isNoDone ? 6 : 5)) ? 2 : 1);
         y += boxHeight + 12;
     });
     const photos = getAdminTechReportPhotos(report).slice(0, 4);
@@ -6736,7 +6780,11 @@ async function shareTechnicianCompletion(detailId) {
     const detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
     if (!detail) return;
     const folio = getDetailFolio(detail);
-    const shareText = `Número de orden: ${folio}`;
+    const isNoDone = detail.status === 'no_realizado' || detail.technicianReport?.result === 'no_realizado';
+    const reason = detail.technicianReport?.reason || '';
+    const shareText = isNoDone
+        ? `WiFiMex - Reporte de Incidencia\nFolio: ${folio}\nCliente: ${detail.clientName || 'Sin cliente'}\nEstado: No realizado / No concluido\nMotivo: ${reason}`
+        : `WiFiMex - Reporte de Servicio\nFolio: ${folio}\nCliente: ${detail.clientName || 'Sin cliente'}\nEstado: Concluido satisfactoriamente`;
     let canvas;
     let blob;
     try {
@@ -6750,7 +6798,7 @@ async function shareTechnicianCompletion(detailId) {
     const copied = await copyTechnicianOrderNumber(detailId, false);
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files:[file] }))) {
         try {
-            await navigator.share({ title:`Detalle ${folio}`, text:shareText, files:[file] });
+            await navigator.share({ title: isNoDone ? `Incidencia ${folio}` : `Detalle ${folio}`, text:shareText, files:[file] });
             if (copied) notify('Evidencia compartida. El número de orden también quedó copiado.');
             return;
         }
@@ -6761,9 +6809,11 @@ async function shareTechnicianCompletion(detailId) {
     link.download = file.name;
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
+    window.open(waUrl, '_blank');
     notify(copied
-        ? 'Imagen descargada y número de orden copiado. Ya puedes pegarlo en WhatsApp.'
-        : 'Imagen descargada. Ya puedes enviarla por WhatsApp.');
+        ? 'Reporte copiado y WhatsApp abierto para enviar la información.'
+        : 'Reporte generado. Abriendo WhatsApp...');
 }
 
 function openTechnicianAddMenu() {
