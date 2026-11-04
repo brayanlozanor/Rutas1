@@ -777,6 +777,46 @@ function openTechnicianRouteMap() {
     }, 180);
 }
 
+const expandedTechRouteStopIds = new Set();
+
+function getDetailLocationInfo(detail) {
+    if (!detail) return { hasLocation: false, label: 'Sin ubicación', url: '' };
+    const raw = detail.detailLocation || detail.technicianReport?.location || '';
+    if (raw && typeof getLocationDisplay === 'function') {
+        const loc = getLocationDisplay(raw);
+        if (loc && (loc.hasLocation || loc.url)) {
+            return {
+                hasLocation: true,
+                label: loc.label || (loc.lat && loc.lng ? `${loc.lat}, ${loc.lng}` : 'Ubicación registrada'),
+                url: loc.url || (loc.lat && loc.lng ? `https://www.google.com/maps?q=${loc.lat},${loc.lng}` : '')
+            };
+        }
+    }
+    const lat = safeFloat(detail.lat);
+    const lng = safeFloat(detail.lng);
+    if (!isNaN(lat) && !isNaN(lng)) {
+        return {
+            hasLocation: true,
+            label: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+            url: `https://www.google.com/maps?q=${lat},${lng}`
+        };
+    }
+    return {
+        hasLocation: false,
+        label: 'Sin ubicación registrada',
+        url: ''
+    };
+}
+
+function toggleTechnicianRouteStopDetails(stopId) {
+    if (expandedTechRouteStopIds.has(stopId)) {
+        expandedTechRouteStopIds.delete(stopId);
+    } else {
+        expandedTechRouteStopIds.add(stopId);
+    }
+    renderTechnicianRouteOverview();
+}
+
 function renderTechnicianRouteOverview() {
     if (!isTechnicianPlanView()) return;
     const plan = getSelectedGeneralPlan();
@@ -798,7 +838,93 @@ function renderTechnicianRouteOverview() {
     if (names) names.innerHTML = stops.length ? stops.map((stop, index) => {
         const equipment = stop.equipmentId ? (state.equipment || []).find(item => item.id === stop.equipmentId && !item.deletedAt) : null;
         const node = stop.nodeId ? (state.nodes || []).find(item => item.id === stop.nodeId && !item.deletedAt) : null;
-        return `<button type="button" onclick="openTechnicianRouteStop('${escapeAttr(stop.id)}')"><span>${index + 1}</span><strong>${escapeHtml(getTechnicianStopName(stop, equipment, node))}</strong><small>${getStopProgress(stop).done}/${getStopProgress(stop).total} detalles hechos</small></button>`;
+        const progress = getStopProgress(stop);
+        const isExpanded = expandedTechRouteStopIds.has(stop.id);
+        const stopName = getTechnicianStopName(stop, equipment, node);
+        const details = getStopDetails(stop);
+
+        const detailsHtml = isExpanded ? `
+            <div class="tech-route-stop-expanded-details" id="tech-stop-expanded-${escapeAttr(stop.id)}">
+                <div class="tech-expanded-header">
+                    <span>Detalles asignados a esta parada (${details.length})</span>
+                </div>
+                ${details.length ? details.map(detail => {
+                    const done = detail.status === 'completada';
+                    const noDone = detail.status === 'no_realizado';
+                    const category = getPlanDetailCategory(detail);
+                    const folio = getDetailFolio(detail);
+                    const client = detail.clientName || 'Sin cliente registrado';
+                    const rawPhone = String(detail.clientPhone || detail.phone || detail.technicianReport?.phone || '').replace(/\D/g, '');
+                    const phone = detail.clientPhone || detail.phone || '';
+                    const detailText = getWorkOrderRequestedText(detail, 'Sin especificación');
+                    const locInfo = getDetailLocationInfo(detail);
+
+                    const phoneBtn = rawPhone ? `
+                        <a href="tel:${escapeAttr(rawPhone)}" class="tech-call-btn" title="Llamar al cliente" onclick="event.stopPropagation()">
+                            <svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                            Llamar
+                        </a>` : '';
+
+                    const actionsHtml = `
+                        <button type="button" class="btn bsm bgh" onclick="event.stopPropagation();openPlanDetailReport('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}')">Ver reporte</button>
+                        ${done
+                            ? `<button type="button" class="btn bsm tech-detail-edit" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Editar solución</button>`
+                            : (noDone
+                                ? `<button type="button" class="btn bsm bg2 tech-detail-finish tech-detail-finish-later" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Concluir detalle</button>`
+                                : `<button type="button" class="btn bsm bg2 tech-detail-finish" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Concluir detalle</button><button type="button" class="btn bsm ba tech-detail-incomplete" onclick="event.stopPropagation();reportPlanDetailIncomplete('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}')">No realizado</button>`)}`;
+
+                    const gpsHtml = locInfo.hasLocation ? `
+                        <div class="tech-detail-location-badge has-gps">
+                            <svg class="tech-gps-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+                            <strong>Con ubicación GPS:</strong>
+                            <a class="order-location-link" href="${escapeAttr(locInfo.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Abrir Maps (${escapeHtml(locInfo.label)})</a>
+                        </div>` : `
+                        <div class="tech-detail-location-badge no-gps">
+                            <svg class="tech-gps-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+                            <span class="order-location-muted no-location">Sin ubicación GPS registrada</span>
+                        </div>`;
+
+                    return `
+                        <div class="tech-inline-detail-card ${done ? 'is-done' : (noDone ? 'is-nodone' : 'is-pending')}" style="border-left-color:${pc(detail.priority)}">
+                            <div class="tech-inline-detail-top">
+                                <div class="tech-inline-detail-badges">
+                                    <span class="detail-folio">${escapeHtml(folio)}</span>
+                                    <span class="badge ${done ? 'bgn' : (noDone ? 'ba' : 'bty')}">${done ? 'Completado' : (noDone ? 'No realizado' : 'Pendiente')}</span>
+                                    <span class="plan-category-badge category-${escapeAttr(category)}">${escapeHtml(planCategoryLabel(category))}</span>
+                                    <span class="priority-badge priority-${escapeAttr(detail.priority || 'media')}"><span class="priority-dot"></span>${escapeHtml(pl(detail.priority || 'media'))}</span>
+                                </div>
+                            </div>
+                            <div class="tech-inline-detail-body">
+                                <div class="tech-inline-detail-client">
+                                    <strong>Cliente:</strong> ${escapeHtml(client)}
+                                </div>
+                                <div class="tech-inline-detail-desc">
+                                    <strong>Detalle:</strong> ${escapeHtml(detailText)}
+                                </div>
+                                ${gpsHtml}
+                            </div>
+                            <div class="tech-inline-detail-actions">
+                                ${phoneBtn}
+                                ${actionsHtml}
+                            </div>
+                        </div>
+                    `;
+                }).join('') : '<div class="tech-route-detail-empty">No hay detalles asignados a esta parada.</div>'}
+            </div>` : '';
+
+        return `
+            <div class="tech-route-stop-item ${isExpanded ? 'expanded' : ''}">
+                <button type="button" class="tech-route-stop-btn ${isExpanded ? 'active' : ''}" onclick="toggleTechnicianRouteStopDetails('${escapeAttr(stop.id)}')">
+                    <span>${index + 1}</span>
+                    <div class="tech-route-stop-info">
+                        <strong>${escapeHtml(stopName)}</strong>
+                        <small>${progress.done}/${progress.total} detalles hechos</small>
+                    </div>
+                    <svg class="tech-chevron-icon ${isExpanded ? 'open' : ''}" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                </button>
+                ${detailsHtml}
+            </div>
+        `;
     }).join('') : '<div class="plan-empty">No hay paradas para este día.</div>';
 }
 
@@ -850,16 +976,40 @@ function renderTechnicianDayMap() {
             const equipment = (state.equipment || []).find(item => item.id === stop.equipmentId && !item.deletedAt);
             const lat = safeFloat(equipment?.lat);
             const lng = safeFloat(equipment?.lng);
-            if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng, name:`Antena de "${equipment?.name || stop.name || 'Sin nombre'}"` });
+            if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng, name:`Antena de "${equipment?.name || stop.name || 'Sin nombre'}"`, stop, isAntenna:true });
         }
         getStopDetails(stop).forEach(detail => {
             const parsed = typeof parseOptionalLocation === 'function' ? parseOptionalLocation(detail.detailLocation || '') : {};
             const lat = safeFloat(detail.lat ?? parsed.lat);
             const lng = safeFloat(detail.lng ?? parsed.lng);
-            if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng, name: `${getDetailFolio(detail)} · ${detail.clientName || detail.title || 'Detalle'}` });
+            if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng, name: `${getDetailFolio(detail)} · ${detail.clientName || detail.title || 'Detalle'}`, detail, stop });
         });
     });
-    points.forEach((point, index) => L.marker([point.lat, point.lng]).bindTooltip(`${index + 1}. ${point.name}`).addTo(technicianDayMapLayer));
+    points.forEach((point, index) => {
+        const marker = L.marker([point.lat, point.lng]).bindTooltip(`${index + 1}. ${point.name}`).addTo(technicianDayMapLayer);
+        if (point.detail) {
+            const d = point.detail;
+            const folio = getDetailFolio(d);
+            const client = d.clientName || 'Sin cliente';
+            const locInfo = getDetailLocationInfo(d);
+            marker.bindPopup(`
+                <div class="plan-map-popup">
+                    <strong>${index + 1}. ${escapeHtml(folio)}</strong>
+                    <div style="font-size:12px;font-weight:700;margin:3px 0">${escapeHtml(client)}</div>
+                    <div style="font-size:11px;color:#64748b;margin-bottom:6px">${escapeHtml(d.title || d.desc || '')}</div>
+                    ${locInfo.hasLocation ? `<div style="margin-top:6px"><a class="order-location-link" href="${escapeAttr(locInfo.url)}" target="_blank" rel="noopener">Abrir en Google Maps</a></div>` : ''}
+                </div>
+            `);
+        } else if (point.stop) {
+            marker.bindPopup(`
+                <div class="plan-map-popup">
+                    <strong>${index + 1}. ${escapeHtml(point.name)}</strong>
+                    <div style="font-size:11px;color:#64748b;margin:3px 0">${point.lat.toFixed(5)}, ${point.lng.toFixed(5)}</div>
+                    <div style="margin-top:6px"><a class="order-location-link" href="https://www.google.com/maps?q=${point.lat},${point.lng}" target="_blank" rel="noopener">Abrir en Google Maps</a></div>
+                </div>
+            `);
+        }
+    });
     if (points.length) technicianDayMap.fitBounds(points.map(point => [point.lat, point.lng]), { padding:[28,28], maxZoom:15 });
     else technicianDayMap.setView([17.55, -99.50], 8);
     const dateLabel = document.getElementById('tech-day-map-date');
@@ -1622,6 +1772,7 @@ function renderPlanKpis() {
 
     if (isTechnicianPlanView()) {
         updateTechnicianProgressCard();
+        renderTechnicianRouteOverview();
         checkAndTriggerTechnicianProductivityBriefings();
         updateTechnicianMobileBellBadge();
         return;
@@ -2503,12 +2654,16 @@ function renderStopCard(stop, day, index) {
     const history = getStopHistorySummary(stop);
     const technicianStopName = getTechnicianStopName(stop, eq, node);
     const antennaLocationUrl = eq && !isNaN(safeFloat(eq.lat)) && !isNaN(safeFloat(eq.lng)) ? `https://www.google.com/maps?q=${safeFloat(eq.lat)},${safeFloat(eq.lng)}` : '';
+    const puebloNavUrl = (lat && lng) ? `https://www.google.com/maps?q=${lat},${lng}` : '';
 
     return `
         <div class="stop-card ${stop.type === 'manual' ? 'manual' : ''} ${doneClass}" data-stop-id="${escapeAttr(stop.id)}" data-stop-day="${escapeAttr(day)}" ondragover="allowPlanStopDrop(event)" ondragleave="clearPlanStopDrop(event)" ondrop="dropPlanStop(event,'${escapeAttr(day)}','${escapeAttr(stop.id)}')">
             <div class="stop-card-heading"><div class="stop-heading-copy"><div class="stop-title clickable-stop-title" title="${escapeAttr(technicianStopName)}" onclick="togglePlanStopDetails('${escapeAttr(stop.id)}')">${escapeHtml(isTechnicianPlanView() ? technicianStopName : (stop.name || eq?.name || node?.name || 'Parada'))}</div><div class="stop-meta">${stop.type === 'manual' ? 'Comunidad / punto manual' : (stop.type === 'node' ? 'Nodo vinculado' : 'Antena registrada')}${lat && lng ? ` · ${lat}, ${lng}` : ''}</div></div>${isPlanReadOnly() ? '' : `<span class="stop-drag-handle" draggable="true" role="button" tabindex="0" title="Arrastra para cambiar el orden" aria-label="Arrastra para cambiar el orden" ondragstart="startPlanStopDrag(event,'${escapeAttr(day)}','${escapeAttr(stop.id)}')" ondragend="endPlanStopDrag()">&#8942;</span>`}</div>
-            ${isTechnicianPlanView() && (lat && lng) ? `<a class="tech-nav-direction-btn" href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" rel="noopener"><svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg> Navegar al pueblo</a>` : ''}
-            ${isTechnicianPlanView() && antennaLocationUrl ? `<a class="order-location-link tech-antenna-location" href="${escapeAttr(antennaLocationUrl)}" target="_blank" rel="noopener">Abrir ubicación de la antena</a>` : ''}
+            ${isTechnicianPlanView() && (puebloNavUrl || antennaLocationUrl) ? `
+                <div class="tech-stop-actions-row">
+                    ${puebloNavUrl ? `<a class="tech-nav-direction-btn" href="${escapeAttr(puebloNavUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg> Navegar al pueblo</a>` : ''}
+                    ${antennaLocationUrl ? `<a class="order-location-link tech-antenna-location" href="${escapeAttr(antennaLocationUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Abrir ubicación de la antena</a>` : ''}
+                </div>` : ''}
             <div class="stop-state-row">
                 <span class="badge ${adminStatus.cls}">${adminStatus.text}</span>
                 <span class="badge bty">${progress.done}/${progress.total} detalles hechos</span>
@@ -6934,10 +7089,10 @@ function escapeAttr(value) {
 
 function renderDetailLocation(value) {
     const loc = getLocationDisplay(value || '');
-    if (loc.url) {
-        return `<a class="order-location-link" href="${escapeAttr(loc.url)}" target="_blank" rel="noopener">Abrir Maps</a><div class="order-location-muted">${escapeHtml(loc.label)}</div>`;
+    if (loc.url || loc.hasLocation) {
+        return `<div class="tech-detail-location-badge has-gps"><svg class="tech-gps-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg><strong>Con ubicación GPS:</strong> <a class="order-location-link" href="${escapeAttr(loc.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Abrir Maps</a><span class="order-location-muted">${escapeHtml(loc.label)}</span></div>`;
     }
-    return `<div class="order-location-muted ${loc.hasLocation ? '' : 'no-location'}">${escapeHtml(loc.label || 'Sin ubicacion')}</div>`;
+    return `<div class="tech-detail-location-badge no-gps"><svg class="tech-gps-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/><line x1="2" y1="2" x2="22" y2="22"/></svg><span class="order-location-muted no-location">${escapeHtml(loc.label || 'Sin ubicación registrada')}</span></div>`;
 }
 
 function openEditStopModal(techId, day, stopId) {

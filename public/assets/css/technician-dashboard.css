@@ -257,32 +257,35 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi.kpi-progress .plan
 /* Tarjeta de Progreso y Desempeño del Técnico */
 /* Barra compacta de progreso del técnico (diseño minimalista de bajo impacto visual) */
 .tech-progress-compact {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 8px 12px;
-  margin: 8px 0 12px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  grid-column: 1 / -1 !important;
+  background: #ffffff !important;
+  border: 1px solid #dce7f3 !important;
+  border-radius: 14px !important;
+  padding: 12px 18px !important;
+  margin: 10px 0 16px !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05) !important;
 }
 .tech-progress-compact-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .tech-progress-compact-info {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
+  gap: 8px;
+  font-size: 12px;
   color: #475569;
-  flex-wrap: nowrap;
-  overflow: hidden;
+  flex-wrap: wrap;
 }
 .tech-progress-compact-svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   stroke: #0284c7;
   fill: none;
   stroke-width: 2;
@@ -291,14 +294,14 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi.kpi-progress .plan
 .tech-progress-compact-label {
   font-weight: 800;
   color: #64748b;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .tech-progress-compact-pct {
   color: #0284c7;
   font-weight: 800;
-  font-size: 12px;
+  font-size: 13px;
 }
 .tech-progress-compact-sep {
   color: #cbd5e1;
@@ -307,22 +310,22 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi.kpi-progress .plan
 .tech-progress-compact-detail {
   color: #0f172a;
   font-weight: 700;
-  font-size: 11.5px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .tech-progress-compact-pueblos {
   color: #64748b;
-  font-size: 11.5px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .tech-compact-urgent-tag {
   display: inline-flex;
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: 6px;
   background: #fff7ed;
   border: 1px solid #fdba74;
   color: #c2410c;
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 800;
 }
 .tech-compact-summary-btn {
@@ -330,7 +333,7 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi.kpi-progress .plan
   background: #f8fafc;
   color: #1e293b;
   border-radius: 8px;
-  padding: 4px 10px;
+  padding: 5px 12px;
   font-size: 11px;
   font-weight: 800;
   cursor: pointer;
@@ -342,19 +345,20 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi.kpi-progress .plan
   border-color: #94a3b8;
 }
 .tech-progress-compact .tech-progress-bar-track {
-  width: 100%;
-  height: 4px;
-  background: #f1f5f9;
-  border-radius: 999px;
-  overflow: hidden;
-  border: 0;
-  margin-bottom: 0;
+  width: 100% !important;
+  height: 8px !important;
+  background: #e2e8f0 !important;
+  border-radius: 999px !important;
+  overflow: hidden !important;
+  border: 0 !important;
+  margin-top: 4px !important;
+  margin-bottom: 0 !important;
 }
 .tech-progress-compact .tech-progress-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #0284c7 0%, #10b981 100%);
-  border-radius: 999px;
-  transition: width 0.4s ease;
+  height: 100% !important;
+  background: linear-gradient(90deg, #0284c7 0%, #10b981 100%) !important;
+  border-radius: 999px !important;
+  transition: width 0.4s ease !important;
 }
 
 .tech-progress-card {
@@ -697,23 +701,230 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar {
   background: #d1fae5;
 }
 
-/* Botón de navegación al pueblo en cada parada */
+/* Fila de acciones de navegacion de la parada */
+.tech-stop-actions-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 10px 0 12px !important;
+  width: 100% !important;
+}
+
+/* Boton de navegacion al pueblo en cada parada */
 .tech-nav-direction-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 7px 14px;
-  border-radius: 10px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  border: 1px solid #bfdbfe;
-  font-size: 12px;
-  font-weight: 800;
-  text-decoration: none;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 8px 14px !important;
+  border-radius: 10px !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1px solid #bfdbfe !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  transition: background 0.15s ease !important;
 }
 .tech-nav-direction-btn:hover {
-  background: #dbeafe;
+  background: #dbeafe !important;
+}
+
+.order-location-link.tech-antenna-location {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 8px 14px !important;
+  border-radius: 10px !important;
+  background: #eaf5ff !important;
+  color: #0369a1 !important;
+  border: 1px solid #bae6fd !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  text-decoration: none !important;
+  margin: 0 !important;
+  white-space: nowrap !important;
+  transition: background 0.15s ease !important;
+}
+.order-location-link.tech-antenna-location:hover {
+  background: #e0f2fe !important;
+}
+
+/* Lista de paradas en resumen de ruta con despliegue inline */
+.tech-route-stop-item {
+  margin-bottom: 8px !important;
+  border: 1px solid #dce7f0 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  overflow: hidden !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+.tech-route-stop-item.expanded {
+  border-color: #93c5fd !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08) !important;
+}
+.tech-route-stop-btn {
+  display: grid !important;
+  width: 100% !important;
+  grid-template-columns: 36px minmax(0, 1fr) 20px !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 11px 14px !important;
+  border: 0 !important;
+  background: transparent !important;
+  text-align: left !important;
+  cursor: pointer !important;
+}
+.tech-route-stop-btn:hover {
+  background: #f8fbff !important;
+}
+.tech-route-stop-btn > span {
+  display: grid !important;
+  width: 32px !important;
+  height: 32px !important;
+  place-items: center !important;
+  border-radius: 50% !important;
+  background: #0874e8 !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+  font-size: 13px !important;
+}
+.tech-route-stop-info {
+  min-width: 0 !important;
+}
+.tech-route-stop-info strong {
+  display: block !important;
+  font-size: 13.5px !important;
+  color: #10264a !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.tech-route-stop-info small {
+  display: block !important;
+  color: #64748b !important;
+  font-size: 11px !important;
+  margin-top: 1px !important;
+}
+.tech-chevron-icon {
+  stroke: #94a3b8 !important;
+  transition: transform 0.2s ease, stroke 0.2s ease !important;
+}
+.tech-chevron-icon.open {
+  transform: rotate(180deg) !important;
+  stroke: #0874e8 !important;
+}
+@media (max-width: 560px) {
+  .tech-route-stop-btn {
+    grid-template-columns: 32px minmax(0, 1fr) 18px !important;
+    padding: 10px 12px !important;
+  }
+}
+
+.tech-route-stop-expanded-details {
+  border-top: 1px solid #e2eaf4 !important;
+  background: #f8fbfe !important;
+  padding: 10px 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+.tech-expanded-header {
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  color: #475569 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  padding-bottom: 4px !important;
+  border-bottom: 1px dashed #cbd5e1 !important;
+}
+.tech-route-detail-empty {
+  padding: 12px !important;
+  color: #64748b !important;
+  font-size: 12px !important;
+  text-align: center !important;
+  font-weight: 600 !important;
+}
+.tech-inline-detail-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-left: 4px solid #0874e8 !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+.tech-inline-detail-card.is-done {
+  border-left-color: #10b981 !important;
+  background: #fcfdfc !important;
+}
+.tech-inline-detail-card.is-nodone {
+  border-left-color: #ef4444 !important;
+  background: #fefcfc !important;
+}
+.tech-inline-detail-badges {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin-bottom: 6px !important;
+}
+.tech-inline-detail-body {
+  font-size: 12px !important;
+  color: #1e293b !important;
+  line-height: 1.45 !important;
+}
+.tech-inline-detail-client {
+  margin-bottom: 4px !important;
+}
+.tech-inline-detail-desc {
+  color: #334155 !important;
+  margin-bottom: 6px !important;
+}
+.tech-inline-detail-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin-top: 8px !important;
+  padding-top: 8px !important;
+  border-top: 1px solid #f1f5f9 !important;
+}
+
+/* Indicadores claros de ubicacion GPS */
+.tech-detail-location-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  padding: 5px 10px !important;
+  border-radius: 8px !important;
+  font-size: 11px !important;
+  margin-top: 4px !important;
+}
+.tech-detail-location-badge.has-gps {
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #065f46 !important;
+}
+.tech-detail-location-badge.has-gps a {
+  color: #047857 !important;
+  font-weight: 800 !important;
+  text-decoration: underline !important;
+}
+.tech-detail-location-badge.no-gps {
+  background: #f8fafc !important;
+  border: 1px dashed #cbd5e1 !important;
+  color: #94a3b8 !important;
+}
+.tech-gps-svg {
+  width: 14px !important;
+  height: 14px !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
+  flex-shrink: 0 !important;
 }
 
 @media (max-width: 520px) {
