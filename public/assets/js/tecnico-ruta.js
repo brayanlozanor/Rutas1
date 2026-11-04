@@ -184,10 +184,17 @@
       return (state.weekPlan[SHARED_ROUTE_ID]._generalPlans || []).filter(plan => !plan.deletedAt);
     }
 
+    function isPlanAssignedTo(plan, technicianId) {
+      if (!plan || !technicianId) return false;
+      if (plan.assignedTechId === technicianId) return true;
+      if (Array.isArray(plan.assignedTechIds) && plan.assignedTechIds.includes(technicianId)) return true;
+      return false;
+    }
+
     function getAssignedGeneralPlansForTech(technicianId) {
       const plans = getAllGeneralPlansForTechRoute();
       if (!technicianId) return [];
-      return plans.filter(plan => plan.assignedTechId === technicianId);
+      return plans.filter(plan => isPlanAssignedTo(plan, technicianId));
     }
 
     function getDirectGeneralPlanForTech(technicianId) {
@@ -213,10 +220,10 @@
       if (!plans.length) return null;
       const technicianId = preferredTechId || loggedTech?.id || techRouteId || '';
       const explicit = techRouteGeneralPlanId ? plans.find(item => item.id === techRouteGeneralPlanId) : null;
-      if (explicit && explicit.assignedTechId === technicianId) return explicit;
+      if (explicit && isPlanAssignedTo(explicit, technicianId)) return explicit;
 
       if (techRouteScope === 'general' && technicianId) {
-        const assigned = plans.filter(plan => plan.assignedTechId === technicianId);
+        const assigned = plans.filter(plan => isPlanAssignedTo(plan, technicianId));
         const assignedWithStops = assigned.filter(plan => Array.isArray(plan.stops) && plan.stops.some(stop => !stop.deletedAt));
         const chosen = assignedWithStops[assignedWithStops.length - 1] || assigned[assigned.length - 1];
         if (chosen) {
@@ -238,7 +245,7 @@
       if (!technicianId) return false;
       if (techRouteScope !== 'general') return !techRouteId || techRouteId === technicianId;
       const plan = getGeneralPlanForTechRoute(technicianId);
-      return !!plan && plan.assignedTechId === technicianId;
+      return !!plan && isPlanAssignedTo(plan, technicianId);
     }
 
     function findTechFromAppUser(user) {

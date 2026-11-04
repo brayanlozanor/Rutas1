@@ -74,9 +74,11 @@
               <div class="fi">
                 <select id="general-plan-assignee" onchange="assignGeneralPlanToTech(this.value)"></select>
               </div>
-              <div class="plan-sidebar-action-row">
-                <button class="btn bc plan-action-button" onclick="createGeneralPlan()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>Nuevo</span></button>
-                <button class="btn br plan-action-button" data-admin-only onclick="deleteGeneralPlan()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 10v7M14 10v7"/></svg></span><span>Eliminar</span></button>
+              <div id="general-plan-team-badges" class="plan-team-badges-row"></div>
+              <div class="plan-sidebar-action-row plan-sidebar-actions-3col">
+                <button type="button" class="btn bc plan-action-button" onclick="createGeneralPlan()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>Nuevo</span></button>
+                <button type="button" class="btn bgh plan-action-button" data-admin-only onclick="openDuplicateGeneralPlanModal()" title="Duplicar este plan para otro técnico"><span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span>Duplicar</span></button>
+                <button type="button" class="btn br plan-action-button" data-admin-only onclick="deleteGeneralPlan()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 10v7M14 10v7"/></svg></span><span>Eliminar</span></button>
               </div>
               <button class="btn bgh bfu plan-action-button" data-admin-only onclick="deletePastGeneralPlans()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M3 4l2-2M3 2l2 2"/></svg></span><span>Eliminar planes pasados</span></button>
             </div>
@@ -139,6 +141,9 @@
                 <div id="weather-road-alert" class="weather-road-alert">Caminos transitables</div>
               </div>
             </div>
+
+            <!-- Resumen operativo del plan -->
+            <div id="plan-sidebar-summary" class="plan-sidebar-summary"></div>
           </aside>
 
           <section class="plan-board">
@@ -445,6 +450,69 @@
     </div>
   </div>
 
+  <div class="mo plan-dialog-overlay" id="plan-duplicate-mo">
+    <div class="md plan-dialog-card plan-duplicate-card">
+      <div class="plan-dialog-head">
+        <span class="plan-dialog-icon" style="background:#eef6ff;color:#0874e8;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </span>
+        <div>
+          <h2>Duplicar Plan General</h2>
+          <p id="plan-duplicate-subtitle">Crea una copia exacta del plan actual para asignar a otro técnico.</p>
+        </div>
+        <button type="button" class="plan-dialog-close" aria-label="Cerrar" onclick="CM('plan-duplicate-mo')">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="plan-dialog-body">
+        <label class="plan-dialog-field" for="plan-duplicate-name">
+          <span>Nombre del nuevo plan duplicado</span>
+          <input id="plan-duplicate-name" maxlength="80" autocomplete="off" placeholder="Ej. Ruta Costa - Copia">
+          <small>Se copiarán todas las paradas y configuración del plan original de forma independiente.</small>
+        </label>
+        <label class="plan-dialog-field" for="plan-duplicate-tech" style="margin-top:12px;">
+          <span>Asignar a técnico</span>
+          <select id="plan-duplicate-tech" style="min-height:42px;width:100%;border-radius:8px;border:1px solid #cbd9e6;padding:0 10px;font-weight:700;"></select>
+          <small>El técnico seleccionado recibirá este plan de forma independiente.</small>
+        </label>
+      </div>
+      <div class="plan-dialog-actions">
+        <button type="button" class="btn bgh" onclick="CM('plan-duplicate-mo')">Cancelar</button>
+        <button type="button" class="btn bc plan-action-button" onclick="confirmDuplicateGeneralPlan()">
+          <span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+          <span>Duplicar y Asignar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="mo plan-dialog-overlay" id="plan-team-mo">
+    <div class="md plan-dialog-card plan-team-card">
+      <div class="plan-dialog-head">
+        <span class="plan-dialog-icon" style="background:#f3e8ff;color:#8b5cf6;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </span>
+        <div>
+          <h2>Asignar Equipo al Plan</h2>
+          <p>Selecciona todos los técnicos que trabajarán conjuntamente en esta ruta.</p>
+        </div>
+        <button type="button" class="plan-dialog-close" aria-label="Cerrar" onclick="CM('plan-team-mo')">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="plan-dialog-body">
+        <div id="plan-team-tech-list" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;padding:4px 0;"></div>
+      </div>
+      <div class="plan-dialog-actions">
+        <button type="button" class="btn bgh" onclick="CM('plan-team-mo')">Cancelar</button>
+        <button type="button" class="btn bc plan-action-button" onclick="confirmTeamAssignment()">
+          <span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg></span>
+          <span>Guardar Equipo</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="mo" id="plan-tech-qr-mo">
     <div class="md" style="max-width:520px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px">
@@ -489,6 +557,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="assets/js/api.js?v=20260831-plan-map-parity-v11"></script>
   <script src="assets/js/common.js?v=20261031-disputes-v1"></script>
-  <script src="assets/js/planificar.js?v=1793828999000"></script>
+  <script src="assets/js/planificar.js?v=20261104-team-and-duplication-v1"></script>
 </body>
 </html>

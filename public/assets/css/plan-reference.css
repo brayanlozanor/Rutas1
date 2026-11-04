@@ -219,12 +219,12 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     padding: 0!important;
     margin: 0!important;
     flex: 1 1 0!important;
-    height: calc(100vh - 116px)!important;
-    height: calc(100dvh - 116px)!important;
-    min-height: calc(100vh - 116px)!important;
-    min-height: calc(100dvh - 116px)!important;
-    max-height: calc(100vh - 116px)!important;
-    max-height: calc(100dvh - 116px)!important;
+    height: calc(100vh - 105px)!important;
+    height: calc(100dvh - 105px)!important;
+    min-height: calc(100vh - 105px)!important;
+    min-height: calc(100dvh - 105px)!important;
+    max-height: calc(100vh - 105px)!important;
+    max-height: calc(100dvh - 105px)!important;
     overflow: hidden!important;
     align-items: stretch!important;
   }
@@ -363,6 +363,333 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     padding: 10px!important;
     background: #f7f9fc!important;
     border-radius: 0 0 12px 12px!important;
+  }
+
+  /* Panel de información técnica y órdenes del sitio activo (Rellena el espacio productivamente) */
+  body.planificar-page:not(.plan-technician-view) .site-extra-info-panel {
+    margin-top: 10px;
+    padding: 12px 14px;
+    background: #fff;
+    border: 1px solid #dce7f2;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(18, 42, 76, .04);
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-info-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eaf0f6;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-info-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-info-icon {
+    font-size: 18px;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-info-title-group h3 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 800;
+    color: #102b50;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-info-title-group small {
+    display: block;
+    font-size: 10px;
+    color: #64758e;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-maps-btn {
+    min-height: 28px!important;
+    padding: 4px 10px!important;
+    font-size: 10px!important;
+    font-weight: 800!important;
+    border-radius: 6px!important;
+    display: inline-flex!important;
+    align-items: center!important;
+    gap: 4px!important;
+    text-decoration: none!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-tags-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-tags-row span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: #f1f6fc;
+    border: 1px solid #dbe6f2;
+    border-radius: 6px;
+    font-size: 10px;
+    color: #243b5a;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-tags-row b {
+    color: #102b50;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-notes-strip {
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    background: #fffbeb;
+    border: 1px solid #fef3c7;
+    border-radius: 6px;
+    font-size: 11px;
+    color: #92400e;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-orders-section {
+    margin-top: 6px;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-orders-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 11px;
+    color: #102b50;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-details-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-detail-card {
+    padding: 8px 10px;
+    background: #f8fbfe;
+    border: 1px solid #dce7f2;
+    border-radius: 8px;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 3px;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-detail-phone {
+    color: #0874e8;
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-detail-desc {
+    font-size: 11px;
+    color: #334e68;
+    line-height: 1.35;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-detail-meta {
+    margin-top: 3px;
+    font-size: 10px;
+    color: #627d98;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-info-empty-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 8px;
+    color: #166534;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-empty-icon {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    background: #dcfce7;
+    color: #15803d;
+    border-radius: 50%;
+    font-weight: 900;
+    font-size: 13px;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-info-empty-card strong {
+    display: block;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .site-info-empty-card p {
+    margin: 2px 0 0;
+    font-size: 10px;
+    color: #15803d;
+  }
+
+  /* Etiquetas de equipo multitécnico en barra lateral */
+  body.planificar-page:not(.plan-technician-view) .plan-team-badges-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+    margin-bottom: 6px;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-team-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    background: #eef6ff;
+    border: 1px solid #c8dff9;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #0874e8;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-team-badge-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border: 0;
+    background: transparent;
+    color: #0874e8;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 50%;
+    line-height: 1;
+    padding: 0;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-team-badge-remove:hover {
+    background: #daeafc;
+    color: #e53e3e;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-sidebar-actions-3col {
+    display: grid!important;
+    grid-template-columns: repeat(3, minmax(0, 1fr))!important;
+    gap: 5px!important;
+  }
+
+  /* Resumen operativo del plan en barra lateral */
+  body.planificar-page:not(.plan-technician-view) .plan-sidebar-summary {
+    margin-top: auto;
+    padding: 8px 10px;
+    background: #f8fbfe;
+    border: 1px solid #dce7f2;
+    border-radius: 10px;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .sidebar-summary-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .sidebar-summary-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #243b5a;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .sidebar-summary-row strong {
+    color: #102b50;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .sidebar-summary-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    text-align: center;
+    padding-top: 6px;
+    border-top: 1px solid #e2edf6;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .sidebar-summary-stats small {
+    display: block;
+    font-size: 9px;
+    color: #64758e;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .sidebar-summary-stats b {
+    display: block;
+    font-size: 12px;
+    color: #102b50;
+    margin-top: 2px;
+  }
+
+  /* Opciones de técnico en modal de equipo */
+  .plan-team-tech-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: #fff;
+    border: 1px solid #dce7f2;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+
+  .plan-team-tech-option:hover {
+    background: #f4f8fd;
+  }
+
+  .plan-team-tech-option input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #0874e8;
+  }
+
+  .tech-avatar-mini {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    border-radius: 50%;
+    background: #eaf3ff;
+    color: #0874e8;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .tech-info-mini {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .tech-info-mini strong {
+    font-size: 12px;
+    color: #102b50;
+  }
+
+  .tech-info-mini small {
+    font-size: 10px;
+    color: #64758e;
   }
 
   /* Columna 3: Mapa a toda la altura disponible (ESTÁTICA, SIN SCROLLBAR) */

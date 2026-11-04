@@ -970,16 +970,23 @@ function getGeneralPlans() {
     return visiblePlans;
 }
 
+function isPlanAssignedToTech(plan, techId) {
+    if (!plan || !techId) return false;
+    if (plan.assignedTechId === techId) return true;
+    if (Array.isArray(plan.assignedTechIds) && plan.assignedTechIds.includes(techId)) return true;
+    return false;
+}
+
 function getVisibleGeneralPlansForRole() {
     const plans = getGeneralPlans();
     if (!isPlanReadOnly()) return plans;
     if (isTechnicianPlanView()) {
         const technicianId = getLoggedTechnicianId();
         return technicianId
-            ? plans.filter(plan => !plan.deletedAt && plan.assignedTechId === technicianId)
+            ? plans.filter(plan => !plan.deletedAt && isPlanAssignedToTech(plan, technicianId))
             : [];
     }
-    return plans.filter(plan => !plan.deletedAt && plan.assignedTechId);
+    return plans.filter(plan => !plan.deletedAt && (plan.assignedTechId || (Array.isArray(plan.assignedTechIds) && plan.assignedTechIds.length)));
 }
 
 function getPlanStopsRef(techId = selectedTechId, day = selectedDay) {
@@ -987,7 +994,7 @@ function getPlanStopsRef(techId = selectedTechId, day = selectedDay) {
     if (day === 'general') {
         const plan = techId === SHARED_PLAN_ID
             ? getSelectedGeneralPlan()
-            : getGeneralPlans().find(item => !item.deletedAt && item.assignedTechId === techId);
+            : getGeneralPlans().find(item => !item.deletedAt && isPlanAssignedToTech(item, techId));
         if (plan) {
             if (!Array.isArray(plan.stops)) plan.stops = [];
             return plan.stops;
@@ -1040,7 +1047,7 @@ function getSelectedGeneralPlan() {
     if (!plans.length) return null;
     let candidates = plans;
     if (selectedTechId && selectedTechId !== SHARED_PLAN_ID) {
-        candidates = plans.filter(plan => plan.assignedTechId === selectedTechId);
+        candidates = plans.filter(plan => isPlanAssignedToTech(plan, selectedTechId));
         if (!candidates.length) return null;
     }
     const selected = candidates.find(plan => plan.id === selectedGeneralPlanId) || candidates[0];
@@ -1067,14 +1074,14 @@ function initPlanSelectors() {
     const visibleGeneralPlans = getVisibleGeneralPlansForRole();
 
     if (isPlanReadOnly()) {
-        const assignedPlans = visibleGeneralPlans.filter(plan => plan.assignedTechId);
-        const assignedTechIds = [...new Set(assignedPlans.map(plan => plan.assignedTechId))];
+        const assignedPlans = visibleGeneralPlans.filter(plan => plan.assignedTechId || (Array.isArray(plan.assignedTechIds) && plan.assignedTechIds.length));
+        const assignedTechIds = [...new Set(assignedPlans.flatMap(plan => [plan.assignedTechId, ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])].filter(Boolean)))];
         const assignedTechs = activeTechs.filter(tech => assignedTechIds.includes(tech.id));
         if (!assignedTechs.some(tech => tech.id === selectedTechId)) {
             selectedTechId = assignedTechs[0]?.id || '';
         }
         selectedDay = 'general';
-        const techPlans = assignedPlans.filter(plan => plan.assignedTechId === selectedTechId);
+        const techPlans = assignedPlans.filter(plan => isPlanAssignedToTech(plan, selectedTechId));
         selectedGeneralPlanId = techPlans.some(plan => plan.id === selectedGeneralPlanId)
             ? selectedGeneralPlanId
             : (techPlans[0]?.id || '');
@@ -1109,7 +1116,7 @@ function initPlanSelectors() {
     const selectedGeneralPlan = getSelectedGeneralPlan();
     const selectablePlans = selectedTechId === SHARED_PLAN_ID
         ? getGeneralPlans()
-        : getGeneralPlans().filter(plan => !plan.deletedAt && plan.assignedTechId === selectedTechId);
+        : getGeneralPlans().filter(plan => !plan.deletedAt && isPlanAssignedToTech(plan, selectedTechId));
     generalPlanSelect.innerHTML = selectablePlans.length
         ? selectablePlans.map(plan => `<option value="${plan.id}" ${plan.id === selectedGeneralPlanId ? 'selected' : ''}>${escapeHtml(plan.name)} · ${formatShortDate(plan.createdAt)}</option>`).join('')
         : '<option value="">Sin plan asignado</option>';
@@ -2051,6 +2058,158 @@ function renderActiveStopExtraDetails(stop) {
     `;
 }
 
+function renderActiveSiteInformation(stop) {
+    if (!stop) return '';
+    const eq = stop.equipmentId ? (state.equipment || []).find(e => e.id === stop.equipmentId && !e.deletedAt) : null;
+    const node = stop.nodeId ? (state.nodes || []).find(n => n.id === stop.nodeId && !n.deletedAt) : null;
+    const pos = getStopCurrentPosition(stop);
+    const hasCoords = !isNaN(pos.lat) && !isNaN(pos.lng);
+    const mapsUrl = hasCoords ? `https://www.google.com/maps/dir/?api=1&destination=${pos.lat},${pos.lng}` : '';
+    const details = getStopDetails(stop);
+    const pendingDetails = details.filter(d => !['completada', 'no_realizado'].includes(d.status || ''));
+
+    const plan = getSelectedGeneralPlan();
+    const assignedTechs = getGeneralPlanAssignedTechs(plan);
+    const assignedNames = assignedTechs.map(t => t.nombre || t.usuario).join(', ');
+
+    let tags = [];
+    if (eq?.ip || node?.ip) tags.push(`<span>🌐 <b>IP:</b> ${escapeHtml(eq?.ip || node?.ip)}</span>`);
+    if (eq?.model) tags.push(`<span>📶 <b>Modelo:</b> ${escapeHtml(eq.model)}</span>`);
+    if (node?.town || stop.town) tags.push(`<span>🏘️ <b>Pueblo:</b> ${escapeHtml(node?.town || stop.town)}</span>`);
+    if (hasCoords) tags.push(`<span>📍 <b>GPS:</b> ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}</span>`);
+    if (assignedNames) tags.push(`<span>👥 <b>Equipo:</b> ${escapeHtml(assignedNames)}</span>`);
+
+    const noteText = stop.notes || node?.notas || eq?.notas || '';
+
+    let ordersHtml = '';
+    if (details.length > 0) {
+        const orderCards = details.map(d => {
+            const clientName = d.clientName || 'Cliente sin nombre';
+            const phone = d.phone ? `<a class="site-detail-phone" href="tel:${escapeAttr(d.phone)}">📞 ${escapeHtml(d.phone)}</a>` : '';
+            const title = d.title || d.description || 'Detalle de red';
+            const statusCls = d.status === 'completada' ? 'bgn' : (d.status === 'no_realizado' ? 'br' : 'by');
+            const statusLabel = d.status === 'completada' ? 'Completado' : (d.status === 'no_realizado' ? 'No realizado' : 'Pendiente');
+            const reporter = d.capturedByName || d.createdBy || '';
+            const assignee = d.assignedTechName || '';
+            return `
+                <div class="site-detail-card">
+                    <div class="site-detail-header">
+                        <strong style="font-size:12px;color:#102b50;">${escapeHtml(clientName)}</strong>
+                        <span class="badge ${statusCls}" style="font-size:9px;padding:2px 7px;">${statusLabel}</span>
+                    </div>
+                    <div class="site-detail-desc">${escapeHtml(title)}</div>
+                    ${phone ? `<div style="margin-top:2px;">${phone}</div>` : ''}
+                    ${d.address ? `<div class="site-detail-meta">📍 ${escapeHtml(d.address)}</div>` : ''}
+                    ${(reporter || assignee) ? `<div class="site-detail-meta">${reporter ? `Capturado por: <b>${escapeHtml(reporter)}</b>` : ''} ${assignee ? `· Asignado: <b>${escapeHtml(assignee)}</b>` : ''}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        ordersHtml = `
+            <div class="site-orders-section">
+                <div class="site-orders-head">
+                    <strong style="font-size:11px;font-weight:800;color:#102b50;">Detalles de red en este sitio (${details.length})</strong>
+                    <span style="font-size:10px;color:#64758e;">${pendingDetails.length} pendiente(s)</span>
+                </div>
+                <div class="site-details-grid">
+                    ${orderCards}
+                </div>
+            </div>
+        `;
+    } else {
+        ordersHtml = `
+            <div class="site-orders-section">
+                <div class="site-info-empty-card">
+                    <span class="site-empty-icon">&#10003;</span>
+                    <div>
+                        <strong>Sitio al corriente</strong>
+                        <p>No hay reportes ni fallas pendientes registradas para este nodo/antena. Equipos operando con normalidad.</p>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="site-extra-info-panel">
+            <div class="site-info-header">
+                <div class="site-info-title-group">
+                    <span class="site-info-icon">📡</span>
+                    <div>
+                        <h3>Información técnica del sitio activo</h3>
+                        <small>${escapeHtml(stop.name || eq?.name || node?.name || 'Sitio seleccionado')}</small>
+                    </div>
+                </div>
+                ${mapsUrl ? `
+                    <a class="btn bc site-maps-btn" href="${escapeAttr(mapsUrl)}" target="_blank" rel="noopener" title="Abrir ruta de navegación en Google Maps">
+                        <span>📍 Navegar en Maps</span>
+                    </a>
+                ` : ''}
+            </div>
+            ${tags.length ? `<div class="site-tags-row">${tags.join('')}</div>` : ''}
+            ${noteText ? `<div class="site-notes-strip"><strong>Nota:</strong> ${escapeHtml(noteText)}</div>` : ''}
+            ${ordersHtml}
+        </div>
+    `;
+}
+
+function renderSidebarPlanSummary(stops) {
+    const container = document.getElementById('plan-sidebar-summary');
+    if (!container) return;
+    const validStops = (stops || []).filter(s => !s.deletedAt);
+    if (!validStops.length) {
+        container.innerHTML = '';
+        return;
+    }
+    const plan = getSelectedGeneralPlan();
+    const assignedTechs = getGeneralPlanAssignedTechs(plan);
+    const techCount = assignedTechs.length || (plan?.assignedTechId ? 1 : 0);
+    const crewLabel = techCount > 1 ? `Equipo: ${techCount} técnicos` : (assignedTechs[0]?.nombre || '1 técnico');
+
+    let totalDetails = 0;
+    let completedDetails = 0;
+    let completedStops = 0;
+
+    validStops.forEach(s => {
+        const details = getStopDetails(s);
+        totalDetails += details.length;
+        const resolved = details.filter(d => ['completada', 'no_realizado'].includes(d.status || ''));
+        completedDetails += resolved.length;
+        if (s.completedAt || (details.length > 0 && resolved.length === details.length)) {
+            completedStops++;
+        }
+    });
+
+    const percent = totalDetails > 0 ? Math.round((completedDetails / totalDetails) * 100) : (validStops.length > 0 ? Math.round((completedStops / validStops.length) * 100) : 0);
+    const metrics = calculateDayRouteFeasibility(validStops, 0);
+
+    container.innerHTML = `
+        <div class="sidebar-summary-card">
+            <div class="sidebar-summary-row">
+                <strong style="font-size:11px;font-weight:800;color:#102b50;">Resumen del Plan</strong>
+                <span style="font-size:10px;font-weight:700;color:#0874e8;">${escapeHtml(crewLabel)}</span>
+            </div>
+            <div style="background:#e5edf6;border-radius:999px;height:6px;overflow:hidden;margin:2px 0;">
+                <div style="background:linear-gradient(90deg,#0874e8,#10b981);height:100%;width:${percent}%;transition:width .3s;"></div>
+            </div>
+            <div class="sidebar-summary-stats">
+                <div>
+                    <small>Avance</small>
+                    <b>${percent}%</b>
+                </div>
+                <div>
+                    <small>Detalles</small>
+                    <b>${completedDetails}/${totalDetails}</b>
+                </div>
+                <div>
+                    <small>Carretera</small>
+                    <b>~${metrics.totalKm}km</b>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function renderRouteIntelligenceWidget(stops, activeIndex = 0) {
     const box = document.getElementById('plan-route-intel-box');
     if (!box) return;
@@ -2138,6 +2297,7 @@ function renderPlanDays() {
         </div>`;
         if (!isTechnicianPlanView()) {
             renderRouteIntelligenceWidget([], 0);
+            renderSidebarPlanSummary([]);
         }
         return;
     }
@@ -2221,6 +2381,7 @@ function renderPlanDays() {
 
         // 5. Rich site details
         const extraDetailsHtml = renderActiveStopExtraDetails(activeStop);
+        const siteInfoHtml = renderActiveSiteInformation(activeStop);
 
         board.innerHTML = `
             ${navigatorHtml}
@@ -2230,11 +2391,13 @@ function renderPlanDays() {
                 <div class="day-body">
                     ${cardHtml}
                     ${transitConnectorHtml}
+                    ${siteInfoHtml}
                 </div>
             </div>
         `;
 
         renderRouteIntelligenceWidget(visible, activePlanCardIndex);
+        renderSidebarPlanSummary(visible);
         panPlanMapToActiveStop(activeStop);
         return;
     }
@@ -2292,6 +2455,7 @@ function renderPlanDays() {
 
     if (!isTechnicianPlanView()) {
         renderRouteIntelligenceWidget(visible, 0);
+        renderSidebarPlanSummary(visible);
     }
 }
 
@@ -2556,8 +2720,16 @@ async function savePlanMaterialSummary() {
 }
 
 function getGeneralPlanAssignedTech(plan = getSelectedGeneralPlan()) {
-    if (!plan?.assignedTechId) return null;
-    return (state.technicians || []).find(t => t.id === plan.assignedTechId && !t.deletedAt) || null;
+    if (!plan) return null;
+    const techId = plan.assignedTechId || (Array.isArray(plan.assignedTechIds) && plan.assignedTechIds[0]);
+    if (!techId) return null;
+    return (state.technicians || []).find(t => t.id === techId && !t.deletedAt) || null;
+}
+
+function getGeneralPlanAssignedTechs(plan = getSelectedGeneralPlan()) {
+    if (!plan) return [];
+    const ids = [...new Set([plan.assignedTechId, ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])].filter(Boolean))];
+    return (state.technicians || []).filter(t => ids.includes(t.id) && !t.deletedAt);
 }
 
 function getGeneralPlanAssignedToTech(techId, ignorePlanId = '') {
@@ -2565,24 +2737,48 @@ function getGeneralPlanAssignedToTech(techId, ignorePlanId = '') {
     return getGeneralPlans().find(plan =>
         !plan.deletedAt &&
         plan.id !== ignorePlanId &&
-        plan.assignedTechId === techId
+        isPlanAssignedToTech(plan, techId)
     ) || null;
 }
 
 function renderGeneralPlanAssigneeSelect() {
     const sel = document.getElementById('general-plan-assignee');
+    const badgesContainer = document.getElementById('general-plan-team-badges');
     if (!sel) return;
     const plan = getSelectedGeneralPlan();
     const currentAssigned = plan?.assignedTechId || '';
+    const assignedTechs = getGeneralPlanAssignedTechs(plan);
     const techs = (state.technicians || []).filter(t => !t.deletedAt && t.estado !== 'inactivo');
-    const availableTechs = techs;
-    sel.innerHTML = ['<option value="">Sin técnico asignado</option>']
-        .concat(availableTechs.map(t => {
-            const current = t.id === currentAssigned ? ' · asignado aquí' : '';
-            return `<option value="${escapeAttr(t.id)}">${escapeHtml(t.nombre || t.usuario || 'Técnico')}${current}</option>`;
-        }))
-        .join('');
-    sel.value = currentAssigned;
+
+    const options = ['<option value="">Sin técnico asignado</option>'];
+    options.push(...techs.map(t => {
+        const isCurrent = t.id === currentAssigned;
+        const inTeam = assignedTechs.some(at => at.id === t.id);
+        const marker = inTeam ? ' · en equipo' : (isCurrent ? ' · asignado' : '');
+        return `<option value="${escapeAttr(t.id)}">${escapeHtml(t.nombre || t.usuario || 'Técnico')}${marker}</option>`;
+    }));
+    options.push('<option value="__team__">👥 Asignar equipo (varios técnicos)...</option>');
+    sel.innerHTML = options.join('');
+
+    if (assignedTechs.length > 1) {
+        sel.value = '__team__';
+    } else {
+        sel.value = currentAssigned;
+    }
+
+    if (badgesContainer) {
+        if (assignedTechs.length > 0) {
+            badgesContainer.innerHTML = assignedTechs.map(t => `
+                <span class="plan-team-badge" title="Técnico asignado a este plan">
+                    <span>👤 ${escapeHtml(t.nombre || t.usuario)}</span>
+                    <button type="button" class="plan-team-badge-remove" onclick="removeTechFromPlanTeam('${escapeAttr(t.id)}')" title="Quitar del plan">&times;</button>
+                </span>
+            `).join('') + `<button type="button" class="btn bsm bgh" onclick="openTeamAssignmentModal()" style="font-size:10px;padding:2px 8px;border-radius:6px;height:22px;cursor:pointer;">+ Equipo</button>`;
+        } else {
+            badgesContainer.innerHTML = '';
+        }
+    }
+
     const hintId = 'general-plan-assignee-hint';
     let hint = document.getElementById(hintId);
     if (!hint && sel.parentElement) {
@@ -2593,10 +2789,177 @@ function renderGeneralPlanAssigneeSelect() {
     }
     const blocked = techs.filter(t => t.id !== currentAssigned && getGeneralPlanAssignedToTech(t.id, plan?.id || ''));
     if (hint) {
-        hint.textContent = blocked.length
-            ? `${blocked.length} tecnico(s) ya tienen otro plan; si eliges uno se movera a este plan.`
-            : 'Puedes dejarlo sin tecnico o asignarlo a un tecnico activo.';
+        if (assignedTechs.length > 1) {
+            hint.textContent = `Plan asignado a un equipo de ${assignedTechs.length} técnicos en conjunto.`;
+        } else {
+            hint.textContent = blocked.length
+                ? `${blocked.length} técnico(s) ya tienen otro plan; si eliges uno se moverá a este plan.`
+                : 'Puedes dejarlo sin técnico, asignarlo a uno, o armar un equipo.';
+        }
     }
+}
+
+function openTeamAssignmentModal() {
+    const plan = getSelectedGeneralPlan();
+    if (!plan) {
+        notify('Selecciona o crea un plan primero.', 'err');
+        return;
+    }
+    const currentTechIds = new Set([plan.assignedTechId, ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])].filter(Boolean));
+    const listEl = document.getElementById('plan-team-tech-list');
+    const techs = (state.technicians || []).filter(t => !t.deletedAt && t.estado !== 'inactivo');
+    if (!listEl) return;
+    if (!techs.length) {
+        listEl.innerHTML = '<div style="padding:10px;color:#64758e;font-size:12px;">No hay técnicos activos registrados.</div>';
+    } else {
+        listEl.innerHTML = techs.map(t => {
+            const checked = currentTechIds.has(t.id) ? 'checked' : '';
+            const initials = (t.nombre || t.usuario || 'T').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+            return `
+                <label class="plan-team-tech-option">
+                    <input type="checkbox" name="plan-team-member" value="${escapeAttr(t.id)}" ${checked}>
+                    <span class="tech-avatar-mini">${escapeHtml(initials)}</span>
+                    <span class="tech-info-mini">
+                        <strong>${escapeHtml(t.nombre || t.usuario)}</strong>
+                        <small>${escapeHtml(t.telefono || t.rol || 'Técnico de campo')}</small>
+                    </span>
+                </label>
+            `;
+        }).join('');
+    }
+    OM('plan-team-mo');
+}
+
+async function confirmTeamAssignment() {
+    const plan = getSelectedGeneralPlan();
+    if (!plan) return;
+    const checkboxes = Array.from(document.querySelectorAll('#plan-team-tech-list input[name="plan-team-member"]:checked'));
+    const selectedIds = checkboxes.map(cb => cb.value);
+
+    plan.assignedTechIds = selectedIds;
+    plan.assignedTechId = selectedIds[0] || '';
+    plan.assignedAt = selectedIds.length ? new Date().toISOString() : '';
+    plan.updatedAt = new Date().toISOString();
+
+    const saved = await saveDB();
+    if (!saved) {
+        notify('No se pudo guardar la asignación del equipo.', 'err');
+        return;
+    }
+    CM('plan-team-mo');
+    renderPlan();
+    if (selectedIds.length === 0) {
+        notify('Plan sin equipo asignado');
+    } else if (selectedIds.length === 1) {
+        const t = (state.technicians || []).find(x => x.id === selectedIds[0]);
+        notify(`Plan asignado a ${t?.nombre || 'técnico'}`);
+    } else {
+        notify(`Equipo de ${selectedIds.length} técnicos asignado al plan`);
+    }
+}
+
+async function removeTechFromPlanTeam(techId) {
+    const plan = getSelectedGeneralPlan();
+    if (!plan || !techId) return;
+    const current = new Set([plan.assignedTechId, ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])].filter(Boolean));
+    current.delete(techId);
+    const updated = Array.from(current);
+    plan.assignedTechIds = updated;
+    plan.assignedTechId = updated[0] || '';
+    plan.assignedAt = updated.length ? (plan.assignedAt || new Date().toISOString()) : '';
+    plan.updatedAt = new Date().toISOString();
+    const saved = await saveDB();
+    if (!saved) {
+        notify('Error al actualizar el equipo del plan.', 'err');
+        return;
+    }
+    renderPlan();
+    notify('Técnico removido del equipo del plan');
+}
+
+function openDuplicateGeneralPlanModal() {
+    const plan = getSelectedGeneralPlan();
+    if (!plan) {
+        notify('Selecciona o crea un plan general antes de duplicar.', 'err');
+        return;
+    }
+    const nameInput = document.getElementById('plan-duplicate-name');
+    const techSelect = document.getElementById('plan-duplicate-tech');
+    const subTitle = document.getElementById('plan-duplicate-subtitle');
+    if (nameInput) {
+        nameInput.value = `${plan.name} (Copia)`;
+    }
+    if (subTitle) {
+        subTitle.textContent = `Copia de "${plan.name}" (${(plan.stops || []).length} paradas) para asignación independiente.`;
+    }
+    if (techSelect) {
+        const techs = (state.technicians || []).filter(t => !t.deletedAt && t.estado !== 'inactivo');
+        techSelect.innerHTML = ['<option value="">Sin técnico asignado (asignar después)</option>']
+            .concat(techs.map(t => `<option value="${escapeAttr(t.id)}" ${t.id !== plan.assignedTechId ? 'selected' : ''}>${escapeHtml(t.nombre || t.usuario)}</option>`))
+            .join('');
+    }
+    OM('plan-duplicate-mo');
+}
+
+async function confirmDuplicateGeneralPlan() {
+    const origPlan = getSelectedGeneralPlan();
+    if (!origPlan) {
+        notify('No se encontró el plan de origen.', 'err');
+        return;
+    }
+    const nameInput = document.getElementById('plan-duplicate-name');
+    const techSelect = document.getElementById('plan-duplicate-tech');
+    const newName = (nameInput?.value || '').trim() || `${origPlan.name} (Copia)`;
+    const targetTechId = techSelect?.value || '';
+
+    // Create deep clone of stops with fresh unique IDs
+    const clonedStops = (origPlan.stops || []).map(s => {
+        const newStopId = gid('st');
+        const cloned = deepClone(s);
+        cloned.id = newStopId;
+        cloned.createdAt = new Date().toISOString();
+        cloned.startedAt = '';
+        cloned.adminReleasedAt = '';
+        cloned.completedAt = '';
+        cloned.details = Array.isArray(s.details) ? s.details.map(d => {
+            const clonedDetail = deepClone(d);
+            clonedDetail.id = gid('dt');
+            clonedDetail.stopId = newStopId;
+            clonedDetail.status = 'pendiente';
+            clonedDetail.completedAt = '';
+            clonedDetail.technicianReport = null;
+            return clonedDetail;
+        }) : [];
+        return cloned;
+    });
+
+    const newPlan = {
+        id: gid('gp'),
+        name: newName,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        assignedTechId: targetTechId,
+        assignedTechIds: targetTechId ? [targetTechId] : [],
+        assignedAt: targetTechId ? new Date().toISOString() : '',
+        materialSummary: origPlan.materialSummary || '',
+        stops: clonedStops
+    };
+
+    if (!Array.isArray(state.weekPlan[SHARED_PLAN_ID]._generalPlans)) {
+        state.weekPlan[SHARED_PLAN_ID]._generalPlans = [];
+    }
+    state.weekPlan[SHARED_PLAN_ID]._generalPlans.push(newPlan);
+    selectedGeneralPlanId = newPlan.id;
+
+    const saved = await saveDB();
+    if (!saved) {
+        notify('No se pudo guardar el plan duplicado.', 'err');
+        return;
+    }
+    CM('plan-duplicate-mo');
+    renderPlan();
+    const assignedTech = targetTechId ? (state.technicians || []).find(t => t.id === targetTechId) : null;
+    notify(`Plan duplicado: "${newName}" con ${clonedStops.length} paradas${assignedTech ? ` asignado a ${assignedTech.nombre}` : ''}`);
 }
 
 function localDateKey(offset = 0) {
@@ -3135,10 +3498,14 @@ function resolvePlanAssignment(confirmed) {
 }
 
 async function assignGeneralPlanToTech(techId) {
+    if (techId === '__team__') {
+        openTeamAssignmentModal();
+        return;
+    }
     const plan = getSelectedGeneralPlan();
     if (!plan) return;
     const targetTechId = techId || '';
-    if (targetTechId === (plan.assignedTechId || '')) return;
+    if (targetTechId === (plan.assignedTechId || '') && (!plan.assignedTechIds || plan.assignedTechIds.length <= 1)) return;
     const targetTech = targetTechId ? (state.technicians || []).find(item => item.id === targetTechId && !item.deletedAt) : null;
     const occupied = targetTechId ? getGeneralPlanAssignedToTech(targetTechId, plan.id) : null;
     const confirmed = await requestPlanAssignmentConfirmation({ plan, tech: targetTech, occupiedPlan: occupied, unassign: !targetTechId });
@@ -3148,10 +3515,12 @@ async function assignGeneralPlanToTech(techId) {
     }
     if (occupied) {
         occupied.assignedTechId = '';
+        occupied.assignedTechIds = [];
         occupied.assignedAt = '';
         occupied.updatedAt = new Date().toISOString();
     }
     plan.assignedTechId = targetTechId;
+    plan.assignedTechIds = targetTechId ? [targetTechId] : [];
     plan.assignedAt = targetTechId ? new Date().toISOString() : '';
     plan.updatedAt = new Date().toISOString();
     const saved = await saveDB();
