@@ -233,7 +233,7 @@ function mergeOrderLookupRecords(key,records) {
 }
 
 const ORDER_FILTER_META = {
-  status: { label: 'Estado', options: [['pendiente', 'Pendiente'], ['en_revision', 'En revisión'], ['revisado', 'Revisado'], ['no_realizado', 'No solucionado'], ['completada', 'Solucionado']] },
+  status: { label: 'Estado', options: [['pendiente', 'Pendiente'], ['en_revision', 'En atención'], ['resuelto_soporte', 'Resuelto'], ['devuelto_soporte', 'Devuelto'], ['no_realizado', 'No realizado'], ['completada', 'Concluido']] },
   type: { label: 'Tipo', options: [['comunidad', 'Comunidad'], ['torre', 'Torre'], ['troncal', 'Troncal'], ['punto_venta', 'Punto de venta']] },
   priority: { label: 'Prioridad', options: [['muy_alta', 'Muy alta'], ['alta', 'Alta'], ['media', 'Media'], ['baja', 'Baja']] },
   category: { label: 'Categoría', options: ORDER_CATEGORIES }
@@ -649,10 +649,12 @@ function getOrderFilterOptions(kind) {
   if (kind === 'status') {
     if (activeOrderDetailKind === 'network') {
       return [
-        ['pendiente', 'Pendiente (Soporte)'],
-        ['resuelto_soporte', 'Resuelto por Soporte'],
-        ['devuelto_soporte', 'Devuelto a Soporte'],
-        ['completada', 'Solucionado']
+        ['pendiente', 'Pendiente'],
+        ['en_revision', 'En atención'],
+        ['resuelto_soporte', 'Resuelto'],
+        ['devuelto_soporte', 'Devuelto'],
+        ['no_realizado', 'No realizado'],
+        ['completada', 'Concluido']
       ];
     }
     return ORDER_FILTER_META.status.options;
@@ -1587,13 +1589,23 @@ async function openWO(id = '') {
       document.getElementById('wo-priority').value = w.priority || 'media';
       updateWOPriorityReminderHint(w.reminderIntervalMin);
       const report = w.technicianReport || {};
-      woEvidencePhotos = [...new Set([...(Array.isArray(report.evidencePhotos) ? report.evidencePhotos : []),report.evidencePhoto].filter(Boolean))].slice(0,6);
+      woEvidencePhotos = [...new Set([...(Array.isArray(w.evidencePhotos) ? w.evidencePhotos : []),(Array.isArray(report.evidencePhotos) ? report.evidencePhotos : []),report.evidencePhoto].flat().filter(Boolean))].slice(0,6);
     }
   }
   renderWOAssignedUserOptions(selectedAssignee);
   updateWORelationInfo();
   setupOrderControls();
   renderWOEvidencePhotos();
+    const reqLabel = document.getElementById('wo-evidence-req-label');
+  const isAttentionUser = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
+  const isNetworkKind = (document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind) === 'network';
+  if (reqLabel) {
+    if (isAttentionUser && isNetworkKind && !editingWOId) {
+      reqLabel.innerHTML = '<b class="req-star" style="color:#dc2626;font-weight:800;">* Obligatorio para Atención</b>';
+    } else {
+      reqLabel.textContent = 'Opcional';
+    }
+  }
   applyRoleFormVisibility();
   OM('wo-mo');
 }
@@ -1656,6 +1668,16 @@ function clearWOForm() {
   const eqMenu = document.getElementById('wo-equipment-suggestions');
   if (eqMenu) eqMenu.classList.remove('open');
   updateWORelationInfo();
+  const reqLabel = document.getElementById('wo-evidence-req-label');
+  const isAttentionUser = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
+  const isNetworkKind = (document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind) === 'network';
+  if (reqLabel) {
+    if (isAttentionUser && isNetworkKind && !editingWOId) {
+      reqLabel.innerHTML = '<b class="req-star" style="color:#dc2626;font-weight:800;">* Obligatorio para Atención</b>';
+    } else {
+      reqLabel.textContent = 'Opcional';
+    }
+  }
   applyRoleFormVisibility();
 }
 
@@ -1784,6 +1806,7 @@ async function saveWO() {
   };
   const existingReport = existingWO?.technicianReport;
   if (woEvidencePhotos.length || existingReport) {
+    payload.evidencePhotos = woEvidencePhotos.slice();
     payload.technicianReport = {
       ...(existingReport || {}),
       result:existingReport?.result || 'pendiente',
@@ -2054,27 +2077,26 @@ async function reopenCompletedWO(id) {
 function getOrderStatusMeta(order) {
   if (order?.status === 'completada') return {label:getOrderCategory(order) === 'instalacion' ? 'Completado' : 'Concluido',className:'is-done',title:'Detalle concluido satisfactoriamente'};
   if (order?.status === 'resuelto_soporte') {
-    const isSentToAttention = isNetworkSupportToAttention(order);
-    const actor = order.technicianReport?.completedByName || order.reviewOpenedByName || order.assignedUserName;
     return {
-      label: isSentToAttention ? 'Respondido' : 'Resuelto',
-      title: isSentToAttention
-        ? (actor ? `Respondido por Atención a clientes (${actor}) · Pendiente de validación por Soporte técnico` : 'Respondido por Atención a clientes · Pendiente de validación por Soporte técnico')
-        : (actor ? `Resuelto por Soporte técnico (${actor}) · Pendiente de validación con el cliente por Atención` : 'Resuelto por Soporte técnico · Pendiente de validación con el cliente por Atención'),
+      label: 'Resuelto',
+      title: 'Reporte resuelto',
       className: 'is-resolving'
     };
   }
   if (order?.status === 'devuelto_soporte') {
-    const isSentToAttention = isNetworkSupportToAttention(order);
     return {
       label: 'Devuelto',
-      title: isSentToAttention
-        ? (order.returnByName ? `Devuelto a Atención a clientes por ${order.returnByName}: ${order.returnReason || 'Aclaración requerida'}` : 'Devuelto a Atención a clientes por Soporte técnico')
-        : (order.returnByName ? `Devuelto a Soporte técnico por ${order.returnByName}: ${order.returnReason || 'Cliente no conforme'}` : 'Devuelto a Soporte técnico por Atención a clientes'),
+      title: 'Reporte devuelto para revisión',
       className: 'is-returned'
     };
   }
-  if (order?.status === 'no_realizado') return {label:'No solucionado',className:'is-unsolved',title:'No solucionado'};
+  if (order?.status === 'no_realizado') {
+    return {
+      label: 'No realizado',
+      className: 'is-unresolvable',
+      title: 'No fue posible solucionar la incidencia'
+    };
+  }
   if (order?.status === 'revisado') return {label:'Revisado',className:'is-reviewed',title:'Revisado'};
   if (order?.status === 'en_revision') {
     return {
@@ -2555,10 +2577,36 @@ function getOrderPlace(order) {
 }
 
 function getOrderReportPhotos(order) {
-  const report = order?.technicianReport || {};
-  const photos = Array.isArray(report.evidencePhotos) ? report.evidencePhotos.filter(Boolean) : [];
-  if (report.evidencePhoto && !photos.includes(report.evidencePhoto)) photos.unshift(report.evidencePhoto);
-  return photos;
+  if (!order) return [];
+  const list = [];
+  const seen = new Set();
+  const add = (url) => {
+    if (url && typeof url === 'string' && !seen.has(url)) {
+      seen.add(url);
+      list.push(url);
+    }
+  };
+
+  // 1. Fotos adjuntas al registrar la orden
+  if (Array.isArray(order.evidencePhotos)) order.evidencePhotos.forEach(add);
+  if (order.evidencePhoto) add(order.evidencePhoto);
+
+  // 2. Fotos del reporte técnico
+  const report = order.technicianReport || {};
+  if (Array.isArray(report.evidencePhotos)) report.evidencePhotos.forEach(add);
+  if (Array.isArray(report.photos)) report.photos.forEach(add);
+  if (report.evidencePhoto) add(report.evidencePhoto);
+
+  // 3. Fotos en seguimientos de devolución, resolución o no realizable
+  if (Array.isArray(order.followUps)) {
+    for (const f of order.followUps) {
+      if (Array.isArray(f.photos)) f.photos.forEach(add);
+      if (Array.isArray(f.evidencePhotos)) f.evidencePhotos.forEach(add);
+      if (f.photo) add(f.photo);
+    }
+  }
+
+  return list;
 }
 
 function orderHasViewableReport(order) {
@@ -2626,7 +2674,24 @@ async function openOrderTechnicianReport(orderId) {
     ${report.materialUsed ? `<section class="order-report-block"><small>Material utilizado</small><p>${orderEscape(report.materialUsed)}</p></section>` : ''}
     ${renderOrderFollowUpTimeline(visibleFollowUps)}
     ${materialItems.length ? `<section class="order-report-block"><small>Materiales registrados</small><div class="order-report-materials">${materialItems.map(item => `<span><strong>${orderEscape(item.name || item.nombre || 'Material')}</strong> · ${orderEscape(item.quantity ?? item.cantidad ?? '')} ${orderEscape(item.unit || item.unidad || '')}</span>`).join('')}</div></section>` : ''}
-    ${photos.length ? `<section class="order-report-evidence"><small>${completed ? 'Evidencias' : 'Imágenes adjuntas al crear el detalle'}</small><div>${photos.map((photo,index) => `<button type="button" onclick="openOrderReportEvidence('${orderEscape(order.id)}',${index})"><img src="${orderEscape(photo)}" alt="Evidencia ${index + 1}"><span>${index + 1}</span></button>`).join('')}</div></section>` : (completed ? '<div class="order-report-empty">No se adjuntaron evidencias gráficas.</div>' : '')}
+    <section class="order-report-evidence-strip">
+      <div class="evidence-strip-head">
+        <strong>Evidencias gráficas registradas (${photos.length})</strong>
+        <span class="evidence-strip-sub">Fotografías y capturas del flujo completo</span>
+      </div>
+      ${photos.length ? `
+        <div class="evidence-strip-grid">
+          ${photos.map((photo, index) => `
+            <button type="button" class="evidence-strip-thumb" onclick="openOrderReportEvidence('${orderEscape(order.id)}', ${index})" title="Ver evidencia ${index + 1}">
+              <img src="${orderEscape(photo)}" alt="Evidencia ${index + 1}">
+              <span class="evidence-strip-num">${index + 1}</span>
+            </button>
+          `).join('')}
+        </div>
+      ` : `
+        <div class="evidence-strip-empty">Sin evidencias fotográficas adjuntas.</div>
+      `}
+    </section>
     ${!completed ? (order.status === 'resuelto_soporte' ? '<div class="order-report-pending" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0"><strong>✓ Resuelto por Soporte:</strong> En espera de que Atención a clientes confirme la satisfacción con el cliente.</div>' : (order.status === 'devuelto_soporte' ? `<div class="order-report-pending" style="background:#fff1f2;color:#be123c;border-color:#fecdd3"><strong>⚠️ Devuelto a Soporte:</strong> ${orderEscape(order.returnReason || 'Atención a clientes indicó que el cliente sigue presentando fallas.')}${order.returnByName ? `<div style="font-size:12px;margin-top:5px;color:#9f1239;">Devuelto por: <strong>${orderEscape(order.returnByName)}</strong></div>` : ''}</div>` : '<div class="order-report-pending">Esta orden sigue pendiente. Se muestran los datos capturados al registrarla.</div>')) : ''}`;
   OM('order-tech-report-mo');
 }
@@ -2752,6 +2817,7 @@ function renderWOs() {
                       networkQuickActions = `
                         <button type="button" class="btn net-btn-retake" onclick="takeOverNetworkOrder('${w.id}')" title="Asumir titularidad de la atención técnica"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg> Retomar</button>
                         <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar solución técnica y enviar a validación"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Resolver</button>
+                        <button type="button" class="btn net-btn-unresolvable" onclick="openUnresolvableNetworkModal('${w.id}')" title="Declarar reporte no realizable por imposibilidad técnica">No realizable</button>
                       `;
                     } else {
                       networkQuickActions = `
@@ -2783,6 +2849,15 @@ function renderWOs() {
                   } else {
                     networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Atención a clientes valide la conformidad con el cliente">Por validar</span>`;
                   }
+                }
+              } else if (w.status === 'no_realizado') {
+                if (isAtencion || userHasRole('administrador', 'admin')) {
+                  networkQuickActions = `
+                    <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkUnresolvableConcluded('${w.id}')" title="Concluir trámite indicando imposibilidad técnica"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Concluir</button>
+                    <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Devolver reporte a Soporte con nuevas observaciones"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
+                  `;
+                } else {
+                  networkQuickActions = `<span class="net-pill-waiting" style="background:#fef2f2;color:#b91c1c;border-color:#fecdd3;" title="Soporte reportó imposibilidad técnica para solucionar este reporte">No realizado</span>`;
                 }
               }
             }
@@ -3215,6 +3290,8 @@ function openReturnNetworkModal(id) {
 
   document.getElementById('netret-order-id').value = order.id;
   document.getElementById('netret-reason').value = '';
+  netretEvidencePhotos = [];
+  renderNetretEvidencePreview();
 
   const isSentToAttention = isNetworkSupportToAttention(order);
   const titleEl = document.querySelector('#network-return-mo .modal-head h2');
@@ -3292,7 +3369,10 @@ async function submitNetworkReturn() {
   order.reviewOpenedAt = '';
 
   const returnLabel = isSentToAttention ? 'Devuelto a Atención a clientes (Aclaración solicitada)' : 'Devuelto a Soporte técnico (Cliente no conforme)';
-  appendSharedNetworkFollowUp(order, 'devuelto_soporte', returnLabel, reason);
+  appendSharedNetworkFollowUp(order, 'devuelto_soporte', returnLabel, reason, netretEvidencePhotos);
+  if (Array.isArray(netretEvidencePhotos) && netretEvidencePhotos.length) {
+    order.evidencePhotos = [...(Array.isArray(order.evidencePhotos) ? order.evidencePhotos : []), ...netretEvidencePhotos];
+  }
   setUpdatedAudit(order, isSentToAttention ? 'devolvió requerimiento a Atención a clientes' : 'devolvió reporte a Soporte técnico tras consulta con cliente');
 
   const saved = await saveRecord('workOrders', order);
@@ -3375,3 +3455,256 @@ async function confirmNetworkClientSatisfied(id) {
   }
 })();
 
+
+/* ==========================================================================
+   EVIDENCIAS EN DEVOLUCIÓN DE REPORTE (#network-return-mo)
+   ========================================================================== */
+let netretEvidencePhotos = [];
+
+function handleNetretEvidenceFiles(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  readNetretFiles(files);
+  event.target.value = '';
+}
+
+function readNetretFiles(files) {
+  files.forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      if (dataUrl && !netretEvidencePhotos.includes(dataUrl)) {
+        netretEvidencePhotos.push(dataUrl);
+        renderNetretEvidencePreview();
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderNetretEvidencePreview() {
+  const container = document.getElementById('netret-evidence-preview');
+  if (!container) return;
+  container.innerHTML = netretEvidencePhotos.map((photo, idx) => `
+    <div class="netres-evidence-thumb">
+      <img src="${orderEscape(photo)}" alt="Evidencia ${idx + 1}" onclick="openEvidenceGallery(netretEvidencePhotos, ${idx})">
+      <button type="button" class="netres-thumb-remove" onclick="removeNetretEvidencePhoto(${idx})" title="Eliminar foto">✕</button>
+    </div>
+  `).join('');
+}
+
+function removeNetretEvidencePhoto(idx) {
+  netretEvidencePhotos.splice(idx, 1);
+  renderNetretEvidencePreview();
+}
+
+/* ==========================================================================
+   NOTIFICACIÓN DE REPORTE NO REALIZABLE (#network-unresolvable-mo)
+   ========================================================================== */
+let netunresEvidencePhotos = [];
+
+function openUnresolvableNetworkModal(id) {
+  const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
+  if (!order) return notify('No se encontró el detalle solicitado.', 'err');
+  if (typeof markNotificationReadByOrderId === 'function') {
+    markNotificationReadByOrderId(id);
+  }
+
+  document.getElementById('netunres-order-id').value = order.id;
+  document.getElementById('netunres-reason').value = '';
+  netunresEvidencePhotos = [];
+  renderNetunresEvidencePreview();
+
+  const summary = document.getElementById('netunres-order-summary');
+  if (summary) {
+    summary.innerHTML = `
+      <div class="netres-summary-row">
+        <span><strong>Folio:</strong> ${orderEscape(getOrderFolio(order))}</span>
+        <span><strong>Cliente:</strong> ${orderEscape(order.clientName || 'Sin nombre')}</span>
+      </div>
+      <div class="netres-summary-row">
+        <span><strong>Pueblo:</strong> ${orderEscape(order.town || order.nodeName || 'Red')}</span>
+        <span><strong>Asignado:</strong> ${orderEscape(order.assignedUserName || 'Equipo de Soporte')}</span>
+      </div>
+      <div class="netres-summary-detail">
+        <strong>Detalle reportado:</strong> ${orderEscape(order.description || order.title || 'Incidencia técnica')}
+      </div>
+    `;
+  }
+
+  OM('network-unresolvable-mo');
+  setTimeout(() => document.getElementById('netunres-reason')?.focus(), 100);
+}
+
+function openUnresolvableNetworkModalFromResolve() {
+  const currentId = document.getElementById('netres-order-id')?.value;
+  if (!currentId) return;
+  CM('network-resolve-mo');
+  openUnresolvableNetworkModal(currentId);
+}
+
+function handleNetunresEvidenceFiles(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  readNetunresFiles(files);
+  event.target.value = '';
+}
+
+function readNetunresFiles(files) {
+  files.forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target.result;
+      if (dataUrl && !netunresEvidencePhotos.includes(dataUrl)) {
+        netunresEvidencePhotos.push(dataUrl);
+        renderNetunresEvidencePreview();
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderNetunresEvidencePreview() {
+  const container = document.getElementById('netunres-evidence-preview');
+  if (!container) return;
+  container.innerHTML = netunresEvidencePhotos.map((photo, idx) => `
+    <div class="netres-evidence-thumb">
+      <img src="${orderEscape(photo)}" alt="Evidencia ${idx + 1}" onclick="openEvidenceGallery(netunresEvidencePhotos, ${idx})">
+      <button type="button" class="netres-thumb-remove" onclick="removeNetunresEvidencePhoto(${idx})" title="Eliminar foto">✕</button>
+    </div>
+  `).join('');
+}
+
+function removeNetunresEvidencePhoto(idx) {
+  netunresEvidencePhotos.splice(idx, 1);
+  renderNetunresEvidencePreview();
+}
+
+async function submitNetworkUnresolvable() {
+  const id = document.getElementById('netunres-order-id')?.value;
+  const reason = document.getElementById('netunres-reason')?.value.trim();
+  if (!id) return;
+  if (!reason) {
+    notify('Por favor ingrese la justificación técnica por la cual no es posible solucionar el reporte.', 'err');
+    document.getElementById('netunres-reason')?.focus();
+    return;
+  }
+
+  const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
+  if (!order) return notify('No se encontró el detalle solicitado.', 'err');
+
+  const folio = getOrderFolio(order);
+  const confirmed = await askConfirmation({
+    title: `¿Declarar reporte #${folio} no realizable?`,
+    message: 'El estado del reporte cambiará a "No realizado" con la justificación técnica especificada y se notificará a Atención a clientes para que proceda con el cliente. ¿Desea continuar?',
+    confirmText: 'Sí, declarar no realizable',
+    cancelText: 'Cancelar',
+    tone: 'danger'
+  });
+  if (!confirmed) return;
+
+  const currentUser = getCurrentUser();
+  const userName = currentUser.name || currentUser.username || 'Personal de soporte';
+  const now = new Date().toISOString();
+
+  order.status = 'no_realizado';
+  order.updatedAt = now;
+  order.updatedById = currentUser.id || '';
+  order.unresolvableReason = reason;
+  order.unresolvableByName = userName;
+  order.unresolvableAt = now;
+  order.technicianReport = {
+    ...(order.technicianReport || {}),
+    result: 'no_realizado',
+    reason: reason,
+    evidencePhotos: [...(order.technicianReport?.evidencePhotos || []), ...netunresEvidencePhotos]
+  };
+
+  appendSharedNetworkFollowUp(order, 'no_realizado', 'Atención no realizada', reason, netunresEvidencePhotos);
+  setUpdatedAudit(order, 'declaró reporte no realizable por causas técnicas');
+
+  const saved = await saveRecord('workOrders', order);
+  if (!saved) {
+    notify('No se pudo guardar la notificación. Intente nuevamente.', 'err');
+    return;
+  }
+
+  CM('network-unresolvable-mo');
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(order, 'unresolvable');
+    }
+  } catch (e) {
+    console.warn('broadcastNetworkOrderChange error:', e);
+  }
+  notify('Reporte marcado como no realizado.', 'ok');
+  await loadOrderPage();
+}
+
+async function confirmNetworkUnresolvableConcluded(id) {
+  const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
+  if (!order) return notify('No se encontró el detalle solicitado.', 'err');
+
+  const folio = getOrderFolio(order);
+  const confirmed = await askConfirmation({
+    title: `¿Concluir trámite de reporte #${folio}?`,
+    message: '¿Confirma concluir este detalle indicando que no fue posible solventar la incidencia por causas técnicas?',
+    confirmText: 'Sí, concluir trámite',
+    cancelText: 'Cancelar',
+    tone: 'warning'
+  });
+  if (!confirmed) return;
+
+  const currentUser = getCurrentUser();
+  const userName = currentUser.name || currentUser.username || 'Atención a clientes';
+  const now = new Date().toISOString();
+
+  order.status = 'completada';
+  order.completedAt = now;
+  order.completedByName = userName;
+  order.updatedAt = now;
+  order.updatedById = currentUser.id || '';
+
+  appendSharedNetworkFollowUp(order, 'completada', 'Concluido sin solución técnica', `Atención a clientes (${userName}) dio por concluido formalmente el reporte tras valorar la imposibilidad técnica.`);
+  setUpdatedAudit(order, 'concluyó reporte sin solución técnica aplicada');
+
+  const saved = await saveRecord('workOrders', order);
+  if (!saved) {
+    notify('No se pudo concluir el reporte. Intente nuevamente.', 'err');
+    return;
+  }
+
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(order, 'confirmed');
+    }
+  } catch (e) {
+    console.warn('broadcastNetworkOrderChange error:', e);
+  }
+  notify('Detalle concluido.', 'ok');
+  await loadOrderPage();
+}
+
+// Escucha global de pegado (Ctrl + V) para evidencias en modales de devolución y no realizable
+document.addEventListener('paste', (e) => {
+  const returnMo = document.getElementById('network-return-mo');
+  if (returnMo && returnMo.classList.contains('open')) {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imgItems = items.filter(x => x.type.startsWith('image/'));
+    if (imgItems.length) {
+      e.preventDefault();
+      readNetretFiles(imgItems.map(x => x.getAsFile()).filter(Boolean));
+    }
+  }
+  const unresMo = document.getElementById('network-unresolvable-mo');
+  if (unresMo && unresMo.classList.contains('open')) {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imgItems = items.filter(x => x.type.startsWith('image/'));
+    if (imgItems.length) {
+      e.preventDefault();
+      readNetunresFiles(imgItems.map(x => x.getAsFile()).filter(Boolean));
+    }
+  }
+});

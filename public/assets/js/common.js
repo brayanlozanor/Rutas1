@@ -1720,11 +1720,11 @@ function sharedNetworkActionNote() {
   return document.getElementById('shared-network-action-note')?.value.trim() || '';
 }
 
-function appendSharedNetworkFollowUp(detail,action,label,note = '') {
+function appendSharedNetworkFollowUp(detail,action,label,note = '', photos = []) {
   const actor = getCurrentUser();
   detail.followUps = [...(Array.isArray(detail.followUps) ? detail.followUps : []),{
     id:gid('ofu'),action,label,note:String(note || '').trim(),at:new Date().toISOString(),
-    byId:actor.id || '',byName:actor.name || actor.username || 'Usuario'
+    byId:actor.id || '',byName:actor.name || actor.username || 'Usuario',...(Array.isArray(photos) && photos.length ? {photos:photos.slice()} : {})
   }].slice(-50);
 }
 
@@ -1966,6 +1966,8 @@ function _injectNetworkNotificationStyles() {
 
     .netops-toast-confirmed { border-left-color: #0d9488; }
     .netops-toast-confirmed .netops-toast-icon { background: #f0fdfa; color: #0d9488; }
+    .netops-toast-unresolvable { border-left-color: #dc2626; }
+    .netops-toast-unresolvable .netops-toast-icon { background: #fef2f2; color: #dc2626; }
 
     .netops-toast-reopened { border-left-color: #d97706; }
     .netops-toast-reopened .netops-toast-icon { background: #fef3c7; color: #d97706; }
@@ -2082,30 +2084,55 @@ function playSubtleNotificationTone() {
       try {
         const now = ctx.currentTime;
 
-        // Tono formal, corto y sutil (acorde armónico D5 -> A5 con envolvente limpia y sin distorsión)
+        // Tono formal WifiMex: E5 (659.25Hz) -> G#5 (830.61Hz) -> B5 (987.77Hz) con overtone cristalino E6 (1318.51Hz)
+        // Duración ~0.68s, volumen audible (~0.24) limpio, distinguible y formal
         const osc1 = ctx.createOscillator();
         const gain1 = ctx.createGain();
         osc1.type = 'sine';
-        osc1.frequency.setValueAtTime(587.33, now); // D5
+        osc1.frequency.setValueAtTime(659.25, now);
         gain1.gain.setValueAtTime(0.0001, now);
-        gain1.gain.linearRampToValueAtTime(0.09, now + 0.015);
-        gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+        gain1.gain.linearRampToValueAtTime(0.18, now + 0.015);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
         osc1.connect(gain1);
         gain1.connect(ctx.destination);
         osc1.start(now);
-        osc1.stop(now + 0.30);
+        osc1.stop(now + 0.45);
 
         const osc2 = ctx.createOscillator();
         const gain2 = ctx.createGain();
         osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(880.0, now + 0.08); // A5
-        gain2.gain.setValueAtTime(0.0001, now + 0.08);
-        gain2.gain.linearRampToValueAtTime(0.10, now + 0.095);
-        gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
+        osc2.frequency.setValueAtTime(830.61, now + 0.10);
+        gain2.gain.setValueAtTime(0.0001, now + 0.10);
+        gain2.gain.linearRampToValueAtTime(0.22, now + 0.12);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.54);
         osc2.connect(gain2);
         gain2.connect(ctx.destination);
-        osc2.start(now + 0.08);
-        osc2.stop(now + 0.40);
+        osc2.start(now + 0.10);
+        osc2.stop(now + 0.56);
+
+        const osc3 = ctx.createOscillator();
+        const gain3 = ctx.createGain();
+        osc3.type = 'sine';
+        osc3.frequency.setValueAtTime(987.77, now + 0.20);
+        gain3.gain.setValueAtTime(0.0001, now + 0.20);
+        gain3.gain.linearRampToValueAtTime(0.24, now + 0.22);
+        gain3.gain.exponentialRampToValueAtTime(0.0001, now + 0.68);
+        osc3.connect(gain3);
+        gain3.connect(ctx.destination);
+        osc3.start(now + 0.20);
+        osc3.stop(now + 0.70);
+
+        const osc4 = ctx.createOscillator();
+        const gain4 = ctx.createGain();
+        osc4.type = 'sine';
+        osc4.frequency.setValueAtTime(1318.51, now + 0.22);
+        gain4.gain.setValueAtTime(0.0001, now + 0.22);
+        gain4.gain.linearRampToValueAtTime(0.11, now + 0.24);
+        gain4.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
+        osc4.connect(gain4);
+        gain4.connect(ctx.destination);
+        osc4.start(now + 0.22);
+        osc4.stop(now + 0.64);
       } catch (err) {
         console.warn('Audio play error:', err);
       }
@@ -2151,6 +2178,7 @@ function showRightScreenNotification({
     attending: '<svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
     resolved: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>',
     returned: '<svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v3"/></svg>',
+    unresolvable: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
     confirmed: '<svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
     reopened: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/></svg>',
     updated: '<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
@@ -2651,12 +2679,14 @@ function handleNetworkOrderEvent(payload) {
   const isOwnCreator = (order.createdById && order.createdById === user.id) || (order.createdByUsername && order.createdByUsername === user.username) || (payload.byUserId && payload.byUserId === user.id);
   const isSupportToAttention = isNetworkSupportToAttention(order);
 
+  const actor = payload.byName || order.reviewOpenedByName || (isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico');
+
   if (transition === 'new_order') {
     if (order.detailKind === 'physical') {
       if (!isOwnCreator && (isSoporte || userHasRole('tecnico'))) {
         notifyNetworkDetailEvent({
           title: 'Nuevo detalle físico',
-          message: `Pueblo: ${order.town || 'General'} · Cliente: ${order.clientName || 'Cliente'}.`,
+          message: `${order.town || 'General'} · Pendiente de atención técnica.`,
           type: 'new_order',
           orderId: order.id
         });
@@ -2667,7 +2697,7 @@ function handleNetworkOrderEvent(payload) {
         if (shouldNotify) {
           notifyNetworkDetailEvent({
             title: 'Nuevo requerimiento',
-            message: `Localidad: ${order.town || 'Red general'} · Solicitud de Atención a clientes.`,
+            message: `${actor} envió un requerimiento de red.`,
             type: 'new_order',
             orderId: order.id
           });
@@ -2679,7 +2709,7 @@ function handleNetworkOrderEvent(payload) {
         if (shouldNotify) {
           notifyNetworkDetailEvent({
             title: 'Nuevo reporte de red',
-            message: `Cliente: ${order.clientName || 'Cliente'} (${order.town || 'Red'}) · Pendiente de atención.`,
+            message: `${actor} reportó una incidencia de red.`,
             type: 'new_order',
             orderId: order.id
           });
@@ -2687,14 +2717,13 @@ function handleNetworkOrderEvent(payload) {
       }
     }
   } else if (transition === 'attending') {
-    const actor = payload.byName || order.reviewOpenedByName || 'Personal';
     if (isSupportToAttention) {
       const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
       const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Atención iniciada',
-          message: `${actor} inició la atención de este requerimiento.`,
+          message: `${actor} inició la atención de este detalle.`,
           type: 'attending',
           orderId: order.id
         });
@@ -2705,21 +2734,20 @@ function handleNetworkOrderEvent(payload) {
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Atención iniciada',
-          message: `${actor} inició la atención de este reporte${order.clientName ? ' (' + order.clientName + ')' : ''}.`,
+          message: `${actor} inició la atención de este detalle.`,
           type: 'attending',
           orderId: order.id
         });
       }
     }
   } else if (transition === 'resolved') {
-    const actor = payload.byName || 'Personal';
     if (isSupportToAttention) {
       const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
       const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Requerimiento respondido',
-          message: `${actor} respondió el requerimiento.`,
+          message: `${actor} resolvió este detalle.`,
           type: 'resolved',
           orderId: order.id
         });
@@ -2730,20 +2758,19 @@ function handleNetworkOrderEvent(payload) {
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Reporte resuelto',
-          message: `${actor} resolvió el reporte${order.clientName ? ' de ' + order.clientName : ''}.`,
+          message: `${actor} resolvió este detalle.`,
           type: 'resolved',
           orderId: order.id
         });
       }
     }
   } else if (transition === 'returned') {
-    const actor = payload.byName || 'Personal';
     if (isSupportToAttention) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Requerimiento devuelto',
-          message: `${actor} devolvió el requerimiento${order.note ? ': ' + order.note.slice(0, 60) : '.'}`,
+          message: `${actor} devolvió este detalle para revisión.`,
           type: 'returned',
           orderId: order.id
         });
@@ -2753,20 +2780,19 @@ function handleNetworkOrderEvent(payload) {
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Reporte devuelto',
-          message: `${actor} devolvió el reporte${order.clientName ? ' (' + order.clientName + ')' : ''}${order.note ? ': ' + order.note.slice(0, 60) : '.'}`,
+          message: `${actor} devolvió este detalle para revisión.`,
           type: 'returned',
           orderId: order.id
         });
       }
     }
   } else if (transition === 'confirmed') {
-    const actor = payload.byName || 'Personal';
     if (isSupportToAttention) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Requerimiento concluido',
-          message: `${actor} concluyó el requerimiento a conformidad.`,
+          message: `${actor} concluyó este detalle a conformidad.`,
           type: 'confirmed',
           orderId: order.id
         });
@@ -2775,15 +2801,26 @@ function handleNetworkOrderEvent(payload) {
       const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
       if (shouldNotify) {
         notifyNetworkDetailEvent({
-          title: 'Reporte finalizado',
-          message: `${actor} corroboró la solución a entera conformidad${order.clientName ? ' con ' + order.clientName : ''}.`,
+          title: 'Reporte concluido',
+          message: `${actor} concluyó este detalle a conformidad.`,
           type: 'confirmed',
           orderId: order.id
         });
       }
     }
+  } else if (transition === 'unresolvable') {
+    const shouldNotify = isSupportToAttention
+      ? (hasAssignment ? isAssignedToMe : isSoporte)
+      : (hasAssignment ? isAssignedToMe : isAtencion);
+    if (shouldNotify) {
+      notifyNetworkDetailEvent({
+        title: 'Reporte no realizable',
+        message: `${actor} notificó que no es posible resolver este reporte.`,
+        type: 'unresolvable',
+        orderId: order.id
+      });
+    }
   } else if (transition === 'reopened') {
-    const actor = payload.byName || 'Personal';
     if (order.detailKind === 'network') {
       if (isSupportToAttention) {
         if (!isOwnCreator && isAtencion) {
@@ -2791,7 +2828,7 @@ function handleNetworkOrderEvent(payload) {
           if (shouldNotify) {
             notifyNetworkDetailEvent({
               title: 'Requerimiento reabierto',
-              message: `${actor} reabrió el requerimiento para nueva atención.`,
+              message: `${actor} reabrió este detalle para atención.`,
               type: 'reopened',
               orderId: order.id
             });
@@ -2803,7 +2840,7 @@ function handleNetworkOrderEvent(payload) {
           if (shouldNotify) {
             notifyNetworkDetailEvent({
               title: 'Reporte reabierto',
-              message: `${actor} reabrió el reporte${order.clientName ? ' (' + order.clientName + ')' : ''} para revisión técnica.`,
+              message: `${actor} reabrió este detalle para atención.`,
               type: 'reopened',
               orderId: order.id
             });
@@ -2814,14 +2851,13 @@ function handleNetworkOrderEvent(payload) {
       if ((isSoporte || userHasRole('tecnico')) && payload.byUserId !== user.id) {
         notifyNetworkDetailEvent({
           title: 'Detalle físico reabierto',
-          message: `${actor} reabrió el detalle físico${order.clientName ? ' (' + order.clientName + ')' : ''}.`,
+          message: `${actor} reabrió el detalle físico.`,
           type: 'reopened',
           orderId: order.id
         });
       }
     }
   } else if (transition === 'updated' && payload.byUserId !== user.id) {
-    const actor = payload.byName || 'Personal';
     notifyNetworkDetailEvent({
       title: 'Detalle actualizado',
       message: `${actor} actualizó este detalle.`,
@@ -2830,7 +2866,6 @@ function handleNetworkOrderEvent(payload) {
     });
   } else if (transition === 'sent_to_physical' && payload.byUserId !== user.id) {
     if (isSoporte || userHasRole('tecnico')) {
-      const actor = payload.byName || 'Personal';
       notifyNetworkDetailEvent({
         title: 'Derivado a detalle físico',
         message: `${actor} turnó este detalle a trabajo en campo.`,
@@ -2840,7 +2875,6 @@ function handleNetworkOrderEvent(payload) {
     }
   } else if (transition === 'resent' && payload.byUserId !== user.id) {
     if (isSoporte) {
-      const actor = payload.byName || 'Personal';
       notifyNetworkDetailEvent({
         title: 'Reporte reenviado',
         message: `${actor} reenvió este reporte para atención.`,
@@ -2849,7 +2883,6 @@ function handleNetworkOrderEvent(payload) {
       });
     }
   } else if (transition === 'deleted' && payload.byUserId !== user.id) {
-    const actor = payload.byName || 'Personal';
     notifyNetworkDetailEvent({
       title: 'Detalle eliminado',
       message: `${actor} eliminó este detalle del sistema.`,
@@ -2857,7 +2890,6 @@ function handleNetworkOrderEvent(payload) {
       orderId: order.id
     });
   } else if (transition === 'retaken' && payload.byUserId !== user.id) {
-    const actor = payload.byName || 'Personal de soporte';
     const isPrevAssignee = (payload.prevAssigneeId && payload.prevAssigneeId === user.id) ||
       (payload.prevAssigneeName && normalizeName(payload.prevAssigneeName) === normalizeName(user.name || user.username));
     if (isPrevAssignee) {
@@ -2998,7 +3030,7 @@ async function checkNetworkOrderNotifications() {
               const actor = order.reviewOpenedByName || (isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico');
               notifyNetworkDetailEvent({
                 title: 'Atención iniciada',
-                message: `${actor} está atendiendo este detalle${clientLabel}.`,
+                message: `${actor} está atendiendo este detalle.`,
                 type: 'attending',
                 orderId: order.id
               });
@@ -3011,7 +3043,7 @@ async function checkNetworkOrderNotifications() {
             if (shouldNotifyResolved) {
               notifyNetworkDetailEvent({
                 title: isSupportToAttention ? 'Requerimiento respondido' : 'Reporte resuelto',
-                message: `Detalle resuelto${clientLabel}.`,
+                message: 'Detalle resuelto.',
                 type: 'resolved',
                 orderId: order.id
               });
@@ -3021,19 +3053,31 @@ async function checkNetworkOrderNotifications() {
             if (shouldNotifyReturned) {
               notifyNetworkDetailEvent({
                 title: 'Reporte devuelto',
-                message: `Detalle devuelto para revisión${clientLabel}.`,
+                message: 'Detalle devuelto para revisión.',
                 type: 'returned',
                 orderId: order.id
               });
             }
-          } else if (currentStatus === 'completada' && (oldStatus === 'resuelto_soporte' || oldStatus === 'en_revision' || oldStatus === 'pendiente')) {
+          } else if (currentStatus === 'no_realizado') {
+            const shouldNotifyUnres = isSupportToAttention
+              ? (hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin', 'soporte'))
+              : (hasAssignment ? isAssignedToMe : userHasRole('atencion_clientes'));
+            if (shouldNotifyUnres) {
+              notifyNetworkDetailEvent({
+                title: 'Reporte no realizable',
+                message: 'Soporte notificó que no es posible resolver este reporte.',
+                type: 'unresolvable',
+                orderId: order.id
+              });
+            }
+          } else if (currentStatus === 'completada' && (oldStatus === 'resuelto_soporte' || oldStatus === 'en_revision' || oldStatus === 'pendiente' || oldStatus === 'no_realizado')) {
             const shouldNotifyConfirmed = isSupportToAttention
               ? (hasAssignment ? isAssignedToMe : userHasRole('atencion_clientes'))
               : (hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin', 'soporte'));
             if (shouldNotifyConfirmed) {
               notifyNetworkDetailEvent({
-                title: isSupportToAttention ? 'Requerimiento concluido' : 'Reporte finalizado',
-                message: `Detalle concluido a conformidad${clientLabel}.`,
+                title: isSupportToAttention ? 'Requerimiento concluido' : 'Reporte concluido',
+                message: 'Detalle concluido a conformidad.',
                 type: 'confirmed',
                 orderId: order.id
               });
@@ -3045,7 +3089,7 @@ async function checkNetworkOrderNotifications() {
             if (shouldNotifyReopened) {
               notifyNetworkDetailEvent({
                 title: isSupportToAttention ? 'Requerimiento reabierto' : 'Reporte reabierto',
-                message: `Detalle reabierto para atención${clientLabel}.`,
+                message: 'Detalle reabierto para atención.',
                 type: 'reopened',
                 orderId: order.id
               });
