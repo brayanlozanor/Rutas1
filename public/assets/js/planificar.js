@@ -4203,6 +4203,7 @@ function initPlanMap() {
         attribution: '© OpenStreetMap',
         maxZoom: 19
     }).addTo(planMap);
+    setTimeout(() => planMap?.invalidateSize(), 100);
     renderPlanMap();
 }
 
