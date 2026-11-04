@@ -219,9 +219,7 @@ function renderUsuarios() {
     <article class="entity-card">
       <div class="entity-title">
         <div>
-          <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;">
-            <span class="user-color-chip" style="background:${user.color || '#0284c7'};"><span class="chip-dot"></span>${userEscape(user.name)}</span>
-          </div>
+          <h3>${userEscape(user.name)}</h3>
           <div class="entity-sub">@${userEscape(user.username)}</div>
         </div>
         <span class="badge zone">${userEscape(formatRoleLabel(user.role))}</span>
