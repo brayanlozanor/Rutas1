@@ -45,8 +45,11 @@ assert.match(ordenesJs, /switchAdminNetworkTarget/);
 assert.match(ordenesJs, /if \(userHasRole\('soporte'\)\) return 'atencion_clientes'/);
 assert.match(ordenesJs, /if \(userHasRole\('atencion_clientes'\)\) return 'soporte'/);
 
-// 7. Acciones de Soporte técnico en órdenes de red
-assert.match(ordenesJs, /const isSoporte = userHasRole\('administrador', 'admin', 'soporte'\)/);
+// 7. Acciones de red: Soporte y Atención operan, Administrador supervisa (no atiende ni resuelve)
+assert.match(ordenesJs, /const isSoporte = userHasRole\('soporte'\)/);
+assert.match(ordenesJs, /const isAdmin = userHasRole\('administrador', 'admin'\)/);
+assert.match(ordenesJs, /El rol administrador no puede atender reportes directamente/);
+assert.match(ordenesJs, /El rol administrador no puede resolver reportes directamente/);
 
 // 8. Interfaz de Técnico: Barra de progreso compacta
 assert.match(planificarJs, /class="tech-progress-compact"/);

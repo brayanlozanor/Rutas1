@@ -2109,7 +2109,7 @@ function orderViewedSummary(order) {
 }
 
 function orderNeedsReviewDecision(order) {
-  return !!order && order.detailKind === 'network' && !order.deletedAt && userHasRole('administrador','admin','soporte') &&
+  return !!order && order.detailKind === 'network' && !order.deletedAt && !userHasRole('administrador','admin') && userHasRole('soporte') &&
     !order.reviewOpenedAt && !['completada','no_realizado','revisado','en_revision'].includes(order.status);
 }
 
@@ -2738,8 +2738,9 @@ function renderWOs() {
             const target = getOrderTarget(w);
             const rowReported = w.status === 'completada' || w.status === 'no_realizado';
             const rowStatus = getOrderStatusMeta(w);
-            const isSoporte = userHasRole('administrador', 'admin', 'soporte');
+            const isSoporte = userHasRole('soporte');
             const isAtencion = userHasRole('atencion_clientes');
+            const isAdmin = userHasRole('administrador', 'admin');
             const currentActor = getCurrentUser();
 
             const isSentToAttention = isNetworkSupportToAttention(w);
@@ -2748,10 +2749,10 @@ function renderWOs() {
               if (w.detailKind === 'network') {
                 if (isSentToAttention) {
                   // Requerimiento enviado por Soporte a Atención: solo Soporte puede reabrirlo
-                  canReopen = isSoporte;
+                  canReopen = isSoporte || isAdmin;
                 } else {
                   // Reporte de red enviado por Atención a Soporte: solo Atención puede reabrirlo
-                  canReopen = isAtencion;
+                  canReopen = isAtencion || isAdmin;
                 }
               } else {
                 canReopen = isSoporte;
@@ -2835,7 +2836,7 @@ function renderWOs() {
                   }
                 }
               } else if (w.status === 'no_realizado') {
-                if (isAtencion || userHasRole('administrador', 'admin')) {
+                if (isAtencion) {
                   networkQuickActions = `
                     <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkUnresolvableConcluded('${w.id}')" title="Concluir trámite indicando imposibilidad técnica"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Concluir</button>
                     <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Devolver reporte a Soporte con nuevas observaciones"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
@@ -2941,6 +2942,9 @@ async function handleNetresEvidenceFile(event) {
 }
 
 function openResolveNetworkModal(id) {
+  if (userHasRole('administrador', 'admin')) {
+    return notify('Acción restringida: El rol administrador no puede resolver reportes directamente.', 'warn');
+  }
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle de red.', 'err');
   if (typeof markNotificationReadByOrderId === 'function') {
@@ -2951,7 +2955,7 @@ function openResolveNetworkModal(id) {
   const userName = currentUser.name || currentUser.username || 'Soporte';
 
   // Si nadie lo está checando todavía y el usuario es Soporte, marcar inicio de revisión
-  if (!order.reviewOpenedById && userHasRole('administrador', 'admin', 'soporte')) {
+  if (!order.reviewOpenedById && !userHasRole('administrador', 'admin') && userHasRole('soporte', 'atencion_clientes')) {
     order.reviewOpenedById = currentUser.id || '';
     order.reviewOpenedByName = userName;
     order.reviewOpenedByUsername = currentUser.username || '';
@@ -3062,6 +3066,9 @@ function openResolveNetworkModal(id) {
 }
 
 async function submitNetworkResolution() {
+  if (userHasRole('administrador', 'admin')) {
+    return notify('Acción restringida: El rol administrador no puede resolver reportes directamente.', 'warn');
+  }
   const id = document.getElementById('netres-order-id')?.value;
   const solution = document.getElementById('netres-solution')?.value.trim();
   if (!id) return;
@@ -3147,6 +3154,9 @@ async function submitNetworkResolution() {
 }
 
 async function startAttendingNetworkOrder(id) {
+  if (userHasRole('administrador', 'admin')) {
+    return notify('Acción restringida: El rol administrador no puede atender reportes directamente.', 'warn');
+  }
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle de red.', 'err');
   if (typeof markNotificationReadByOrderId === 'function') {
@@ -3205,6 +3215,9 @@ async function startAttendingNetworkOrder(id) {
 }
 
 async function takeOverNetworkOrder(id) {
+  if (userHasRole('administrador', 'admin')) {
+    return notify('Acción restringida: El rol administrador no puede asumir la atención de reportes.', 'warn');
+  }
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle de red.', 'err');
 

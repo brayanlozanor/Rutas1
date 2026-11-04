@@ -86,8 +86,8 @@ const styleCss = fs.readFileSync('public/assets/css/style.css', 'utf8');
 // 6. Visual Hierarchy & Non-Overlapping Notification Bell
 console.log('6. Checking visual hierarchy and non-overlapping notification bell...');
 assert(styleCss.includes('.floating-notification-bell .notification-bell-icon:before'), 'style.css must target notification-bell-icon:before');
-assert(styleCss.includes('content:none!important;'), 'style.css must disable emoji pseudo-element on notification-bell-icon');
-assert(!styleCss.includes('content:"\\1F514"'), 'style.css must not have emoji bell content');
+assert(styleCss.includes('content:"\\1F514"'), 'style.css must feature restored golden bell emoji icon');
+assert(styleCss.includes('.floating-notification-bell .notification-bell-icon svg'), 'style.css must target notification-bell-icon svg');
 assert(ordersDesignCss.includes('.order-place-main'), 'orders-design-v2.css must define .order-place-main');
 assert(ordersDesignCss.includes('.order-client-main'), 'orders-design-v2.css must define .order-client-main');
 assert(ordersDesignCss.includes('.order-detail-text'), 'orders-design-v2.css must define .order-detail-text');

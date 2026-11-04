@@ -2358,20 +2358,20 @@ body.sidebar-collapsed .topbar.app-sidebar .sbar .btn:before{
 .floating-notification-bell,
 button.floating-notification-bell{
   position:fixed!important;
-  right:18px!important;
-  bottom:18px!important;
-  width:44px!important;
-  height:44px!important;
-  min-width:44px!important;
-  min-height:44px!important;
+  right:22px!important;
+  bottom:22px!important;
+  width:62px!important;
+  height:62px!important;
+  min-width:62px!important;
+  min-height:62px!important;
   padding:0!important;
-  border:1px solid #cbd5e1!important;
-  border-radius:12px!important;
+  border:1px solid rgba(203,226,246,.92)!important;
+  border-radius:22px!important;
   background:#ffffff!important;
-  color:#0284c7!important;
+  color:#0a4f86!important;
   display:grid!important;
   place-items:center!important;
-  box-shadow:0 8px 24px rgba(15,23,42,.12)!important;
+  box-shadow:0 18px 42px rgba(15,39,66,.22)!important;
   z-index:2400!important;
   cursor:pointer!important;
   transition:all .18s ease!important;
@@ -2379,86 +2379,79 @@ button.floating-notification-bell{
 
 .floating-notification-bell:hover{
   transform:translateY(-2px)!important;
-  box-shadow:0 12px 28px rgba(15,23,42,.18)!important;
-  border-color:#94a3b8!important;
+  box-shadow:0 22px 52px rgba(15,39,66,.28)!important;
 }
 
 .floating-notification-bell .notification-bell-icon{
-  width:24px;
-  height:24px;
-  border-radius:6px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:transparent;
-  color:#0284c7;
+  width:32px;
+  height:32px;
+  border-radius:999px;
+  display:grid;
+  place-items:center;
+  background:linear-gradient(135deg,#0b87d1,#18a7d8);
+  color:#fff;
   font-size:0;
-  line-height:1;
-}
-
-.floating-notification-bell .notification-bell-icon svg{
-  width:18px;
-  height:18px;
-  stroke:#0284c7;
-  stroke-width:2;
-  display:block;
+  font-weight:900;
 }
 
 .floating-notification-bell .notification-bell-icon:before{
-  content:none!important;
+  content:"\1F514"!important;
+  font-size:18px!important;
+  line-height:1!important;
+  display:block!important;
+}
+
+.floating-notification-bell .notification-bell-icon svg{
   display:none!important;
 }
 
 .floating-notification-bell #notification-count{
   position:absolute;
-  right:-4px;
-  top:-4px;
-  min-width:18px;
-  height:18px;
-  padding:0 5px;
+  right:-5px;
+  top:-5px;
+  min-width:24px;
+  height:24px;
+  padding:0 7px;
   border-radius:999px;
   background:#ef4444;
   color:#fff;
-  border:2px solid #fff;
+  border:3px solid #fff;
   display:grid;
   place-items:center;
-  font-size:10px;
+  font-size:12px;
   font-weight:900;
-  box-shadow:0 2px 6px rgba(239,68,68,.35);
+  box-shadow:0 4px 10px rgba(239,68,68,.45);
 }
 
 .floating-notification-bell:not(.has-items) #notification-count{
+  background:#d8e5f1;
+  color:#42536a;
   display:none!important;
 }
 
 .floating-notification-bell.has-items{
-  border-color:#fca5a5!important;
+  border-color:#fed7aa!important;
   background:#fffaf0!important;
 }
 
 .floating-notification-bell.has-items .notification-bell-icon{
-  background:transparent;
-  color:#dc2626;
-}
-
-.floating-notification-bell.has-items .notification-bell-icon svg{
-  stroke:#dc2626;
+  background:linear-gradient(135deg,#f59e0b,#ef4444);
 }
 
 body.sidebar-collapsed .floating-notification-bell{
-  right:16px!important;
+  right:18px!important;
 }
 
 @media(max-width:760px){
   .floating-notification-bell,
   button.floating-notification-bell{
-    right:12px!important;
-    bottom:12px!important;
-    width:40px!important;
-    height:40px!important;
-    min-width:40px!important;
-    min-height:40px!important;
-    border-radius:10px!important;
+    right:14px!important;
+    bottom:14px!important;
+    width:56px!important;
+    height:56px!important;
+    min-width:56px!important;
+    min-height:56px!important;
+    border-radius:20px!important;
   }
 }
 
