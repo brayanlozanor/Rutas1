@@ -1535,12 +1535,18 @@ function applyRoleFormVisibility() {
       evidenceZone.style.display = '';
       const evidenceCopy = document.querySelector('#wo-evidence-zone .wo-evidence-copy strong');
       if (evidenceCopy) {
-        evidenceCopy.innerHTML = 'Adjuntar evidencias <span class="required-indicator" style="color:#ef4444;font-weight:700;margin-left:4px;">* Obligatorio</span>';
+        const isAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+        const isAttention = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
+        if (isAdmin || !isAttention || editingWOId) {
+          evidenceCopy.innerHTML = 'Adjuntar evidencias <span class="optional-label" id="wo-evidence-req-label" style="font-weight:normal;color:#64748b;margin-left:4px;">Opcional</span>';
+        } else {
+          evidenceCopy.innerHTML = 'Adjuntar evidencias <span class="required-indicator" id="wo-evidence-req-label" style="color:#ef4444;font-weight:700;margin-left:4px;">* Obligatorio para Atención</span>';
+        }
       }
     }
 
     if (modalTitle) modalTitle.textContent = editingWOId ? 'Editar reporte para Soporte' : 'Nuevo reporte de red para Soporte';
-    if (modalSub) modalSub.textContent = 'Reporte: cliente, categoría, detalle específico, evidencias obligatorias y pueblo.';
+    if (modalSub) modalSub.textContent = 'Reporte: cliente, categoría, detalle específico y pueblo vinculado.';
     if (saveBtn) saveBtn.textContent = editingWOId ? 'Guardar detalle' : 'Enviar reporte a Soporte';
   }
 }
@@ -1593,13 +1599,14 @@ async function openWO(id = '') {
   setupOrderControls();
   renderWOEvidencePhotos();
     const reqLabel = document.getElementById('wo-evidence-req-label');
+  const isAdminUser = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
   const isAttentionUser = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
   const isNetworkKind = (document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind) === 'network';
   if (reqLabel) {
-    if (isAttentionUser && isNetworkKind && !editingWOId) {
+    if (!isAdminUser && isAttentionUser && isNetworkKind && !editingWOId) {
       reqLabel.innerHTML = '<b class="req-star" style="color:#dc2626;font-weight:800;">* Obligatorio para Atención</b>';
     } else {
-      reqLabel.textContent = 'Opcional';
+      reqLabel.innerHTML = '<span class="optional-label" style="font-weight:normal;color:#64748b;">Opcional</span>';
     }
   }
   applyRoleFormVisibility();
@@ -1665,13 +1672,14 @@ function clearWOForm() {
   if (eqMenu) eqMenu.classList.remove('open');
   updateWORelationInfo();
   const reqLabel = document.getElementById('wo-evidence-req-label');
+  const isAdminUser = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
   const isAttentionUser = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
   const isNetworkKind = (document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind) === 'network';
   if (reqLabel) {
-    if (isAttentionUser && isNetworkKind && !editingWOId) {
+    if (!isAdminUser && isAttentionUser && isNetworkKind && !editingWOId) {
       reqLabel.innerHTML = '<b class="req-star" style="color:#dc2626;font-weight:800;">* Obligatorio para Atención</b>';
     } else {
-      reqLabel.textContent = 'Opcional';
+      reqLabel.innerHTML = '<span class="optional-label" style="font-weight:normal;color:#64748b;">Opcional</span>';
     }
   }
   applyRoleFormVisibility();
@@ -1724,9 +1732,10 @@ async function saveWO() {
     if (!typedNode) return showWOFieldError('wo-node', 'Busca un pueblo o escribe uno nuevo.');
     if (!node) return showWOFieldError('wo-node', 'Selecciona un pueblo registrado o pulsa “Agregar pueblo” para crearlo.');
 
-    // Evidencia obligatoria al subir reporte de red desde Atención a clientes
+    // Evidencia obligatoria al subir reporte de red desde Atención a clientes (Opcional para Administrador)
     const existingEvidences = (existingWO?.technicianReport?.evidencePhotos || []).filter(Boolean);
-    if (!woEvidencePhotos.length && !existingEvidences.length && userHasRole('atencion_clientes')) {
+    const isAdminUser = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+    if (!isAdminUser && !woEvidencePhotos.length && !existingEvidences.length && userHasRole('atencion_clientes')) {
       notify('Como Atención a clientes es obligatorio adjuntar al menos una evidencia fotográfica o captura.', 'err');
       const evZone = document.getElementById('wo-evidence-zone');
       if (evZone) {
@@ -2653,8 +2662,26 @@ async function openOrderTechnicianReport(orderId) {
       ${orderReportField('pin', 'Lugar', getOrderPlace(order))}
       ${orderReportField('target', 'Ubicación capturada', capturedLocation)}
       ${orderReportField('check', 'Estado', `<span class="order-report-status ${order.status === 'completada' ? 'is-completed' : (order.status === 'resuelto_soporte' ? 'is-resolving' : (order.status === 'devuelto_soporte' ? 'is-returned' : (order.status === 'no_realizado' ? 'is-failed' : 'is-pending')))}">${orderEscape(reportStatus)}</span>`, { raw: true, className: 'status-field' })}
-      ${orderReportField('user', completed ? (order.detailKind === 'network' ? 'Resuelto por' : 'Técnico') : 'Capturado por', completed ? renderUserColorChip(report.completedByName || 'Sin registro', report.completedById) : renderUserColorChip(order.createdByName || order.createdByUsername || 'Sin registro', order.createdById), { raw: true })}
-      ${order.assignedUserName ? orderReportField('user', 'Asignado a (Soporte)', renderUserColorChip(order.assignedUserName, order.assignedUserId), { raw: true }) : ''}
+      ${orderReportField('user', 'Capturado por', renderUserColorChip(order.createdByName || order.createdByUsername || 'Sin registro', order.createdById), { raw: true })}
+      ${orderReportField('user', 'Asignado a', order.assignedUserName ? renderUserColorChip(order.assignedUserName, order.assignedUserId) : '<span style="color:#64748b;font-weight:600;font-size:12px;">Sin asignar</span>', { raw: true })}
+      ${orderReportField('check', 'Resuelto por', (() => {
+        const resolverName = report.completedByName || order.completedByName || (visibleFollowUps.find(f => f.action === 'resuelto_soporte' || f.action === 'solved')?.user) || '';
+        const resolverId = report.completedBy || report.completedById || '';
+        if (resolverName) {
+          const chip = renderUserColorChip(resolverName, resolverId);
+          if (order.status === 'completada') {
+            return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + chip + ' <span style="font-size:11px;color:#059669;font-weight:700;">✓ Aceptado y concluido por Atención</span></div>';
+          }
+          if (order.status === 'resuelto_soporte') {
+            return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + chip + ' <span style="font-size:11px;color:#d97706;font-weight:700;">⏳ En revisión de Atención</span></div>';
+          }
+          return chip;
+        }
+        if (order.status === 'no_realizado') {
+          return '<span style="color:#dc2626;font-weight:600;font-size:12px;font-style:italic;">No realizable (Sin resolver)</span>';
+        }
+        return '<span style="color:#64748b;font-weight:600;font-size:12px;font-style:italic;">Pendiente de resolución</span>';
+      })(), { raw: true })}
       ${orderReportField('calendar', 'Fecha de creación', order.createdAt ? new Date(order.createdAt).toLocaleString('es-MX') : 'Sin fecha')}
       ${viewedSummary ? orderReportField('check', 'Visto', viewedSummary) : ''}
       ${order.reviewOpenedAt ? orderReportField('calendar', 'Abierta para revisión', orderReviewOpenedSummary(order)) : ''}

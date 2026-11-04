@@ -2742,6 +2742,23 @@ function handleNetworkOrderEvent(payload) {
   const isOwnCreator = (order.createdById && order.createdById === user.id) || (order.createdByUsername && order.createdByUsername === user.username) || (payload.byUserId && payload.byUserId === user.id);
   const isSupportToAttention = isNetworkSupportToAttention(order);
 
+  const uIdStr = String(user.id || '').toLowerCase();
+  const uNameNorm = normalizeName(user.name || user.username || '');
+  const isPrevAssignee = (payload.prevAssigneeId && String(payload.prevAssigneeId).toLowerCase() === uIdStr) ||
+    (payload.prevAssigneeName && normalizeName(payload.prevAssigneeName) === uNameNorm);
+
+  const reportData = order.technicianReport || {};
+  const isResolverMe = (reportData.completedById && String(reportData.completedById).toLowerCase() === uIdStr) ||
+    (reportData.completedBy && String(reportData.completedBy).toLowerCase() === uIdStr) ||
+    (reportData.completedByName && normalizeName(reportData.completedByName) === uNameNorm) ||
+    (order.completedByName && normalizeName(order.completedByName) === uNameNorm);
+
+  const isReviewerMe = (order.reviewOpenedById && String(order.reviewOpenedById).toLowerCase() === uIdStr) ||
+    (order.reviewOpenedByName && normalizeName(order.reviewOpenedByName) === uNameNorm);
+
+  // Todo usuario involucrado en el reporte (quien capturó, asignado actual o previo, quien resolvió, quien atendió)
+  const isUserInvolvedInReport = isCreatedByMe || isAssignedToMe || isPrevAssignee || isResolverMe || isReviewerMe;
+
   const actor = payload.byName || order.reviewOpenedByName || (isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico');
 
   if (transition === 'new_order') {
@@ -2780,33 +2797,20 @@ function handleNetworkOrderEvent(payload) {
       }
     }
   } else if (transition === 'attending') {
-    if (isSupportToAttention) {
-      const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
-      const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
-      if (shouldNotify) {
-        notifyNetworkDetailEvent({
-          title: 'Atención iniciada',
-          message: `${actor} inició la atención de este detalle.`,
-          type: 'attending',
-          orderId: order.id
-        });
-      }
-    } else {
-      const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
-      const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
-      if (shouldNotify) {
-        notifyNetworkDetailEvent({
-          title: 'Atención iniciada',
-          message: `${actor} inició la atención de este detalle.`,
-          type: 'attending',
-          orderId: order.id
-        });
-      }
+    const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
+    const shouldNotify = isUserInvolvedInReport || (isSupportToAttention ? (hasCreator ? isCreatedByMe : isSoporte) : (hasCreator ? isCreatedByMe : isAtencion));
+    if (shouldNotify) {
+      notifyNetworkDetailEvent({
+        title: 'Atención iniciada',
+        message: `${actor} inició la atención de este detalle.`,
+        type: 'attending',
+        orderId: order.id
+      });
     }
   } else if (transition === 'resolved') {
     if (isSupportToAttention) {
       const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
-      const shouldNotify = hasCreator ? isCreatedByMe : isSoporte;
+      const shouldNotify = isUserInvolvedInReport || (hasCreator ? isCreatedByMe : isSoporte);
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Requerimiento respondido',
@@ -2817,7 +2821,7 @@ function handleNetworkOrderEvent(payload) {
       }
     } else {
       const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
-      const shouldNotify = hasCreator ? isCreatedByMe : isAtencion;
+      const shouldNotify = isUserInvolvedInReport || (hasCreator ? isCreatedByMe : isAtencion);
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Reporte resuelto',
@@ -2829,7 +2833,7 @@ function handleNetworkOrderEvent(payload) {
     }
   } else if (transition === 'returned') {
     if (isSupportToAttention) {
-      const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
+      const shouldNotify = isUserInvolvedInReport || (hasAssignment ? isAssignedToMe : isAtencion);
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Requerimiento devuelto',
@@ -2839,7 +2843,7 @@ function handleNetworkOrderEvent(payload) {
         });
       }
     } else {
-      const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
+      const shouldNotify = isUserInvolvedInReport || (hasAssignment ? isAssignedToMe : isSoporte);
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Reporte devuelto',
@@ -2851,7 +2855,7 @@ function handleNetworkOrderEvent(payload) {
     }
   } else if (transition === 'confirmed') {
     if (isSupportToAttention) {
-      const shouldNotify = hasAssignment ? isAssignedToMe : isAtencion;
+      const shouldNotify = isUserInvolvedInReport || (hasAssignment ? isAssignedToMe : isAtencion);
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Requerimiento concluido',
@@ -2861,7 +2865,7 @@ function handleNetworkOrderEvent(payload) {
         });
       }
     } else {
-      const shouldNotify = hasAssignment ? isAssignedToMe : isSoporte;
+      const shouldNotify = isUserInvolvedInReport || (hasAssignment ? isAssignedToMe : isSoporte);
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Reporte concluido',
@@ -2872,9 +2876,7 @@ function handleNetworkOrderEvent(payload) {
       }
     }
   } else if (transition === 'unresolvable') {
-    const shouldNotify = isSupportToAttention
-      ? (hasAssignment ? isAssignedToMe : isSoporte)
-      : (hasAssignment ? isAssignedToMe : isAtencion);
+    const shouldNotify = isUserInvolvedInReport || (isSupportToAttention ? (hasAssignment ? isAssignedToMe : isSoporte) : (hasAssignment ? isAssignedToMe : isAtencion));
     if (shouldNotify) {
       notifyNetworkDetailEvent({
         title: 'Reporte no realizable',
@@ -2953,8 +2955,6 @@ function handleNetworkOrderEvent(payload) {
       orderId: order.id
     });
   } else if (transition === 'retaken' && payload.byUserId !== user.id) {
-    const isPrevAssignee = (payload.prevAssigneeId && payload.prevAssigneeId === user.id) ||
-      (payload.prevAssigneeName && normalizeName(payload.prevAssigneeName) === normalizeName(user.name || user.username));
     if (isPrevAssignee) {
       notifyNetworkDetailEvent({
         title: 'Reporte retomado',
@@ -2962,10 +2962,10 @@ function handleNetworkOrderEvent(payload) {
         type: 'retaken',
         orderId: order.id
       });
-    } else if (isSoporte) {
+    } else if (isUserInvolvedInReport || isSoporte) {
       notifyNetworkDetailEvent({
-        title: 'Atención reasignada',
-        message: `${actor} asumió la atención de este reporte.`,
+        title: 'Reporte retomado',
+        message: `${actor} retomó la atención de este reporte.`,
         type: 'retaken',
         orderId: order.id
       });

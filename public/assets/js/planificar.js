@@ -1834,6 +1834,7 @@ function getWmoWeatherInfo(code) {
 }
 
 let lastWeatherWidgetData = null;
+const weatherMemoryCache = new Map();
 
 async function fetchTownWeather(lat, lng, townName) {
     const latNum = safeFloat(lat);
@@ -1845,6 +1846,12 @@ async function fetchTownWeather(lat, lng, townName) {
 
     const coordKey = `${latNum.toFixed(2)}_${lngNum.toFixed(2)}`;
     const cacheKey = `wm_wx_${coordKey}`;
+    if (weatherMemoryCache.has(coordKey)) {
+        const memoryData = weatherMemoryCache.get(coordKey);
+        lastWeatherWidgetData = memoryData;
+        renderWeatherWidget(memoryData, townName);
+        return;
+    }
     try {
         const cachedStr = sessionStorage.getItem(cacheKey);
         if (cachedStr) {
@@ -1888,6 +1895,7 @@ async function fetchTownWeather(lat, lng, townName) {
         };
 
         try {
+            weatherMemoryCache.set(coordKey, weatherObj);
             sessionStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: weatherObj }));
         } catch (e) {}
 
@@ -2228,7 +2236,6 @@ function renderPlanDays() {
                 <div class="day-body">
                     ${cardHtml}
                     ${transitConnectorHtml}
-                    ${extraDetailsHtml}
                 </div>
             </div>
         `;

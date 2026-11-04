@@ -88,25 +88,159 @@ body.planificar-page:not(.plan-technician-view) .plan-map-panel-head{padding:9px
 body.planificar-page:not(.plan-technician-view) .plan-map-legend{gap:8px!important;padding:7px 6px!important}
 
 @media(min-width:901px){
-  body.planificar-page:not(.plan-technician-view) .plan-shell{
-    display:grid!important;
-    grid-template-columns:250px minmax(360px,1fr) minmax(330px,420px)!important;
-    grid-template-areas:"sidebar board map"!important;
-    align-items:start!important;
+  body.planificar-page:not(.plan-technician-view) {
+    height:100vh!important;
+    max-height:100vh!important;
+    overflow:hidden!important;
   }
-  body.planificar-page:not(.plan-technician-view) .plan-sidebar{grid-area:sidebar!important}
-  body.planificar-page:not(.plan-technician-view) .plan-board{grid-area:board!important}
-  body.planificar-page:not(.plan-technician-view) .plan-map-panel{
-    grid-area:map!important;
-    position:sticky!important;
-    top:14px!important;
-    height:calc(100vh - 140px)!important;
-    min-height:540px!important;
+  body.planificar-page:not(.plan-technician-view) .main {
+    height:calc(100vh - 52px)!important;
+    max-height:calc(100vh - 52px)!important;
+    overflow:hidden!important;
+    padding:0!important;
   }
-  body.planificar-page:not(.plan-technician-view) .plan-map-panel .plan-map{
-    flex:1 1 auto!important;
+  body.planificar-page:not(.plan-technician-view) .ct {
     height:100%!important;
-    min-height:440px!important;
+    max-height:100%!important;
+    overflow:hidden!important;
+    padding:0!important;
+  }
+  body.planificar-page:not(.plan-technician-view) #plan-panel {
+    height:100%!important;
+    max-height:100%!important;
+    overflow:hidden!important;
+    display:flex!important;
+    flex-direction:column!important;
+    padding:6px 14px 10px!important;
+    background:#f4f7fb!important;
+    box-sizing:border-box!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero {
+    display:none!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-kpi-bar {
+    display:grid!important;
+    grid-template-columns:repeat(5,minmax(0,1fr))!important;
+    gap:10px!important;
+    margin:0 0 6px!important;
+    padding:0!important;
+    min-height:48px!important;
+    max-height:48px!important;
+    flex:0 0 48px!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-kpi {
+    min-height:48px!important;
+    height:48px!important;
+    padding:6px 12px!important;
+    border-radius:8px!important;
+    display:flex!important;
+    align-items:center!important;
+    gap:8px!important;
+    box-sizing:border-box!important;
+    box-shadow:0 2px 8px rgba(18,42,76,.04)!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-kpi-icon,
+  body.planificar-page:not(.plan-technician-view) .plan-kpi-ring {
+    width:32px!important;
+    height:32px!important;
+    flex:0 0 32px!important;
+    font-size:13px!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-kpi strong {
+    font-size:17px!important;
+    line-height:1!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-kpi small {
+    font-size:9px!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-calendar {
+    margin:0 0 6px!important;
+    padding:6px 12px!important;
+    flex:0 0 auto!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-shell {
+    display:grid!important;
+    grid-template-columns:255px minmax(360px,1fr) minmax(330px,430px)!important;
+    grid-template-areas:"sidebar board map"!important;
+    gap:12px!important;
+    padding:0!important;
+    flex:1 1 0!important;
+    min-height:0!important;
+    height:100%!important;
+    overflow:hidden!important;
+    align-items:stretch!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-sidebar {
+    grid-area:sidebar!important;
+    height:100%!important;
+    max-height:100%!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    display:flex!important;
+    flex-direction:column!important;
+    gap:7px!important;
+    padding:10px!important;
+    border-radius:12px!important;
+    background:#fff!important;
+    box-shadow:0 4px 14px rgba(18,42,76,.06)!important;
+    box-sizing:border-box!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-board {
+    grid-area:board!important;
+    height:100%!important;
+    max-height:100%!important;
+    display:flex!important;
+    flex-direction:column!important;
+    overflow:hidden!important;
+    min-height:0!important;
+    box-sizing:border-box!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-board>.sh {
+    min-height:30px!important;
+    padding:0 2px 4px!important;
+    flex:0 0 auto!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-command-bar {
+    margin-bottom:6px!important;
+    padding:5px 6px!important;
+    flex:0 0 auto!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-card-navigator {
+    flex:0 0 auto!important;
+    margin-bottom:6px!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-site-pills-row {
+    flex:0 0 auto!important;
+    margin-bottom:6px!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-days {
+    flex:1 1 0!important;
+    min-height:0!important;
+    height:100%!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    padding-right:6px!important;
+    scrollbar-width:thin!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-map-panel {
+    grid-area:map!important;
+    height:100%!important;
+    max-height:100%!important;
+    display:flex!important;
+    flex-direction:column!important;
+    overflow:hidden!important;
+    min-height:0!important;
+    position:static!important;
+    border-radius:12px!important;
+    background:#fff!important;
+    box-shadow:0 4px 14px rgba(18,42,76,.06)!important;
+    box-sizing:border-box!important;
+  }
+  body.planificar-page:not(.plan-technician-view) .plan-map-panel .plan-map {
+    flex:1 1 0!important;
+    min-height:0!important;
+    height:100%!important;
+    width:100%!important;
   }
 }
 @media(max-width:900px){
