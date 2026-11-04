@@ -1989,7 +1989,11 @@ function togglePlanDisplayMode() {
 }
 
 function panPlanMapToActiveStop(stop) {
-    if (!planMap || !stop) return;
+    if (!planMap) return;
+    try {
+        planMap.invalidateSize();
+    } catch (e) {}
+    if (!stop) return;
     const pos = getStopCurrentPosition(stop);
     if (!isNaN(pos.lat) && !isNaN(pos.lng)) {
         try {

@@ -214,11 +214,11 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     display: grid!important;
     grid-template-columns: 255px minmax(360px, 1fr) minmax(330px, 440px)!important;
     grid-template-areas: "sidebar board map"!important;
-    grid-template-rows: 100%!important;
+    grid-template-rows: minmax(0, 1fr)!important;
     gap: 14px!important;
     padding: 0!important;
     margin: 0!important;
-    flex: 1 1 auto!important;
+    flex: 1 1 0!important;
     height: calc(100vh - 116px)!important;
     height: calc(100dvh - 116px)!important;
     min-height: calc(100vh - 116px)!important;
@@ -234,14 +234,14 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     grid-area: sidebar!important;
     box-sizing: border-box!important;
     height: 100%!important;
-    min-height: 100%!important;
+    min-height: 0!important;
     max-height: 100%!important;
     overflow: hidden!important;
     overflow-y: hidden!important;
     display: flex!important;
     flex-direction: column!important;
-    gap: 6px!important;
-    padding: 10px 12px!important;
+    gap: 8px!important;
+    padding: 12px!important;
     border-radius: 12px!important;
     background: #fff!important;
     border: 1px solid #dce5ee!important;
@@ -250,13 +250,13 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
 
   body.planificar-page:not(.plan-technician-view) .plan-route-intel-box {
     margin-top: 4px!important;
-    padding: 7px 9px!important;
+    padding: 8px 10px!important;
     flex: 0 0 auto!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-weather-box {
-    margin-top: 4px!important;
-    padding: 7px 9px!important;
+    margin-top: auto!important;
+    padding: 8px 10px!important;
     flex: 0 0 auto!important;
   }
 
@@ -265,7 +265,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     grid-area: board!important;
     box-sizing: border-box!important;
     height: 100%!important;
-    min-height: 100%!important;
+    min-height: 0!important;
     max-height: 100%!important;
     display: flex!important;
     flex-direction: column!important;
@@ -336,6 +336,34 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     overflow-x: hidden!important;
     padding-right: 6px!important;
     scrollbar-width: thin!important;
+    display: flex!important;
+    flex-direction: column!important;
+  }
+
+  /* La tarjeta del día se expande verticalmente para ocupar todo el panel central sin huecos vacíos abajo */
+  body.planificar-page:not(.plan-technician-view) .plan-days > .day-col {
+    flex: 1 1 auto!important;
+    min-height: 0!important;
+    display: flex!important;
+    flex-direction: column!important;
+    border-radius: 12px!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-days > .day-col > .day-head {
+    flex: 0 0 auto!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-days > .day-col > .day-body {
+    flex: 1 1 auto!important;
+    display: flex!important;
+    flex-direction: column!important;
+    gap: 8px!important;
+    min-height: 0!important;
+    overflow-y: auto!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-days .plan-card-transit-box {
+    margin-top: auto!important;
   }
 
   /* Columna 3: Mapa a toda la altura disponible (ESTÁTICA, SIN SCROLLBAR) */
@@ -343,7 +371,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     grid-area: map!important;
     box-sizing: border-box!important;
     height: 100%!important;
-    min-height: 100%!important;
+    min-height: 0!important;
     max-height: 100%!important;
     display: flex!important;
     flex-direction: column!important;
