@@ -144,7 +144,8 @@ assert.strictEqual(getWmoWeatherInfo(95).condition, 'alert');
 
 // 6. Verify CSS definitions for desktop layout
 assert(cssRefContent.includes('body.planificar-page:not(.plan-technician-view) .plan-shell'), 'Missing desktop plan-shell rule');
-assert(cssRefContent.includes('position:sticky!important;top:14px!important'), 'Missing sticky map rule');
+assert(cssRefContent.includes('grid-template-areas:"sidebar board map"!important') || cssRefContent.includes('grid-template-areas: "sidebar board map"'), 'Missing 3-column desktop layout');
+assert(cssRefContent.includes('position:sticky') && cssRefContent.includes('plan-map-panel'), 'Missing sticky map rule');
 assert(cssUiContent.includes('.plan-route-intel-box'), 'Missing .plan-route-intel-box styles');
 assert(cssUiContent.includes('.plan-weather-box'), 'Missing .plan-weather-box styles');
 assert(cssUiContent.includes('.plan-inter-stop-transit'), 'Missing .plan-inter-stop-transit styles');
@@ -158,3 +159,4 @@ const techCss = fs.readFileSync(techCssPath, 'utf8');
 assert(techCss.includes('body.plan-technician-view'), 'Technician dashboard CSS intact');
 
 console.log('All Plan Desktop Redesign, Route Feasibility, Weather & Week Filter tests passed successfully!');
+

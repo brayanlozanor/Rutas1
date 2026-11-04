@@ -4088,7 +4088,7 @@ html[data-role="atencion_clientes"] .topbar.app-sidebar .nav .nb[href="usuarios.
 .plan-map-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 12px;border-bottom:1px solid #dbe5ef;color:#183455}.plan-map-panel-head .btn{min-height:34px!important;padding:6px 9px!important;border-radius:6px!important}
 .planificar-page .plan-map-panel .plan-map{height:calc(100vh - 270px)!important;min-height:470px!important;border-radius:0!important}
 .planificar-page .plan-map-legend{display:flex;justify-content:center;gap:14px;padding:10px 8px;border-top:1px solid #dbe5ef;background:#fff;font-size:9px}
-@media(max-width:1350px){.planificar-page .plan-shell{grid-template-columns:220px minmax(0,1fr)!important}.plan-map-panel{grid-column:1/-1;position:static}.planificar-page .plan-map-panel .plan-map{height:460px!important}}
+@media(max-width:1350px){.planificar-page:not(.plan-technician-view) .plan-shell{grid-template-columns:230px minmax(340px,1fr) minmax(300px,360px)!important}.planificar-page:not(.plan-technician-view) .plan-map-panel{grid-column:auto;position:sticky;top:12px}}
 @media(max-width:850px){.planificar-page .hero-panel{width:calc(100% + 24px)!important;margin:0 -12px!important;padding-left:28px!important;padding-right:28px!important}.plan-kpi-bar{grid-template-columns:repeat(2,1fr);margin:-40px 10px 14px}.plan-kpi{border-right:0;border-bottom:1px solid #dbe5ef}.plan-kpi:last-child{grid-column:1/-1}.planificar-page .plan-shell{grid-template-columns:1fr!important;padding:0 10px 20px}.planificar-page .plan-sidebar{position:static!important}.plan-command-bar{grid-template-columns:1fr 1fr}.plan-command-bar .search-input{grid-column:1/-1}}
 
 /* Centro de ordenes */
