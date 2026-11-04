@@ -1695,6 +1695,274 @@ function renderPlanSummary() {
         </div>`;
 }
 
+// --- Inteligencia de Ruta, Clima y Viabilidad para Vista de Escritorio ---
+
+function calculateHaversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function estimateRouteTravel(lat1, lon1, lat2, lon2) {
+    const directKm = calculateHaversineKm(lat1, lon1, lat2, lon2);
+    if (isNaN(directKm) || directKm <= 0.05) return { km: 0.1, minutes: 2, formatted: '~2 min (mismo poblado)' };
+    const roadKm = Math.round(directKm * 1.32 * 10) / 10;
+    const minutes = Math.max(3, Math.round((roadKm / 38) * 60) + 2);
+    const timeFormatted = minutes >= 60 
+        ? `${Math.floor(minutes / 60)}h ${minutes % 60 ? (minutes % 60) + 'm' : ''}`.trim()
+        : `${minutes} min`;
+    return {
+        km: roadKm,
+        minutes,
+        formatted: `~${timeFormatted} (${roadKm} km)`
+    };
+}
+
+function calculateDayRouteFeasibility(stops) {
+    const validStops = (stops || []).filter(s => !s.deletedAt);
+    let totalKm = 0;
+    let totalTravelMinutes = 0;
+    const legs = [];
+
+    for (let i = 0; i < validStops.length - 1; i++) {
+        const s1 = validStops[i];
+        const s2 = validStops[i + 1];
+        const pos1 = getStopCurrentPosition(s1);
+        const pos2 = getStopCurrentPosition(s2);
+        if (!isNaN(pos1.lat) && !isNaN(pos1.lng) && !isNaN(pos2.lat) && !isNaN(pos2.lng)) {
+            const leg = estimateRouteTravel(pos1.lat, pos1.lng, pos2.lat, pos2.lng);
+            totalKm += leg.km;
+            totalTravelMinutes += leg.minutes;
+            legs.push({ from: s1, to: s2, ...leg });
+        } else {
+            legs.push({ from: s1, to: s2, km: 0, minutes: 0, formatted: 'Sin coordenadas' });
+        }
+    }
+
+    const serviceMinutes = validStops.length * 45;
+    const totalWorkdayMinutes = totalTravelMinutes + serviceMinutes;
+    const workdayHours = Math.floor(totalWorkdayMinutes / 60);
+    const workdayRemMinutes = totalWorkdayMinutes % 60;
+    const workdayFormatted = workdayHours > 0 
+        ? `${workdayHours}h ${workdayRemMinutes > 0 ? workdayRemMinutes + 'm' : ''}`.trim() 
+        : `${workdayRemMinutes}m`;
+
+    const travelHours = Math.floor(totalTravelMinutes / 60);
+    const travelRemMinutes = totalTravelMinutes % 60;
+    const travelFormatted = travelHours > 0 
+        ? `${travelHours}h ${travelRemMinutes > 0 ? travelRemMinutes + 'm' : ''}`.trim() 
+        : `${totalTravelMinutes} min`;
+
+    let status = 'optima';
+    let statusLabel = 'Jornada adecuada';
+    let statusDesc = 'Tiempo equilibrado de traslado y trabajo en campo.';
+    let statusClass = 'bgn';
+
+    if (validStops.length === 0) {
+        status = 'vacia';
+        statusLabel = 'Sin paradas';
+        statusDesc = 'No hay paradas programadas para esta fecha.';
+        statusClass = 'bgh';
+    } else if (totalWorkdayMinutes > 540) {
+        status = 'sobrecarga';
+        statusLabel = 'Sobrecarga de jornada';
+        statusDesc = 'Supera 9 horas estimadas. Se sugiere redistribuir paradas.';
+        statusClass = 'br';
+    } else if (totalWorkdayMinutes > 420) {
+        status = 'completa';
+        statusLabel = 'Jornada completa';
+        statusDesc = 'Ruta extensa pero viable en jornada normal.';
+        statusClass = 'by';
+    }
+
+    return {
+        stopsCount: validStops.length,
+        totalKm: Math.round(totalKm * 10) / 10,
+        totalTravelMinutes,
+        travelFormatted,
+        serviceMinutes,
+        totalWorkdayMinutes,
+        workdayFormatted,
+        status,
+        statusLabel,
+        statusDesc,
+        statusClass,
+        legs
+    };
+}
+
+let lastWeatherFetchCoords = null;
+
+function getWmoWeatherInfo(code) {
+    if (code === 0) return { label: 'Soleado / Despejado', icon: '☀️', condition: 'good' };
+    if (code === 1 || code === 2) return { label: 'Mayormente despejado', icon: '🌤️', condition: 'good' };
+    if (code === 3) return { label: 'Nublado', icon: '☁️', condition: 'fair' };
+    if (code === 45 || code === 48) return { label: 'Niebla / Neblina', icon: '🌫️', condition: 'caution' };
+    if (code >= 51 && code <= 55) return { label: 'Llovizna ligera', icon: '🌦️', condition: 'caution' };
+    if (code >= 61 && code <= 65) return { label: 'Lluvia constante', icon: '🌧️', condition: 'warning' };
+    if (code >= 80 && code <= 82) return { label: 'Chubascos', icon: '🌧️', condition: 'warning' };
+    if (code >= 95) return { label: 'Tormenta eléctrica', icon: '⛈️', condition: 'alert' };
+    return { label: 'Tiempo templado', icon: '⛅', condition: 'good' };
+}
+
+async function fetchTownWeather(lat, lng, townName) {
+    const latNum = safeFloat(lat);
+    const lngNum = safeFloat(lng);
+    if (isNaN(latNum) || isNaN(lngNum)) return;
+
+    const cacheKey = `wm_wx_${latNum.toFixed(2)}_${lngNum.toFixed(2)}`;
+    try {
+        const cachedStr = sessionStorage.getItem(cacheKey);
+        if (cachedStr) {
+            const cached = JSON.parse(cachedStr);
+            if (Date.now() - cached.timestamp < 3600000) {
+                renderWeatherWidget(cached.data, townName);
+                return;
+            }
+        }
+    } catch (e) {}
+
+    const coordKey = `${latNum.toFixed(2)}_${lngNum.toFixed(2)}`;
+    if (lastWeatherFetchCoords === coordKey) return;
+    lastWeatherFetchCoords = coordKey;
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4500);
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${latNum.toFixed(4)}&longitude=${lngNum.toFixed(4)}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation&daily=precipitation_probability_max,temperature_2m_max,temperature_2m_min&timezone=auto`;
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error('Weather fetch failed');
+        const data = await res.json();
+
+        const temp = Math.round(data.current?.temperature_2m ?? 24);
+        const code = data.current?.weather_code ?? 1;
+        const wind = Math.round(data.current?.wind_speed_10m ?? 8);
+        const rainProb = data.daily?.precipitation_probability_max?.[0] ?? Math.round(data.current?.precipitation ? 60 : 10);
+        const weatherInfo = getWmoWeatherInfo(code);
+
+        const weatherObj = {
+            temp,
+            wind,
+            rainProb,
+            icon: weatherInfo.icon,
+            label: weatherInfo.label,
+            condition: weatherInfo.condition
+        };
+
+        try {
+            sessionStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: weatherObj }));
+        } catch (e) {}
+
+        renderWeatherWidget(weatherObj, townName);
+    } catch (err) {
+        renderWeatherFallback(townName);
+    }
+}
+
+function renderWeatherWidget(wx, townName) {
+    const tempEl = document.getElementById('weather-temp');
+    const townEl = document.getElementById('weather-town');
+    const iconEl = document.getElementById('weather-icon');
+    const descEl = document.getElementById('weather-desc');
+    const rainEl = document.getElementById('weather-rain');
+    const windEl = document.getElementById('weather-wind');
+    const alertEl = document.getElementById('weather-road-alert');
+    if (!tempEl || !townEl) return;
+
+    tempEl.textContent = `${wx.temp}°C`;
+    townEl.textContent = townName ? `Zona ${townName}` : 'Clima en zona';
+    if (iconEl) iconEl.textContent = wx.icon || '⛅';
+    if (descEl) descEl.textContent = wx.label || 'Tiempo favorable';
+    if (rainEl) rainEl.textContent = `🌧️ ${wx.rainProb}% lluvia`;
+    if (windEl) windEl.textContent = `💨 ${wx.wind} km/h`;
+
+    if (alertEl) {
+        if (wx.rainProb >= 60 || wx.condition === 'warning' || wx.condition === 'alert') {
+            alertEl.className = 'weather-road-alert alert-warning';
+            alertEl.textContent = '⚠️ Alerta de lluvia: precaución en terracerías';
+        } else if (wx.wind >= 35) {
+            alertEl.className = 'weather-road-alert alert-warning';
+            alertEl.textContent = '⚠️ Viento fuerte: precaución al subir torres';
+        } else {
+            alertEl.className = 'weather-road-alert';
+            alertEl.textContent = '✓ Condiciones favorables para ruta de campo';
+        }
+    }
+}
+
+function renderWeatherFallback(townName) {
+    const tempEl = document.getElementById('weather-temp');
+    const townEl = document.getElementById('weather-town');
+    const descEl = document.getElementById('weather-desc');
+    const alertEl = document.getElementById('weather-road-alert');
+    if (tempEl) tempEl.textContent = 'Guerrero';
+    if (townEl) townEl.textContent = townName ? `Zona ${townName}` : 'Clima en zona';
+    if (descEl) descEl.textContent = 'Pronóstico local listo para ruta';
+    if (alertEl) {
+        alertEl.className = 'weather-road-alert';
+        alertEl.textContent = '✓ Caminos transitables';
+    }
+}
+
+function renderRouteIntelligenceWidget(stops) {
+    const box = document.getElementById('plan-route-intel-box');
+    if (!box) return;
+    const feasibility = calculateDayRouteFeasibility(stops);
+
+    const kmEl = document.getElementById('intel-km');
+    const travelEl = document.getElementById('intel-travel-time');
+    const stopsTimeEl = document.getElementById('intel-stops-time');
+    const workdayEl = document.getElementById('intel-workday');
+    const badgeEl = document.getElementById('intel-feasibility-badge');
+    const statusEl = document.getElementById('intel-route-status');
+    const stripEl = document.getElementById('plan-day-intel-strip');
+
+    if (kmEl) kmEl.textContent = `${feasibility.totalKm} km`;
+    if (travelEl) travelEl.textContent = feasibility.travelFormatted;
+    if (stopsTimeEl) stopsTimeEl.textContent = `${feasibility.serviceMinutes} min`;
+    if (workdayEl) workdayEl.textContent = feasibility.workdayFormatted;
+    if (badgeEl) {
+        badgeEl.className = `badge ${feasibility.statusClass}`;
+        badgeEl.textContent = feasibility.statusLabel;
+    }
+    if (statusEl) statusEl.textContent = feasibility.statusDesc;
+
+    if (stripEl) {
+        if (stops.length > 0) {
+            stripEl.style.display = 'flex';
+            stripEl.innerHTML = `
+                <div class="intel-summary">
+                    <span><b>📍 ${stops.length}</b> paradas</span>
+                    <span><b>🚗 ~${feasibility.totalKm} km</b> carretera</span>
+                    <span><b>⏱️ ~${feasibility.travelFormatted}</b> traslado</span>
+                    <span><b>🛠️ ${feasibility.serviceMinutes} min</b> servicio</span>
+                    <span>Jornada est: <b>~${feasibility.workdayFormatted}</b></span>
+                </div>
+                <div><span class="badge ${feasibility.statusClass}">${feasibility.statusLabel}</span></div>
+            `;
+        } else {
+            stripEl.style.display = 'none';
+        }
+    }
+
+    const firstStopWithPos = stops.find(s => {
+        const p = getStopCurrentPosition(s);
+        return !isNaN(p.lat) && !isNaN(p.lng);
+    });
+    if (firstStopWithPos) {
+        const p = getStopCurrentPosition(firstStopWithPos);
+        fetchTownWeather(p.lat, p.lng, firstStopWithPos.name);
+    } else {
+        renderWeatherFallback();
+    }
+}
+
 function renderPlanDays() {
     const board = document.getElementById('plan-days');
     if (!selectedTechId) {
@@ -1733,8 +2001,34 @@ function renderPlanDays() {
     board.innerHTML = keys.map(key => {
         const stops = groups.get(key) || [];
         const label = !key ? 'Sin fecha asignada' : (key < today ? `Pendientes anteriores · ${formatCalendarDate(key)}` : (key === today ? `Trabajo de hoy · ${formatCalendarDate(key)}` : formatCalendarDate(key)));
-        return `<div class="day-col"><div class="day-head"><span>${escapeHtml(label)}</span></div><div class="day-body">${stops.map((stop,index) => renderStopCard(stop,'general',index)).join('')}</div></div>`;
+        const stopsHtml = stops.map((stop, index) => {
+            let transitHtml = '';
+            if (index > 0 && !isTechnicianPlanView()) {
+                const prevStop = stops[index - 1];
+                const p1 = getStopCurrentPosition(prevStop);
+                const p2 = getStopCurrentPosition(stop);
+                if (!isNaN(p1.lat) && !isNaN(p1.lng) && !isNaN(p2.lat) && !isNaN(p2.lng)) {
+                    const leg = estimateRouteTravel(p1.lat, p1.lng, p2.lat, p2.lng);
+                    const prevName = prevStop.name || 'Parada anterior';
+                    const currName = stop.name || 'Siguiente parada';
+                    transitHtml = `
+                        <div class="plan-inter-stop-transit">
+                            <div class="transit-line"></div>
+                            <div class="transit-badge" title="Tiempo estimado en carretera (38 km/h)">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+                                <span><b>~${leg.minutes} min</b> (${leg.km} km) de <b>${escapeHtml(prevName)}</b> a <b>${escapeHtml(currName)}</b></span>
+                            </div>
+                        </div>`;
+                }
+            }
+            return transitHtml + renderStopCard(stop, 'general', index);
+        }).join('');
+        return `<div class="day-col"><div class="day-head"><span>${escapeHtml(label)}</span></div><div class="day-body">${stopsHtml}</div></div>`;
     }).join('') || `<div class="plan-empty">${isTechnicianPlanView() ? `No tienes paradas asignadas para ${formatCalendarDate(selectedCalendarDate || today)}.` : 'No hay paradas en esta fecha.'}</div>`;
+
+    if (!isTechnicianPlanView()) {
+        renderRouteIntelligenceWidget(visible);
+    }
 }
 
 function stopActionIcon(type) {
@@ -2190,6 +2484,8 @@ function renderAdminWeekPlanner() {
     const plan = getSelectedGeneralPlan();
     const stops = (plan?.stops || []).filter(stop => !stop.deletedAt);
     const dates = getAdminPlannerWeekDates();
+    const dayNamesShort = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
     const renderCard = (stop, instanceKey) => {
         const details = getStopDetails(stop);
         const progress = getStopProgress(stop);
@@ -2198,31 +2494,69 @@ function renderAdminWeekPlanner() {
             const resolved = detail.status === 'completada' || detail.status === 'no_realizado';
             return `<div class="plan-week-detail ${resolved ? 'resolved' : ''}"><span>${escapeHtml(detail.title || 'Detalle')}</span><b>${resolved ? 'Resuelto' : 'Pendiente'}</b></div>`;
         }).join('') || '<div class="plan-week-empty-detail">Esta parada no tiene detalles.</div>';
+
+        const quickMoveOptions = [
+            '<option value="" disabled selected>📅 Mover a día...</option>',
+            '<option value="">Sin fecha (disponibles)</option>',
+            ...dates.map((d, idx) => `<option value="${d}" ${stop.scheduledDate === d ? 'disabled' : ''}>${dayNamesShort[idx]} · ${formatCalendarDate(d)}</option>`)
+        ].join('');
+
         return `<article class="plan-week-stop" draggable="true" ondragstart="startAdminWeekDrag(event,'${escapeAttr(stop.id)}')" ondragover="allowAdminWeekCardDrop(event)" ondragleave="event.currentTarget.classList.remove('drop-after')" ondrop="dropAdminWeekStopOnCard(event,'${escapeAttr(stop.scheduledDate || '')}','${escapeAttr(stop.id)}')">
         <strong>${escapeHtml(stop.name || 'Parada')}</strong>
         <small>${escapeHtml(stop.type === 'manual' ? 'Punto manual' : (stop.type === 'node' ? 'Nodo' : 'Antena'))}</small>
         <div class="plan-week-progress"><span>${progress.total} detalles</span><span class="resolved">${progress.done} resueltos</span><span>${progress.pending} pendientes</span></div>
+        <div class="plan-week-quick-move-wrap">
+            <select class="plan-week-quick-move" onchange="moveAdminWeekStopToDay('${escapeAttr(stop.id)}', this.value)" onclick="event.stopPropagation()">
+                ${quickMoveOptions}
+            </select>
+        </div>
         <button class="plan-week-details-toggle" type="button" onclick="toggleAdminWeekStopDetails(event,'${detailPanelId}')">Ver detalles</button>
         <div id="${detailPanelId}" class="plan-week-details" hidden>${detailRows}</div>
     </article>`;
     };
-    const columns = [{ date:'', label:'Paradas', source:true }, ...dates.map(date => ({ date, label:formatCalendarDate(date), source:false }))];
+
+    const columns = [{ date:'', label:'Paradas disponibles', source:true }, ...dates.map(date => ({ date, label:formatCalendarDate(date), source:false }))];
     board.innerHTML = columns.map((column, columnIndex) => {
         const columnStops = column.source
             ? stops.filter(stop => !dates.includes(stop.scheduledDate))
             : stops.filter(stop => stop.scheduledDate === column.date);
         const dropEvents = `ondragover="allowAdminWeekDrop(event)" ondrop="dropAdminWeekStop(event,'${column.date}')"`;
+        const feasibility = column.source ? null : calculateDayRouteFeasibility(columnStops);
+        const workloadBadge = feasibility && columnStops.length > 0
+            ? `<span class="plan-week-workload-badge" title="Jornada estimada: traslado + servicio">~${feasibility.workdayFormatted}</span>`
+            : '';
+
         return `<section class="plan-week-column ${column.source ? 'plan-week-source' : ''}" ${dropEvents}>
-            <header><span>${escapeHtml(column.label)}</span><b>${columnStops.length}</b></header>
+            <header onclick="${column.source ? '' : `setAdminWeekMapScope('${column.date}')`}" style="${column.source ? '' : 'cursor:pointer'}" title="${column.source ? '' : 'Clic para enfocar ruta en el mapa'}">
+                <span>${escapeHtml(column.label)}</span>
+                <div class="plan-week-column-header-info">
+                    ${workloadBadge}
+                    <b>${columnStops.length}</b>
+                </div>
+            </header>
             <div class="plan-week-dropzone">${columnStops.map((stop,index) => renderCard(stop, `${columnIndex}-${index}`)).join('') || `<div class="plan-week-empty">${column.source ? 'No hay paradas disponibles' : 'Suelta una parada aquí'}</div>`}</div>
         </section>`;
     }).join('');
+
     const range = document.getElementById('plan-week-range');
     if (range) range.textContent = `${formatCalendarDate(dates[0])} — ${formatCalendarDate(dates[6])}`;
     const sub = document.getElementById('plan-week-planner-sub');
     if (sub) sub.textContent = `${plan?.name || 'Plan general'} · ${stops.length} paradas`;
     renderAdminWeekMapOptions(dates, stops);
     if (adminWeekRouteMap) renderAdminWeekRouteMap();
+}
+
+async function moveAdminWeekStopToDay(stopId, targetDate) {
+    const plan = getSelectedGeneralPlan();
+    if (!plan) return;
+    const stop = (plan.stops || []).find(s => s.id === stopId && !s.deletedAt);
+    if (!stop) return;
+    stop.scheduledDate = targetDate || '';
+    stop.updatedAt = new Date().toISOString();
+    await saveDB();
+    renderAdminWeekPlanner();
+    renderPlan();
+    notify(targetDate ? `Parada asignada al ${formatCalendarDate(targetDate)}` : 'Parada desasignada a disponibles');
 }
 
 function renderAdminWeekMapOptions(dates = getAdminPlannerWeekDates(), stops = visibleStops(getSelectedGeneralPlan()?.stops)) {
@@ -3679,30 +4013,128 @@ function getOrderedRouteStops() {
         .filter(stop => !isNaN(stop.lat) && !isNaN(stop.lng));
 }
 
-function openWeeklyRouteModal() {
-    const stops = getOrderedRouteStops();
+let weeklyRouteSelectedDay = 'all';
+let weeklyRouteListCollapsed = false;
+
+function toggleRouteListFullscreen() {
+    weeklyRouteListCollapsed = !weeklyRouteListCollapsed;
+    const modal = document.querySelector('#plan-route-mo .route-full-modal');
+    const btnLabel = document.getElementById('route-toggle-list-text');
+    if (modal) {
+        if (weeklyRouteListCollapsed) {
+            modal.classList.add('map-maximized');
+            if (btnLabel) btnLabel.textContent = 'Ver lista';
+        } else {
+            modal.classList.remove('map-maximized');
+            if (btnLabel) btnLabel.textContent = 'Maximizar mapa';
+        }
+    }
+    setTimeout(() => {
+        if (routeFullMap) routeFullMap.invalidateSize();
+    }, 120);
+}
+
+function getFilteredWeeklyRouteStops() {
+    const allStops = getOrderedRouteStops();
+    if (weeklyRouteSelectedDay === 'all') return allStops;
+    return allStops.filter(s => (s.scheduledDate || 'unscheduled') === weeklyRouteSelectedDay);
+}
+
+function renderWeeklyRouteDayFilters(allStops) {
+    const filterBox = document.getElementById('plan-route-day-filters');
+    if (!filterBox) return;
+
+    const dateCounts = new Map();
+    allStops.forEach(s => {
+        const key = s.scheduledDate || 'unscheduled';
+        dateCounts.set(key, (dateCounts.get(key) || 0) + 1);
+    });
+
+    const sortedDates = [...dateCounts.keys()].sort((a, b) => {
+        if (a === 'unscheduled') return 1;
+        if (b === 'unscheduled') return -1;
+        return a.localeCompare(b);
+    });
+
+    const pills = [
+        `<button type="button" class="route-day-pill ${weeklyRouteSelectedDay === 'all' ? 'active' : ''}" onclick="selectWeeklyRouteDay('all')"><span>Todos los días</span><small>${allStops.length}</small></button>`,
+        ...sortedDates.map(dateKey => {
+            const count = dateCounts.get(dateKey) || 0;
+            const label = dateKey === 'unscheduled' ? 'Sin fecha' : formatCalendarDate(dateKey);
+            return `<button type="button" class="route-day-pill ${weeklyRouteSelectedDay === dateKey ? 'active' : ''}" onclick="selectWeeklyRouteDay('${escapeAttr(dateKey)}')"><span>${escapeHtml(label)}</span><small>${count}</small></button>`;
+        })
+    ];
+
+    filterBox.innerHTML = pills.join('');
+}
+
+function selectWeeklyRouteDay(dayKey) {
+    weeklyRouteSelectedDay = dayKey;
+    const allStops = getOrderedRouteStops();
+    renderWeeklyRouteDayFilters(allStops);
+    renderWeeklyRouteView();
+    const filteredStops = getFilteredWeeklyRouteStops();
+    renderRouteFullMap(filteredStops);
+}
+
+function renderWeeklyRouteView() {
+    const allStops = getOrderedRouteStops();
+    const stops = getFilteredWeeklyRouteStops();
     const tech = getSelectedTech();
     const generalPlan = getSelectedGeneralPlan();
     const totalDetails = stops.reduce((sum, stop) => sum + stop.progress.total, 0);
     const pendingDetails = stops.reduce((sum, stop) => sum + stop.progress.pending, 0);
     const doneDetails = totalDetails - pendingDetails;
-    const label = selectedTechId === SHARED_PLAN_ID
-        ? `${tech?.nombre || 'Plan general compartido'} - ${generalPlan?.name || 'Plan general'}`
-        : `${tech?.nombre || 'Tecnico'} - ${dayLabel(selectedDay)}`;
+    const feasibility = calculateDayRouteFeasibility(stops);
 
-    document.getElementById('plan-route-sub').innerHTML = `
-        <span>${escapeHtml(label)}</span>
-        <span>${stops.length} paradas</span>
-        <span>${totalDetails} detalles en total</span>
-        <span>${pendingDetails} pendientes</span>
-        <span>${doneDetails} hechos</span>
-    `;
+    const dayLabelStr = weeklyRouteSelectedDay === 'all' 
+        ? 'Todos los días' 
+        : (weeklyRouteSelectedDay === 'unscheduled' ? 'Sin fecha asignada' : formatCalendarDate(weeklyRouteSelectedDay));
+
+    const label = selectedTechId === SHARED_PLAN_ID
+        ? `${tech?.nombre || 'Plan general compartido'} - ${generalPlan?.name || 'Plan general'} (${dayLabelStr})`
+        : `${tech?.nombre || 'Tecnico'} - ${dayLabelStr}`;
+
+    const subEl = document.getElementById('plan-route-sub');
+    if (subEl) {
+        subEl.innerHTML = `
+            <span>${escapeHtml(label)}</span>
+            <span>${stops.length} paradas</span>
+            <span>${totalDetails} detalles</span>
+            <span>${pendingDetails} pendientes</span>
+            <span>${doneDetails} hechos</span>
+        `;
+    }
+
+    const statsEl = document.getElementById('plan-route-day-stats');
+    if (statsEl) {
+        statsEl.innerHTML = `
+            <span>🚗 ~${feasibility.totalKm} km</span> · 
+            <span>⏱️ ~${feasibility.travelFormatted} traslado</span> · 
+            <span>Jornada: <b>~${feasibility.workdayFormatted}</b></span> · 
+            <span class="badge ${feasibility.statusClass}">${feasibility.statusLabel}</span>
+        `;
+    }
+
     renderWeeklyRouteList(stops);
+}
+
+function openWeeklyRouteModal() {
+    weeklyRouteSelectedDay = 'all';
+    weeklyRouteListCollapsed = false;
+    const modal = document.querySelector('#plan-route-mo .route-full-modal');
+    if (modal) modal.classList.remove('map-maximized');
+    const btnLabel = document.getElementById('route-toggle-list-text');
+    if (btnLabel) btnLabel.textContent = 'Maximizar mapa';
+
+    const allStops = getOrderedRouteStops();
+    renderWeeklyRouteDayFilters(allStops);
+    renderWeeklyRouteView();
     OM('plan-route-mo');
 
     setTimeout(() => {
         initRouteFullMap();
-        renderRouteFullMap(stops);
+        renderRouteFullMap(getFilteredWeeklyRouteStops());
     }, 100);
 }
 
@@ -3722,13 +4154,14 @@ function excelCell(value) {
     return escapeHtml(stripExcelText(value));
 }
 
-function getWeeklyRouteExportRows(stops = getOrderedRouteStops()) {
+function getWeeklyRouteExportRows(stops = getFilteredWeeklyRouteStops()) {
     const rows = [];
-    stops.forEach(stop => {
+    stops.forEach((stop, idx) => {
+        const orderNum = idx + 1;
         const region = rById(getStopRegion(stop)).n;
         if (!stop.details.length) {
             rows.push({
-                order: stop.order,
+                order: orderNum,
                 comunidad: stop.name || 'Parada',
                 region,
                 prioridad: '',
@@ -3742,7 +4175,7 @@ function getWeeklyRouteExportRows(stops = getOrderedRouteStops()) {
 
         stop.details.forEach(detail => {
             rows.push({
-                order: stop.order,
+                order: orderNum,
                 comunidad: stop.name || 'Parada',
                 region,
                 prioridad: stripExcelText(pl(detail.priority)),
@@ -3769,21 +4202,22 @@ function downloadExcelHtml(filename, html) {
 }
 
 function exportWeeklyRouteExcel() {
-    const stops = getOrderedRouteStops();
+    const stops = getFilteredWeeklyRouteStops ? getFilteredWeeklyRouteStops() : getOrderedRouteStops();
     if (!stops.length) {
-        notify('No hay paradas para exportar', 'err');
+        notify('No hay paradas para exportar en este filtro', 'err');
         return;
     }
 
     const tech = getSelectedTech();
     const generalPlan = getSelectedGeneralPlan();
+    const dayLabelStr = weeklyRouteSelectedDay === 'all' ? 'semanal_completa' : (weeklyRouteSelectedDay === 'unscheduled' ? 'sin_fecha' : weeklyRouteSelectedDay);
     const label = selectedTechId === SHARED_PLAN_ID
         ? `${tech?.nombre || 'Plan general compartido'} - ${generalPlan?.name || 'Plan general'}`
         : `${tech?.nombre || 'Tecnico'} - ${dayLabel(selectedDay)}`;
     const rows = getWeeklyRouteExportRows(stops);
     const totalDetails = stops.reduce((sum, stop) => sum + stop.progress.total, 0);
     const pendingDetails = stops.reduce((sum, stop) => sum + stop.progress.pending, 0);
-    const safeName = stripExcelText(label).replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'ruta_semanal';
+    const safeName = `${stripExcelText(label).replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'ruta'}_${dayLabelStr}`;
     const date = new Date().toISOString().slice(0, 10);
 
     const tableRows = rows.map(row => `
@@ -3814,7 +4248,7 @@ function exportWeeklyRouteExcel() {
         </head>
         <body>
             <table>
-                <tr><th class="title" colspan="8">${excelCell(label)}</th></tr>
+                <tr><th class="title" colspan="8">${excelCell(label)} (${excelCell(weeklyRouteSelectedDay === 'all' ? 'Todos los días' : formatCalendarDate(weeklyRouteSelectedDay))})</th></tr>
                 <tr class="summary">
                     <td colspan="2">Paradas: ${stops.length}</td>
                     <td colspan="2">Detalles: ${totalDetails}</td>
@@ -3845,11 +4279,27 @@ function renderWeeklyRouteList(stops) {
     const box = document.getElementById('plan-route-list');
     if (!box) return;
     if (!stops.length) {
-        box.innerHTML = '<div class="plan-empty">No hay paradas con coordenadas para mostrar en la ruta.</div>';
+        box.innerHTML = '<div class="plan-empty">No hay paradas con coordenadas para este filtro.</div>';
         return;
     }
 
-    box.innerHTML = stops.map(stop => {
+    box.innerHTML = stops.map((stop, index) => {
+        let transitBadge = '';
+        if (index > 0) {
+            const prev = stops[index - 1];
+            if (!isNaN(prev.lat) && !isNaN(prev.lng) && !isNaN(stop.lat) && !isNaN(stop.lng)) {
+                const leg = estimateRouteTravel(prev.lat, prev.lng, stop.lat, stop.lng);
+                transitBadge = `
+                    <div class="plan-inter-stop-transit">
+                        <div class="transit-line"></div>
+                        <div class="transit-badge" title="Tiempo estimado en carretera (38 km/h)">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+                            <span><b>~${leg.minutes} min</b> (${leg.km} km)</span>
+                        </div>
+                    </div>`;
+            }
+        }
+
         const region = rById(getStopRegion(stop)).n;
         const adminStatus = getStopAdminStatus(stop, stop.progress);
         const visibleNotes = getVisibleStopNotes(stop, stop.details);
@@ -3869,12 +4319,15 @@ function renderWeeklyRouteList(stops) {
                 </div>`).join('')
             : '<div class="ant-muted">Sin detalles ligados.</div>';
 
+        const dayTag = stop.scheduledDate ? `<small style="font-size:9px;background:#eef5fc;color:#1d4ed8;border-radius:4px;padding:2px 5px;margin-left:6px;font-weight:700">${formatCalendarDate(stop.scheduledDate)}</small>` : '';
+
         return `
+            ${transitBadge}
             <div class="route-stop-card" data-route-stop-id="${escapeAttr(stop.id)}">
                 <div class="route-stop-top">
-                    <span class="route-stop-num">${stop.order}</span>
+                    <span class="route-stop-num">${index + 1}</span>
                     <div>
-                        <div class="route-stop-name">${escapeHtml(stop.name || 'Parada')}</div>
+                        <div class="route-stop-name">${escapeHtml(stop.name || 'Parada')} ${dayTag}</div>
                         <div class="route-stop-meta">${escapeHtml(region)} - ${stop.lat.toFixed(5)}, ${stop.lng.toFixed(5)}</div>
                     </div>
                 </div>
@@ -4032,18 +4485,20 @@ async function renderRouteFullMap(stops) {
         addRouteFullLine(latLngs, { color: '#f59e0b', weight: 5, opacity: .95, dashArray: '10 7', interactive: false });
     }
 
-    stops.forEach(stop => {
+    stops.forEach((stop, index) => {
+        const orderNum = index + 1;
+        const dayAbbr = stop.scheduledDate ? formatCalendarDate(stop.scheduledDate).slice(0, 3) : '';
         const marker = L.marker([stop.lat, stop.lng], {
             icon: L.divIcon({
-                html: `<div class="route-map-marker">${stop.order}</div>`,
+                html: `<div class="route-map-marker" style="${dayAbbr && weeklyRouteSelectedDay === 'all' ? 'height:34px;width:34px;font-size:11px;' : ''}">${orderNum}${dayAbbr && weeklyRouteSelectedDay === 'all' ? `<span style="display:block;font-size:7px;line-height:1;opacity:.85">${escapeHtml(dayAbbr)}</span>` : ''}</div>`,
                 className: '',
-                iconSize: [30, 30],
-                iconAnchor: [15, 15]
+                iconSize: [34, 34],
+                iconAnchor: [17, 17]
             }),
             zIndexOffset: 1000
         }).addTo(routeFullMap);
-        marker.bindTooltip(`${stop.order}. ${escapeHtml(stop.name || 'Parada')}`, { permanent: true, direction: 'right', offset: [12, 0], className: 'plan-map-stop-label' });
-        marker.bindPopup(getRouteFullPopupHtml(stop), { maxWidth: 420, className: 'route-map-popup' });
+        marker.bindTooltip(`${orderNum}. ${escapeHtml(stop.name || 'Parada')}${dayAbbr ? ` (${dayAbbr})` : ''}`, { permanent: true, direction: 'right', offset: [12, 0], className: 'plan-map-stop-label' });
+        marker.bindPopup(getRouteFullPopupHtml({ ...stop, order: orderNum }), { maxWidth: 420, className: 'route-map-popup' });
         routeFullMarkers.push(marker);
     });
 

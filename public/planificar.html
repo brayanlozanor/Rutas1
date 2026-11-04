@@ -86,6 +86,57 @@
             <select id="plan-day" onchange="selectPlanDay(this.value)" hidden aria-hidden="true">
               <option value="general">General</option>
             </select>
+
+            <!-- Inteligencia de Ruta y Viabilidad (Vista Escritorio) -->
+            <div id="plan-route-intel-box" class="plan-route-intel-box">
+              <div class="intel-box-head">
+                <span class="intel-box-icon"><svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+                <div>
+                  <strong>Viabilidad de ruta</strong>
+                  <small id="intel-route-status">Analizando ruta...</small>
+                </div>
+              </div>
+              <div class="intel-metrics-grid">
+                <div class="intel-metric">
+                  <small>Distancia carretera</small>
+                  <strong id="intel-km">0 km</strong>
+                </div>
+                <div class="intel-metric">
+                  <small>Tiempo traslado</small>
+                  <strong id="intel-travel-time">0 min</strong>
+                </div>
+                <div class="intel-metric">
+                  <small>Tiempo visitas</small>
+                  <strong id="intel-stops-time">0 min</strong>
+                </div>
+                <div class="intel-metric highlight">
+                  <small>Jornada estimada</small>
+                  <strong id="intel-workday">0h</strong>
+                </div>
+              </div>
+              <div id="intel-badge-container" class="intel-badge-row">
+                <span class="badge bgn" id="intel-feasibility-badge">Jornada adecuada</span>
+              </div>
+            </div>
+
+            <!-- Clima en la Zona de la Ruta -->
+            <div id="plan-weather-box" class="plan-weather-box">
+              <div class="weather-box-head">
+                <span id="weather-icon" class="weather-icon">⛅</span>
+                <div>
+                  <strong id="weather-temp">--°C</strong>
+                  <small id="weather-town">Clima en zona</small>
+                </div>
+              </div>
+              <div class="weather-body">
+                <div id="weather-desc" class="weather-desc">Consultando pronóstico...</div>
+                <div class="weather-details-row">
+                  <span id="weather-rain">🌧️ --% lluvia</span>
+                  <span id="weather-wind">💨 -- km/h</span>
+                </div>
+                <div id="weather-road-alert" class="weather-road-alert">Caminos transitables</div>
+              </div>
+            </div>
           </aside>
 
           <section class="plan-board">
@@ -97,6 +148,7 @@
               <button class="btn bgh" onclick="togglePlanMapSize()">Vista mapa</button>
               <button class="btn bc" data-admin-only onclick="openPlanStopModal()">+ Agregar parada</button>
             </div>
+            <div id="plan-day-intel-strip" class="plan-day-intel-strip" style="display:none"></div>
             <div id="plan-days" class="plan-days"></div>
           </section>
           <aside id="plan-map-box" class="plan-map-panel">
@@ -331,9 +383,14 @@
           <div id="plan-route-sub" class="route-full-sub"></div>
         </div>
         <div class="route-full-actions">
+          <button class="btn bsm bgh route-toggle-list-btn" type="button" onclick="toggleRouteListFullscreen()" id="btn-toggle-route-list" title="Maximizar mapa"><span id="route-toggle-list-text">Maximizar mapa</span></button>
           <button class="btn bsm bg2" onclick="exportWeeklyRouteExcel()">Exportar Excel</button>
           <button class="btn bsm bgh" onclick="closeWeeklyRouteModal()">Cerrar</button>
         </div>
+      </div>
+      <div class="route-day-toolbar">
+        <div id="plan-route-day-filters" class="route-day-filters" role="tablist" aria-label="Filtrar por día"></div>
+        <div id="plan-route-day-stats" class="route-day-stats"></div>
       </div>
       <div class="route-full-body">
         <div id="plan-route-full-map" class="route-full-map"></div>
