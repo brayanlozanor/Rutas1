@@ -87,45 +87,47 @@
               <option value="general">General</option>
             </select>
 
-            <!-- Inteligencia de Ruta y Viabilidad (Vista Escritorio) -->
+            <!-- Trayecto entre sitios y Distancia (Vista Escritorio) -->
             <div id="plan-route-intel-box" class="plan-route-intel-box">
               <div class="intel-box-head">
-                <span class="intel-box-icon"><svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+                <span class="intel-box-icon">
+                  <svg viewBox="0 0 24 24"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+                </span>
                 <div>
-                  <strong>Viabilidad de ruta</strong>
-                  <small id="intel-route-status">Analizando ruta...</small>
+                  <strong>Trayecto entre sitios</strong>
+                  <small id="intel-route-status">Distancias de ruta</small>
                 </div>
               </div>
               <div class="intel-metrics-grid">
-                <div class="intel-metric">
-                  <small>Distancia carretera</small>
-                  <strong id="intel-km">0 km</strong>
-                </div>
-                <div class="intel-metric">
-                  <small>Tiempo traslado</small>
-                  <strong id="intel-travel-time">0 min</strong>
-                </div>
-                <div class="intel-metric">
-                  <small>Tiempo visitas</small>
-                  <strong id="intel-stops-time">0 min</strong>
-                </div>
                 <div class="intel-metric highlight">
-                  <small>Jornada estimada</small>
-                  <strong id="intel-workday">0h</strong>
+                  <small>Al siguiente sitio</small>
+                  <strong id="intel-next-dist">0 km</strong>
+                </div>
+                <div class="intel-metric">
+                  <small>Tiempo estimado</small>
+                  <strong id="intel-next-time">0 min</strong>
+                </div>
+                <div class="intel-metric">
+                  <small>Desde anterior</small>
+                  <strong id="intel-prev-dist">0 km</strong>
+                </div>
+                <div class="intel-metric">
+                  <small>Ruta total</small>
+                  <strong id="intel-total-dist">0 km</strong>
                 </div>
               </div>
               <div id="intel-badge-container" class="intel-badge-row">
-                <span class="badge bgn" id="intel-feasibility-badge">Jornada adecuada</span>
+                <span class="badge bgn" id="intel-feasibility-badge">Sitio activo</span>
               </div>
             </div>
 
-            <!-- Clima en la Zona de la Ruta -->
+            <!-- Clima en la Zona del Sitio Activo -->
             <div id="plan-weather-box" class="plan-weather-box">
               <div class="weather-box-head">
                 <span id="weather-icon" class="weather-icon">⛅</span>
                 <div>
                   <strong id="weather-temp">--°C</strong>
-                  <small id="weather-town">Clima en zona</small>
+                  <small id="weather-town">Clima en el sitio</small>
                 </div>
               </div>
               <div class="weather-body">

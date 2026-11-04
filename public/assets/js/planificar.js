@@ -43,6 +43,8 @@ let technicianDayMapLayer = null;
 let currentPlanTechRouteLink = '';
 let lastFocusedStartedStopId = '';
 const expandedResolvedStops = new Set();
+let planCardDisplayMode = 'card';
+let activePlanCardIndex = 0;
 let expandedPendingStopId = '';
 let expandedCompletedStopId = '';
 const planEvidenceGalleries = new Map();
@@ -1118,6 +1120,10 @@ function initPlanSelectors() {
 
 function selectPlanTech(id) {
     selectedTechId = id;
+    selectedCalendarDate = '';
+    const calBox = document.getElementById('plan-calendar');
+    if (calBox) calBox.dataset.unscheduledFilter = '0';
+    activePlanCardIndex = 0;
     ensureTechPlan(id);
     selectedDay = id === SHARED_PLAN_ID ? 'general' : getInitialDayForTech(id);
     document.getElementById('plan-day').value = selectedDay;
@@ -1128,6 +1134,9 @@ function selectGeneralPlan(id) {
     if (isPlanReadOnly() && !getVisibleGeneralPlansForRole().some(plan => plan.id === id)) return;
     selectedGeneralPlanId = id;
     selectedCalendarDate = '';
+    const calBox = document.getElementById('plan-calendar');
+    if (calBox) calBox.dataset.unscheduledFilter = '0';
+    activePlanCardIndex = 0;
     selectedDay = 'general';
     if (!isPlanReadOnly() && selectedTechId === SHARED_PLAN_ID) {
         document.getElementById('plan-tech').value = SHARED_PLAN_ID;
@@ -1723,7 +1732,7 @@ function estimateRouteTravel(lat1, lon1, lat2, lon2) {
     };
 }
 
-function calculateDayRouteFeasibility(stops) {
+function calculateDayRouteFeasibility(stops, activeIndex = 0) {
     const validStops = (stops || []).filter(s => !s.deletedAt);
     let totalKm = 0;
     let totalTravelMinutes = 0;
@@ -1744,44 +1753,56 @@ function calculateDayRouteFeasibility(stops) {
         }
     }
 
-    const serviceMinutes = validStops.length * 45;
-    const totalWorkdayMinutes = totalTravelMinutes + serviceMinutes;
-    const workdayHours = Math.floor(totalWorkdayMinutes / 60);
-    const workdayRemMinutes = totalWorkdayMinutes % 60;
-    const workdayFormatted = workdayHours > 0 
-        ? `${workdayHours}h ${workdayRemMinutes > 0 ? workdayRemMinutes + 'm' : ''}`.trim() 
-        : `${workdayRemMinutes}m`;
-
     const travelHours = Math.floor(totalTravelMinutes / 60);
     const travelRemMinutes = totalTravelMinutes % 60;
     const travelFormatted = travelHours > 0 
         ? `${travelHours}h ${travelRemMinutes > 0 ? travelRemMinutes + 'm' : ''}`.trim() 
         : `${totalTravelMinutes} min`;
 
+    // Active leg metrics (site to site)
+    const idx = Math.max(0, Math.min(validStops.length - 1, activeIndex));
+    const currStop = validStops[idx] || null;
+    let legNext = null;
+    let legPrev = null;
+
+    if (currStop && idx < validStops.length - 1) {
+        const sNext = validStops[idx + 1];
+        const p1 = getStopCurrentPosition(currStop);
+        const p2 = getStopCurrentPosition(sNext);
+        if (!isNaN(p1.lat) && !isNaN(p1.lng) && !isNaN(p2.lat) && !isNaN(p2.lng)) {
+            legNext = { toName: sNext.name || 'Siguiente parada', ...estimateRouteTravel(p1.lat, p1.lng, p2.lat, p2.lng) };
+        } else {
+            legNext = { toName: sNext.name || 'Siguiente parada', km: 0, minutes: 0, formatted: 'Sin coordenadas' };
+        }
+    }
+
+    if (currStop && idx > 0) {
+        const sPrev = validStops[idx - 1];
+        const p1 = getStopCurrentPosition(sPrev);
+        const p2 = getStopCurrentPosition(currStop);
+        if (!isNaN(p1.lat) && !isNaN(p1.lng) && !isNaN(p2.lat) && !isNaN(p2.lng)) {
+            legPrev = { fromName: sPrev.name || 'Parada anterior', ...estimateRouteTravel(p1.lat, p1.lng, p2.lat, p2.lng) };
+        } else {
+            legPrev = { fromName: sPrev.name || 'Parada anterior', km: 0, minutes: 0, formatted: 'Sin coordenadas' };
+        }
+    }
+
     let status = 'optima';
-    let statusLabel = 'Jornada adecuada';
-    let statusDesc = 'Tiempo equilibrado de traslado y trabajo en campo.';
+    let statusLabel = validStops.length > 0 ? `Sitio ${idx + 1} de ${validStops.length}` : 'Sin paradas';
+    let statusDesc = legNext ? `Hacia ${legNext.toName} (~${legNext.minutes} min)` : (validStops.length > 0 ? 'Último sitio del plan' : 'No hay paradas');
     let statusClass = 'bgn';
 
-    if (validStops.length === 0) {
-        status = 'vacia';
-        statusLabel = 'Sin paradas';
-        statusDesc = 'No hay paradas programadas para esta fecha.';
-        statusClass = 'bgh';
-    } else if (totalWorkdayMinutes > 540) {
-        status = 'sobrecarga';
-        statusLabel = 'Sobrecarga de jornada';
-        statusDesc = 'Supera 9 horas estimadas. Se sugiere redistribuir paradas.';
-        statusClass = 'br';
-    } else if (totalWorkdayMinutes > 420) {
-        status = 'completa';
-        statusLabel = 'Jornada completa';
-        statusDesc = 'Ruta extensa pero viable en jornada normal.';
-        statusClass = 'by';
-    }
+    // Keep backwards compatibility for serviceMinutes, workdayFormatted if any other code references them
+    const serviceMinutes = validStops.length * 45;
+    const totalWorkdayMinutes = totalTravelMinutes + serviceMinutes;
+    const workdayHours = Math.floor(totalWorkdayMinutes / 60);
+    const workdayRemMinutes = totalWorkdayMinutes % 60;
+    const workdayFormatted = workdayHours > 0 ? `${workdayHours}h ${workdayRemMinutes > 0 ? workdayRemMinutes + 'm' : ''}`.trim() : `${workdayRemMinutes}m`;
 
     return {
         stopsCount: validStops.length,
+        activeIndex: idx,
+        activeStop: currStop,
         totalKm: Math.round(totalKm * 10) / 10,
         totalTravelMinutes,
         travelFormatted,
@@ -1792,7 +1813,9 @@ function calculateDayRouteFeasibility(stops) {
         statusLabel,
         statusDesc,
         statusClass,
-        legs
+        legs,
+        legNext,
+        legPrev
     };
 }
 
@@ -1810,25 +1833,34 @@ function getWmoWeatherInfo(code) {
     return { label: 'Tiempo templado', icon: '⛅', condition: 'good' };
 }
 
+let lastWeatherWidgetData = null;
+
 async function fetchTownWeather(lat, lng, townName) {
     const latNum = safeFloat(lat);
     const lngNum = safeFloat(lng);
-    if (isNaN(latNum) || isNaN(lngNum)) return;
+    if (isNaN(latNum) || isNaN(lngNum)) {
+        renderWeatherFallback(townName);
+        return;
+    }
 
-    const cacheKey = `wm_wx_${latNum.toFixed(2)}_${lngNum.toFixed(2)}`;
+    const coordKey = `${latNum.toFixed(2)}_${lngNum.toFixed(2)}`;
+    const cacheKey = `wm_wx_${coordKey}`;
     try {
         const cachedStr = sessionStorage.getItem(cacheKey);
         if (cachedStr) {
             const cached = JSON.parse(cachedStr);
             if (Date.now() - cached.timestamp < 3600000) {
+                lastWeatherWidgetData = cached.data;
                 renderWeatherWidget(cached.data, townName);
                 return;
             }
         }
     } catch (e) {}
 
-    const coordKey = `${latNum.toFixed(2)}_${lngNum.toFixed(2)}`;
-    if (lastWeatherFetchCoords === coordKey) return;
+    if (lastWeatherFetchCoords === coordKey && lastWeatherWidgetData) {
+        renderWeatherWidget(lastWeatherWidgetData, townName);
+        return;
+    }
     lastWeatherFetchCoords = coordKey;
 
     try {
@@ -1859,6 +1891,7 @@ async function fetchTownWeather(lat, lng, townName) {
             sessionStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: weatherObj }));
         } catch (e) {}
 
+        lastWeatherWidgetData = weatherObj;
         renderWeatherWidget(weatherObj, townName);
     } catch (err) {
         renderWeatherFallback(townName);
@@ -1910,54 +1943,177 @@ function renderWeatherFallback(townName) {
     }
 }
 
-function renderRouteIntelligenceWidget(stops) {
+function getVisiblePlanStops() {
+    const query = normalizeName(document.getElementById('plan-stop-search')?.value || '');
+    const today = localDateKey();
+    const allStops = getPlanStopsForView('general').filter(stop => {
+        if (!query) return true;
+        const details = getStopDetails(stop);
+        return normalizeName([stop.name, ...details.flatMap(detail => [detail.clientName, detail.title, detail.description])].filter(Boolean).join(' ')).includes(query);
+    });
+    return isTechnicianPlanView()
+        ? (technicianSummaryMode === 'general' ? allStops : allStops.filter(stop => stop.scheduledDate === (selectedCalendarDate || today)))
+        : (selectedCalendarDate
+            ? allStops.filter(stop => (stop.scheduledDate || '') === selectedCalendarDate)
+            : (document.getElementById('plan-calendar')?.dataset.unscheduledFilter === '1'
+                ? allStops.filter(stop => !stop.scheduledDate)
+                : allStops));
+}
+
+function advancePlanCard(offset) {
+    const visible = getVisiblePlanStops();
+    if (!visible.length) return;
+    activePlanCardIndex = Math.max(0, Math.min(visible.length - 1, activePlanCardIndex + offset));
+    renderPlanDays();
+}
+
+function selectPlanCardIndex(idx) {
+    const visible = getVisiblePlanStops();
+    if (idx >= 0 && idx < visible.length) {
+        activePlanCardIndex = idx;
+        renderPlanDays();
+    }
+}
+
+function togglePlanDisplayMode() {
+    planCardDisplayMode = planCardDisplayMode === 'card' ? 'all' : 'card';
+    renderPlanDays();
+}
+
+function panPlanMapToActiveStop(stop) {
+    if (!planMap || !stop) return;
+    const pos = getStopCurrentPosition(stop);
+    if (!isNaN(pos.lat) && !isNaN(pos.lng)) {
+        try {
+            planMap.panTo([pos.lat, pos.lng], { animate: true, duration: 0.5 });
+        } catch (e) {}
+    }
+}
+
+function renderActiveStopExtraDetails(stop) {
+    if (!stop) return '';
+    const eq = stop.equipmentId ? (state.equipment || []).find(e => e.id === stop.equipmentId && !e.deletedAt) : null;
+    const node = stop.nodeId ? (state.nodes || []).find(n => n.id === stop.nodeId && !n.deletedAt) : null;
+    const pos = getStopCurrentPosition(stop);
+    const hasCoords = !isNaN(pos.lat) && !isNaN(pos.lng);
+    const mapsUrl = hasCoords ? `https://www.google.com/maps/dir/?api=1&destination=${pos.lat},${pos.lng}` : '';
+    const details = getStopDetails(stop);
+
+    let siteSpecs = [];
+    if (eq?.ip || node?.ip) siteSpecs.push(`<span><b>IP:</b> ${escapeHtml(eq?.ip || node?.ip)}</span>`);
+    if (eq?.model) siteSpecs.push(`<span><b>Modelo:</b> ${escapeHtml(eq.model)}</span>`);
+    if (node?.town || stop.town) siteSpecs.push(`<span><b>Comunidad:</b> ${escapeHtml(node?.town || stop.town)}</span>`);
+    if (hasCoords) siteSpecs.push(`<span><b>Coordenadas:</b> ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}</span>`);
+
+    const detailsItemsHtml = details.map(d => {
+        const clientName = d.clientName || 'Cliente sin nombre';
+        const phone = d.phone ? `<a href="tel:${escapeAttr(d.phone)}" style="color:#0874e8;text-decoration:none;font-weight:700;">📞 ${escapeHtml(d.phone)}</a>` : '';
+        const title = d.title || d.description || 'Detalle de red';
+        const statusCls = d.status === 'completada' ? 'bgn' : (d.status === 'no_realizado' ? 'br' : 'by');
+        const statusLabel = d.status === 'completada' ? 'Completado' : (d.status === 'no_realizado' ? 'No realizado' : 'Pendiente');
+        return `
+            <div class="plan-site-detail-item">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                    <strong>${escapeHtml(clientName)} ${phone ? `· ${phone}` : ''}</strong>
+                    <span class="badge ${statusCls}" style="font-size:9px;padding:2px 7px;">${statusLabel}</span>
+                </div>
+                <small>${escapeHtml(title)}</small>
+                ${d.address ? `<small style="color:#788ea5;">📍 ${escapeHtml(d.address)}</small>` : ''}
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="plan-site-extra-details">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <h4 style="margin:0;font-size:11px;font-weight:800;color:#183a61;">Información del sitio activo</h4>
+                ${mapsUrl ? `<a href="${escapeAttr(mapsUrl)}" target="_blank" rel="noopener" style="font-size:10px;font-weight:800;color:#0874e8;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">📍 Navegar en Maps</a>` : ''}
+            </div>
+            ${siteSpecs.length ? `<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:#284360;margin-bottom:10px;padding:6px 10px;background:#ffffff;border:1px solid #e2ecf5;border-radius:6px;">${siteSpecs.join(' · ')}</div>` : ''}
+            ${stop.notes ? `<div style="font-size:11px;color:#475e77;margin-bottom:8px;padding:6px 9px;background:#ffffff;border:1px solid #e4edf5;border-radius:6px;"><strong>Nota del sitio:</strong> ${escapeHtml(stop.notes)}</div>` : ''}
+            <div>
+                <h4 style="margin:8px 0 6px;font-size:11px;font-weight:800;color:#183a61;">Detalles de red en este sitio (${details.length})</h4>
+                ${detailsItemsHtml || '<div style="font-size:11px;color:#788ea5;font-style:italic;">No hay tickets de clientes en este sitio.</div>'}
+            </div>
+        </div>
+    `;
+}
+
+function renderRouteIntelligenceWidget(stops, activeIndex = 0) {
     const box = document.getElementById('plan-route-intel-box');
     if (!box) return;
-    const feasibility = calculateDayRouteFeasibility(stops);
+    const metrics = calculateDayRouteFeasibility(stops, activeIndex);
 
-    const kmEl = document.getElementById('intel-km');
-    const travelEl = document.getElementById('intel-travel-time');
-    const stopsTimeEl = document.getElementById('intel-stops-time');
-    const workdayEl = document.getElementById('intel-workday');
+    const nextDistEl = document.getElementById('intel-next-dist');
+    const nextTimeEl = document.getElementById('intel-next-time');
+    const prevDistEl = document.getElementById('intel-prev-dist');
+    const totalDistEl = document.getElementById('intel-total-dist');
     const badgeEl = document.getElementById('intel-feasibility-badge');
     const statusEl = document.getElementById('intel-route-status');
     const stripEl = document.getElementById('plan-day-intel-strip');
 
-    if (kmEl) kmEl.textContent = `${feasibility.totalKm} km`;
-    if (travelEl) travelEl.textContent = feasibility.travelFormatted;
-    if (stopsTimeEl) stopsTimeEl.textContent = `${feasibility.serviceMinutes} min`;
-    if (workdayEl) workdayEl.textContent = feasibility.workdayFormatted;
-    if (badgeEl) {
-        badgeEl.className = `badge ${feasibility.statusClass}`;
-        badgeEl.textContent = feasibility.statusLabel;
+    if (nextDistEl) {
+        nextDistEl.textContent = metrics.legNext ? `${metrics.legNext.km} km` : (metrics.stopsCount > 1 ? 'Fin de ruta' : '-');
     }
-    if (statusEl) statusEl.textContent = feasibility.statusDesc;
+    if (nextTimeEl) {
+        nextTimeEl.textContent = metrics.legNext ? `~${metrics.legNext.minutes} min` : '-';
+    }
+    if (prevDistEl) {
+        prevDistEl.textContent = metrics.legPrev ? `${metrics.legPrev.km} km` : (metrics.stopsCount > 0 ? 'Punto de partida' : '-');
+    }
+    if (totalDistEl) {
+        totalDistEl.textContent = `${metrics.totalKm} km`;
+    }
+
+    // Backwards-compatibility for older elements if still present
+    const kmEl = document.getElementById('intel-km');
+    const travelEl = document.getElementById('intel-travel-time');
+    const stopsTimeEl = document.getElementById('intel-stops-time');
+    const workdayEl = document.getElementById('intel-workday');
+    if (kmEl) kmEl.textContent = `${metrics.totalKm} km`;
+    if (travelEl) travelEl.textContent = metrics.travelFormatted;
+    if (stopsTimeEl) stopsTimeEl.textContent = `${metrics.serviceMinutes} min`;
+    if (workdayEl) workdayEl.textContent = metrics.workdayFormatted;
+
+    if (badgeEl) {
+        badgeEl.className = `badge ${metrics.statusClass}`;
+        badgeEl.textContent = metrics.statusLabel;
+    }
+    if (statusEl) {
+        statusEl.textContent = metrics.statusDesc;
+    }
 
     if (stripEl) {
         if (stops.length > 0) {
             stripEl.style.display = 'flex';
             stripEl.innerHTML = `
                 <div class="intel-summary">
-                    <span><b>📍 ${stops.length}</b> paradas</span>
-                    <span><b>🚗 ~${feasibility.totalKm} km</b> carretera</span>
-                    <span><b>⏱️ ~${feasibility.travelFormatted}</b> traslado</span>
-                    <span><b>🛠️ ${feasibility.serviceMinutes} min</b> servicio</span>
-                    <span>Jornada est: <b>~${feasibility.workdayFormatted}</b></span>
+                    <span><b>📍 ${stops.length}</b> sitio${stops.length === 1 ? '' : 's'} en el plan</span>
+                    <span><b>🚗 ~${metrics.totalKm} km</b> carretera total</span>
+                    <span><b>⏱️ ~${metrics.travelFormatted}</b> traslado acumulado</span>
                 </div>
-                <div><span class="badge ${feasibility.statusClass}">${feasibility.statusLabel}</span></div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <button type="button" class="plan-view-toggle-btn" onclick="togglePlanDisplayMode()">
+                        ${planCardDisplayMode === 'card' 
+                            ? '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 6h16M4 12h16M4 18h16"/></svg> Ver todo el plan' 
+                            : '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="16" rx="2"/></svg> Modo tarjeta'}
+                    </button>
+                </div>
             `;
         } else {
             stripEl.style.display = 'none';
         }
     }
 
-    const firstStopWithPos = stops.find(s => {
-        const p = getStopCurrentPosition(s);
-        return !isNaN(p.lat) && !isNaN(p.lng);
-    });
-    if (firstStopWithPos) {
-        const p = getStopCurrentPosition(firstStopWithPos);
-        fetchTownWeather(p.lat, p.lng, firstStopWithPos.name);
+    // Weather widget update: ALWAYS matches active stop in card mode, or first stop
+    const targetStop = metrics.activeStop || stops[0];
+    if (targetStop) {
+        const p = getStopCurrentPosition(targetStop);
+        if (!isNaN(p.lat) && !isNaN(p.lng)) {
+            fetchTownWeather(p.lat, p.lng, targetStop.name);
+        } else {
+            renderWeatherFallback(targetStop.name);
+        }
     } else {
         renderWeatherFallback();
     }
@@ -1976,20 +2132,113 @@ function renderPlanDays() {
     selectedDay = 'general';
     const daySelect = document.getElementById('plan-day');
     if (daySelect) daySelect.value = 'general';
-    const query = normalizeName(document.getElementById('plan-stop-search')?.value || '');
     const today = localDateKey();
-    const allStops = getPlanStopsForView('general').filter(stop => {
-        if (!query) return true;
-        const details = getStopDetails(stop);
-        return normalizeName([stop.name, ...details.flatMap(detail => [detail.clientName, detail.title, detail.description])].filter(Boolean).join(' ')).includes(query);
-    });
-    const visible = isTechnicianPlanView()
-        ? (technicianSummaryMode === 'general' ? allStops : allStops.filter(stop => stop.scheduledDate === (selectedCalendarDate || today)))
-        : (selectedCalendarDate
-            ? allStops.filter(stop => (stop.scheduledDate || '') === selectedCalendarDate)
-            : (document.getElementById('plan-calendar')?.dataset.unscheduledFilter === '1'
-                ? allStops.filter(stop => !stop.scheduledDate)
-                : allStops));
+    const visible = getVisiblePlanStops();
+
+    if (visible.length === 0) {
+        const isFiltered = Boolean(selectedCalendarDate || document.getElementById('plan-calendar')?.dataset.unscheduledFilter === '1');
+        board.innerHTML = `<div class="plan-empty">
+            <p>${isTechnicianPlanView() ? `No tienes paradas asignadas para ${formatCalendarDate(selectedCalendarDate || today)}.` : 'No hay paradas que coincidan con la búsqueda o filtro de fecha.'}</p>
+            ${isFiltered && !isTechnicianPlanView() ? `<button type="button" class="btn bsm bgh" onclick="clearPlanCalendarFilter()" style="margin-top:10px;">Mostrar todas las paradas del plan</button>` : ''}
+        </div>`;
+        if (!isTechnicianPlanView()) {
+            renderRouteIntelligenceWidget([], 0);
+        }
+        return;
+    }
+
+    // Desktop view and Card-by-Card mode:
+    if (!isTechnicianPlanView() && planCardDisplayMode === 'card') {
+        if (activePlanCardIndex >= visible.length) activePlanCardIndex = Math.max(0, visible.length - 1);
+        if (activePlanCardIndex < 0) activePlanCardIndex = 0;
+
+        const activeStop = visible[activePlanCardIndex];
+        const isFirst = activePlanCardIndex === 0;
+        const isLast = activePlanCardIndex === visible.length - 1;
+        const key = activeStop.scheduledDate || '';
+        const groupLabel = !key ? 'Sin fecha asignada' : (key < today ? `Pendientes anteriores · ${formatCalendarDate(key)}` : (key === today ? `Trabajo de hoy · ${formatCalendarDate(key)}` : formatCalendarDate(key)));
+
+        // 1. Navigation controls (Anterior / Siguiente / Counter)
+        const navigatorHtml = `
+            <div class="plan-card-navigator">
+                <div class="plan-card-nav-controls">
+                    <button type="button" class="plan-card-nav-btn" onclick="advancePlanCard(-1)" ${isFirst ? 'disabled' : ''} title="Ver parada anterior">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m15 18-6-6 6-6"/></svg>
+                        <span>Anterior</span>
+                    </button>
+                    <span class="plan-card-step-badge">
+                        Sitio <strong>${activePlanCardIndex + 1}</strong> de <strong>${visible.length}</strong>
+                    </span>
+                    <button type="button" class="plan-card-nav-btn" onclick="advancePlanCard(1)" ${isLast ? 'disabled' : ''} title="Ver siguiente parada">
+                        <span>Siguiente</span>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                </div>
+                <button type="button" class="plan-view-toggle-btn" onclick="togglePlanDisplayMode()" title="Ver la lista completa de paradas">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    <span>Ver todo el plan</span>
+                </button>
+            </div>
+        `;
+
+        // 2. Horizontal pills strip to jump to any site directly
+        const pillsHtml = `
+            <div class="plan-site-pills-row" title="Selecciona directamente cualquier sitio del plan">
+                ${visible.map((s, idx) => {
+                    const isActive = idx === activePlanCardIndex ? 'active' : '';
+                    const label = escapeHtml(s.name || `Sitio ${idx + 1}`);
+                    return `<button type="button" class="plan-site-pill ${isActive}" onclick="selectPlanCardIndex(${idx})"><small>${idx + 1}.</small> <span>${label}</span></button>`;
+                }).join('')}
+            </div>
+        `;
+
+        // 3. Card HTML
+        const cardHtml = renderStopCard(activeStop, 'general', activePlanCardIndex);
+
+        // 4. Transit connector to next site (matches user image!)
+        let transitConnectorHtml = '';
+        if (!isLast) {
+            const nextStop = visible[activePlanCardIndex + 1];
+            const p1 = getStopCurrentPosition(activeStop);
+            const p2 = getStopCurrentPosition(nextStop);
+            let transitText = 'Próximo sitio';
+            if (!isNaN(p1.lat) && !isNaN(p1.lng) && !isNaN(p2.lat) && !isNaN(p2.lng)) {
+                const leg = estimateRouteTravel(p1.lat, p1.lng, p2.lat, p2.lng);
+                transitText = `~${leg.minutes} min (${leg.km} km) de ${escapeHtml(activeStop.name || 'Sitio actual')} a ${escapeHtml(nextStop.name || 'Siguiente sitio')}`;
+            } else {
+                transitText = `Siguiente: ${escapeHtml(nextStop.name || 'Próximo sitio')}`;
+            }
+            transitConnectorHtml = `
+                <div class="plan-card-transit-box" onclick="advancePlanCard(1)" style="cursor:pointer;" title="Click para avanzar a ${escapeAttr(nextStop.name || 'este sitio')}">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+                    <span>${transitText}</span>
+                    <span style="margin-left:auto;color:#0874e8;font-size:11px;font-weight:800;">Avanzar siguiente →</span>
+                </div>
+            `;
+        }
+
+        // 5. Rich site details
+        const extraDetailsHtml = renderActiveStopExtraDetails(activeStop);
+
+        board.innerHTML = `
+            ${navigatorHtml}
+            ${pillsHtml}
+            <div class="day-col">
+                <div class="day-head"><span>${escapeHtml(groupLabel)}</span></div>
+                <div class="day-body">
+                    ${cardHtml}
+                    ${transitConnectorHtml}
+                    ${extraDetailsHtml}
+                </div>
+            </div>
+        `;
+
+        renderRouteIntelligenceWidget(visible, activePlanCardIndex);
+        panPlanMapToActiveStop(activeStop);
+        return;
+    }
+
+    // Default Full List / Technician View
     const groups = new Map();
     visible.forEach(stop => {
         const key = stop.scheduledDate || '';
@@ -1998,7 +2247,16 @@ function renderPlanDays() {
         groups.set(key, list);
     });
     const keys = [...groups.keys()].sort((a,b) => String(a || '9999').localeCompare(String(b || '9999')));
-    board.innerHTML = keys.map(key => {
+    const listModeBanner = !isTechnicianPlanView() ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;padding:8px 12px;background:#ffffff;border:1px solid #dce7f2;border-radius:10px;">
+            <span style="font-size:11px;font-weight:700;color:#204060;">Mostrando todas las paradas (${visible.length})</span>
+            <button type="button" class="plan-view-toggle-btn" onclick="togglePlanDisplayMode()">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/></svg>
+                <span>Modo tarjeta (una por una)</span>
+            </button>
+        </div>` : '';
+
+    board.innerHTML = listModeBanner + keys.map(key => {
         const stops = groups.get(key) || [];
         const label = !key ? 'Sin fecha asignada' : (key < today ? `Pendientes anteriores · ${formatCalendarDate(key)}` : (key === today ? `Trabajo de hoy · ${formatCalendarDate(key)}` : formatCalendarDate(key)));
         const stopsHtml = stops.map((stop, index) => {
@@ -2027,7 +2285,7 @@ function renderPlanDays() {
     }).join('') || `<div class="plan-empty">${isTechnicianPlanView() ? `No tienes paradas asignadas para ${formatCalendarDate(selectedCalendarDate || today)}.` : 'No hay paradas en esta fecha.'}</div>`;
 
     if (!isTechnicianPlanView()) {
-        renderRouteIntelligenceWidget(visible);
+        renderRouteIntelligenceWidget(visible, 0);
     }
 }
 
@@ -2357,7 +2615,19 @@ function renderPlanCalendar() {
     if (!isTechnicianPlanView()) {
         if (!planCalendarExpanded) {
             box.classList.add('is-collapsed');
-            box.innerHTML = `<button type="button" class="plan-calendar-show" onclick="togglePlanCalendar(true)"><span>Agenda del plan</span><strong>Ver semana</strong></button>`;
+            const hasFilter = Boolean(selectedCalendarDate || box.dataset.unscheduledFilter === '1');
+            const filterLabel = selectedCalendarDate ? formatCalendarDate(selectedCalendarDate) : (box.dataset.unscheduledFilter === '1' ? 'Sin fecha asignada' : '');
+            box.innerHTML = `
+                <div class="plan-calendar-collapsed-bar" style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:10px;">
+                    <div style="display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="togglePlanCalendar(true)">
+                        <span style="font-size:12px;font-weight:800;color:#18385c;">📅 Agenda del plan</span>
+                        ${hasFilter ? `<span class="badge by" style="font-size:10px;padding:3px 8px;">Filtrado: ${escapeHtml(filterLabel)}</span>` : '<span style="font-size:11px;color:#71879d;">(Todas las paradas visibles)</span>'}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        ${hasFilter ? `<button type="button" class="btn bsm bgh" onclick="clearPlanCalendarFilter()" style="font-size:10px;padding:4px 9px;">Mostrar todo</button>` : ''}
+                        <button type="button" class="btn bsm bgh" onclick="togglePlanCalendar(true)" style="font-size:10px;padding:4px 9px;">Ver semana</button>
+                    </div>
+                </div>`;
             return;
         }
         box.classList.remove('is-collapsed');
@@ -2418,6 +2688,7 @@ function setPlanCalendarFilter(value) {
     const box = document.getElementById('plan-calendar');
     if (box) box.dataset.unscheduledFilter = '0';
     selectedCalendarDate = selectedCalendarDate === value ? '' : value;
+    activePlanCardIndex = 0;
     renderPlanCalendar();
     renderPlanDays();
 }
@@ -2426,6 +2697,7 @@ function clearPlanCalendarFilter() {
     selectedCalendarDate = '';
     const box = document.getElementById('plan-calendar');
     if (box) box.dataset.unscheduledFilter = '0';
+    activePlanCardIndex = 0;
     renderPlanCalendar();
     renderPlanDays();
 }
@@ -2434,6 +2706,7 @@ function setUnscheduledPlanFilter() {
     selectedCalendarDate = '';
     const box = document.getElementById('plan-calendar');
     if (box) box.dataset.unscheduledFilter = '1';
+    activePlanCardIndex = 0;
     renderPlanCalendar();
     renderPlanDays();
 }

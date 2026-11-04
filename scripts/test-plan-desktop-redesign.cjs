@@ -21,6 +21,14 @@ assert(htmlContent.includes('id="plan-weather-box"'), 'Missing plan-weather-box 
 assert(htmlContent.includes('id="plan-day-intel-strip"'), 'Missing plan-day-intel-strip in planificar.html');
 assert(htmlContent.includes('id="plan-route-day-filters"'), 'Missing plan-route-day-filters in planificar.html');
 assert(htmlContent.includes('onclick="toggleRouteListFullscreen()"'), 'Missing toggleRouteListFullscreen in planificar.html');
+assert(htmlContent.includes('id="intel-next-dist"'), 'Missing intel-next-dist in planificar.html');
+assert(htmlContent.includes('id="intel-next-time"'), 'Missing intel-next-time in planificar.html');
+assert(htmlContent.includes('id="intel-prev-dist"'), 'Missing intel-prev-dist in planificar.html');
+assert(htmlContent.includes('id="intel-total-dist"'), 'Missing intel-total-dist in planificar.html');
+// Verify NO money / $ icon in intel box
+const intelBoxHtml = htmlContent.slice(htmlContent.indexOf('id="plan-route-intel-box"'), htmlContent.indexOf('id="plan-weather-box"'));
+assert(!intelBoxHtml.includes('$'), 'Found forbidden $ in plan-route-intel-box');
+assert(!intelBoxHtml.includes('M12 2v20M17 5H9.5'), 'Found forbidden dollar SVG icon in plan-route-intel-box');
 
 // 3. Test calculation helpers (extract and execute from JS)
 // Calculate Haversine Km
@@ -152,8 +160,22 @@ assert(cssUiContent.includes('.plan-inter-stop-transit'), 'Missing .plan-inter-s
 assert(cssUiContent.includes('.route-day-filters'), 'Missing .route-day-filters styles');
 assert(cssUiContent.includes('.route-full-modal.map-maximized'), 'Missing map-maximized styles');
 assert(cssUiContent.includes('.plan-week-quick-move'), 'Missing .plan-week-quick-move styles');
+assert(cssUiContent.includes('.plan-card-navigator'), 'Missing .plan-card-navigator styles');
+assert(cssUiContent.includes('.plan-card-nav-btn'), 'Missing .plan-card-nav-btn styles');
+assert(cssUiContent.includes('.plan-site-pills-row'), 'Missing .plan-site-pills-row styles');
+assert(cssUiContent.includes('.plan-site-pill'), 'Missing .plan-site-pill styles');
+assert(cssUiContent.includes('.plan-card-transit-box'), 'Missing .plan-card-transit-box styles');
+assert(cssUiContent.includes('.plan-site-extra-details'), 'Missing .plan-site-extra-details styles');
 
-// 7. Verify technician isolation: technician dashboard CSS untouched
+// 7. Verify JS Card-by-Card mode functions
+assert(jsContent.includes('advancePlanCard'), 'Missing advancePlanCard in planificar.js');
+assert(jsContent.includes('selectPlanCardIndex'), 'Missing selectPlanCardIndex in planificar.js');
+assert(jsContent.includes('togglePlanDisplayMode'), 'Missing togglePlanDisplayMode in planificar.js');
+assert(jsContent.includes('getVisiblePlanStops'), 'Missing getVisiblePlanStops in planificar.js');
+assert(jsContent.includes('renderActiveStopExtraDetails'), 'Missing renderActiveStopExtraDetails in planificar.js');
+assert(jsContent.includes('panPlanMapToActiveStop'), 'Missing panPlanMapToActiveStop in planificar.js');
+
+// 8. Verify technician isolation: technician dashboard CSS untouched
 const techCssPath = path.join(__dirname, '..', 'public', 'assets', 'css', 'technician-dashboard.css');
 const techCss = fs.readFileSync(techCssPath, 'utf8');
 assert(techCss.includes('body.plan-technician-view'), 'Technician dashboard CSS intact');
