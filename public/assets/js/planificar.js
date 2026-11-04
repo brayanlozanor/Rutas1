@@ -2391,7 +2391,6 @@ function renderPlanDays() {
                 <div class="day-body">
                     ${cardHtml}
                     ${transitConnectorHtml}
-                    ${siteInfoHtml}
                 </div>
             </div>
         `;
