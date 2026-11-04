@@ -131,15 +131,85 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
    DISEÑO EN ESCRITORIO (min-width: 901px): OCUPA TODO EL ALTO SIN ESPACIOS SOBRANTES
    ========================================================================= */
 @media (min-width: 901px) {
+  body.planificar-page:not(.plan-technician-view) {
+    height: 100vh!important;
+    height: 100dvh!important;
+    max-height: 100vh!important;
+    max-height: 100dvh!important;
+    overflow: hidden!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) > .main,
+  body.planificar-page:not(.plan-technician-view) .main {
+    height: 100vh!important;
+    height: 100dvh!important;
+    max-height: 100vh!important;
+    max-height: 100dvh!important;
+    min-height: 0!important;
+    overflow: hidden!important;
+    padding: 0!important;
+    margin: 0!important;
+    display: flex!important;
+    flex-direction: column!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) > .main > .ct,
+  body.planificar-page:not(.plan-technician-view) .ct {
+    height: 100%!important;
+    max-height: 100%!important;
+    min-height: 0!important;
+    overflow: hidden!important;
+    padding: 0!important;
+    margin: 0!important;
+    display: flex!important;
+    flex-direction: column!important;
+    flex: 1 1 auto!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) #plan-panel {
+    box-sizing: border-box!important;
+    display: flex!important;
+    flex-direction: column!important;
+    height: 100%!important;
+    max-height: 100%!important;
+    min-height: 0!important;
+    overflow: hidden!important;
+    padding: 8px 18px 14px!important;
+    background: #f4f7fb!important;
+    flex: 1 1 auto!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero {
+    display: none!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-kpi-bar {
+    display: grid!important;
+    grid-template-columns: repeat(5, minmax(0, 1fr))!important;
+    gap: 10px!important;
+    margin: 0 0 8px!important;
+    padding: 0!important;
+    min-height: 48px!important;
+    max-height: 48px!important;
+    flex: 0 0 48px!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-calendar {
+    margin: 0 0 8px!important;
+    padding: 6px 12px!important;
+    flex: 0 0 auto!important;
+  }
+
   body.planificar-page:not(.plan-technician-view) .plan-shell {
+    box-sizing: border-box!important;
     display: grid!important;
     grid-template-columns: 255px minmax(360px, 1fr) minmax(330px, 440px)!important;
     grid-template-areas: "sidebar board map"!important;
-    grid-template-rows: 100%!important;
+    grid-template-rows: minmax(0, 1fr)!important;
     gap: 14px!important;
     padding: 0!important;
     margin: 0!important;
-    flex: 1 1 0!important;
+    flex: 1 1 auto!important;
     min-height: 0!important;
     height: 100%!important;
     max-height: 100%!important;
@@ -150,6 +220,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
   /* Columna 1: Barra lateral de técnico y ruta */
   body.planificar-page:not(.plan-technician-view) .plan-sidebar {
     grid-area: sidebar!important;
+    box-sizing: border-box!important;
     height: 100%!important;
     max-height: 100%!important;
     min-height: 0!important;
@@ -163,20 +234,19 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     background: #fff!important;
     border: 1px solid #dce5ee!important;
     box-shadow: 0 4px 14px rgba(18,42,76,.06)!important;
-    box-sizing: border-box!important;
     scrollbar-width: thin!important;
   }
 
   /* Columna 2: Tablero del plan con lista deslizable interna */
   body.planificar-page:not(.plan-technician-view) .plan-board {
     grid-area: board!important;
+    box-sizing: border-box!important;
     height: 100%!important;
     max-height: 100%!important;
     min-height: 0!important;
     display: flex!important;
     flex-direction: column!important;
     overflow: hidden!important;
-    box-sizing: border-box!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-board > .sh {
@@ -214,9 +284,8 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
 
   /* Recuadro estático interno donde desliza la lista y los detalles */
   body.planificar-page:not(.plan-technician-view) .plan-days {
-    flex: 1 1 0!important;
+    flex: 1 1 auto!important;
     min-height: 0!important;
-    height: 100%!important;
     overflow-y: auto!important;
     overflow-x: hidden!important;
     padding-right: 6px!important;
@@ -226,6 +295,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
   /* Columna 3: Mapa a toda la altura disponible */
   body.planificar-page:not(.plan-technician-view) .plan-map-panel {
     grid-area: map!important;
+    box-sizing: border-box!important;
     height: 100%!important;
     max-height: 100%!important;
     min-height: 0!important;
@@ -233,12 +303,11 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     flex-direction: column!important;
     overflow: hidden!important;
     position: sticky!important;
-    top: 10px!important;
+    top: 0!important;
     border-radius: 12px!important;
     background: #fff!important;
     border: 1px solid #dce5ee!important;
     box-shadow: 0 4px 14px rgba(18,42,76,.06)!important;
-    box-sizing: border-box!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-map-panel-head {
@@ -247,11 +316,11 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-map-panel .plan-map {
-    flex: 1 1 0!important;
+    flex: 1 1 auto!important;
     min-height: 0!important;
     height: 100%!important;
     width: 100%!important;
-    border-radius: 0!important;
+    border-radius: 0 0 12px 12px!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-map-legend {
