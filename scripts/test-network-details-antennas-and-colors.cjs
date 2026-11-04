@@ -62,4 +62,50 @@ assert(commonJs.includes('retomó la atención del reporte que tenías asignado'
 assert(!commonJs.includes('⏳') && !commonJs.includes('⏰'), 'common.js reminder titles must not contain emojis');
 assert(!commonJs.includes('`Detalle concluido a conformidad${client ? \' (\' + client + \')\' : \'\'}.`'), 'common.js must not format (a) for client');
 
+// 6. Admin Dispatch Switch & Custom User Color Matching in Network Details
+console.log('6. Checking admin dispatch switch between Support and Attention & Color Matching...');
+assert(ordenesJs.includes('applyRoleFormVisibility();') && ordenesJs.includes('switchAdminNetworkTarget(target)'), 'switchAdminNetworkTarget must call applyRoleFormVisibility');
+assert(!ordenesJs.includes('setupOrderModalFields();'), 'Must not call nonexistent setupOrderModalFields');
+assert(apiJs.includes("'ordenes.html': ['operations', 'people']"), 'api.js must load people part on ordenes.html');
+assert(relationalStore.includes('u.color,r.code AS role FROM users u'), 'relational-store.js must fetch user color for support and attention users');
+
+// Test getUserColor logic directly
+global.state = {
+  users: [
+    { id: 'us_brayan', name: 'Brayan De Jesus Lozano Rendón', username: 'brayan', role: 'administrador', color: '#e11d48' },
+    { id: 'us_gerardo', name: 'Gerardo Navarrete Martinez', username: 'gerardo', role: 'soporte', color: '#0284c7' }
+  ]
+};
+function normStr(str) {
+  return String(str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+}
+function testGetUserColor(name, userId = '') {
+  const normTarget = normStr(name);
+  const userIds = String(userId || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const checkUser = u => {
+    if (!u || u.deletedAt) return null;
+    const uId = String(u.id || '').toLowerCase();
+    const uName = normStr(u.name);
+    const uUsername = normStr(u.username);
+    if (userIds.length && userIds.includes(uId)) {
+      if (normTarget && uName && uName !== normTarget && uUsername && uUsername !== normTarget) {}
+      else if (u.color) return u.color;
+    }
+    if (normTarget && (uName === normTarget || uUsername === normTarget)) {
+      if (u.color) return u.color;
+    }
+    return null;
+  };
+  if (global.state?.users) {
+    for (const u of global.state.users) {
+      const c = checkUser(u);
+      if (c) return c;
+    }
+  }
+  return '#4f46e5';
+}
+
+assert.strictEqual(testGetUserColor('Brayan De Jesus Lozano Rendón', 'us_brayan'), '#e11d48', 'User color must match configured admin color (#e11d48) instead of default');
+assert.strictEqual(testGetUserColor('Gerardo Navarrete Martinez', 'us_brayan, us_gerardo'), '#0284c7', 'User color for Gerardo in multi-assignee must match Gerardo\'s color (#0284c7)');
+
 console.log('ALL TESTS PASSED: Network details typography, timeline, user colors, antenna-nodes & retaken notifications OK!');

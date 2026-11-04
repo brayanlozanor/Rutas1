@@ -271,11 +271,15 @@ function getActiveNetworkTargetRole() {
 
 function switchAdminNetworkTarget(target) {
   adminNetworkTargetRole = target === 'atencion_clientes' ? 'atencion_clientes' : 'soporte';
-  setupOrderModalFields();
+  applyRoleFormVisibility();
   renderWOAssignedUserOptions();
 }
 
 function getAvailableSupportUsers() {
+  if (Array.isArray(state?.users) && state.users.length) {
+    const fromState = state.users.filter(u => !u.deletedAt && ['administrador', 'admin', 'soporte'].includes(normalizeRole(u.role)) && u.active !== false);
+    if (fromState.length) return fromState;
+  }
   if (Array.isArray(window.netopsSupportUsers) && window.netopsSupportUsers.length) {
     return window.netopsSupportUsers;
   }
@@ -294,6 +298,10 @@ function getAvailableSupportUsers() {
 }
 
 function getAvailableAttentionUsers() {
+  if (Array.isArray(state?.users) && state.users.length) {
+    const fromState = state.users.filter(u => !u.deletedAt && ['atencion_clientes', 'atencion'].includes(normalizeRole(u.role)) && u.active !== false);
+    if (fromState.length) return fromState;
+  }
   if (Array.isArray(window.netopsAttentionUsers) && window.netopsAttentionUsers.length) {
     return window.netopsAttentionUsers;
   }
@@ -1548,6 +1556,7 @@ async function openWO(id = '') {
   editingWOId = id;
   copyingWOFromId = '';
   clearWOForm();
+  if (!id) adminNetworkTargetRole = 'soporte';
   if (!document.getElementById('wo-phone')) document.getElementById('wo-client')?.closest('.fi')?.insertAdjacentHTML('afterend', '<div class="fi"><label>Numero telefonico <span class="optional-label">Opcional</span></label><input id="wo-phone" type="tel" placeholder="Numero de telefono (opcional)"></div>');
   let selectedAssignee = '';
   if (id) {
@@ -1555,6 +1564,9 @@ async function openWO(id = '') {
     if (w) {
       try { await ensureOrderRelationRecords(w); } catch (error) { console.warn('No se pudieron cargar las relaciones de la orden',error); }
       const target = getOrderTarget(w);
+      if (w.detailKind === 'network') {
+        adminNetworkTargetRole = isNetworkSupportToAttention(w) ? 'atencion_clientes' : 'soporte';
+      }
       selectedAssignee = w.assignedUserId || '';
       document.getElementById('wo-modal-title').textContent = 'Editar detalle';
       document.getElementById('wo-id').value = w.id;

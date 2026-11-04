@@ -149,7 +149,31 @@ async function saveUser() {
   const technician=(state.technicians||[]).find(item=>item.userId===userToSave.id||normalizeName(item.usuario)===normalizeName(userToSave.username));
   if(ok&&technician)ok=await saveRecord('technicians',technician);
   if(ok)for(const audit of (state.auditLog||[]).slice(auditCountBefore))ok=(await saveRecord('auditLog',audit))&&ok;
-  if (ok) notify(editingUserId ? 'Usuario actualizado y sincronizado.' : 'Usuario creado y sincronizado.');
+  if (ok) {
+    try {
+      ['netops_cached_support_users', 'netops_cached_attention_users'].forEach(k => {
+        const raw = localStorage.getItem(k);
+        if (raw) {
+          const arr = JSON.parse(raw);
+          if (Array.isArray(arr)) {
+            arr.forEach(item => {
+              if (item && (item.id === userToSave.id || item.username === userToSave.username)) {
+                item.color = userToSave.color;
+                item.name = userToSave.name;
+              }
+            });
+            localStorage.setItem(k, JSON.stringify(arr));
+          }
+        }
+      });
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('netops_last_good_state_v1:')) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (e) {}
+    notify(editingUserId ? 'Usuario actualizado y sincronizado.' : 'Usuario creado y sincronizado.');
+  }
   CM('user-mo');
   resetUserForm();
   if(ok) await loadUserPage(); else renderUsuarios();

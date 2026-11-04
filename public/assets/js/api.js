@@ -49,7 +49,7 @@ const OBJECT_DATA_KEYS = ['weekPlan', 'prepChecked'];
 const DATA_PARTS_BY_PAGE = {
     'antenas.html': ['equipment'],
     'nodos.html': ['nodes'],
-    'ordenes.html': ['operations'],
+    'ordenes.html': ['operations', 'people'],
     'mapa.html': ['equipment', 'nodes'],
     'planificar.html': ['people', 'materials', 'planning'],
     'tecnico-ruta.html': ['people', 'materials', 'planning'],

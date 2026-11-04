@@ -1436,11 +1436,11 @@ export async function loadStatePart(env, part, page = {}) {
     const deletionRequests=(page?.windowed==='1'||page?.scoped==='1')?(await loadDeletionRequests(env)).filter(request=>visibleIds.has(request.targetId)||visibleIds.has(request.detailId)):[];
     const query=workOrderQuery(page);
     const [supportUsers, attentionUsers] = await Promise.all([
-      all(env,`SELECT u.id,u.name,u.username,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('administrador','admin','soporte') ORDER BY lower(u.name),lower(u.username)`),
-      all(env,`SELECT u.id,u.name,u.username,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`)
+      all(env,`SELECT u.id,u.name,u.username,u.color,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('administrador','admin','soporte') ORDER BY lower(u.name),lower(u.username)`),
+      all(env,`SELECT u.id,u.name,u.username,u.color,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`)
     ]);
-    const mappedSupportUsers = supportUsers.map(user=>({id:user.id,name:user.name||user.username||'Soporte',username:user.username}));
-    const mappedAttentionUsers = attentionUsers.map(user=>({id:user.id,name:user.name||user.username||'Atención',username:user.username}));
+    const mappedSupportUsers = supportUsers.map(user=>({id:user.id,name:user.name||user.username||'Soporte',username:user.username,color:user.color||''}));
+    const mappedAttentionUsers = attentionUsers.map(user=>({id:user.id,name:user.name||user.username||'Atención',username:user.username,color:user.color||''}));
     if (page?.windowed !== '1') {
       const totalRow=await first(env,`SELECT COUNT(*) AS total FROM work_orders w LEFT JOIN zones z ON z.id=w.zone_id${query.where}`,query.binds);
       return {workOrders,deletionRequests,total:Number(totalRow?.total)||0,supportUsers:mappedSupportUsers,attentionUsers:mappedAttentionUsers};
@@ -1451,14 +1451,14 @@ export async function loadStatePart(env, part, page = {}) {
     const [totalRow,statsRow,creatorRows]=await Promise.all([
       first(env,`SELECT COUNT(*) AS total FROM work_orders w LEFT JOIN zones z ON z.id=w.zone_id${query.where}`,query.binds),
       first(env,`SELECT COUNT(*) AS total, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND priority IN ('muy_alta','alta') THEN 1 ELSE 0 END) AS critical, SUM(CASE WHEN status='completada' THEN 1 ELSE 0 END) AS done FROM work_orders WHERE deleted_at IS NULL AND COALESCE(detail_kind,'physical')=?${statsCategoryClause}`,[statsDetailKind,...excludedStatsCategories]),
-      all(env,`SELECT DISTINCT u.id,u.name,u.username FROM work_orders w JOIN users u ON u.id=w.created_by WHERE w.deleted_at IS NULL ORDER BY lower(u.name),lower(u.username)`)
+      all(env,`SELECT DISTINCT u.id,u.name,u.username,u.color FROM work_orders w JOIN users u ON u.id=w.created_by WHERE w.deleted_at IS NULL ORDER BY lower(u.name),lower(u.username)`)
     ]);
     return {
       workOrders,
       deletionRequests,
       total:Number(totalRow?.total)||0,
       stats:{total:Number(statsRow?.total)||0,pending:Number(statsRow?.pending)||0,critical:Number(statsRow?.critical)||0,done:Number(statsRow?.done)||0},
-      creators:creatorRows.map(user=>({id:user.id,name:user.name||user.username||'Usuario'})),
+      creators:creatorRows.map(user=>({id:user.id,name:user.name||user.username||'Usuario',color:user.color||''})),
       supportUsers:mappedSupportUsers,
       attentionUsers:mappedAttentionUsers,
       ...(placeNodes.length?{nodes:placeNodes}:{})

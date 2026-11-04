@@ -2293,15 +2293,78 @@ function triggerDesktopNotification({ title, message, url = '', orderId = '' }) 
 }
 
 function getUserColor(name, userId = '') {
-  if (userId && typeof state !== 'undefined' && Array.isArray(state?.users)) {
-    const foundById = state.users.find(u => u && !u.deletedAt && u.id === userId);
-    if (foundById && foundById.color) return foundById.color;
+  const normStr = str => {
+    if (typeof normalizeName === 'function') return normalizeName(str);
+    return String(str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+  };
+  const normTarget = normStr(name);
+  const userIds = String(userId || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
+  const checkUser = u => {
+    if (!u || u.deletedAt) return null;
+    const uId = String(u.id || '').toLowerCase();
+    const uName = normStr(u.name);
+    const uUsername = normStr(u.username);
+    if (userIds.length && userIds.includes(uId)) {
+      if (normTarget && uName && uName !== normTarget && uUsername && uUsername !== normTarget) {
+        // multiple IDs: only match if name also matches this user
+      } else if (u.color) {
+        return u.color;
+      }
+    }
+    if (normTarget && (uName === normTarget || uUsername === normTarget)) {
+      if (u.color) return u.color;
+    }
+    return null;
+  };
+
+  // 1. Verificar state.users
+  if (typeof state !== 'undefined' && Array.isArray(state?.users)) {
+    for (const u of state.users) {
+      const c = checkUser(u);
+      if (c) return c;
+    }
   }
-  if (name && typeof state !== 'undefined' && Array.isArray(state?.users)) {
-    const norm = normalizeName(name);
-    const foundByName = state.users.find(u => u && !u.deletedAt && (normalizeName(u.name) === norm || normalizeName(u.username) === norm));
-    if (foundByName && foundByName.color) return foundByName.color;
+
+  // 2. Verificar soporte y atencion en memoria global
+  if (Array.isArray(window.netopsSupportUsers)) {
+    for (const u of window.netopsSupportUsers) {
+      const c = checkUser(u);
+      if (c) return c;
+    }
   }
+  if (Array.isArray(window.netopsAttentionUsers)) {
+    for (const u of window.netopsAttentionUsers) {
+      const c = checkUser(u);
+      if (c) return c;
+    }
+  }
+
+  // 3. Verificar cache en localStorage
+  try {
+    const cachedSupport = JSON.parse(localStorage.getItem('netops_cached_support_users') || '[]');
+    if (Array.isArray(cachedSupport)) {
+      for (const u of cachedSupport) {
+        const c = checkUser(u);
+        if (c) return c;
+      }
+    }
+    const cachedAttention = JSON.parse(localStorage.getItem('netops_cached_attention_users') || '[]');
+    if (Array.isArray(cachedAttention)) {
+      for (const u of cachedAttention) {
+        const c = checkUser(u);
+        if (c) return c;
+      }
+    }
+  } catch (e) {}
+
+  // 4. Verificar usuario logueado
+  if (typeof getCurrentUser === 'function') {
+    const cur = getCurrentUser();
+    const c = checkUser(cur);
+    if (c) return c;
+  }
+
   const palette = [
     '#0284c7', '#7c3aed', '#059669', '#ea580c', '#0891b2',
     '#4f46e5', '#db2777', '#d97706', '#0d9488', '#2563eb'
