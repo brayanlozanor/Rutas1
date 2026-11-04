@@ -329,6 +329,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
 
   /* Recuadro interno donde desliza la lista y los detalles */
   body.planificar-page:not(.plan-technician-view) .plan-days {
+    display: block!important;
     flex: 1 1 0!important;
     min-height: 0!important;
     height: 100%!important;
@@ -336,34 +337,32 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     overflow-x: hidden!important;
     padding-right: 6px!important;
     scrollbar-width: thin!important;
-    display: flex!important;
-    flex-direction: column!important;
   }
 
-  /* La tarjeta del día se expande verticalmente para ocupar todo el panel central sin huecos vacíos abajo */
-  body.planificar-page:not(.plan-technician-view) .plan-days > .day-col {
-    flex: 1 1 auto!important;
-    min-height: 0!important;
-    display: flex!important;
-    flex-direction: column!important;
+  /* Las columnas de días conservan su aspecto íntegro natural y deslizan limpiamente sin aplastarse */
+  body.planificar-page:not(.plan-technician-view) .day-col {
+    min-height: auto!important;
+    margin-bottom: 12px!important;
+    border: 1px solid #d8e4ee!important;
     border-radius: 12px!important;
+    background: #fff!important;
+    box-shadow: 0 3px 12px rgba(16,43,75,.05)!important;
+    overflow: visible!important;
   }
 
-  body.planificar-page:not(.plan-technician-view) .plan-days > .day-col > .day-head {
-    flex: 0 0 auto!important;
+  body.planificar-page:not(.plan-technician-view) .day-col:last-child {
+    margin-bottom: 0!important;
   }
 
-  body.planificar-page:not(.plan-technician-view) .plan-days > .day-col > .day-body {
-    flex: 1 1 auto!important;
-    display: flex!important;
-    flex-direction: column!important;
-    gap: 8px!important;
-    min-height: 0!important;
-    overflow-y: auto!important;
+  body.planificar-page:not(.plan-technician-view) .day-head {
+    padding: 11px 14px!important;
+    border-radius: 12px 12px 0 0!important;
   }
 
-  body.planificar-page:not(.plan-technician-view) .plan-days .plan-card-transit-box {
-    margin-top: auto!important;
+  body.planificar-page:not(.plan-technician-view) .day-body {
+    padding: 10px!important;
+    background: #f7f9fc!important;
+    border-radius: 0 0 12px 12px!important;
   }
 
   /* Columna 3: Mapa a toda la altura disponible (ESTÁTICA, SIN SCROLLBAR) */
