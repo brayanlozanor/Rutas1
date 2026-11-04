@@ -46,10 +46,6 @@
       <div class="order-filter-topbar">
         <button class="btn bc order-new-button" onclick="openWO()"><span aria-hidden="true">＋</span> Nuevo detalle</button>
         <button id="wo-clear-filters" type="button" class="btn bgh order-clear-button" onclick="clearOrderFilters()"><span aria-hidden="true">▽</span> Limpiar filtros</button>
-        <div class="order-font-scale-control" role="group" aria-label="Ajustar tamaño de texto">
-          <button type="button" id="wo-font-normal" class="is-active" onclick="setOrderFontScale('normal')" title="Tamaño de texto normal">A</button>
-          <button type="button" id="wo-font-large" onclick="setOrderFontScale('large')" title="Tamaño de texto ampliado">A+</button>
-        </div>
         <label class="order-search-box" for="wo-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="wo-search" class="search-input order-search" placeholder="Buscar cliente, nodo, pueblo o detalle" oninput="debounceAction('ordenes-search', resetOrderPagination)"></label>
       </div>
       <div class="order-filter-builder">

@@ -1,22 +1,6 @@
 
-const NETOPS_ORDERS_FONT_SCALE_KEY = 'netops_orders_font_scale_v1';
-
-function initOrderFontScale() {
-  const scale = localStorage.getItem(NETOPS_ORDERS_FONT_SCALE_KEY) || 'normal';
-  setOrderFontScale(scale, false);
-}
-
-function setOrderFontScale(scale = 'normal', save = true) {
-  const isLarge = scale === 'large';
-  document.body.classList.toggle('orders-font-large', isLarge);
-  document.getElementById('wo-font-normal')?.classList.toggle('is-active', !isLarge);
-  document.getElementById('wo-font-large')?.classList.toggle('is-active', isLarge);
-  if (save) {
-    try {
-      localStorage.setItem(NETOPS_ORDERS_FONT_SCALE_KEY, isLarge ? 'large' : 'normal');
-    } catch (e) {}
-  }
-}
+function initOrderFontScale() {}
+function setOrderFontScale() {}
 
 function getTimelineStepClass(action = '', label = '') {
   const text = (action + ' ' + label).toLowerCase();

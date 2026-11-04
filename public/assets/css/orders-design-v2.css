@@ -3370,7 +3370,7 @@
 .orders-page .order-place-main,
 .orders-page td[data-label="Lugar"] strong {
   display: block !important;
-  font-size: 15px !important;
+  font-size: 13.5px !important;
   font-weight: 800 !important;
   color: #0f172a !important;
   letter-spacing: -0.01em !important;
@@ -3380,7 +3380,7 @@
 .orders-page .order-client-main,
 .orders-page td[data-label="Cliente"] strong {
   display: block !important;
-  font-size: 14.5px !important;
+  font-size: 13px !important;
   font-weight: 700 !important;
   color: #0f172a !important;
   line-height: 1.3 !important;
@@ -3388,29 +3388,29 @@
 
 .orders-page .order-client-phone {
   display: block !important;
-  font-size: 11.5px !important;
+  font-size: 11px !important;
   font-weight: 500 !important;
   color: #64748b !important;
-  margin-top: 2px !important;
+  margin-top: 1px !important;
 }
 
 .orders-page .order-detail-text,
 .orders-page td[data-label="Detalle"] > div:not(.order-assignment-tags) {
-  font-size: 13.5px !important;
+  font-size: 12.5px !important;
   font-weight: 600 !important;
   color: #1e293b !important;
-  line-height: 1.45 !important;
-  margin-top: 4px !important;
+  line-height: 1.4 !important;
+  margin-top: 3px !important;
 }
 
 .orders-page .order-category-badge {
-  font-size: 11px !important;
+  font-size: 10.5px !important;
   font-weight: 700 !important;
 }
 
 /* Quién atiende: tamaño compacto y secundario para no competir visualmente */
 .orders-page .order-assignment-tags {
-  margin-top: 6px !important;
+  margin-top: 5px !important;
   display: flex !important;
   flex-wrap: wrap !important;
   gap: 4px !important;
@@ -3452,22 +3452,4 @@
   .orders-page .order-table-footer {
     padding-right: 68px !important;
   }
-}
-
-/* Modo texto grande */
-.orders-page.orders-font-large .order-place-main,
-.orders-page.orders-font-large td[data-label="Lugar"] strong {
-  font-size: 16.5px !important;
-}
-.orders-page.orders-font-large .order-client-main,
-.orders-page.orders-font-large td[data-label="Cliente"] strong {
-  font-size: 16px !important;
-}
-.orders-page.orders-font-large .order-detail-text,
-.orders-page.orders-font-large td[data-label="Detalle"] > div:not(.order-assignment-tags) {
-  font-size: 15px !important;
-}
-.orders-page.orders-font-large .order-assignment-tags .user-color-chip {
-  font-size: 11px !important;
-  height: 21px !important;
 }

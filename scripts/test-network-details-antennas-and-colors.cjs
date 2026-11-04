@@ -15,15 +15,13 @@ const ordersDesignCss = fs.readFileSync('public/assets/css/orders-design-v2.css'
 const ordersRefCss = fs.readFileSync('public/assets/css/orders-reference.css', 'utf8');
 const ordersTableCss = fs.readFileSync('public/assets/css/orders-table-simple.css', 'utf8');
 
-// 1. Typography & Font Scale
-console.log('1. Checking typography and font scale controls...');
+// 1. Typography
+console.log('1. Checking typography and table readability...');
 assert(ordersRefCss.includes('font-size:11.5px!important') || ordersRefCss.includes('font-size: 11.5px!important'), 'Header font size in orders-reference.css must be 11.5px');
 assert(ordersRefCss.includes('font-size:12.5px!important') || ordersRefCss.includes('font-size: 12.5px!important'), 'Cell font size in orders-reference.css must be 12.5px');
 assert(ordersTableCss.includes('font-size:12.5px!important'), 'Cell font size in orders-table-simple.css must be 12.5px');
-assert(ordenesHtml.includes('order-font-scale-control'), 'ordenes.html must have font scale controls');
-assert(ordenesHtml.includes('wo-font-normal') && ordenesHtml.includes('wo-font-large'), 'ordenes.html must have A and A+ buttons');
-assert(ordenesJs.includes('initOrderFontScale') && ordenesJs.includes('setOrderFontScale'), 'ordenes.js must support font scaling functions');
-assert(ordersDesignCss.includes('.orders-page.orders-font-large .order-table td'), 'orders-design-v2.css must style enlarged font mode');
+assert(ordersDesignCss.includes('.order-place-main'), 'orders-design-v2.css must style place');
+assert(ordersDesignCss.includes('.order-detail-text'), 'orders-design-v2.css must style detail');
 
 // 2. Timeline with Distinct Colors in "Ver Detalle Completo"
 console.log('2. Checking timeline step classification and colors...');
