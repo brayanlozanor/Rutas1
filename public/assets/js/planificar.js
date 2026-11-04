@@ -2092,25 +2092,8 @@ function renderRouteIntelligenceWidget(stops, activeIndex = 0) {
     }
 
     if (stripEl) {
-        if (stops.length > 0) {
-            stripEl.style.display = 'flex';
-            stripEl.innerHTML = `
-                <div class="intel-summary">
-                    <span><b>📍 ${stops.length}</b> sitio${stops.length === 1 ? '' : 's'} en el plan</span>
-                    <span><b>🚗 ~${metrics.totalKm} km</b> carretera total</span>
-                    <span><b>⏱️ ~${metrics.travelFormatted}</b> traslado acumulado</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <button type="button" class="plan-view-toggle-btn" onclick="togglePlanDisplayMode()">
-                        ${planCardDisplayMode === 'card' 
-                            ? '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 6h16M4 12h16M4 18h16"/></svg> Ver todo el plan' 
-                            : '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="16" rx="2"/></svg> Modo tarjeta'}
-                    </button>
-                </div>
-            `;
-        } else {
-            stripEl.style.display = 'none';
-        }
+        stripEl.style.display = 'none';
+        stripEl.innerHTML = '';
     }
 
     // Weather widget update: ALWAYS matches active stop in card mode, or first stop
@@ -2166,7 +2149,9 @@ function renderPlanDays() {
         const key = activeStop.scheduledDate || '';
         const groupLabel = !key ? 'Sin fecha asignada' : (key < today ? `Pendientes anteriores · ${formatCalendarDate(key)}` : (key === today ? `Trabajo de hoy · ${formatCalendarDate(key)}` : formatCalendarDate(key)));
 
-        // 1. Navigation controls (Anterior / Siguiente / Counter)
+        const metrics = calculateDayRouteFeasibility(visible, activePlanCardIndex);
+
+        // 1. Navigation controls (Anterior / Siguiente / Counter + Metrics + Ver todo el plan)
         const navigatorHtml = `
             <div class="plan-card-navigator">
                 <div class="plan-card-nav-controls">
@@ -2181,6 +2166,11 @@ function renderPlanDays() {
                         <span>Siguiente</span>
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m9 18 6-6-6-6"/></svg>
                     </button>
+                </div>
+                <div class="plan-card-nav-metrics">
+                    <span>📍 <b>${visible.length}</b> sitio${visible.length === 1 ? '' : 's'} en el plan</span>
+                    <span>🚗 <b>~${metrics.totalKm} km</b> carretera total</span>
+                    <span>⏱️ <b>~${metrics.travelFormatted}</b> traslado acumulado</span>
                 </div>
                 <button type="button" class="plan-view-toggle-btn" onclick="togglePlanDisplayMode()" title="Ver la lista completa de paradas">
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -2254,9 +2244,14 @@ function renderPlanDays() {
         groups.set(key, list);
     });
     const keys = [...groups.keys()].sort((a,b) => String(a || '9999').localeCompare(String(b || '9999')));
+    const allMetrics = calculateDayRouteFeasibility(visible, 0);
     const listModeBanner = !isTechnicianPlanView() ? `
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;padding:8px 12px;background:#ffffff;border:1px solid #dce7f2;border-radius:10px;">
-            <span style="font-size:11px;font-weight:700;color:#204060;">Mostrando todas las paradas (${visible.length})</span>
+        <div class="plan-card-navigator plan-list-mode-banner" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;padding:8px 12px;background:#ffffff;border:1px solid #dce7f2;border-radius:10px;">
+            <div class="plan-card-nav-metrics" style="justify-content:flex-start;">
+                <span>📍 <b>${visible.length}</b> sitio${visible.length === 1 ? '' : 's'} en el plan</span>
+                <span>🚗 <b>~${allMetrics.totalKm} km</b> carretera total</span>
+                <span>⏱️ <b>~${allMetrics.travelFormatted}</b> traslado acumulado</span>
+            </div>
             <button type="button" class="plan-view-toggle-btn" onclick="togglePlanDisplayMode()">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/></svg>
                 <span>Modo tarjeta (una por una)</span>

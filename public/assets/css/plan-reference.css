@@ -9,12 +9,17 @@ body.planificar-page:not(.plan-technician-view) #plan-panel {
   max-height: 100%!important;
   min-height: 0!important;
   overflow: hidden!important;
-  padding: 8px 18px 14px!important;
+  padding: 8px 18px 12px!important;
   background: #f4f7fb!important;
 }
 
 /* Ocultar hero repetitivo en escritorio para ganar espacio útil vertical */
 body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero {
+  display: none!important;
+}
+
+/* Ocultar barra superior redundante del tablero */
+body.planificar-page:not(.plan-technician-view) .plan-day-intel-strip {
   display: none!important;
 }
 
@@ -35,9 +40,9 @@ body.planificar-page:not(.plan-technician-view) .plan-kpi-bar {
 body.planificar-page:not(.plan-technician-view) .plan-kpi {
   box-sizing: border-box!important;
   justify-content: flex-start!important;
-  min-height: 48px!important;
-  height: 48px!important;
-  padding: 6px 12px!important;
+  min-height: 46px!important;
+  height: 46px!important;
+  padding: 5px 12px!important;
   border: 1px solid #dfe7ef!important;
   border-radius: 8px!important;
   background: #fff!important;
@@ -49,9 +54,9 @@ body.planificar-page:not(.plan-technician-view) .plan-kpi {
 
 body.planificar-page:not(.plan-technician-view) .plan-kpi-icon,
 body.planificar-page:not(.plan-technician-view) .plan-kpi-ring {
-  width: 32px!important;
-  height: 32px!important;
-  flex: 0 0 32px!important;
+  width: 30px!important;
+  height: 30px!important;
+  flex: 0 0 30px!important;
   font-size: 13px!important;
 }
 
@@ -68,7 +73,7 @@ body.planificar-page:not(.plan-technician-view) .plan-kpi small {
 body.planificar-page:not(.plan-technician-view) .plan-calendar {
   box-sizing: border-box!important;
   margin: 0 0 8px!important;
-  padding: 7px 12px!important;
+  padding: 6px 12px!important;
   border: 1px solid #dce5ee!important;
   border-radius: 10px!important;
   background: #fff!important;
@@ -174,7 +179,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     max-height: 100%!important;
     min-height: 0!important;
     overflow: hidden!important;
-    padding: 8px 18px 14px!important;
+    padding: 8px 18px 12px!important;
     background: #f4f7fb!important;
     flex: 1 1 auto!important;
   }
@@ -189,15 +194,19 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     gap: 10px!important;
     margin: 0 0 8px!important;
     padding: 0!important;
-    min-height: 48px!important;
-    max-height: 48px!important;
-    flex: 0 0 48px!important;
+    min-height: 46px!important;
+    max-height: 46px!important;
+    flex: 0 0 46px!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-calendar {
     margin: 0 0 8px!important;
     padding: 6px 12px!important;
     flex: 0 0 auto!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-day-intel-strip {
+    display: none!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-shell {
@@ -210,37 +219,48 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     padding: 0!important;
     margin: 0!important;
     flex: 1 1 auto!important;
-    height: calc(100vh - 124px)!important;
-    height: calc(100dvh - 124px)!important;
-    min-height: calc(100vh - 124px)!important;
-    min-height: calc(100dvh - 124px)!important;
-    max-height: calc(100vh - 124px)!important;
-    max-height: calc(100dvh - 124px)!important;
+    height: calc(100vh - 116px)!important;
+    height: calc(100dvh - 116px)!important;
+    min-height: calc(100vh - 116px)!important;
+    min-height: calc(100dvh - 116px)!important;
+    max-height: calc(100vh - 116px)!important;
+    max-height: calc(100dvh - 116px)!important;
     overflow: hidden!important;
     align-items: stretch!important;
   }
 
-  /* Columna 1: Barra lateral de técnico y ruta */
+  /* Columna 1: Barra lateral de técnico y ruta (ESTÁTICA, SIN SCROLLBAR) */
   body.planificar-page:not(.plan-technician-view) .plan-sidebar {
     grid-area: sidebar!important;
     box-sizing: border-box!important;
     height: 100%!important;
     min-height: 100%!important;
     max-height: 100%!important;
-    overflow-y: auto!important;
-    overflow-x: hidden!important;
+    overflow: hidden!important;
+    overflow-y: hidden!important;
     display: flex!important;
     flex-direction: column!important;
-    gap: 8px!important;
-    padding: 12px!important;
+    gap: 6px!important;
+    padding: 10px 12px!important;
     border-radius: 12px!important;
     background: #fff!important;
     border: 1px solid #dce5ee!important;
     box-shadow: 0 4px 14px rgba(18,42,76,.06)!important;
-    scrollbar-width: thin!important;
   }
 
-  /* Columna 2: Tablero del plan con lista deslizable interna */
+  body.planificar-page:not(.plan-technician-view) .plan-route-intel-box {
+    margin-top: 4px!important;
+    padding: 7px 9px!important;
+    flex: 0 0 auto!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-weather-box {
+    margin-top: 4px!important;
+    padding: 7px 9px!important;
+    flex: 0 0 auto!important;
+  }
+
+  /* Columna 2: Tablero del plan - solo desliza cuando se muestra plan completo o detalles */
   body.planificar-page:not(.plan-technician-view) .plan-board {
     grid-area: board!important;
     box-sizing: border-box!important;
@@ -253,8 +273,8 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-board > .sh {
-    min-height: 28px!important;
-    padding: 0 2px 4px!important;
+    min-height: 26px!important;
+    padding: 0 2px 3px!important;
     flex: 0 0 auto!important;
   }
 
@@ -270,14 +290,36 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     flex: 0 0 auto!important;
   }
 
-  body.planificar-page:not(.plan-technician-view) .plan-day-intel-strip {
-    flex: 0 0 auto!important;
-    margin-bottom: 6px!important;
-  }
-
   body.planificar-page:not(.plan-technician-view) .plan-card-navigator {
     flex: 0 0 auto!important;
     margin-bottom: 6px!important;
+    padding: 6px 10px!important;
+    display: flex!important;
+    align-items: center!important;
+    justify-content: space-between!important;
+    gap: 8px!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-card-nav-metrics {
+    display: flex!important;
+    align-items: center!important;
+    gap: 10px!important;
+    font-size: 11px!important;
+    color: #4b617a!important;
+    white-space: nowrap!important;
+    flex: 1 1 auto!important;
+    justify-content: center!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-card-nav-metrics span {
+    display: inline-flex!important;
+    align-items: center!important;
+    gap: 3px!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-card-nav-metrics b {
+    color: #102b50!important;
+    font-weight: 800!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-site-pills-row {
@@ -285,7 +327,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     margin-bottom: 6px!important;
   }
 
-  /* Recuadro estático interno donde desliza la lista y los detalles */
+  /* Recuadro interno donde desliza la lista y los detalles */
   body.planificar-page:not(.plan-technician-view) .plan-days {
     flex: 1 1 0!important;
     min-height: 0!important;
@@ -296,7 +338,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     scrollbar-width: thin!important;
   }
 
-  /* Columna 3: Mapa a toda la altura disponible */
+  /* Columna 3: Mapa a toda la altura disponible (ESTÁTICA, SIN SCROLLBAR) */
   body.planificar-page:not(.plan-technician-view) .plan-map-panel {
     grid-area: map!important;
     box-sizing: border-box!important;
@@ -306,6 +348,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     display: flex!important;
     flex-direction: column!important;
     overflow: hidden!important;
+    overflow-y: hidden!important;
     position: sticky!important;
     top: 0!important;
     border-radius: 12px!important;
@@ -316,7 +359,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
 
   body.planificar-page:not(.plan-technician-view) .plan-map-panel-head {
     flex: 0 0 auto!important;
-    padding: 9px 12px!important;
+    padding: 8px 12px!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-map-panel .plan-map {
@@ -330,7 +373,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
 
   body.planificar-page:not(.plan-technician-view) .plan-map-legend {
     flex: 0 0 auto!important;
-    padding: 7px 8px!important;
+    padding: 6px 8px!important;
   }
 }
 
@@ -386,4 +429,4 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
 }
 
 /* Modales y selector de paradas */
-.plan-stop-picker-card{box-sizing:border-box!important;width:min(780px,calc(100vw - 32px))!important;max-height:calc(100dvh - 32px)!important;margin:auto!important;padding:28px 32px!important;overflow:auto!important;border:1px solid #d9e3ed!important;border-radius:20px!important;background:#fff!important;box-shadow:0 28px 80px rgba(12,35,64,.28)!important}.plan-stop-picker-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:22px}.plan-stop-picker-head h2{margin:0;color:#102b55;font-size:25px}.plan-stop-picker-head p{margin:5px 0 0;color:#64758e;font-size:14px;font-weight:700}.plan-stop-picker-close{display:grid;width:42px;height:42px;flex:0 0 42px;place-items:center;border:1px solid #d7e2ed;border-radius:11px;background:#fff;color:#40516a;font-size:25px;cursor:pointer}.plan-stop-picker-tabs{display:grid;grid-template-columns:1fr 1fr;margin-bottom:16px}.plan-stop-picker-tabs button{min-height:48px;border:1px solid #d2dce8;background:#fff;color:#526079;font:800 16px Manrope,Inter,sans-serif;cursor:pointer}.plan-stop-picker-tabs button:first-child{border-radius:10px 0 0 10px}.plan-stop-picker-tabs button:last-child{border-radius:0 10px 10px 0}.plan-stop-picker-tabs button.active{position:relative;z-index:1;border-color:#0874e8;color:#0874e8;background:#f7fbff;box-shadow:inset 0 0 0 1px #0874e8}.plan-stop-picker-search{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;min-height:54px;border:2px solid #0874e8;border-radius:11px;background:#fff}.plan-stop-picker-search span{display:grid;place-items:center;color:#0874e8;font-size:21px}.plan-stop-picker-search input{width:100%;min-width:0;border:0!important;outline:0!important;background:transparent!important;color:#102b55;font:600 16px Manrope,Inter,sans-serif!important}.plan-stop-picker-filters{display:flex;gap:10px;margin:14px 0}.plan-stop-picker-filters button{padding:8px 18px;border:1px solid #d4deea;border-radius:22px;background:#fff;color:#526079;font:700 13px Manrope,Inter,sans-serif}.plan-stop-picker-filters button.active{border-color:#dbeaff;background:#edf5ff;color:#0874e8}.plan-stop-picker-divider{height:1px;margin:15px 0;background:#dce5ee}.plan-stop-picker-label{display:block;margin-bottom:9px;color:#60718a;font-size:13px}.plan-stop-picker-results{display:grid;gap:7px;max-height:330px;overflow:auto}.plan-stop-picker-result{display:grid;grid-template-columns:46px minmax(0,1fr) 36px;align-items:center;gap:12px;min-height:60px;padding:7px 12px;border:1px solid #d7e1ec;border-radius:10px;background:#fff}.plan-stop-picker-result>span{display:grid;width:42px;height:42px;place-items:center;border-radius:12px;background:#eaf3ff;color:#0874e8;font-size:20px}.plan-stop-picker-result>span.node{background:#e9f8ef;color:#16a662}.plan-stop-picker-result div{min-width:0}.plan-stop-picker-result b,.plan-stop-picker-result small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.plan-stop-picker-result b{color:#102b55;font-size:14px}.plan-stop-picker-result small{margin-top:3px;color:#64758e;font-size:12px}.plan-stop-picker-result>button{display:grid;width:34px;height:34px;place-items:center;border:1px solid #a9cdf7;border-radius:50%;background:#fff;color:#0874e8;font-size:25px;line-height:1;cursor:pointer}.plan-stop-picker-result.selected{border-color:#b7d5f8;background:#f7fbff}.plan-stop-picker-add{width:100%;margin-top:12px!important}@media(max-width:650px){.plan-stop-picker-card{width:calc(100vw - 14px)!important;max-height:calc(100dvh - 14px)!important;padding:18px 14px!important}.plan-stop-picker-head h2{font-size:20px}.plan-stop-picker-head p{font-size:11px}.plan-stop-picker-tabs button{font-size:13px}.plan-stop-picker-result{grid-template-columns:40px minmax(0,1fr) 34px;padding:6px 8px}.plan-stop-picker-result>span{width:36px;height:36px}.plan-stop-picker-results{max-height:45dvh}}
+.plan-stop-picker-card{box-sizing:border-box!important;width:min(780px,calc(100vw - 32px))!important;max-height:calc(100dvh - 32px)!important;margin:auto!important;padding:28px 32px!important;overflow:auto!important;border:1px solid #d9e3ed!important;border-radius:20px!important;background:#fff!important;box-shadow:0 28px 80px rgba(12,35,64,.28)!important}.plan-stop-picker-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:22px}.plan-stop-picker-head h2{margin:0;color:#102b50;font-size:25px}.plan-stop-picker-head p{margin:5px 0 0;color:#64758e;font-size:14px;font-weight:700}.plan-stop-picker-close{display:grid;width:42px;height:42px;flex:0 0 42px;place-items:center;border:1px solid #d7e2ed;border-radius:11px;background:#fff;color:#40516a;font-size:25px;cursor:pointer}.plan-stop-picker-tabs{display:grid;grid-template-columns:1fr 1fr;margin-bottom:16px}.plan-stop-picker-tabs button{min-height:48px;border:1px solid #d2dce8;background:#fff;color:#526079;font:800 16px Manrope,Inter,sans-serif;cursor:pointer}.plan-stop-picker-tabs button:first-child{border-radius:10px 0 0 10px}.plan-stop-picker-tabs button:last-child{border-radius:0 10px 10px 0}.plan-stop-picker-tabs button.active{position:relative;z-index:1;border-color:#0874e8;color:#0874e8;background:#f7fbff;box-shadow:inset 0 0 0 1px #0874e8}.plan-stop-picker-search{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;min-height:54px;border:2px solid #0874e8;border-radius:11px;background:#fff}.plan-stop-picker-search span{display:grid;place-items:center;color:#0874e8;font-size:21px}.plan-stop-picker-search input{width:100%;min-width:0;border:0!important;outline:0!important;background:transparent!important;color:#102b50;font:600 16px Manrope,Inter,sans-serif!important}.plan-stop-picker-filters{display:flex;gap:10px;margin:14px 0}.plan-stop-picker-filters button{padding:8px 18px;border:1px solid #d4deea;border-radius:22px;background:#fff;color:#526079;font:700 13px Manrope,Inter,sans-serif}.plan-stop-picker-filters button.active{border-color:#dbeaff;background:#edf5ff;color:#0874e8}.plan-stop-picker-divider{height:1px;margin:15px 0;background:#dce5ee}.plan-stop-picker-label{display:block;margin-bottom:9px;color:#60718a;font-size:13px}.plan-stop-picker-results{display:grid;gap:7px;max-height:330px;overflow:auto}.plan-stop-picker-result{display:grid;grid-template-columns:46px minmax(0,1fr) 36px;align-items:center;gap:12px;min-height:60px;padding:7px 12px;border:1px solid #d7e1ec;border-radius:10px;background:#fff}.plan-stop-picker-result>span{display:grid;width:42px;height:42px;place-items:center;border-radius:12px;background:#eaf3ff;color:#0874e8;font-size:20px}.plan-stop-picker-result>span.node{background:#e9f8ef;color:#16a662}.plan-stop-picker-result div{min-width:0}.plan-stop-picker-result b,.plan-stop-picker-result small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.plan-stop-picker-result b{color:#102b50;font-size:14px}.plan-stop-picker-result small{margin-top:3px;color:#64758e;font-size:12px}.plan-stop-picker-result>button{display:grid;width:34px;height:34px;place-items:center;border:1px solid #a9cdf7;border-radius:50%;background:#fff;color:#0874e8;font-size:25px;line-height:1;cursor:pointer}.plan-stop-picker-result.selected{border-color:#b7d5f8;background:#f7fbff}.plan-stop-picker-add{width:100%;margin-top:12px!important}@media(max-width:650px){.plan-stop-picker-card{width:calc(100vw - 14px)!important;max-height:calc(100dvh - 14px)!important;padding:18px 14px!important}.plan-stop-picker-head h2{font-size:20px}.plan-stop-picker-head p{font-size:11px}.plan-stop-picker-tabs button{font-size:13px}.plan-stop-picker-result{grid-template-columns:40px minmax(0,1fr) 34px;padding:6px 8px}.plan-stop-picker-result>span{width:36px;height:36px}.plan-stop-picker-results{max-height:45dvh}}
