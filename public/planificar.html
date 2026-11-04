@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="assets/css/plan-stop-cards.css?v=20260902-plan-status-v1">
   <link rel="stylesheet" href="assets/css/plan-stop-detail-grid.css?v=20260826-client-detail-v1">
   <link rel="stylesheet" href="assets/css/plan-stop-card-exact.css?v=20260823-role-actions-v2">
-  <link rel="stylesheet" href="assets/css/technician-dashboard.css?v=20260809-tech-summary-wide-v15">
+  <link rel="stylesheet" href="assets/css/technician-dashboard.css?v=20261104-mobile-clean-v2">
   <link rel="stylesheet" href="assets/css/technician-view-modes.css?v=20260824-tech-completed-edit-v11">
   <link rel="stylesheet" href="assets/css/plan-ui-v2.css?v=20260823-stop-modal-responsive-v4">
   <link rel="stylesheet" href="assets/css/material-dispatches.css?v=20261030-v2">
@@ -553,10 +553,25 @@
     </div>
   </div>
 
+  <nav class="tech-bottom-nav tech-bottom-nav-three" id="tech-bottom-nav" aria-label="Opciones del técnico">
+    <button class="active" type="button" onclick="openTechnicianDetails()" title="Ver agenda y detalles del día">
+      <svg class="tech-nav-svg" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v0Zm0 9h6m-6 4h4"/></svg>
+      <span>Detalles</span>
+    </button>
+    <button type="button" onclick="openTechnicianRouteMap()" title="Ver mapa de la ruta completa">
+      <svg class="tech-nav-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+      <span>Ruta</span>
+    </button>
+    <button type="button" onclick="openTechnicianAddMenu()" title="Registrar nueva instalación o detalle">
+      <svg class="tech-nav-svg" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Agregar</span>
+    </button>
+  </nav>
+
   <div class="nt" id="nt"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="assets/js/api.js?v=20260831-plan-map-parity-v11"></script>
   <script src="assets/js/common.js?v=20261031-disputes-v1"></script>
-  <script src="assets/js/planificar.js?v=20261104-clean-card-v2"></script>
+  <script src="assets/js/planificar.js?v=20261104-tech-mobile-clean-v1"></script>
 </body>
 </html>

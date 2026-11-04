@@ -1,5 +1,128 @@
+/* Reglas generales para la vista y rol técnico: CERO sidebar admin, 100% full width y barra inferior activa */
 .tech-mobile-header,.tech-bottom-nav{display:none}
-body.plan-technician-view{background:#f1f6fc;color:#10264a}
+
+body.plan-technician-view .topbar,
+body.plan-technician-view .topbar.app-sidebar,
+body.plan-technician-view #mobile-menu-toggle,
+body.plan-technician-view .sidebar-toggle,
+html[data-role="tecnico"] body .topbar,
+html[data-role="tecnico"] body .topbar.app-sidebar,
+html[data-role="tecnico"] body #mobile-menu-toggle,
+html[data-role="tecnico"] body .sidebar-toggle {
+  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.plan-technician-view,
+body.plan-technician-view .main,
+body.sidebar-collapsed.plan-technician-view .main,
+body.plan-technician-view > .main,
+body.plan-technician-view .ct,
+body.plan-technician-view #plan-panel,
+html[data-role="tecnico"] body,
+html[data-role="tecnico"] body .main,
+html[data-role="tecnico"] body.sidebar-collapsed .main,
+html[data-role="tecnico"] body .ct,
+html[data-role="tecnico"] body #plan-panel {
+  margin-left: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Ocultar campana flotante inferior para técnicos (tienen la campana en la cabecera superior móvil, sin estorbar botones) */
+body.plan-technician-view #notification-bell,
+body.plan-technician-view .floating-notification-bell,
+body.plan-technician-view button.floating-notification-bell,
+html[data-role="tecnico"] #notification-bell,
+html[data-role="tecnico"] .floating-notification-bell,
+html[data-role="tecnico"] button.floating-notification-bell {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body.plan-technician-view {
+  padding-bottom: 78px !important;
+  background: #f1f6fc !important;
+  color: #10264a;
+}
+
+body.plan-technician-view .tech-mobile-header {
+  position: sticky !important;
+  z-index: 1500 !important;
+  top: 0 !important;
+  display: grid !important;
+  grid-template-columns: 46px 1fr 46px !important;
+  align-items: center !important;
+  gap: 12px !important;
+  height: 68px !important;
+  padding: 10px 16px !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: 0 4px 18px rgba(24, 57, 96, 0.08) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+body.plan-technician-view .tech-bottom-nav,
+body.plan-technician-view .tech-bottom-nav.tech-bottom-nav-three {
+  position: fixed !important;
+  z-index: 2500 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  height: 68px !important;
+  padding: 6px 16px 8px !important;
+  border-top: 1px solid #dfe8f2 !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: 0 -6px 22px rgba(29, 64, 105, 0.1) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+}
+
+body.plan-technician-view .tech-bottom-nav button,
+body.plan-technician-view .tech-bottom-nav a {
+  display: flex !important;
+  min-width: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-direction: column !important;
+  gap: 3px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #64748b !important;
+  font-family: 'Manrope', sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  transition: color 0.15s ease, transform 0.1s ease !important;
+}
+
+body.plan-technician-view .tech-bottom-nav button:hover,
+body.plan-technician-view .tech-bottom-nav button:active {
+  color: #0874e8 !important;
+}
+
+body.plan-technician-view .tech-bottom-nav button.active {
+  color: #0874e8 !important;
+}
+
+body.plan-technician-view .tech-bottom-nav .tech-nav-svg {
+  width: 22px !important;
+  height: 22px !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
+  fill: none !important;
+}
+
 body.plan-technician-view .main{background:#f1f6fc}
 body.plan-technician-view #plan-panel{height:auto!important;min-height:100vh;overflow:visible!important}
 body.plan-technician-view .ct{max-width:none!important}

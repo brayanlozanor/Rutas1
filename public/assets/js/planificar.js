@@ -109,14 +109,16 @@ function resetPlanMapScrollLock() {
 async function initPlanificarPage() {
     if (!checkAuth()) return;
     initCommon();
+    if (isTechnicianPlanView()) {
+        document.body.classList.add('plan-technician-view');
+        applyTechnicianViewportLayout();
+        const logo = document.querySelector('.logo-link');
+        if (logo) logo.href = 'planificar.html';
+    }
     const stopSearch = document.getElementById('plan-stop-search');
     if (stopSearch) stopSearch.placeholder = 'Buscar cliente, pueblo o antena...';
     resetPlanMapScrollLock();
     await loadDB({ showOverlay: false, preferCache: true });
-    if (isTechnicianPlanView()) {
-        const logo = document.querySelector('.logo-link');
-        if (logo) logo.href = 'planificar.html';
-    }
     normalizeWeekPlan();
     initPlanSelectors();
     configureTechnicianDashboard();
@@ -872,24 +874,39 @@ function shiftTechnicianAgendaWeek(offset) {
 }
 
 function applyTechnicianViewportLayout() {
-    const mobile = window.matchMedia('(max-width: 760px)').matches;
+    const isTech = isTechnicianPlanView();
     const body = document.body;
     const main = document.querySelector('.main');
     const topbar = document.querySelector('.topbar');
-    if (mobile) {
+    
+    if (isTech) {
+        body.classList.add('plan-technician-view');
         body.style.setProperty('padding-left', '0', 'important');
         body.style.setProperty('width', '100%', 'important');
         main?.style.setProperty('width', '100%', 'important');
         main?.style.setProperty('margin-left', '0', 'important');
+        main?.style.setProperty('padding-left', '0', 'important');
         main?.style.setProperty('transform', 'none', 'important');
         topbar?.style.setProperty('display', 'none', 'important');
+        const bell = document.getElementById('notification-bell');
+        if (bell) bell.style.setProperty('display', 'none', 'important');
     } else {
-        body.style.removeProperty('padding-left');
-        body.style.removeProperty('width');
-        main?.style.removeProperty('width');
-        main?.style.removeProperty('margin-left');
-        main?.style.removeProperty('transform');
-        topbar?.style.removeProperty('display');
+        const mobile = window.matchMedia('(max-width: 760px)').matches;
+        if (mobile) {
+            body.style.setProperty('padding-left', '0', 'important');
+            body.style.setProperty('width', '100%', 'important');
+            main?.style.setProperty('width', '100%', 'important');
+            main?.style.setProperty('margin-left', '0', 'important');
+            main?.style.setProperty('transform', 'none', 'important');
+            topbar?.style.setProperty('display', 'none', 'important');
+        } else {
+            body.style.removeProperty('padding-left');
+            body.style.removeProperty('width');
+            main?.style.removeProperty('width');
+            main?.style.removeProperty('margin-left');
+            main?.style.removeProperty('transform');
+            topbar?.style.removeProperty('display');
+        }
     }
     if (!window.__techViewportLayoutBound) {
         window.__techViewportLayoutBound = true;
