@@ -1,22 +1,24 @@
-/* Apariencia del planificador optimizada: diseño 100% estático que aprovecha todo el alto de la pantalla sin espacios sobrantes */
+/* Apariencia del planificador: diseño 100% estático que aprovecha todo el alto disponible sin romper el menú lateral */
 
-/* Reglas base para planificar */
-body.planificar-page:not(.plan-technician-view) {
-  margin: 0!important;
-  padding: 0!important;
-}
-
-body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero {
+/* Panel principal del planificador dentro de .ct */
+body.planificar-page:not(.plan-technician-view) #plan-panel {
   box-sizing: border-box!important;
-  width: auto!important;
-  margin: 0 0 10px!important;
-  padding: 14px 20px!important;
-  border: 1px solid #e3eaf2!important;
-  border-radius: 12px!important;
-  background: #fff!important;
-  box-shadow: 0 4px 15px rgba(18,42,76,.05)!important;
+  display: flex!important;
+  flex-direction: column!important;
+  height: 100%!important;
+  max-height: 100%!important;
+  min-height: 0!important;
+  overflow: hidden!important;
+  padding: 8px 18px 14px!important;
+  background: #f4f7fb!important;
 }
 
+/* Ocultar hero repetitivo en escritorio para ganar espacio útil vertical */
+body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero {
+  display: none!important;
+}
+
+/* Barra KPI compacta horizontal */
 body.planificar-page:not(.plan-technician-view) .plan-kpi-bar {
   display: grid!important;
   grid-template-columns: repeat(5, minmax(0, 1fr))!important;
@@ -27,6 +29,7 @@ body.planificar-page:not(.plan-technician-view) .plan-kpi-bar {
   border-radius: 0!important;
   background: transparent!important;
   box-shadow: none!important;
+  flex: 0 0 auto!important;
 }
 
 body.planificar-page:not(.plan-technician-view) .plan-kpi {
@@ -61,6 +64,7 @@ body.planificar-page:not(.plan-technician-view) .plan-kpi small {
   font-size: 9px!important;
 }
 
+/* Agenda del plan compacta */
 body.planificar-page:not(.plan-technician-view) .plan-calendar {
   box-sizing: border-box!important;
   margin: 0 0 8px!important;
@@ -124,78 +128,15 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
 }
 
 /* =========================================================================
-   DISEÑO EN ESCRITORIO (min-width: 901px): 100% DEL ALTO, CERO ESPACIO SOBRANTE
+   DISEÑO EN ESCRITORIO (min-width: 901px): OCUPA TODO EL ALTO SIN ESPACIOS SOBRANTES
    ========================================================================= */
 @media (min-width: 901px) {
-  html:has(body.planificar-page:not(.plan-technician-view)) {
-    height: 100%!important;
-    max-height: 100%!important;
-    overflow: hidden!important;
-  }
-
-  body.planificar-page:not(.plan-technician-view) {
-    height: 100vh!important;
-    max-height: 100vh!important;
-    min-height: 100vh!important;
-    overflow: hidden!important;
-    display: flex!important;
-    flex-direction: column!important;
-  }
-
-  body.planificar-page:not(.plan-technician-view) .topbar {
-    flex: 0 0 54px!important;
-    height: 54px!important;
-    min-height: 54px!important;
-    max-height: 54px!important;
-  }
-
-  body.planificar-page:not(.plan-technician-view) .main {
-    flex: 1 1 0!important;
-    height: calc(100vh - 54px)!important;
-    max-height: calc(100vh - 54px)!important;
-    min-height: calc(100vh - 54px)!important;
-    overflow: hidden!important;
-    padding: 0!important;
-    margin: 0!important;
-    display: flex!important;
-    flex-direction: column!important;
-  }
-
-  body.planificar-page:not(.plan-technician-view) .ct {
-    flex: 1 1 0!important;
-    height: 100%!important;
-    max-height: 100%!important;
-    min-height: 100%!important;
-    overflow: hidden!important;
-    padding: 0!important;
-    margin: 0!important;
-    display: flex!important;
-    flex-direction: column!important;
-  }
-
-  body.planificar-page:not(.plan-technician-view) #plan-panel {
-    flex: 1 1 0!important;
-    height: 100%!important;
-    max-height: 100%!important;
-    min-height: 100%!important;
-    overflow: hidden!important;
-    display: flex!important;
-    flex-direction: column!important;
-    padding: 6px 14px 10px!important;
-    background: #f4f7fb!important;
-    box-sizing: border-box!important;
-  }
-
-  body.planificar-page:not(.plan-technician-view) .hero-panel.compact-hero {
-    display: none!important;
-  }
-
   body.planificar-page:not(.plan-technician-view) .plan-shell {
     display: grid!important;
     grid-template-columns: 255px minmax(360px, 1fr) minmax(330px, 440px)!important;
-    grid-template-rows: 100%!important;
     grid-template-areas: "sidebar board map"!important;
-    gap: 12px!important;
+    grid-template-rows: 100%!important;
+    gap: 14px!important;
     padding: 0!important;
     margin: 0!important;
     flex: 1 1 0!important;
@@ -206,17 +147,18 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     align-items: stretch!important;
   }
 
+  /* Columna 1: Barra lateral de técnico y ruta */
   body.planificar-page:not(.plan-technician-view) .plan-sidebar {
     grid-area: sidebar!important;
     height: 100%!important;
     max-height: 100%!important;
-    min-height: 100%!important;
+    min-height: 0!important;
     overflow-y: auto!important;
     overflow-x: hidden!important;
     display: flex!important;
     flex-direction: column!important;
-    gap: 7px!important;
-    padding: 10px!important;
+    gap: 8px!important;
+    padding: 12px!important;
     border-radius: 12px!important;
     background: #fff!important;
     border: 1px solid #dce5ee!important;
@@ -225,20 +167,15 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     scrollbar-width: thin!important;
   }
 
+  /* Columna 2: Tablero del plan con lista deslizable interna */
   body.planificar-page:not(.plan-technician-view) .plan-board {
     grid-area: board!important;
     height: 100%!important;
     max-height: 100%!important;
-    min-height: 100%!important;
+    min-height: 0!important;
     display: flex!important;
     flex-direction: column!important;
     overflow: hidden!important;
-    min-height: 0!important;
-    border-radius: 12px!important;
-    background: #fff!important;
-    border: 1px solid #dce5ee!important;
-    box-shadow: 0 4px 14px rgba(18,42,76,.06)!important;
-    padding: 10px 12px!important;
     box-sizing: border-box!important;
   }
 
@@ -249,7 +186,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-board > .sh h2 {
-    font-size: 15px!important;
+    font-size: 16px!important;
     color: #102b50!important;
     margin: 0!important;
   }
@@ -258,7 +195,6 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     margin-bottom: 6px!important;
     padding: 5px 6px!important;
     flex: 0 0 auto!important;
-    min-height: 42px!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-day-intel-strip {
@@ -276,6 +212,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     margin-bottom: 6px!important;
   }
 
+  /* Recuadro estático interno donde desliza la lista y los detalles */
   body.planificar-page:not(.plan-technician-view) .plan-days {
     flex: 1 1 0!important;
     min-height: 0!important;
@@ -286,16 +223,16 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     scrollbar-width: thin!important;
   }
 
+  /* Columna 3: Mapa a toda la altura disponible */
   body.planificar-page:not(.plan-technician-view) .plan-map-panel {
     grid-area: map!important;
     height: 100%!important;
     max-height: 100%!important;
-    min-height: 100%!important;
+    min-height: 0!important;
     display: flex!important;
     flex-direction: column!important;
     overflow: hidden!important;
-    min-height: 0!important;
-    position:sticky!important;
+    position: sticky!important;
     top: 10px!important;
     border-radius: 12px!important;
     background: #fff!important;
@@ -324,24 +261,12 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
 }
 
 /* =========================================================================
-   DISEÑO RESPONSIVO EN TABLETS Y DISPOSITIVOS PEQUEÑOS (<= 900px)
+   DISEÑO RESPONSIVO (<= 900px)
    ========================================================================= */
 @media (max-width: 900px) {
-  body.planificar-page:not(.plan-technician-view) {
-    height: auto!important;
-    min-height: 100vh!important;
-    overflow-y: auto!important;
-  }
-
-  body.planificar-page:not(.plan-technician-view) .main,
-  body.planificar-page:not(.plan-technician-view) .ct {
-    height: auto!important;
-    overflow: visible!important;
-  }
-
   body.planificar-page:not(.plan-technician-view) #plan-panel {
     height: auto!important;
-    overflow: visible!important;
+    overflow-y: auto!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-kpi-bar {
@@ -358,6 +283,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     gap: 14px!important;
     height: auto!important;
     min-height: auto!important;
+    overflow: visible!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-sidebar,
@@ -384,3 +310,6 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     padding: 6px 8px!important;
   }
 }
+
+/* Modales y selector de paradas */
+.plan-stop-picker-card{box-sizing:border-box!important;width:min(780px,calc(100vw - 32px))!important;max-height:calc(100dvh - 32px)!important;margin:auto!important;padding:28px 32px!important;overflow:auto!important;border:1px solid #d9e3ed!important;border-radius:20px!important;background:#fff!important;box-shadow:0 28px 80px rgba(12,35,64,.28)!important}.plan-stop-picker-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:22px}.plan-stop-picker-head h2{margin:0;color:#102b55;font-size:25px}.plan-stop-picker-head p{margin:5px 0 0;color:#64758e;font-size:14px;font-weight:700}.plan-stop-picker-close{display:grid;width:42px;height:42px;flex:0 0 42px;place-items:center;border:1px solid #d7e2ed;border-radius:11px;background:#fff;color:#40516a;font-size:25px;cursor:pointer}.plan-stop-picker-tabs{display:grid;grid-template-columns:1fr 1fr;margin-bottom:16px}.plan-stop-picker-tabs button{min-height:48px;border:1px solid #d2dce8;background:#fff;color:#526079;font:800 16px Manrope,Inter,sans-serif;cursor:pointer}.plan-stop-picker-tabs button:first-child{border-radius:10px 0 0 10px}.plan-stop-picker-tabs button:last-child{border-radius:0 10px 10px 0}.plan-stop-picker-tabs button.active{position:relative;z-index:1;border-color:#0874e8;color:#0874e8;background:#f7fbff;box-shadow:inset 0 0 0 1px #0874e8}.plan-stop-picker-search{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;min-height:54px;border:2px solid #0874e8;border-radius:11px;background:#fff}.plan-stop-picker-search span{display:grid;place-items:center;color:#0874e8;font-size:21px}.plan-stop-picker-search input{width:100%;min-width:0;border:0!important;outline:0!important;background:transparent!important;color:#102b55;font:600 16px Manrope,Inter,sans-serif!important}.plan-stop-picker-filters{display:flex;gap:10px;margin:14px 0}.plan-stop-picker-filters button{padding:8px 18px;border:1px solid #d4deea;border-radius:22px;background:#fff;color:#526079;font:700 13px Manrope,Inter,sans-serif}.plan-stop-picker-filters button.active{border-color:#dbeaff;background:#edf5ff;color:#0874e8}.plan-stop-picker-divider{height:1px;margin:15px 0;background:#dce5ee}.plan-stop-picker-label{display:block;margin-bottom:9px;color:#60718a;font-size:13px}.plan-stop-picker-results{display:grid;gap:7px;max-height:330px;overflow:auto}.plan-stop-picker-result{display:grid;grid-template-columns:46px minmax(0,1fr) 36px;align-items:center;gap:12px;min-height:60px;padding:7px 12px;border:1px solid #d7e1ec;border-radius:10px;background:#fff}.plan-stop-picker-result>span{display:grid;width:42px;height:42px;place-items:center;border-radius:12px;background:#eaf3ff;color:#0874e8;font-size:20px}.plan-stop-picker-result>span.node{background:#e9f8ef;color:#16a662}.plan-stop-picker-result div{min-width:0}.plan-stop-picker-result b,.plan-stop-picker-result small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.plan-stop-picker-result b{color:#102b55;font-size:14px}.plan-stop-picker-result small{margin-top:3px;color:#64758e;font-size:12px}.plan-stop-picker-result>button{display:grid;width:34px;height:34px;place-items:center;border:1px solid #a9cdf7;border-radius:50%;background:#fff;color:#0874e8;font-size:25px;line-height:1;cursor:pointer}.plan-stop-picker-result.selected{border-color:#b7d5f8;background:#f7fbff}.plan-stop-picker-add{width:100%;margin-top:12px!important}@media(max-width:650px){.plan-stop-picker-card{width:calc(100vw - 14px)!important;max-height:calc(100dvh - 14px)!important;padding:18px 14px!important}.plan-stop-picker-head h2{font-size:20px}.plan-stop-picker-head p{font-size:11px}.plan-stop-picker-tabs button{font-size:13px}.plan-stop-picker-result{grid-template-columns:40px minmax(0,1fr) 34px;padding:6px 8px}.plan-stop-picker-result>span{width:36px;height:36px}.plan-stop-picker-results{max-height:45dvh}}

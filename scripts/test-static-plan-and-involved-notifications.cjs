@@ -17,7 +17,7 @@ assert(planJs.includes('weatherMemoryCache = new Map()'), 'planificar.js must ca
 
 // 2. Static Desktop Layout in Planificar
 console.log('2. Checking static desktop layout in plan-reference.css and planificar.html...');
-assert(planCss.includes('height: 100vh!important') || planCss.includes('height:100vh!important'), 'plan-reference.css must lock body height to 100vh on desktop');
+assert(planCss.includes('#plan-panel') && (planCss.includes('height: 100%!important') || planCss.includes('height:100%!important')), 'plan-reference.css must lock plan-panel height to 100% on desktop');
 assert(planCss.includes('.plan-days') && (planCss.includes('overflow-y: auto!important') || planCss.includes('overflow-y:auto!important')), 'plan-reference.css must make plan-days the dedicated static scrollable box');
 assert(planCss.includes('.hero-panel.compact-hero') && (planCss.includes('display: none!important') || planCss.includes('display:none!important')), 'plan-reference.css must hide redundant hero on desktop');
 assert(!planHtml.includes('id="plan-panel" class="panel active" style="height:100%;overflow:auto"'), 'planificar.html must not force overflow:auto on plan-panel inline');
