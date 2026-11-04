@@ -23,9 +23,9 @@
 .orders-page .orders-table-card .table-wrap{max-height:calc(100dvh - 330px);overflow:auto!important;border-radius:8px!important;scrollbar-gutter:stable}
 .orders-page .order-table{min-width:1450px!important}
 .orders-page .order-table thead{position:sticky;z-index:4;top:0}
-.orders-page .order-table th{height:40px!important;padding:8px 10px!important;background:#f6f9fc!important;color:#425672!important;font-size:8px!important}
-.orders-page .order-table td{height:52px!important;padding:8px 10px!important;font-size:9px!important}
-.orders-page .order-folio{display:inline-flex;padding:4px 7px;border-radius:6px;background:#e9f3ff;color:#0871dd;font-size:8px}
+.orders-page .order-table th{height:40px!important;padding:8px 10px!important;background:#f6f9fc!important;color:#425672!important;font-size:11.5px!important;font-weight:700!important}
+.orders-page .order-table td{height:52px!important;padding:8px 10px!important;font-size:12.5px!important}
+.orders-page .order-folio{display:inline-flex;padding:4px 7px;border-radius:6px;background:#e9f3ff;color:#0871dd;font-size:11px;font-weight:700}
 .orders-page .order-actions{justify-content:center!important}
 .orders-page .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend){width:31px!important;height:31px!important;min-width:31px!important;min-height:31px!important;padding:0!important;border-radius:7px!important;font-size:0!important}
 .orders-page .order-actions .btn:before{font-size:14px!important;line-height:1!important}

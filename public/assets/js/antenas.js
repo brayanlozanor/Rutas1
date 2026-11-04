@@ -805,13 +805,24 @@ function ensureAntennaNodeModal() {
   document.body.appendChild(div);
 }
 
-function openAntennaNodeLinks(id) {
+async function openAntennaNodeLinks(id) {
   const eq = (state.equipment || []).find(item => item.id === id && !item.deletedAt);
   if (!eq) return;
   ensureAntennaNodeModal();
   linkingAntennaId = id;
   document.getElementById('ant-node-link-title').textContent = `Pueblos de ${eq.name || 'antena'}`;
   document.getElementById('ant-node-link-search').value = '';
+
+  // Asegurar que state.nodes contenga todos los pueblos registrados para vincular
+  if (!state.nodes || state.nodes.length < 5) {
+    try {
+      const nodeData = await fetchDataPage('nodes', { limit: 1000 });
+      if (Array.isArray(nodeData.nodes)) {
+        state.nodes = nodeData.nodes;
+      }
+    } catch (e) {}
+  }
+
   renderAntennaNodeLinks();
   document.body.classList.add('ant-node-link-open');
   OM('ant-node-link-mo');
@@ -834,40 +845,75 @@ function renderAntennaNodeLinkSuggestions() {
   const q = normalizeName(document.getElementById('ant-node-link-search')?.value || '');
   const menu = document.getElementById('ant-node-link-suggestions');
   if (!menu) return;
-  const linked = new Set(getCurrentLinkedNodeIds());
-  const matches = (state.nodes || []).filter(n => !n.deletedAt && !linked.has(n.id))
+  const currentLinked = new Set(getCurrentLinkedNodeIds());
+  
+  // Buscar entre todos los nodos disponibles
+  const allAvailable = (state.nodes || []).filter(n => n && !n.deletedAt && !currentLinked.has(n.id));
+  const matches = allAvailable
     .filter(n => !q || [getNodeLabel(n), n.nodeCode, n.town, getZoneLabel(n.zone)].some(v => normalizeName(v).includes(q)))
-    .slice(0, 6);
+    .slice(0, 8);
+
   const title = document.getElementById('ant-node-suggestions-title');
-  if (title) title.textContent = q ? 'Resultados' : 'Sugerencias';
+  if (title) title.textContent = q ? `Resultados (${matches.length})` : 'Pueblos sugeridos para vincular';
   if (!matches.length) {
-    menu.innerHTML = `<div class="ant-node-no-results">${q ? 'No se encontraron pueblos disponibles.' : 'No hay más pueblos para vincular.'}</div>`;
+    menu.innerHTML = `<div class="ant-node-no-results">${q ? 'No se encontraron pueblos con esa búsqueda.' : 'No hay más pueblos disponibles para vincular.'}</div>`;
     return;
   }
-  menu.innerHTML = matches.map(n => `<article class="ant-node-suggestion"><span class="ant-node-pin">&#9906;</span><div><strong>${antennaEscape(getNodeLabel(n))}</strong><small>${antennaEscape(getZoneLabel(n.zone))}</small></div><button type="button" onmousedown="event.preventDefault();addNodeToAntenna('${n.id}')">Vincular</button></article>`).join('');
+
+  menu.innerHTML = matches.map(n => {
+    const otherEq = (state.equipment || []).find(e => e.id !== linkingAntennaId && !e.deletedAt && Array.isArray(e.linkedNodeIds) && e.linkedNodeIds.includes(n.id));
+    const isReassign = !!otherEq;
+    const btnText = isReassign ? 'Reasignar' : 'Vincular';
+    const statusNote = otherEq ? ` · <span style="color:#d97706;font-weight:700;">En antena: ${antennaEscape(otherEq.name)}</span>` : '';
+    return `<article class="ant-node-suggestion" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <span class="ant-node-pin">&#9906;</span>
+      <div style="flex:1;min-width:0;">
+        <strong>${antennaEscape(getNodeLabel(n))}</strong>
+        <small>${antennaEscape(getZoneLabel(n.zone))}${statusNote}</small>
+      </div>
+      <button type="button" class="${isReassign ? 'bgh' : ''}" style="${isReassign ? 'background:#e0f2fe;color:#0284c7;border:1px solid #bae6fd;' : ''}" onmousedown="event.preventDefault();addNodeToAntenna('${n.id}')">${btnText}</button>
+    </article>`;
+  }).join('');
 }
 
 async function addNodeToAntenna(nodeId) {
   const eq = (state.equipment || []).find(item => item.id === linkingAntennaId);
   const node = (state.nodes || []).find(n => n.id === nodeId && !n.deletedAt);
   if (!eq || !node) return;
+
   if (!Array.isArray(eq.linkedNodeIds)) eq.linkedNodeIds = [];
+
+  // Regla estricta institucional: Un pueblo solo puede asignarse a una antena
+  // Si ya estaba asignado a otra antena, desvincularlo de la antena previa
+  const otherAntenna = (state.equipment || []).find(item => item.id !== eq.id && Array.isArray(item.linkedNodeIds) && item.linkedNodeIds.includes(nodeId));
+  if (otherAntenna) {
+    otherAntenna.linkedNodeIds = otherAntenna.linkedNodeIds.filter(id => id !== nodeId);
+    setUpdatedAudit(otherAntenna, `desvinculó nodo ${getNodeLabel(node)} (reasignado a ${eq.name})`);
+    await saveRecord('equipment', otherAntenna).catch(() => {});
+  }
+
   if (!eq.linkedNodeIds.includes(nodeId)) {
     eq.linkedNodeIds.push(nodeId);
     setUpdatedAudit(eq, `vinculó nodo ${getNodeLabel(node)}`);
     const saved = await saveRecord('equipment', eq);
     if (!saved) {
       eq.linkedNodeIds = eq.linkedNodeIds.filter(id => id !== nodeId);
-      notify('No se pudo vincular el nodo en D1.', 'err');
+      notify('No se pudo vincular el nodo.', 'err');
       return;
     }
   }
+
+  node.equipmentId = eq.id;
+  node.equipmentName = eq.name || '';
+  await saveRecord('nodes', node).catch(() => {});
+
   document.getElementById('ant-node-link-search').value = '';
   const menu = document.getElementById('ant-node-link-suggestions');
   if (menu) menu.innerHTML = '';
   renderAntennaNodeLinks();
   if (currentDetailAntennaId === eq.id) refreshAntennaDetailRelationsUI(`node:${nodeId}`);
   renderAntenas();
+  notify(`Pueblo "${getNodeLabel(node)}" vinculado a ${eq.name || 'la antena'}.`, 'ok');
 }
 
 async function removeNodeFromAntenna(nodeId) {
@@ -880,12 +926,18 @@ async function removeNodeFromAntenna(nodeId) {
   const saved = await saveRecord('equipment', eq);
   if (!saved) {
     eq.linkedNodeIds = prevIds;
-    notify('No se pudo quitar el vínculo en D1.', 'err');
+    notify('No se pudo quitar el vínculo.', 'err');
     return;
+  }
+  if (node) {
+    node.equipmentId = '';
+    node.equipmentName = '';
+    await saveRecord('nodes', node).catch(() => {});
   }
   renderAntennaNodeLinks();
   if (currentDetailAntennaId === eq.id) refreshAntennaDetailRelationsUI('equipment');
   renderAntenas();
+  notify('Pueblo desvinculado.', 'ok');
 }
 
 function renderAntennaNodeLinks() {

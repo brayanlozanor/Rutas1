@@ -2831,3 +2831,233 @@
 .wo-assign-user-pill.is-selected .wo-assign-avatar {
   display: none;
 }
+
+/* Control de escala de fuente y tamaño de texto mejorado */
+.order-font-scale-control {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cfdae6;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  height: 38px;
+  margin-left: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.order-font-scale-control button {
+  border: 0;
+  background: transparent;
+  color: #475569;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 0 12px;
+  height: 100%;
+  cursor: pointer;
+  transition: all .15s ease;
+  line-height: 38px;
+}
+.order-font-scale-control button:hover {
+  background: #f1f5f9;
+  color: #0284c7;
+}
+.order-font-scale-control button.is-active {
+  background: #0284c7;
+  color: #fff;
+}
+
+/* Tamaño de texto ampliado para la tabla de órdenes */
+.orders-page.orders-font-large .order-table td {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+.orders-page.orders-font-large .order-table th {
+  font-size: 13px !important;
+}
+.orders-page.orders-font-large .order-folio {
+  font-size: 12px !important;
+}
+.orders-page.orders-font-large .order-status-badge {
+  font-size: 12px !important;
+  max-width: 130px !important;
+  padding: 5px 8px !important;
+}
+
+/* Distintivos de color por usuario */
+.user-color-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2.5px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.user-color-chip .chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  flex-shrink: 0;
+}
+
+/* Línea de tiempo visual y profesional para el seguimiento en "Ver detalle completo" */
+.order-follow-up-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+  position: relative;
+  padding-left: 18px;
+  border-left: 2px solid #e2e8f0;
+}
+
+.timeline-step-card {
+  position: relative;
+  border-radius: 12px;
+  padding: 13px 16px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.timeline-step-card:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.timeline-step-card::before {
+  content: "";
+  position: absolute;
+  left: -24px;
+  top: 16px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 2px currentColor;
+  background: currentColor;
+}
+
+.timeline-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.timeline-step-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.timeline-action-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.timeline-step-time {
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.timeline-step-note {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #1e293b;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  word-break: break-word;
+}
+
+/* Colores por tipo de paso en la línea de tiempo */
+.step-kind-created {
+  border-left: 4px solid #0284c7;
+  background: #f0f9ff;
+}
+.step-kind-created::before { color: #0284c7; }
+.step-kind-created .timeline-action-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.step-kind-attending {
+  border-left: 4px solid #d97706;
+  background: #fffbeb;
+}
+.step-kind-attending::before { color: #d97706; }
+.step-kind-attending .timeline-action-badge {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.step-kind-retaken {
+  border-left: 4px solid #7c3aed;
+  background: #f5f3ff;
+}
+.step-kind-retaken::before { color: #7c3aed; }
+.step-kind-retaken .timeline-action-badge {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.step-kind-resolved {
+  border-left: 4px solid #059669;
+  background: #ecfdf5;
+}
+.step-kind-resolved::before { color: #059669; }
+.step-kind-resolved .timeline-action-badge {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.step-kind-returned {
+  border-left: 4px solid #e11d48;
+  background: #fff1f2;
+}
+.step-kind-returned::before { color: #e11d48; }
+.step-kind-returned .timeline-action-badge {
+  background: #ffe4e6;
+  color: #be123c;
+}
+
+.step-kind-completed {
+  border-left: 4px solid #4338ca;
+  background: #eef2ff;
+}
+.step-kind-completed::before { color: #4338ca; }
+.step-kind-completed .timeline-action-badge {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.step-kind-reopened {
+  border-left: 4px solid #ea580c;
+  background: #fff7ed;
+}
+.step-kind-reopened::before { color: #ea580c; }
+.step-kind-reopened .timeline-action-badge {
+  background: #ffedd5;
+  color: #c2410c;
+}
+

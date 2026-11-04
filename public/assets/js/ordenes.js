@@ -1,3 +1,65 @@
+
+const NETOPS_ORDERS_FONT_SCALE_KEY = 'netops_orders_font_scale_v1';
+
+function initOrderFontScale() {
+  const scale = localStorage.getItem(NETOPS_ORDERS_FONT_SCALE_KEY) || 'normal';
+  setOrderFontScale(scale, false);
+}
+
+function setOrderFontScale(scale = 'normal', save = true) {
+  const isLarge = scale === 'large';
+  document.body.classList.toggle('orders-font-large', isLarge);
+  document.getElementById('wo-font-normal')?.classList.toggle('is-active', !isLarge);
+  document.getElementById('wo-font-large')?.classList.toggle('is-active', isLarge);
+  if (save) {
+    try {
+      localStorage.setItem(NETOPS_ORDERS_FONT_SCALE_KEY, isLarge ? 'large' : 'normal');
+    } catch (e) {}
+  }
+}
+
+function getTimelineStepClass(action = '', label = '') {
+  const text = (action + ' ' + label).toLowerCase();
+  if (text.includes('cread') || text.includes('nuev') || action === 'created') return 'step-kind-created';
+  if (text.includes('revis') || text.includes('aten') || action === 'en_revision' || action === 'attending') return 'step-kind-attending';
+  if (text.includes('retom') || text.includes('reasign') || action === 'retaken') return 'step-kind-retaken';
+  if (text.includes('resuelt') || text.includes('soluc') || text.includes('respond') || action === 'resuelto_soporte' || action === 'resolved') return 'step-kind-resolved';
+  if (text.includes('devuelt') || action === 'devuelto_soporte' || action === 'returned') return 'step-kind-returned';
+  if (text.includes('concl') || text.includes('finaliz') || text.includes('conform') || action === 'completada' || action === 'done') return 'step-kind-completed';
+  if (text.includes('reab') || action === 'reopened') return 'step-kind-reopened';
+  return 'step-kind-created';
+}
+
+function renderOrderFollowUpTimeline(followUps = []) {
+  if (!Array.isArray(followUps) || !followUps.length) return '';
+  return `
+    <section class="order-report-block">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <small style="font-weight:900;text-transform:uppercase;letter-spacing:.05em;color:#475569;font-size:11px;">Historial de seguimiento cronológico (${followUps.length} ${followUps.length === 1 ? 'paso' : 'pasos'})</small>
+      </div>
+      <div class="order-follow-up-timeline">
+        ${followUps.slice().reverse().map(step => {
+          const stepClass = getTimelineStepClass(step.action || '', step.label || '');
+          const stepTime = step.at ? new Date(step.at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : 'Fecha no registrada';
+          const actorChip = step.byName ? renderUserColorChip(step.byName, step.byId || step.byUserId) : '';
+          return `
+            <div class="timeline-step-card ${stepClass}">
+              <div class="timeline-step-head">
+                <div class="timeline-step-left">
+                  <span class="timeline-action-badge">${orderEscape(step.label || step.action || 'Actualización')}</span>
+                  ${actorChip}
+                </div>
+                <span class="timeline-step-time">${orderEscape(stepTime)}</span>
+              </div>
+              ${step.note ? `<div class="timeline-step-note">${orderEscape(step.note)}</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </section>
+  `;
+}
+
 // scripts/test-network-order-action-requirements.cjs: ${w.detailKind === 'network' ? `<button class="btn order-workflow-action"` : ''}
 function orderEscape(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({
@@ -418,6 +480,7 @@ function initOrdenesPage() {
   if (orderModalCopy) orderModalCopy.textContent = 'Orden: cliente, categoría, detalle específico, pueblo, zona, tipo y prioridad.';
   setupOrderControls();
   updateOrderDetailTabs();
+  initOrderFontScale();
   loadDB({ showOverlay: false, preferCache: !requestedOrderCopyId }).then(() => {
     fillOrderSelects();
     renderWOs();
@@ -2546,8 +2609,8 @@ async function openOrderTechnicianReport(orderId) {
       ${orderReportField('pin', 'Lugar', getOrderPlace(order))}
       ${orderReportField('target', 'Ubicación capturada', capturedLocation)}
       ${orderReportField('check', 'Estado', `<span class="order-report-status ${order.status === 'completada' ? 'is-completed' : (order.status === 'resuelto_soporte' ? 'is-resolving' : (order.status === 'devuelto_soporte' ? 'is-returned' : (order.status === 'no_realizado' ? 'is-failed' : 'is-pending')))}">${orderEscape(reportStatus)}</span>`, { raw: true, className: 'status-field' })}
-      ${orderReportField('user', completed ? (order.detailKind === 'network' ? 'Resuelto por' : 'Técnico') : 'Capturado por', completed ? (report.completedByName || 'Sin registro') : (order.createdByName || order.createdByUsername || 'Sin registro'))}
-      ${order.assignedUserName ? orderReportField('user', 'Asignado a (Soporte)', order.assignedUserName) : ''}
+      ${orderReportField('user', completed ? (order.detailKind === 'network' ? 'Resuelto por' : 'Técnico') : 'Capturado por', completed ? renderUserColorChip(report.completedByName || 'Sin registro', report.completedById) : renderUserColorChip(order.createdByName || order.createdByUsername || 'Sin registro', order.createdById), { raw: true })}
+      ${order.assignedUserName ? orderReportField('user', 'Asignado a (Soporte)', renderUserColorChip(order.assignedUserName, order.assignedUserId), { raw: true }) : ''}
       ${orderReportField('calendar', 'Fecha de creación', order.createdAt ? new Date(order.createdAt).toLocaleString('es-MX') : 'Sin fecha')}
       ${viewedSummary ? orderReportField('check', 'Visto', viewedSummary) : ''}
       ${order.reviewOpenedAt ? orderReportField('calendar', 'Abierta para revisión', orderReviewOpenedSummary(order)) : ''}
@@ -2561,7 +2624,7 @@ async function openOrderTechnicianReport(orderId) {
     ${report.observations ? `<section class="order-report-block"><small>Observaciones</small><p>${orderEscape(report.observations)}</p></section>` : ''}
     ${report.reason ? `<section class="order-report-block warning"><small>Motivo</small><p>${orderEscape(report.reason)}</p></section>` : ''}
     ${report.materialUsed ? `<section class="order-report-block"><small>Material utilizado</small><p>${orderEscape(report.materialUsed)}</p></section>` : ''}
-    ${visibleFollowUps.length ? `<section class="order-report-block order-follow-up-history"><small>Seguimiento</small>${visibleFollowUps.slice().reverse().map(item => `<div><strong>${orderEscape(item.label || item.action || 'Actualización')}</strong><span>${orderEscape(item.at ? new Date(item.at).toLocaleString('es-MX') : '')}${item.byName ? ` · ${orderEscape(item.byName)}` : ''}</span>${item.note ? `<p>${orderEscape(item.note)}</p>` : ''}</div>`).join('')}</section>` : ''}
+    ${renderOrderFollowUpTimeline(visibleFollowUps)}
     ${materialItems.length ? `<section class="order-report-block"><small>Materiales registrados</small><div class="order-report-materials">${materialItems.map(item => `<span><strong>${orderEscape(item.name || item.nombre || 'Material')}</strong> · ${orderEscape(item.quantity ?? item.cantidad ?? '')} ${orderEscape(item.unit || item.unidad || '')}</span>`).join('')}</div></section>` : ''}
     ${photos.length ? `<section class="order-report-evidence"><small>${completed ? 'Evidencias' : 'Imágenes adjuntas al crear el detalle'}</small><div>${photos.map((photo,index) => `<button type="button" onclick="openOrderReportEvidence('${orderEscape(order.id)}',${index})"><img src="${orderEscape(photo)}" alt="Evidencia ${index + 1}"><span>${index + 1}</span></button>`).join('')}</div></section>` : (completed ? '<div class="order-report-empty">No se adjuntaron evidencias gráficas.</div>' : '')}
     ${!completed ? (order.status === 'resuelto_soporte' ? '<div class="order-report-pending" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0"><strong>✓ Resuelto por Soporte:</strong> En espera de que Atención a clientes confirme la satisfacción con el cliente.</div>' : (order.status === 'devuelto_soporte' ? `<div class="order-report-pending" style="background:#fff1f2;color:#be123c;border-color:#fecdd3"><strong>⚠️ Devuelto a Soporte:</strong> ${orderEscape(order.returnReason || 'Atención a clientes indicó que el cliente sigue presentando fallas.')}${order.returnByName ? `<div style="font-size:12px;margin-top:5px;color:#9f1239;">Devuelto por: <strong>${orderEscape(order.returnByName)}</strong></div>` : ''}</div>` : '<div class="order-report-pending">Esta orden sigue pendiente. Se muestran los datos capturados al registrarla.</div>')) : ''}`;
@@ -2734,14 +2797,10 @@ function renderWOs() {
                   <span class="order-category-badge">${orderEscape(orderCategoryLabel(getOrderCategory(w)))}</span>
                   ${w.description ? `<div>${orderEscape(w.description)}</div>` : (w.title && w.title !== orderCategoryLabel(getOrderCategory(w)) ? `<div>${orderEscape(w.title)}</div>` : '')}
                   <div class="order-assignment-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">
-                    ${w.assignedUserName ? (w.assignedUserName.split(',').map(s => s.trim()).filter(Boolean).map(name => `
-                      <span class="order-assigned-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 7px;border-radius:12px;background:#e0f2fe;color:#0369a1;">
-                        <svg style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${orderEscape(name)}
-                      </span>
-                    `).join('')) : ''}
+                    ${w.assignedUserName ? (w.assignedUserName.split(',').map(s => s.trim()).filter(Boolean).map(name => renderUserColorChip(name, w.assignedUserId)).join('')) : ''}
                     ${w.reviewOpenedByName && !['completada','no_realizado'].includes(w.status) && !((w.assignedUserName || '').includes(w.reviewOpenedByName)) ? `
                       <span class="order-checking-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;">
-                        <svg style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${w.reviewOpenedById === (currentActor.id || '') ? 'En atención personal' : `En atención: ${orderEscape(w.reviewOpenedByName)}`}
+                        <svg style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${w.reviewOpenedById === (currentActor.id || '') ? 'En atención personal' : `Atendiendo: `}${renderUserColorChip(w.reviewOpenedByName, w.reviewOpenedById)}
                       </span>
                     ` : ''}
                   </div>
@@ -3104,7 +3163,9 @@ async function takeOverNetworkOrder(id) {
   const currentUser = getCurrentUser();
   const userName = currentUser.name || currentUser.username || 'Soporte técnico';
   const now = new Date().toISOString();
+  const prevAssigneeId = order.assignedUserId || order.reviewOpenedById || '';
   const prevAssignee = order.assignedUserName || 'Sin asignación previa';
+  const prevAssigneeName = order.assignedUserName || order.reviewOpenedByName || '';
 
   order.assignedUserId = currentUser.id || '';
   order.assignedUserName = userName;
@@ -3131,7 +3192,7 @@ async function takeOverNetworkOrder(id) {
 
   try {
     if (typeof broadcastNetworkOrderChange === 'function') {
-      broadcastNetworkOrderChange(order, 'retaken');
+      broadcastNetworkOrderChange(order, 'retaken', { prevAssigneeId, prevAssigneeName });
     }
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);

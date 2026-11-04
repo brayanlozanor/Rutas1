@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS users (
   role_id INTEGER NOT NULL,
   legacy_role TEXT,
   phone TEXT,
+  color TEXT,
   status TEXT NOT NULL DEFAULT 'activo',
   active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
   notes TEXT,

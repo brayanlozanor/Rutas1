@@ -62,8 +62,36 @@ function normalizeUserRoleValue(role) {
   return '';
 }
 
+const USER_COLOR_PRESETS = [
+  '#0284c7', '#0ea5e9', '#059669', '#10b981', '#7c3aed',
+  '#8b5cf6', '#ea580c', '#f97316', '#d97706', '#e11d48',
+  '#db2777', '#4f46e5'
+];
+
+function initUserColorPalette() {
+  const container = document.getElementById('user-color-palette');
+  if (!container || container.dataset.built) return;
+  container.dataset.built = '1';
+  container.innerHTML = USER_COLOR_PRESETS.map(hex => `
+    <button type="button" onclick="updateUserColorPreview('${hex}')" style="width:24px;height:24px;border-radius:6px;background:${hex};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.25);cursor:pointer;" title="${hex}" aria-label="Color ${hex}"></button>
+  `).join('');
+}
+
+function updateUserColorPreview(color) {
+  const hex = color || '#0284c7';
+  const input = document.getElementById('user-color');
+  if (input && input.value !== hex) input.value = hex;
+  const preview = document.getElementById('user-color-preview');
+  if (preview) {
+    preview.style.backgroundColor = hex;
+    const nameInput = document.getElementById('user-name')?.value.trim();
+    preview.innerHTML = `<span class="chip-dot"></span>${userEscape(nameInput || 'Vista previa')}`;
+  }
+}
+
 function openUserModal() {
   resetUserForm();
+  initUserColorPalette();
   OM('user-mo');
 }
 
@@ -73,6 +101,7 @@ function resetUserForm() {
   ['user-name','user-username','user-password','user-phone','user-notes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('user-role').value = 'tecnico';
   document.getElementById('user-status').value = 'activo';
+  updateUserColorPreview('#0284c7');
   fillUserZoneOptions([]);
 }
 
@@ -86,6 +115,7 @@ async function saveUser() {
     phone: document.getElementById('user-phone').value.trim(),
     role: normalizeUserRoleValue(document.getElementById('user-role').value),
     status: document.getElementById('user-status').value,
+    color: document.getElementById('user-color')?.value || '#0284c7',
     zones: selectedUserZones(),
     notes: document.getElementById('user-notes').value.trim()
   };
@@ -129,6 +159,7 @@ function editUser(id) {
   const user = (state.users || []).find(item => item.id === id && !item.deletedAt);
   if (!user) return;
   editingUserId = id;
+  initUserColorPalette();
   document.getElementById('user-form-title').textContent = 'Editar usuario';
   document.getElementById('user-name').value = user.name || '';
   document.getElementById('user-username').value = user.username || '';
@@ -138,6 +169,7 @@ function editUser(id) {
   document.getElementById('user-role').value = normalizeUserRoleValue(user.role) || 'tecnico';
   document.getElementById('user-status').value = user.status || 'activo';
   document.getElementById('user-notes').value = user.notes || '';
+  updateUserColorPreview(user.color || '#0284c7');
   fillUserZoneOptions(Array.isArray(user.zones) ? user.zones : []);
   OM('user-mo');
 }
@@ -187,7 +219,9 @@ function renderUsuarios() {
     <article class="entity-card">
       <div class="entity-title">
         <div>
-          <h3>${userEscape(user.name)}</h3>
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px;">
+            <span class="user-color-chip" style="background:${user.color || '#0284c7'};"><span class="chip-dot"></span>${userEscape(user.name)}</span>
+          </div>
           <div class="entity-sub">@${userEscape(user.username)}</div>
         </div>
         <span class="badge zone">${userEscape(formatRoleLabel(user.role))}</span>

@@ -310,6 +310,19 @@ async function syncWorkOrderColumns(env) {
   }
 }
 
+async function syncUserColumns(env) {
+  try {
+    const colInfo = await all(env, 'PRAGMA table_info(users)');
+    if (!colInfo || colInfo.length === 0) return;
+    const columns = new Set(colInfo.map(c => c.name));
+    if (!columns.has('color')) {
+      await run(env, 'ALTER TABLE users ADD COLUMN color TEXT');
+    }
+  } catch (e) {
+    // Ignore if already added or concurrency
+  }
+}
+
 async function ensurePlansColumns(env) {
   try {
     const colInfo = await all(env, 'PRAGMA table_info(plans)');
@@ -363,6 +376,7 @@ export async function ensureRelationalSchema(env) {
       // Ignore if table exists or concurrency
     }
     await syncWorkOrderColumns(env).catch(e => console.warn('[ensureRelationalSchema] work_orders:', e));
+    await syncUserColumns(env).catch(e => console.warn('[ensureRelationalSchema] users:', e));
     await syncMaterialInventorySchema(env).catch(e => console.warn('[ensureRelationalSchema] materials:', e));
     await ensurePlansColumns(env).catch(e => console.warn('[ensureRelationalSchema] plans:', e));
     await ensurePerformanceIndices(env).catch(e => console.warn('[ensureRelationalSchema] indices:', e));
@@ -953,7 +967,7 @@ async function loadUsers(env, page = null) {
     audit:await getLatestAuditMap(env, rows.map(row => row.id))
   };
   return rows.map(row => {
-    const out = { id:row.id,name:row.name,username:row.username,role:normalizeRole(row.role_code),active:!!row.active,phone:row.phone||'',status:row.status||'activo',zones:zonesBy.get(row.id)||[],notes:row.notes||'',hasPassword:!!(row.password_hash||row.password_legacy) };
+    const out = { id:row.id,name:row.name,username:row.username,role:normalizeRole(row.role_code),active:!!row.active,phone:row.phone||'',color:row.color||'',status:row.status||'activo',zones:zonesBy.get(row.id)||[],notes:row.notes||'',hasPassword:!!(row.password_hash||row.password_legacy) };
     if (row.created_at) out.createdAt=row.created_at;
     if (row.updated_at) out.updatedAt=row.updated_at;
     if (row.deleted_at) out.deletedAt=row.deleted_at;
@@ -1371,6 +1385,12 @@ export async function loadStatePart(env, part, page = {}) {
         const nodeIds=[...new Set(records.flatMap(record=>record.linkedNodeIds||[]))];
         result.nodes=[];
         for(const idsChunk of chunkValues(nodeIds))result.nodes.push(...await loadNodes(env,ctx,{paged:'1',limit:'100',nodeIds:idsChunk.join(',')}));
+        // Incluir todos los pueblos disponibles para permitir vinculación en antenas
+        const allSystemNodes = await loadNodes(env,ctx,{limit:'1000'});
+        const existingNodeIdSet = new Set(result.nodes.map(n => n.id));
+        for (const n of allSystemNodes) {
+          if (!existingNodeIdSet.has(n.id)) result.nodes.push(n);
+        }
       } else {
         const linked=[];
         for(const idsChunk of chunkValues(ids))linked.push(...await all(env,`SELECT DISTINCT equipment_id FROM equipment_nodes WHERE node_id IN (${idsChunk.map(()=>'?').join(',')})`,idsChunk));
@@ -1542,8 +1562,16 @@ async function upsertEquipment(env, rec) {
   }
   if (Array.isArray(rec.linkedNodeIds)) {
     await run(env,'DELETE FROM equipment_nodes WHERE equipment_id=?',[rec.id]);
-    const stmts=rec.linkedNodeIds.filter(Boolean).map((nodeId,i)=>env.DB.prepare('INSERT OR IGNORE INTO equipment_nodes(equipment_id,node_id,position,created_at) VALUES(?,?,?,?)').bind(rec.id,nodeId,i,new Date().toISOString()));
-    if (stmts.length) await batchChunks(env,stmts);
+    const cleanNodeIds = rec.linkedNodeIds.filter(Boolean);
+    if (cleanNodeIds.length) {
+      // Regla: un pueblo solo puede asignarse a una antena
+      for (const chunk of chunkValues(cleanNodeIds)) {
+        const ph = chunk.map(() => '?').join(',');
+        await run(env, `DELETE FROM equipment_nodes WHERE node_id IN (${ph})`, chunk);
+      }
+      const stmts=cleanNodeIds.map((nodeId,i)=>env.DB.prepare('INSERT OR IGNORE INTO equipment_nodes(equipment_id,node_id,position,created_at) VALUES(?,?,?,?)').bind(rec.id,nodeId,i,new Date().toISOString()));
+      await batchChunks(env,stmts);
+    }
   }
 }
 
@@ -1611,9 +1639,9 @@ async function upsertUser(env,rec) {
   const passwordHash = password ? await hashPassword(password) : null;
   const existing = await first(env,'SELECT id,password_hash,password_legacy FROM users WHERE id=?',[rec.id]);
   if (!existing && !passwordHash) throw new Error('La contrasena es obligatoria para usuarios nuevos');
-  await run(env, `INSERT INTO users(id,name,username,password_legacy,password_hash,role_id,legacy_role,phone,status,active,notes,created_at,updated_at,deleted_at,created_by,updated_by) VALUES(?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET name=excluded.name,username=excluded.username,password_legacy=CASE WHEN excluded.password_hash IS NOT NULL THEN NULL ELSE users.password_legacy END,password_hash=COALESCE(excluded.password_hash,users.password_hash),role_id=excluded.role_id,legacy_role=excluded.legacy_role,phone=excluded.phone,status=excluded.status,active=excluded.active,notes=excluded.notes,created_at=COALESCE(users.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,created_by=COALESCE(users.created_by,excluded.created_by),updated_by=excluded.updated_by`,
-    [rec.id,text(rec.name),text(rec.username),passwordHash,roleId,text(rec.role),text(rec.phone),text(rec.status,'activo'),boolInt(rec.active,true),text(rec.notes),rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById)]);
+  await run(env, `INSERT INTO users(id,name,username,password_legacy,password_hash,role_id,legacy_role,phone,color,status,active,notes,created_at,updated_at,deleted_at,created_by,updated_by) VALUES(?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET name=excluded.name,username=excluded.username,password_legacy=CASE WHEN excluded.password_hash IS NOT NULL THEN NULL ELSE users.password_legacy END,password_hash=COALESCE(excluded.password_hash,users.password_hash),role_id=excluded.role_id,legacy_role=excluded.legacy_role,phone=excluded.phone,color=excluded.color,status=excluded.status,active=excluded.active,notes=excluded.notes,created_at=COALESCE(users.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,created_by=COALESCE(users.created_by,excluded.created_by),updated_by=excluded.updated_by`,
+    [rec.id,text(rec.name),text(rec.username),passwordHash,roleId,text(rec.role),text(rec.phone),nullableText(rec.color),text(rec.status,'activo'),boolInt(rec.active,true),text(rec.notes),rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById)]);
   await replaceZones(env,'user_zones','user_id',rec.id,rec.zones);
 }
 

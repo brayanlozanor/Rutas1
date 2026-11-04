@@ -78,6 +78,14 @@
           <div class="fi"><label>Rol</label><select id="user-role"><option value="administrador">Administrador</option><option value="soporte">Soporte</option><option value="atencion_clientes">Atención a clientes</option><option value="tecnico">Técnico</option></select></div>
           <div class="fi"><label>Estatus</label><select id="user-status"><option value="activo">Activo</option><option value="inactivo">Inactivo</option></select></div>
         </div>
+        <div class="fi">
+          <label>Color distintivo del usuario (visible en reportes y asignaciones)</label>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:4px;">
+            <input type="color" id="user-color" value="#0284c7" oninput="updateUserColorPreview(this.value)" style="width:48px;height:38px;padding:2px;border:1px solid #cfdae6;border-radius:8px;cursor:pointer;background:#fff;">
+            <span id="user-color-preview" class="user-color-chip" style="background:#0284c7;"><span class="chip-dot"></span>Vista previa</span>
+          </div>
+          <div id="user-color-palette" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
+        </div>
         <div class="fi"><label>Zonas</label><select id="user-zones" multiple style="height:140px"></select></div>
         <div class="fi"><label>Notas</label><textarea id="user-notes" placeholder="Especialidad o descripción"></textarea></div>
         <div class="card-actions">

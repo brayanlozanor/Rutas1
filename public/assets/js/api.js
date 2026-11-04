@@ -802,18 +802,24 @@ function isOpenOrder(order) {
 
 function getEquipmentLinkedNodeIds(equipmentId) {
     const eq = (state.equipment || []).find(item => item && item.id === equipmentId);
-    const ids = Array.isArray(eq?.linkedNodeIds) ? eq.linkedNodeIds : [];
-    return ids.filter(Boolean);
+    const ids = new Set(Array.isArray(eq?.linkedNodeIds) ? eq.linkedNodeIds : []);
+    (state.nodes || []).forEach(node => {
+        if (node && !node.deletedAt && node.equipmentId === equipmentId) {
+            ids.add(node.id);
+        }
+    });
+    return Array.from(ids).filter(Boolean);
 }
 
 function getEquipmentLinkedNodes(equipmentId) {
     const ids = new Set(getEquipmentLinkedNodeIds(equipmentId));
-    return (state.nodes || []).filter(node => node && !node.deletedAt && ids.has(node.id));
+    return (state.nodes || []).filter(node => node && !node.deletedAt && (ids.has(node.id) || node.equipmentId === equipmentId));
 }
 
 function getNodeLinkedEquipment(nodeId) {
+    const node = (state.nodes || []).find(n => n && n.id === nodeId);
     return (state.equipment || []).filter(eq =>
-        eq && !eq.deletedAt && Array.isArray(eq.linkedNodeIds) && eq.linkedNodeIds.includes(nodeId)
+        eq && !eq.deletedAt && ((Array.isArray(eq.linkedNodeIds) && eq.linkedNodeIds.includes(nodeId)) || (node && node.equipmentId === eq.id))
     );
 }
 

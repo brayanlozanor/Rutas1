@@ -2264,6 +2264,37 @@ function triggerDesktopNotification({ title, message, url = '', orderId = '' }) 
   }
 }
 
+function getUserColor(name, userId = '') {
+  if (userId && typeof state !== 'undefined' && Array.isArray(state?.users)) {
+    const foundById = state.users.find(u => u && !u.deletedAt && u.id === userId);
+    if (foundById && foundById.color) return foundById.color;
+  }
+  if (name && typeof state !== 'undefined' && Array.isArray(state?.users)) {
+    const norm = normalizeName(name);
+    const foundByName = state.users.find(u => u && !u.deletedAt && (normalizeName(u.name) === norm || normalizeName(u.username) === norm));
+    if (foundByName && foundByName.color) return foundByName.color;
+  }
+  const palette = [
+    '#0284c7', '#7c3aed', '#059669', '#ea580c', '#0891b2',
+    '#4f46e5', '#db2777', '#d97706', '#0d9488', '#2563eb'
+  ];
+  let hash = 0;
+  const str = String(name || userId || 'Usuario');
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return palette[Math.abs(hash) % palette.length];
+}
+
+function renderUserColorChip(name, userId = '') {
+  if (!name || name === 'Sin registro' || name === 'Sin asignar' || name === 'Sin fecha') {
+    return `<span style="color:#64748b;font-size:12px;">${escapeHtml(name || 'Sin asignar')}</span>`;
+  }
+  const color = getUserColor(name, userId);
+  return `<span class="user-color-chip" style="background-color:${color};"><span class="chip-dot"></span>${escapeHtml(name)}</span>`;
+}
+
 function notifyNetworkDetailEvent({
   title,
   message,
@@ -2399,13 +2430,13 @@ function checkPriorityUnresolvedReminders(orders = []) {
       // Pendiente de validación por Atención a clientes
       const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
       shouldRemindMe = hasCreator ? isCreatedByMe : userHasRole('atencion_clientes');
-      reminderTitle = '⏳ Pendiente validar solución con cliente';
+      reminderTitle = 'Pendiente validar solución con cliente';
       reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Aún no se ha validado si el servicio quedó restablecido.`;
       reminderType = 'resolved';
     } else {
       // Pendiente en Soporte técnico
-      shouldRemindMe = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin');
-      reminderTitle = '⏰ Reporte de red pendiente sin resolver';
+      shouldRemindMe = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin', 'soporte');
+      reminderTitle = 'Reporte de red pendiente de atención';
       reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Prioridad ${order.priority || 'media'}. Sigue pendiente de atención técnica.`;
       reminderType = order.status === 'devuelto_soporte' ? 'returned' : 'new_order';
     }
@@ -2504,7 +2535,7 @@ function isNetworkSupportToAttention(order) {
 /**
  * Emite un evento en tiempo real tras mutar una orden de red (creación, resolución, devolución o confirmación).
  */
-function broadcastNetworkOrderChange(order, transition) {
+function broadcastNetworkOrderChange(order, transition, extraMeta = {}) {
   try {
     if (!order) return;
     const user = getCurrentUser();
@@ -2532,6 +2563,7 @@ function broadcastNetworkOrderChange(order, transition) {
     setStoredNetworkStateCache(cache);
 
     const payload = {
+      ...extraMeta,
       type: 'NETWORK_ORDER_EVENT',
       transition,
       orderId: order.id,
@@ -2610,7 +2642,7 @@ function handleNetworkOrderEvent(payload) {
     if (isVeryRecent) return;
   }
 
-  const isSoporte = userHasRole('administrador', 'admin');
+  const isSoporte = userHasRole('administrador', 'admin', 'soporte');
   const isAtencion = userHasRole('atencion_clientes');
 
   const hasAssignment = !!(order.assignedUserId || order.assignedUserName);
@@ -2824,14 +2856,25 @@ function handleNetworkOrderEvent(payload) {
       type: 'deleted',
       orderId: order.id
     });
-  } else if (transition === 'retaken' && isSoporte && payload.byUserId !== user.id) {
-    const actor = payload.byName || 'Personal';
-    notifyNetworkDetailEvent({
-      title: 'Atención reasignada',
-      message: `${actor} asumió la atención de este reporte.`,
-      type: 'retaken',
-      orderId: order.id
-    });
+  } else if (transition === 'retaken' && payload.byUserId !== user.id) {
+    const actor = payload.byName || 'Personal de soporte';
+    const isPrevAssignee = (payload.prevAssigneeId && payload.prevAssigneeId === user.id) ||
+      (payload.prevAssigneeName && normalizeName(payload.prevAssigneeName) === normalizeName(user.name || user.username));
+    if (isPrevAssignee) {
+      notifyNetworkDetailEvent({
+        title: 'Reporte retomado',
+        message: `${actor} retomó la atención del reporte que tenías asignado.`,
+        type: 'retaken',
+        orderId: order.id
+      });
+    } else if (isSoporte) {
+      notifyNetworkDetailEvent({
+        title: 'Atención reasignada',
+        message: `${actor} asumió la atención de este reporte.`,
+        type: 'retaken',
+        orderId: order.id
+      });
+    }
   }
 }
 
@@ -2933,17 +2976,29 @@ async function checkNetworkOrderNotifications() {
         updated = true;
 
         const isOwnUpdater = (order.updatedById && order.updatedById === user.id) || (order.updatedByUsername && order.updatedByUsername === user.username);
+        const clientLabel = (client && client.trim().length > 1 && !['cliente', 'atención a clientes'].includes(client.trim().toLowerCase())) ? ` · ${client.trim()}` : '';
+
+        if (!isFirstRun && !isOwnUpdater && prev.assignedUserId === user.id && order.assignedUserId && order.assignedUserId !== user.id) {
+          const actor = order.assignedUserName || order.reviewOpenedByName || 'Personal de soporte';
+          notifyNetworkDetailEvent({
+            title: 'Reporte retomado',
+            message: `${actor} retomó la atención del reporte que tenías asignado.`,
+            type: 'retaken',
+            orderId: order.id
+          });
+        }
+
         if (!isFirstRun && !isOwnUpdater && prev.status !== currentStatus) {
           if (currentStatus === 'en_revision' && oldStatus !== 'en_revision') {
             const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
             const shouldNotifyAttending = isSupportToAttention
-              ? (hasCreator ? isCreatedByMe : userHasRole('administrador', 'admin'))
+              ? (hasCreator ? isCreatedByMe : userHasRole('administrador', 'admin', 'soporte'))
               : (hasCreator ? isCreatedByMe : userHasRole('atencion_clientes'));
             if (shouldNotifyAttending) {
               const actor = order.reviewOpenedByName || (isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico');
               notifyNetworkDetailEvent({
                 title: 'Atención iniciada',
-                message: `${actor} está atendiendo este detalle${client ? ' (' + client + ')' : ''}.`,
+                message: `${actor} está atendiendo este detalle${clientLabel}.`,
                 type: 'attending',
                 orderId: order.id
               });
@@ -2951,22 +3006,22 @@ async function checkNetworkOrderNotifications() {
           } else if (currentStatus === 'resuelto_soporte') {
             const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
             const shouldNotifyResolved = isSupportToAttention
-              ? userHasRole('administrador', 'admin')
+              ? userHasRole('administrador', 'admin', 'soporte')
               : (hasCreator ? isCreatedByMe : userHasRole('atencion_clientes'));
             if (shouldNotifyResolved) {
               notifyNetworkDetailEvent({
                 title: isSupportToAttention ? 'Requerimiento respondido' : 'Reporte resuelto',
-                message: `Detalle resuelto${client ? ' (' + client + ')' : ''}.`,
+                message: `Detalle resuelto${clientLabel}.`,
                 type: 'resolved',
                 orderId: order.id
               });
             }
           } else if (currentStatus === 'devuelto_soporte') {
-            const shouldNotifyReturned = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin');
+            const shouldNotifyReturned = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin', 'soporte');
             if (shouldNotifyReturned) {
               notifyNetworkDetailEvent({
                 title: 'Reporte devuelto',
-                message: `Detalle devuelto para revisión${client ? ' (' + client + ')' : ''}.`,
+                message: `Detalle devuelto para revisión${clientLabel}.`,
                 type: 'returned',
                 orderId: order.id
               });
@@ -2974,11 +3029,11 @@ async function checkNetworkOrderNotifications() {
           } else if (currentStatus === 'completada' && (oldStatus === 'resuelto_soporte' || oldStatus === 'en_revision' || oldStatus === 'pendiente')) {
             const shouldNotifyConfirmed = isSupportToAttention
               ? (hasAssignment ? isAssignedToMe : userHasRole('atencion_clientes'))
-              : (hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin'));
+              : (hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin', 'soporte'));
             if (shouldNotifyConfirmed) {
               notifyNetworkDetailEvent({
                 title: isSupportToAttention ? 'Requerimiento concluido' : 'Reporte finalizado',
-                message: `Detalle concluido a conformidad${client ? ' (' + client + ')' : ''}.`,
+                message: `Detalle concluido a conformidad${clientLabel}.`,
                 type: 'confirmed',
                 orderId: order.id
               });
@@ -2986,11 +3041,11 @@ async function checkNetworkOrderNotifications() {
           } else if (currentStatus === 'pendiente' && (oldStatus === 'completada' || oldStatus === 'no_realizado')) {
             const shouldNotifyReopened = isSupportToAttention
               ? (hasAssignment ? isAssignedToMe : userHasRole('atencion_clientes'))
-              : (hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin'));
+              : (hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin', 'soporte'));
             if (shouldNotifyReopened) {
               notifyNetworkDetailEvent({
                 title: isSupportToAttention ? 'Requerimiento reabierto' : 'Reporte reabierto',
-                message: `Detalle reabierto para atención${client ? ' (' + client + ')' : ''}.`,
+                message: `Detalle reabierto para atención${clientLabel}.`,
                 type: 'reopened',
                 orderId: order.id
               });
