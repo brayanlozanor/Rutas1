@@ -211,6 +211,12 @@ function configureTechnicianDashboard() {
             shell.insertAdjacentHTML('afterbegin', progressCardHtml);
         }
     }
+    if (!document.getElementById('tech-weather-card')) {
+        const progressCard = document.getElementById('tech-progress-compact');
+        if (progressCard) {
+            progressCard.insertAdjacentHTML('afterend', '<section id="tech-weather-card" class="tech-weather-card" style="display:none;"></section>');
+        }
+    }
 
     if (shell && calendar && calendar.parentElement !== shell) shell.appendChild(calendar);
     if (mapBox) {
@@ -218,7 +224,7 @@ function configureTechnicianDashboard() {
         const head = mapBox.querySelector('.plan-map-panel-head');
         if (head) head.innerHTML = `<strong><span class="tech-map-icon">◇</span> Ubicaciones de las paradas</strong>`;
         if (!document.getElementById('tech-route-overview')) {
-            mapBox.insertAdjacentHTML('beforebegin', `<section id="tech-route-overview" class="tech-route-overview"><div class="tech-route-overview-head"><span>Plan asignado</span><h2 id="tech-route-overview-title">Mi ruta</h2><small id="tech-route-overview-date"></small></div><div id="tech-route-overview-kpis" class="tech-route-overview-kpis"></div><div id="tech-route-stop-names" class="tech-route-stop-names"></div></section>`);
+            mapBox.insertAdjacentHTML('beforebegin', `<section id="tech-route-overview" class="tech-route-overview"><div class="tech-route-overview-head"><span>Plan asignado</span><h2 id="tech-route-overview-title">Mi ruta</h2><small id="tech-route-overview-date"></small></div><div id="tech-route-overview-kpis" class="tech-route-overview-kpis"></div><div id="tech-route-travel-summary" class="tech-route-travel-summary"></div><div id="tech-route-stop-names" class="tech-route-stop-names"></div></section>`);
         }
     }
     if (board) {
@@ -251,6 +257,7 @@ function configureTechnicianDashboard() {
     updateTechnicianProgressCard();
     updateTechnicianMobileBellBadge();
     setTimeout(renderTechnicianDayMap, 0);
+    requestTechnicianRealtimeWeather();
 }
 
 function getTechnicianPendingDispatches() {
@@ -763,6 +770,7 @@ function openTechnicianDetails() {
     applyTechnicianViewportLayout();
     document.querySelector('.tech-calendar-toolbar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     setTimeout(renderTechnicianDayMap, 80);
+    requestTechnicianRealtimeWeather();
 }
 
 function openTechnicianRouteMap() {
@@ -834,6 +842,26 @@ function renderTechnicianRouteOverview() {
     if (dateBox) dateBox.textContent = `${stops.length} parada${stops.length === 1 ? '' : 's'} asignada${stops.length === 1 ? '' : 's'} en el plan`;
     const kpis = document.getElementById('tech-route-overview-kpis');
     if (kpis) kpis.innerHTML = `<div><strong>${stops.length}</strong><small>paradas</small></div><div><strong>${totals.details}</strong><small>detalles</small></div><div><strong>${totals.done}</strong><small>completados</small></div><div><strong>${totals.pending}</strong><small>faltantes</small></div>`;
+    const feasibility = calculateDayRouteFeasibility(stops);
+    const travelSummary = document.getElementById('tech-route-travel-summary');
+    if (travelSummary) {
+        if (stops.length > 1 && feasibility && feasibility.totalKm > 0) {
+            travelSummary.style.display = 'flex';
+            travelSummary.innerHTML = `
+                <div class="tech-route-travel-chip">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+                    <span>Carretera total: <strong>~${feasibility.totalKm} km</strong></span>
+                </div>
+                <div class="tech-route-travel-chip">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span>Traslado acumulado: <strong>~${feasibility.travelFormatted}</strong></span>
+                </div>
+            `;
+        } else {
+            travelSummary.style.display = 'none';
+            travelSummary.innerHTML = '';
+        }
+    }
     const names = document.getElementById('tech-route-stop-names');
     if (names) names.innerHTML = stops.length ? stops.map((stop, index) => {
         const equipment = stop.equipmentId ? (state.equipment || []).find(item => item.id === stop.equipmentId && !item.deletedAt) : null;
@@ -912,7 +940,23 @@ function renderTechnicianRouteOverview() {
                 }).join('') : '<div class="tech-route-detail-empty">No hay detalles asignados a esta parada.</div>'}
             </div>` : '';
 
-        return `
+        let legTransitHtml = '';
+        if (index > 0 && feasibility && feasibility.legs && feasibility.legs[index - 1]) {
+            const leg = feasibility.legs[index - 1];
+            const prevStop = stops[index - 1];
+            const prevEq = prevStop.equipmentId ? (state.equipment || []).find(item => item.id === prevStop.equipmentId && !item.deletedAt) : null;
+            const prevNode = prevStop.nodeId ? (state.nodes || []).find(item => item.id === prevStop.nodeId && !item.deletedAt) : null;
+            const prevName = getTechnicianStopName(prevStop, prevEq, prevNode);
+            legTransitHtml = `
+                <div class="tech-route-leg-transit">
+                    <div class="tech-route-leg-line"></div>
+                    <div class="tech-route-leg-badge" title="Distancia estimada por carretera (38 km/h)">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+                        <span>Tramo: <b>~${leg.minutes} min</b> (${leg.km} km) de <b>${escapeHtml(prevName)}</b> a <b>${escapeHtml(stopName)}</b></span>
+                    </div>
+                </div>`;
+        }
+        return legTransitHtml + `
             <div class="tech-route-stop-item ${isExpanded ? 'expanded' : ''}">
                 <button type="button" class="tech-route-stop-btn ${isExpanded ? 'active' : ''}" onclick="toggleTechnicianRouteStopDetails('${escapeAttr(stop.id)}')">
                     <span>${index + 1}</span>
@@ -2112,6 +2156,144 @@ function renderWeatherWidget(wx, townName) {
     }
 }
 
+
+let techRealtimeWeatherCoords = null;
+let techRealtimeWeatherActive = false;
+
+function hideTechnicianWeather() {
+    techRealtimeWeatherActive = false;
+    const card = document.getElementById('tech-weather-card');
+    if (card) {
+        card.style.display = 'none';
+        card.classList.remove('has-weather');
+        card.innerHTML = '';
+    }
+}
+
+function getTechnicianWeatherIconSvg(condition) {
+    if (condition === 'alert') {
+        return '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 16.9A5 5 0 0 0 18 7h-1.26a8 8 0 1 0-11.62 9"/><polyline points="13 11 9 17 15 17 11 23"/></svg>';
+    }
+    if (condition === 'warning') {
+        return '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="16" y1="13" x2="16" y2="21"/><line x1="8" y1="13" x2="8" y2="21"/><line x1="12" y1="15" x2="12" y2="23"/><path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/></svg>';
+    }
+    if (condition === 'caution') {
+        return '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M8 19v1"/><path d="M8 14v1"/><path d="M12 21v1"/><path d="M12 16v1"/><path d="M16 19v1"/><path d="M16 14v1"/></svg>';
+    }
+    if (condition === 'fair') {
+        return '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 0 1 2.5 8.242"/></svg>';
+    }
+    return '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#eab308" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>';
+}
+
+async function requestTechnicianRealtimeWeather(forceRefresh = false) {
+    if (!isTechnicianPlanView()) {
+        hideTechnicianWeather();
+        return;
+    }
+
+    if (!('geolocation' in navigator) || !navigator.geolocation || typeof navigator.geolocation.getCurrentPosition !== 'function') {
+        hideTechnicianWeather();
+        return;
+    }
+
+    if (techRealtimeWeatherCoords && !forceRefresh) {
+        await fetchAndRenderTechnicianWeather(techRealtimeWeatherCoords.lat, techRealtimeWeatherCoords.lng);
+        return;
+    }
+
+    try {
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                const lat = safeFloat(pos.coords?.latitude);
+                const lng = safeFloat(pos.coords?.longitude);
+                if (isNaN(lat) || isNaN(lng)) {
+                    hideTechnicianWeather();
+                    return;
+                }
+                techRealtimeWeatherCoords = { lat, lng };
+                await fetchAndRenderTechnicianWeather(lat, lng);
+            },
+            (err) => {
+                techRealtimeWeatherCoords = null;
+                hideTechnicianWeather();
+            },
+            {
+                enableHighAccuracy: false,
+                timeout: 8000,
+                maximumAge: 300000
+            }
+        );
+    } catch (e) {
+        techRealtimeWeatherCoords = null;
+        hideTechnicianWeather();
+    }
+}
+
+async function fetchAndRenderTechnicianWeather(lat, lng) {
+    if (!isTechnicianPlanView()) {
+        hideTechnicianWeather();
+        return;
+    }
+    const card = document.getElementById('tech-weather-card');
+    if (!card) return;
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4500);
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation&daily=precipitation_probability_max,temperature_2m_max,temperature_2m_min&timezone=auto`;
+        const res = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+            hideTechnicianWeather();
+            return;
+        }
+        const data = await res.json();
+        const temp = Math.round(data.current?.temperature_2m ?? 24);
+        const code = data.current?.weather_code ?? 1;
+        const wind = Math.round(data.current?.wind_speed_10m ?? 8);
+        const rainProb = data.daily?.precipitation_probability_max?.[0] ?? Math.round(data.current?.precipitation ? 60 : 10);
+        const info = getWmoWeatherInfo(code);
+        const weatherSvg = getTechnicianWeatherIconSvg(info.condition);
+
+        card.innerHTML = `
+            <div class="tech-weather-card-inner">
+                <div class="tech-weather-left">
+                    <div class="tech-weather-icon-wrap" aria-hidden="true">${weatherSvg}</div>
+                    <div class="tech-weather-main">
+                        <div class="tech-weather-temp">${temp}&#176;C</div>
+                        <div class="tech-weather-title">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+                            <span>Clima en tu ubicaci&oacute;n actual</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="tech-weather-right">
+                    <div class="tech-weather-desc">${escapeHtml(info.label || 'Tiempo favorable')}</div>
+                    <div class="tech-weather-metrics">
+                        <span class="tech-wx-metric" title="Probabilidad de lluvia">
+                            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+                            ${rainProb}% lluvia
+                        </span>
+                        <span class="tech-wx-metric" title="Velocidad del viento">
+                            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.7 7.7A2.5 2.5 0 1 1 19 12H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></svg>
+                            ${wind} km/h
+                        </span>
+                    </div>
+                    <div class="tech-wx-road ${info.condition === 'warning' || info.condition === 'alert' ? 'caution' : ''}">
+                        ${info.condition === 'warning' || info.condition === 'alert' ? 'Precauci&oacute;n en terracer&iacute;a' : 'Caminos transitables'}
+                    </div>
+                </div>
+            </div>
+        `;
+        card.style.display = 'block';
+        card.classList.add('has-weather');
+        techRealtimeWeatherActive = true;
+    } catch (e) {
+        hideTechnicianWeather();
+    }
+}
+
 function renderWeatherFallback(townName) {
     const tempEl = document.getElementById('weather-temp');
     const townEl = document.getElementById('weather-town');
@@ -2595,16 +2777,24 @@ function renderPlanDays() {
     board.innerHTML = listModeBanner + keys.map(key => {
         const stops = groups.get(key) || [];
         const label = !key ? 'Sin fecha asignada' : (key < today ? `Pendientes anteriores · ${formatCalendarDate(key)}` : (key === today ? `Trabajo de hoy · ${formatCalendarDate(key)}` : formatCalendarDate(key)));
+        const dayMetrics = calculateDayRouteFeasibility(stops);
+        const dayTravelBadge = isTechnicianPlanView() && stops.length > 1 && dayMetrics.totalKm > 0
+            ? `<span class="tech-day-travel-badge" title="Distancia total por carretera para este día"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>~${dayMetrics.totalKm} km (${dayMetrics.travelFormatted})</span>`
+            : '';
         const stopsHtml = stops.map((stop, index) => {
             let transitHtml = '';
-            if (index > 0 && !isTechnicianPlanView()) {
+            if (index > 0) {
                 const prevStop = stops[index - 1];
                 const p1 = getStopCurrentPosition(prevStop);
                 const p2 = getStopCurrentPosition(stop);
                 if (!isNaN(p1.lat) && !isNaN(p1.lng) && !isNaN(p2.lat) && !isNaN(p2.lng)) {
                     const leg = estimateRouteTravel(p1.lat, p1.lng, p2.lat, p2.lng);
-                    const prevName = prevStop.name || 'Parada anterior';
-                    const currName = stop.name || 'Siguiente parada';
+                    const prevEq = prevStop.equipmentId ? (state.equipment || []).find(item => item.id === prevStop.equipmentId && !item.deletedAt) : null;
+                    const prevNode = prevStop.nodeId ? (state.nodes || []).find(item => item.id === prevStop.nodeId && !item.deletedAt) : null;
+                    const currEq = stop.equipmentId ? (state.equipment || []).find(item => item.id === stop.equipmentId && !item.deletedAt) : null;
+                    const currNode = stop.nodeId ? (state.nodes || []).find(item => item.id === stop.nodeId && !item.deletedAt) : null;
+                    const prevName = isTechnicianPlanView() ? getTechnicianStopName(prevStop, prevEq, prevNode) : (prevStop.name || 'Parada anterior');
+                    const currName = isTechnicianPlanView() ? getTechnicianStopName(stop, currEq, currNode) : (stop.name || 'Siguiente parada');
                     transitHtml = `
                         <div class="plan-inter-stop-transit">
                             <div class="transit-line"></div>
@@ -2617,7 +2807,7 @@ function renderPlanDays() {
             }
             return transitHtml + renderStopCard(stop, 'general', index);
         }).join('');
-        return `<div class="day-col"><div class="day-head"><span>${escapeHtml(label)}</span></div><div class="day-body">${stopsHtml}</div></div>`;
+        return `<div class="day-col"><div class="day-head"><span>${escapeHtml(label)}</span>${dayTravelBadge}</div><div class="day-body">${stopsHtml}</div></div>`;
     }).join('') || `<div class="plan-empty">${isTechnicianPlanView() ? `No tienes paradas asignadas para ${formatCalendarDate(selectedCalendarDate || today)}.` : 'No hay paradas en esta fecha.'}</div>`;
 
     if (!isTechnicianPlanView()) {
