@@ -2792,7 +2792,7 @@ function handleNetworkOrderEvent(payload) {
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Requerimiento concluido',
-          message: `${actor} concluyó este detalle a conformidad.`,
+          message: `${actor} concluyó este detalle.`,
           type: 'confirmed',
           orderId: order.id
         });
@@ -2802,7 +2802,7 @@ function handleNetworkOrderEvent(payload) {
       if (shouldNotify) {
         notifyNetworkDetailEvent({
           title: 'Reporte concluido',
-          message: `${actor} concluyó este detalle a conformidad.`,
+          message: `${actor} concluyó este detalle.`,
           type: 'confirmed',
           orderId: order.id
         });
@@ -3077,7 +3077,7 @@ async function checkNetworkOrderNotifications() {
             if (shouldNotifyConfirmed) {
               notifyNetworkDetailEvent({
                 title: isSupportToAttention ? 'Requerimiento concluido' : 'Reporte concluido',
-                message: 'Detalle concluido a conformidad.',
+                message: 'Detalle concluido.',
                 type: 'confirmed',
                 orderId: order.id
               });

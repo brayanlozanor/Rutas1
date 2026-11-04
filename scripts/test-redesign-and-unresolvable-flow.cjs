@@ -81,4 +81,24 @@ assert(ordenesJs.includes('order-report-evidence-strip'), 'ordenes.js must rende
 assert(ordersDesignCss.includes('.order-report-evidence-strip {'), 'orders-design-v2.css must define .order-report-evidence-strip');
 assert(ordersDesignCss.includes('.evidence-strip-thumb {'), 'orders-design-v2.css must define .evidence-strip-thumb');
 
-console.log('ALL TESTS PASSED: Modern modal design, compact evidence strip, concise statuses & unresolvable flow OK!');
+const styleCss = fs.readFileSync('public/assets/css/style.css', 'utf8');
+
+// 6. Visual Hierarchy & Non-Overlapping Notification Bell
+console.log('6. Checking visual hierarchy and non-overlapping notification bell...');
+assert(styleCss.includes('.floating-notification-bell .notification-bell-icon:before'), 'style.css must target notification-bell-icon:before');
+assert(styleCss.includes('content:none!important;'), 'style.css must disable emoji pseudo-element on notification-bell-icon');
+assert(!styleCss.includes('content:"\\1F514"'), 'style.css must not have emoji bell content');
+assert(ordersDesignCss.includes('.order-place-main'), 'orders-design-v2.css must define .order-place-main');
+assert(ordersDesignCss.includes('.order-client-main'), 'orders-design-v2.css must define .order-client-main');
+assert(ordersDesignCss.includes('.order-detail-text'), 'orders-design-v2.css must define .order-detail-text');
+assert(ordersDesignCss.includes('.order-assignment-tags .user-color-chip'), 'orders-design-v2.css must style user-color-chip discretely');
+assert(ordersDesignCss.includes('padding-right: 74px !important;'), 'orders-design-v2.css must provide right-side clearance in order-table-footer');
+
+assert(!ordenesJs.includes('title: `¿Reabrir detalle #${folio}?`'), 'ordenes.js must not include folio in reopen title');
+assert(!ordenesJs.includes('title: `¿Devolver detalle #${folio}?`'), 'ordenes.js must not include folio in return title');
+assert(!ordenesJs.includes('title: `¿Concluir detalle #${folio}?`'), 'ordenes.js must not include folio in conclude title');
+assert(!ordenesJs.includes('title: `¿Declarar reporte #${folio} no realizable?`'), 'ordenes.js must not include folio in unresolvable title');
+assert(!ordenesJs.includes('title: `¿Concluir trámite de reporte #${folio}?`'), 'ordenes.js must not include folio in unresolvable concluded title');
+
+console.log('ALL TESTS PASSED: Modern modal design, compact evidence strip, concise statuses, unresolvable flow, visual hierarchy & notification bell OK!');
+

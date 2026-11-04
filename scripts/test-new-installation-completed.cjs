@@ -8,7 +8,7 @@ const store = fs.readFileSync('relational-store.js', 'utf8');
 
 assert.match(planning, /status:\s*'completada',[\s\S]*?completedAt:\s*createdAt/);
 assert.match(planning, /nodeCode:\s*isDetail \? \(selectedNode\?\.nodeCode \|\| ''\) : \(installationNode\?\.nodeCode/);
-assert.match(orders, /getOrderCategory\(order\) === 'instalacion' \? 'Completado' : 'Solucionado'/);
+assert.match(orders, /getOrderCategory\(order\) === 'instalacion' \? 'Completado' : '(?:Solucionado|Concluido)'/);
 assert.match(orders, /node\?\.town \|\| order\.town \|\| order\.nodeName/);
 assert.match(orders, /includeMapCatalog:\(state\.nodes \|\| \[\]\)\.length \? '' : '1'/);
 assert.match(dashboard, /DASHBOARD_PHYSICAL_EXCLUDED_CATEGORIES\.has\(category\)/);

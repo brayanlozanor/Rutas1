@@ -2037,8 +2037,8 @@ async function reopenCompletedWO(id) {
 
   const folio = getOrderFolio(w);
   const confirmed = await askConfirmation({
-    title: `¿Reabrir detalle #${folio}?`,
-    message: `El detalle #${folio} volverá a Pendiente para nueva atención.`,
+    title: '¿Reabrir detalle?',
+    message: 'El detalle volverá a estar pendiente para nueva atención.',
     confirmText: 'Sí, reabrir',
     cancelText: 'Cancelar',
     tone: 'warn'
@@ -2070,7 +2070,7 @@ async function reopenCompletedWO(id) {
     broadcastNetworkOrderChange(w, 'reopened');
   }
 
-  notify(`Detalle #${folio} reabierto.`, 'ok');
+  notify('Detalle reabierto.', 'ok');
   await loadOrderPage();
 }
 
@@ -2866,11 +2866,11 @@ function renderWOs() {
               <tr class="${rowReported ? 'order-row-done' : ''}">
                 <td data-label="Folio"><strong class="order-folio">${orderEscape(getOrderFolio(w))}</strong></td>
                 <td data-label="Zona">${orderEscape(getZoneLabel(target.zone || w.region) || '--')}</td>
-                <td data-label="Lugar"><strong>${orderEscape(getOrderPlace(w))}</strong></td>
-                <td data-label="Cliente"><strong>${orderEscape(w.clientName || '--')}</strong></td>
+                <td data-label="Lugar"><strong class="order-place-main">${orderEscape(getOrderPlace(w))}</strong></td>
+                <td data-label="Cliente"><strong class="order-client-main">${orderEscape(w.clientName || '--')}</strong>${w.clientPhone ? `<div class="order-client-phone">${orderEscape(w.clientPhone)}</div>` : ''}</td>
                 <td data-label="Detalle">
                   <span class="order-category-badge">${orderEscape(orderCategoryLabel(getOrderCategory(w)))}</span>
-                  ${w.description ? `<div>${orderEscape(w.description)}</div>` : (w.title && w.title !== orderCategoryLabel(getOrderCategory(w)) ? `<div>${orderEscape(w.title)}</div>` : '')}
+                  ${w.description ? `<div class="order-detail-text">${orderEscape(w.description)}</div>` : (w.title && w.title !== orderCategoryLabel(getOrderCategory(w)) ? `<div class="order-detail-text">${orderEscape(w.title)}</div>` : '')}
                   <div class="order-assignment-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">
                     ${w.assignedUserName ? (w.assignedUserName.split(',').map(s => s.trim()).filter(Boolean).map(name => renderUserColorChip(name, w.assignedUserId)).join('')) : ''}
                     ${w.reviewOpenedByName && !['completada','no_realizado'].includes(w.status) && !((w.assignedUserName || '').includes(w.reviewOpenedByName)) ? `
@@ -3095,8 +3095,8 @@ async function submitNetworkResolution() {
   const confirmed = await askConfirmation({
     title: isSentToAttention ? '¿Confirmar envío de respuesta?' : '¿Confirmar resolución técnica?',
     message: isSentToAttention
-      ? `Se remitirá formalmente la respuesta para el requerimiento #${folio} a Soporte técnico para su verificación y seguimiento. ¿Desea proceder?`
-      : `Se registrará la solución técnica del reporte #${folio} (${order.clientName || 'Cliente'}). El estado cambiará a "Resuelto" y se notificará a Atención a clientes para que valide la entera conformidad con el cliente. ¿Desea proceder?`,
+      ? `Se remitirá formalmente la respuesta a Soporte técnico para su verificación. ¿Desea proceder?`
+      : `Se registrará la solución técnica del reporte. El estado cambiará a "Resuelto" para su validación. ¿Desea proceder?`,
     confirmText: isSentToAttention ? 'Confirmar y enviar respuesta' : 'Confirmar y registrar solución',
     cancelText: 'Continuar editando',
     tone: 'ok'
@@ -3173,7 +3173,7 @@ async function startAttendingNetworkOrder(id) {
   const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
     title: 'Iniciar atención',
-    message: `¿Iniciar la atención del detalle #${folio}?`,
+    message: '¿Iniciar la atención de este detalle?',
     confirmText: 'Sí, atender',
     cancelText: 'Cancelar',
     tone: 'ok'
@@ -3216,7 +3216,7 @@ async function startAttendingNetworkOrder(id) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
 
-  notify(`Atendiendo detalle #${folio}.`, 'ok');
+  notify('Detalle en atención.', 'ok');
   renderWOs();
 }
 
@@ -3273,7 +3273,7 @@ async function takeOverNetworkOrder(id) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
 
-  notify(`Detalle #${folio} a tu cargo.`, 'ok');
+  notify('Detalle a tu cargo.', 'ok');
 
   if (document.getElementById('network-resolve-mo')?.classList.contains('open') && document.getElementById('netres-order-id')?.value === id) {
     openResolveNetworkModal(id);
@@ -3345,8 +3345,8 @@ async function submitNetworkReturn() {
   const isSentToAttention = isNetworkSupportToAttention(order);
   const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
-    title: `¿Devolver detalle #${folio}?`,
-    message: `El detalle #${folio} volverá a Devuelto con tus observaciones.`,
+    title: '¿Devolver detalle?',
+    message: 'El detalle se devolverá para revisión con las observaciones indicadas.',
     confirmText: 'Sí, devolver',
     cancelText: 'Cancelar',
     tone: 'warning'
@@ -3401,8 +3401,8 @@ async function confirmNetworkClientSatisfied(id) {
   const client = order.clientName || 'el cliente titular';
   const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
-    title: `¿Concluir detalle #${folio}?`,
-    message: `¿El detalle quedó solucionado a entera conformidad?`,
+    title: '¿Concluir detalle?',
+    message: '¿Confirma que el detalle ha sido solventado satisfactoriamente?',
     confirmText: 'Sí, concluir',
     cancelText: 'Cancelar',
     tone: 'ok'
@@ -3439,7 +3439,7 @@ async function confirmNetworkClientSatisfied(id) {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify(`Detalle #${folio} concluido.`, 'ok');
+  notify('Detalle concluido.', 'ok');
   await loadOrderPage();
 }
 
@@ -3597,8 +3597,8 @@ async function submitNetworkUnresolvable() {
 
   const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
-    title: `¿Declarar reporte #${folio} no realizable?`,
-    message: 'El estado del reporte cambiará a "No realizado" con la justificación técnica especificada y se notificará a Atención a clientes para que proceda con el cliente. ¿Desea continuar?',
+    title: '¿Declarar reporte no realizable?',
+    message: 'El estado del reporte cambiará a "No realizado" con la justificación técnica especificada. ¿Desea continuar?',
     confirmText: 'Sí, declarar no realizable',
     cancelText: 'Cancelar',
     tone: 'danger'
@@ -3649,8 +3649,8 @@ async function confirmNetworkUnresolvableConcluded(id) {
 
   const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
-    title: `¿Concluir trámite de reporte #${folio}?`,
-    message: '¿Confirma concluir este detalle indicando que no fue posible solventar la incidencia por causas técnicas?',
+    title: '¿Concluir trámite de reporte?',
+    message: '¿Confirma dar por concluido este reporte registrando la imposibilidad técnica?',
     confirmText: 'Sí, concluir trámite',
     cancelText: 'Cancelar',
     tone: 'warning'
