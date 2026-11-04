@@ -126,7 +126,479 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi.kpi-progress .plan
  html[data-role="tecnico"] body.plan-technician-view .ct,html[data-role="tecnico"] body.plan-technician-view #plan-panel{width:100%!important;max-width:none!important;margin:0!important;padding:0!important}
  html[data-role="tecnico"] body.plan-technician-view .plan-shell{display:flex!important;width:100%!important;max-width:none!important;margin:0!important;padding:10px 10px 22px!important;flex-direction:column!important;gap:12px!important}
  html[data-role="tecnico"] body.plan-technician-view .tech-calendar-toolbar{order:1;width:100%!important}
- html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar{order:2;width:100%!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;margin:0!important;padding:9px!important}
+ html[data-role="tecnico"] body.plan-technician-view .tech-progress-card{order:2;width:100%!important}
  html[data-role="tecnico"] body.plan-technician-view .plan-calendar{order:3}html[data-role="tecnico"] body.plan-technician-view .tech-today-board{order:4;width:100%!important}html[data-role="tecnico"] body.plan-technician-view .tech-route-map-card{order:5;width:100%!important}
 }
-@media(max-width:760px){html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}html[data-role="tecnico"] body.plan-technician-view .plan-kpi.kpi-progress{grid-column:1/-1!important}}
+@media(max-width:760px){html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar{display:none!important}}
+
+/* Tarjeta de Progreso y Desempeño del Técnico */
+/* Barra compacta de progreso del técnico (diseño minimalista de bajo impacto visual) */
+.tech-progress-compact {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin: 8px 0 12px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+}
+.tech-progress-compact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.tech-progress-compact-info {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: #475569;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.tech-progress-compact-svg {
+  width: 15px;
+  height: 15px;
+  stroke: #0284c7;
+  fill: none;
+  stroke-width: 2;
+  flex-shrink: 0;
+}
+.tech-progress-compact-label {
+  font-weight: 800;
+  color: #64748b;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tech-progress-compact-pct {
+  color: #0284c7;
+  font-weight: 800;
+  font-size: 12px;
+}
+.tech-progress-compact-sep {
+  color: #cbd5e1;
+  font-weight: 700;
+}
+.tech-progress-compact-detail {
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.tech-progress-compact-pueblos {
+  color: #64748b;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.tech-compact-urgent-tag {
+  display: inline-flex;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #c2410c;
+  font-size: 10px;
+  font-weight: 800;
+}
+.tech-compact-summary-btn {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #1e293b;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.tech-compact-summary-btn:hover {
+  background: #e2e8f0;
+  border-color: #94a3b8;
+}
+.tech-progress-compact .tech-progress-bar-track {
+  width: 100%;
+  height: 4px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 0;
+  margin-bottom: 0;
+}
+.tech-progress-compact .tech-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0284c7 0%, #10b981 100%);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.tech-progress-card {
+  grid-area: progress;
+  background: #ffffff;
+  border: 1px solid #dce7f3;
+  border-radius: 20px;
+  padding: 18px 20px 16px;
+  box-shadow: 0 8px 24px rgba(29, 64, 105, 0.08);
+  margin-bottom: 4px;
+}
+.tech-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.tech-progress-eyebrow {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #0284c7;
+}
+.tech-progress-title {
+  margin: 3px 0 0;
+  font-size: 19px;
+  font-weight: 800;
+  color: #0f172a;
+}
+.tech-progress-percent-badge {
+  font-size: 16px;
+  font-weight: 900;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+  transition: all 0.3s ease;
+}
+.tech-progress-percent-badge.complete {
+  background: #dcfce7;
+  color: #16a34a;
+  border-color: #bbf7d0;
+}
+.tech-progress-bar-track {
+  width: 100%;
+  height: 12px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  margin-bottom: 16px;
+}
+.tech-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #0284c7 0%, #0ea5e9 50%, #10b981 100%);
+  border-radius: 999px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tech-progress-bar-fill.complete {
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+}
+.tech-progress-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.tech-stat-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+.tech-stat-pill .tech-stat-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.tech-stat-pill .tech-stat-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tech-stat-pill .tech-stat-info strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+}
+.tech-stat-pill .tech-stat-info small {
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tech-stat-pill#tech-stat-pill-urgent.has-urgent {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+.tech-stat-pill#tech-stat-pill-urgent.has-urgent strong {
+  color: #c2410c;
+}
+.tech-stat-pill#tech-stat-pill-urgent.has-urgent small {
+  color: #9a3412;
+}
+.tech-stat-pill#tech-stat-pill-urgent.all-clear {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+.tech-stat-pill#tech-stat-pill-urgent.all-clear strong {
+  color: #16a34a;
+}
+.tech-summary-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.tech-summary-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+/* Ocultar barra antigua de KPIs en favor de la tarjeta de progreso */
+html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar {
+  display: none !important;
+}
+
+/* Header móvil del técnico con campana integrada y estilo limpio */
+.plan-technician-view .tech-mobile-header {
+  position: sticky;
+  z-index: 1500;
+  top: 0;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+  height: 64px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 2px 14px rgba(24, 57, 96, 0.07);
+  backdrop-filter: blur(12px);
+}
+.tech-header-logout {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 12px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  color: #64748b !important;
+  padding: 0 !important;
+  cursor: pointer;
+}
+.tech-header-logout svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tech-header-title {
+  text-align: center;
+  min-width: 0;
+}
+.tech-header-title strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tech-header-title small {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 700;
+}
+.tech-header-bell {
+  position: relative;
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 12px !important;
+  display: grid !important;
+  place-items: center !important;
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
+  color: #64748b !important;
+  padding: 0 !important;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+.tech-header-bell .tech-bell-svg {
+  width: 20px;
+  height: 20px;
+  stroke: #475569;
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tech-nav-svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: block;
+  margin: 0 auto 3px;
+}
+.tech-btn-svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -2px;
+  margin-right: 4px;
+}
+.tech-header-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #0284c7;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 900;
+  border: 2px solid #ffffff;
+  display: grid;
+  place-items: center;
+}
+
+/* Floating bell ajustada para técnicos: pequeña, discreta y sin tapar nada */
+#notification-bell.technician-bell {
+  width: 40px !important;
+  height: 40px !important;
+  min-width: 40px !important;
+  min-height: 40px !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08) !important;
+  color: #334155 !important;
+}
+#notification-bell.technician-bell .notification-bell-icon {
+  width: 24px !important;
+  height: 24px !important;
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+}
+#notification-bell.technician-bell #notification-count {
+  min-width: 18px !important;
+  height: 18px !important;
+  font-size: 10px !important;
+  top: -4px !important;
+  right: -4px !important;
+  background: #0284c7 !important;
+  border: 2px solid #ffffff !important;
+}
+@media (max-width: 760px) {
+  #notification-bell.technician-bell {
+    display: none !important;
+  }
+}
+
+/* Días de la semana con indicador de trabajo */
+.tech-week-day {
+  position: relative;
+}
+.tech-work-dot {
+  position: absolute;
+  bottom: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #0284c7;
+}
+.tech-week-day.active .tech-work-dot {
+  background: #ffffff;
+}
+.tech-today-pill {
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: #eff6ff;
+  color: #0284c7;
+  border: 1px solid #bfdbfe;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* Botón de llamada al cliente en cada detalle */
+.tech-call-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: none;
+  min-height: 34px;
+}
+.tech-call-btn:hover {
+  background: #d1fae5;
+}
+
+/* Botón de navegación al pueblo en cada parada */
+.tech-nav-direction-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 7px 14px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+.tech-nav-direction-btn:hover {
+  background: #dbeafe;
+}
+
+@media (max-width: 520px) {
+  .tech-progress-stats-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .tech-stat-pill {
+    padding: 8px 10px;
+  }
+}

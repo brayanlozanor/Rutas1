@@ -134,6 +134,14 @@
         <select id="wo-zone"></select>
       </div>
 
+      <div class="fi wo-target-team-field" id="wo-target-team-field" style="display:none;">
+        <label id="wo-target-team-label">DESTINO DEL REPORTE DE RED</label>
+        <div class="wo-target-toggle-group" style="display:flex;gap:8px;margin-bottom:6px;">
+          <button type="button" class="btn bsm bc" id="wo-target-btn-soporte" onclick="switchAdminNetworkTarget('soporte')">A Soporte técnico</button>
+          <button type="button" class="btn bsm bgh" id="wo-target-btn-atencion" onclick="switchAdminNetworkTarget('atencion_clientes')">A Atención a clientes</button>
+        </div>
+      </div>
+
       <div class="fi wo-assign-field" id="wo-assign-field">
         <label id="wo-assign-label">Asignación a Soporte técnico</label>
         <div class="wo-multi-assign-wrapper" id="wo-multi-assign-wrapper">

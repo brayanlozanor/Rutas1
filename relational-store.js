@@ -1416,8 +1416,8 @@ export async function loadStatePart(env, part, page = {}) {
     const deletionRequests=(page?.windowed==='1'||page?.scoped==='1')?(await loadDeletionRequests(env)).filter(request=>visibleIds.has(request.targetId)||visibleIds.has(request.detailId)):[];
     const query=workOrderQuery(page);
     const [supportUsers, attentionUsers] = await Promise.all([
-      all(env,`SELECT u.id,u.name,u.username,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('administrador','admin') ORDER BY lower(u.name),lower(u.username)`),
-      all(env,`SELECT u.id,u.name,u.username,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code = 'atencion_clientes' ORDER BY lower(u.name),lower(u.username)`)
+      all(env,`SELECT u.id,u.name,u.username,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('administrador','admin','soporte') ORDER BY lower(u.name),lower(u.username)`),
+      all(env,`SELECT u.id,u.name,u.username,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`)
     ]);
     const mappedSupportUsers = supportUsers.map(user=>({id:user.id,name:user.name||user.username||'Soporte',username:user.username}));
     const mappedAttentionUsers = attentionUsers.map(user=>({id:user.id,name:user.name||user.username||'Atención',username:user.username}));

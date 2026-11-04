@@ -137,7 +137,7 @@ function configureTechnicianDashboard() {
     const hero = document.querySelector('.hero-panel');
     if (hero) {
         hero.classList.add('tech-dashboard-hero');
-        hero.innerHTML = `<div><div class="tech-hero-eyebrow">Mi jornada</div><h1>¡Hola, ${escapeHtml(firstName)}!</h1><p>${escapeHtml(todayText.charAt(0).toUpperCase() + todayText.slice(1))}</p><a href="material.html" class="tech-material-link-pill" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:6px 14px;background:#e8f2ff;color:#0874e8;border-radius:20px;font-size:12px;font-weight:700;text-decoration:none;box-shadow:0 1px 3px rgba(8,116,232,0.12)">📦 Mi Material y Entregas →</a></div><div class="tech-hero-signal" aria-hidden="true"><span></span><i></i><b></b></div>`;
+        hero.innerHTML = `<div><div class="tech-hero-eyebrow">Mi jornada</div><h1>¡Hola, ${escapeHtml(firstName)}!</h1><p>${escapeHtml(todayText.charAt(0).toUpperCase() + todayText.slice(1))}</p></div><div class="tech-hero-signal" aria-hidden="true"><span></span><i></i><b></b></div>`;
     }
     const shell = document.querySelector('.plan-shell');
     const calendar = document.getElementById('plan-calendar');
@@ -148,18 +148,66 @@ function configureTechnicianDashboard() {
         const today = new Date(`${selectedCalendarDate}T12:00:00`);
         const monday = new Date(today);
         monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+        const allStops = getPlanStopsForView('general');
         const days = Array.from({ length: 7 }, (_, index) => {
             const date = new Date(monday);
             date.setDate(monday.getDate() + index);
             const dateKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
             const active = dateKey === selectedCalendarDate ? 'active' : '';
-            return `<button type="button" class="tech-week-day ${active}" onclick="selectTechnicianAgendaDate('${dateKey}')"><small>${date.toLocaleDateString('es-MX',{weekday:'short'}).replace('.','')}</small><strong>${date.getDate()}</strong></button>`;
+            const dayStopsCount = allStops.filter(s => (s.scheduledDate || '') === dateKey).length;
+            const hasWork = dayStopsCount > 0 ? 'has-work' : '';
+            return `<button type="button" class="tech-week-day ${active} ${hasWork}" onclick="selectTechnicianAgendaDate('${dateKey}')"><small>${date.toLocaleDateString('es-MX',{weekday:'short'}).replace('.','')}</small><strong>${date.getDate()}</strong>${dayStopsCount > 0 ? '<i class="tech-work-dot" title="Trabajo asignado"></i>' : ''}</button>`;
         }).join('');
-        shell.insertAdjacentHTML('afterbegin', `<section class="tech-calendar-toolbar"><div class="tech-agenda-title"><button type="button" aria-label="Volver">&#8249;</button><h1>Mi agenda por día</h1><span aria-hidden="true">&#128197;</span></div><div class="tech-day-label">Selecciona el día</div><div class="tech-month-row"><button type="button" onclick="shiftTechnicianAgendaWeek(-1)">&#8249;</button><strong>${today.toLocaleDateString('es-MX',{month:'long',year:'numeric'})}</strong><button type="button" onclick="shiftTechnicianAgendaWeek(1)">&#8250;</button></div><div class="tech-week-strip">${days}</div></section>`);
+        shell.insertAdjacentHTML('afterbegin', `<section class="tech-calendar-toolbar">
+            <div class="tech-agenda-title">
+                <h1>Mi agenda</h1>
+                <button type="button" class="tech-today-pill" onclick="selectTechnicianAgendaDate('${localDateKey()}')">Hoy</button>
+            </div>
+            <div class="tech-day-label">Selecciona el día</div>
+            <div class="tech-month-row">
+                <button type="button" onclick="shiftTechnicianAgendaWeek(-1)" aria-label="Semana anterior">&#8249;</button>
+                <strong>${today.toLocaleDateString('es-MX',{month:'long',year:'numeric'})}</strong>
+                <button type="button" onclick="shiftTechnicianAgendaWeek(1)" aria-label="Semana siguiente">&#8250;</button>
+            </div>
+            <div class="tech-week-strip">${days}</div>
+        </section>`);
     }
     const toolbar = document.querySelector('.tech-calendar-toolbar');
     toolbar?.querySelector('.tech-summary-toggle')?.remove();
-    if (shell && kpis && kpis.parentElement !== shell) shell.querySelector('.tech-calendar-toolbar')?.insertAdjacentElement('afterend', kpis);
+
+    // Inyectar barra compacta de progreso en móvil/pantalla técnica (máxima prioridad a los detalles)
+    if (shell && !document.getElementById('tech-progress-card')) {
+        const progressCardHtml = `
+            <section class="tech-progress-compact" id="tech-progress-card">
+                <div class="tech-progress-compact-row">
+                    <div class="tech-progress-compact-info">
+                        <svg class="tech-progress-compact-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+                        <span class="tech-progress-compact-label">Avance</span>
+                        <strong class="tech-progress-compact-pct" id="tech-progress-percent-badge">0%</strong>
+                        <span class="tech-progress-compact-sep">·</span>
+                        <span class="tech-progress-compact-detail" id="tech-stat-detalles">0 de 0</span>
+                        <span class="tech-progress-compact-sep">·</span>
+                        <span class="tech-progress-compact-pueblos" id="tech-stat-pueblos">0 pueblos</span>
+                        <span class="tech-compact-urgent-tag" id="tech-stat-pill-urgent" style="display:none">
+                            <span id="tech-stat-urgentes">0</span>
+                        </span>
+                    </div>
+                    <button type="button" class="tech-compact-summary-btn" onclick="openTechnicianProductivitySummary()" title="Ver resumen formal de productividad">
+                        Resumen
+                    </button>
+                </div>
+                <div class="tech-progress-bar-track">
+                    <div class="tech-progress-bar-fill" id="tech-progress-bar-fill" style="width: 0%"></div>
+                </div>
+            </section>
+        `;
+        if (toolbar) {
+            toolbar.insertAdjacentHTML('afterend', progressCardHtml);
+        } else {
+            shell.insertAdjacentHTML('afterbegin', progressCardHtml);
+        }
+    }
+
     if (shell && calendar && calendar.parentElement !== shell) shell.appendChild(calendar);
     if (mapBox) {
         mapBox.classList.add('tech-route-map-card');
@@ -177,24 +225,27 @@ function configureTechnicianDashboard() {
             board.insertAdjacentHTML('afterend', `<section id="tech-day-map-card" class="tech-day-map-card"><div><strong>Ubicaciones del día</strong><small id="tech-day-map-date"></small></div><div id="tech-day-map" class="tech-day-map"></div></section>`);
         }
     }
-    const kpiLabels = [
-        ['plan-kpi-stops','detalles de la semana'],
-        ['plan-kpi-total','completados en la semana'],
-        ['plan-kpi-done','detalles del día'],
-        ['plan-kpi-pending','completados en el día'],
-        ['plan-kpi-day-pending','faltantes del día']
-    ];
-    kpiLabels.forEach(([id,label]) => {
-        const el = document.getElementById(id)?.closest('.plan-kpi')?.querySelector('small');
-        if (el) el.textContent = label;
-    });
     if (!document.querySelector('.tech-mobile-header')) {
-        document.body.insertAdjacentHTML('afterbegin', `<header class="tech-mobile-header"><button type="button" class="tech-header-logout" onclick="logout()" aria-label="Cerrar sesión" title="Cerrar sesión"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M14 4h4a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-4"></path></svg></button><strong>Mi agenda</strong><span aria-hidden="true">&#128197;</span></header>`);
+        document.body.insertAdjacentHTML('afterbegin', `<header class="tech-mobile-header">
+            <button type="button" class="tech-header-logout" onclick="logout()" aria-label="Cerrar sesión" title="Cerrar sesión">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M14 4h4a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-4"></path></svg>
+            </button>
+            <div class="tech-header-title">
+                <strong>Hola, ${escapeHtml(firstName)}</strong>
+                <small>${escapeHtml(todayText.charAt(0).toUpperCase() + todayText.slice(1))}</small>
+            </div>
+            <button type="button" class="tech-header-bell" onclick="openNotificationPanel()" aria-label="Notificaciones y material" title="Avisos y material">
+                <svg class="tech-bell-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                <span class="tech-header-badge" id="tech-mobile-bell-count" style="display:none">0</span>
+            </button>
+        </header>`);
     }
     if (!document.querySelector('.tech-bottom-nav')) {
-        document.body.insertAdjacentHTML('beforeend', `<nav class="tech-bottom-nav tech-bottom-nav-three" aria-label="Opciones del técnico"><button class="active" type="button" onclick="openTechnicianDetails()"><span>☷</span>Detalles</button><button type="button" onclick="openTechnicianRouteMap()"><span>⌖</span>Ruta</button><button type="button" onclick="openTechnicianAddMenu()"><span>＋</span>Agregar</button></nav>`);
+        document.body.insertAdjacentHTML('beforeend', `<nav class="tech-bottom-nav tech-bottom-nav-three" aria-label="Opciones del técnico"><button class="active" type="button" onclick="openTechnicianDetails()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v0Zm0 9h6m-6 4h4"/></svg>Detalles</button><button type="button" onclick="openTechnicianRouteMap()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>Ruta</button><button type="button" onclick="openTechnicianAddMenu()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Agregar</button></nav>`);
     }
     renderTechnicianRouteOverview();
+    updateTechnicianProgressCard();
+    updateTechnicianMobileBellBadge();
     setTimeout(renderTechnicianDayMap, 0);
 }
 
@@ -357,12 +408,12 @@ function checkTechnicianPendingMaterialPrompt() {
                 <div class="dispatch-card" style="margin-bottom:12px;background:#fff;border:1px solid #dfe6ef;border-radius:14px;padding:16px">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                         <span class="dispatch-folio-tag delivery" style="display:inline-flex;padding:3px 8px;border-radius:6px;font-family:monospace;font-size:12px;font-weight:800;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe">${escapeHtml(deliveryFolio)}</span>
-                        <span class="dispatch-badge status-pending_receipt">🟡 Por recibir</span>
+                        <span class="dispatch-badge status-pending_receipt">Por recibir</span>
                     </div>
 
                     ${isEdited ? `
                         <div class="dispatch-edited-warning">
-                            <span class="dispatch-edited-badge">✎ Modificado</span>
+                            <span class="dispatch-edited-badge">Modificado</span>
                             <p>Soporte actualizó los materiales de esta entrega. Por favor revísalos antes de confirmar.</p>
                         </div>
                     ` : ''}
@@ -382,10 +433,10 @@ function checkTechnicianPendingMaterialPrompt() {
 
                     <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:6px">
                         <button type="button" class="btn bg2" onclick="confirmarRecepcionDesdePlan('${d.id}')" style="min-height:46px;font-size:13px;font-weight:800;border-radius:10px">
-                            ${isEdited ? '✓ Confirmar recepción (actualizado)' : '✓ Confirmar que recibí'}
+                            ${isEdited ? 'Confirmar recepción (actualizado)' : 'Confirmar que recibí'}
                         </button>
                         <button type="button" class="btn br" onclick="rechazarRecepcionDesdePlan('${d.id}')" style="min-height:46px;padding:0 14px;font-size:12px;font-weight:800;border-radius:10px;background:#fee2e2;color:#dc2626;border:1px solid #fecdd3" title="No estoy de acuerdo con este material y deseo devolverlo a soporte">
-                            ✕ Devolver
+                            Devolver
                         </button>
                     </div>
                 </div>
@@ -428,7 +479,7 @@ function checkTechnicianPendingMaterialPrompt() {
             <div class="dispatch-card" style="margin-bottom:12px;background:#fff;border:1px solid #dfe6ef;border-radius:14px;padding:16px">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                     <span class="dispatch-folio-tag receipt" style="display:inline-flex;padding:3px 8px;border-radius:6px;font-family:monospace;font-size:12px;font-weight:800;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0">${escapeHtml(receiptFolio)}</span>
-                    <span class="dispatch-badge status-pending_handover">🟠 Por confirmar entrega</span>
+                    <span class="dispatch-badge status-pending_handover">Por confirmar entrega</span>
                 </div>
 
                 <div style="background:#fff8f1;border:1px solid #fed7aa;border-radius:10px;padding:10px 14px;margin:8px 0">
@@ -447,10 +498,10 @@ function checkTechnicianPendingMaterialPrompt() {
 
                 <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:6px">
                     <button type="button" class="btn bc" onclick="confirmarEntregaTecnicoDesdePlan('${d.id}')" style="min-height:46px;font-size:13px;font-weight:800;border-radius:10px;background:#ea580c;border-color:#ea580c">
-                        ✓ Confirmo entrega a soporte
+                        Confirmar entrega a soporte
                     </button>
                     <button type="button" class="btn br" onclick="rechazarEntregaDesdePlan('${d.id}')" style="min-height:46px;padding:0 14px;font-size:12px;font-weight:800;border-radius:10px;background:#fee2e2;color:#dc2626;border:1px solid #fecdd3" title="No estoy de acuerdo con las cantidades y deseo devolverlo a soporte">
-                        ✕ Devolver
+                        Devolver
                     </button>
                 </div>
             </div>
@@ -488,9 +539,9 @@ async function confirmarRecepcionDesdePlan(dispatchId) {
 
     // BOTÓN EXTRA DE CONFIRMACIÓN OBLIGATORIO
     const confirmed = await askConfirmation({
-        title: 'Confirmar recepción de material',
-        message: `¿Confirmas haber recibido todos los materiales y cantidades entregados por soporte? (${itemsText})`,
-        confirmText: 'Sí, confirmar recepción',
+        title: 'Confirmación de recepción física de material',
+        message: `¿Confirma de conformidad haber recibido físicamente la totalidad de los materiales y cantidades entregados por Soporte Técnico? (${itemsText})`,
+        confirmText: 'Confirmar recepción',
         cancelText: 'Cancelar',
         tone: 'ok'
     });
@@ -518,7 +569,7 @@ async function confirmarRecepcionDesdePlan(dispatchId) {
     if (typeof saveRecord === 'function') {
         await saveRecord('materialMovements', targetDispatch);
     }
-    if (typeof notify === 'function') notify('✓ Has confirmado haber recibido el material.');
+    if (typeof notify === 'function') notify('Recepción física de material confirmada satisfactoriamente.', 'ok');
 
     checkTechnicianPendingMaterialPrompt();
 }
@@ -526,10 +577,10 @@ async function confirmarRecepcionDesdePlan(dispatchId) {
 async function rechazarRecepcionDesdePlan(dispatchId) {
     if (typeof askReasonPrompt !== 'function') return;
     const motivo = await askReasonPrompt({
-        title: 'Devolver entrega a Soporte',
-        message: 'Indica por qué no estás de acuerdo con la entrega (ej: falta material, cantidades incorrectas, daño):',
-        placeholder: 'Escribe aquí el motivo o faltante...',
-        confirmText: 'Devolver a Soporte'
+        title: 'Devolución de entrega a Soporte Técnico',
+        message: 'Indique formalmente el motivo de no conformidad o devolución física del material asignado:',
+        placeholder: 'Especifique el motivo, material faltante o inconsistencia física...',
+        confirmText: 'Registrar devolución'
     });
     if (!motivo) return;
 
@@ -574,17 +625,17 @@ async function rechazarRecepcionDesdePlan(dispatchId) {
     if (typeof saveRecord === 'function') {
         await saveRecord('materialMovements', targetDispatch);
     }
-    if (typeof notify === 'function') notify('✓ Entrega devuelta a soporte para corrección.');
+    if (typeof notify === 'function') notify('La entrega de material ha sido devuelta a Soporte Técnico para su corrección.', 'ok');
     checkTechnicianPendingMaterialPrompt();
 }
 
 async function rechazarEntregaDesdePlan(dispatchId) {
     if (typeof askReasonPrompt !== 'function') return;
     const motivo = await askReasonPrompt({
-        title: 'Devolver recepción a Soporte',
-        message: 'Indica por qué no estás de acuerdo con las cantidades registradas por Soporte:',
-        placeholder: 'Escribe aquí las observaciones o cantidades reales...',
-        confirmText: 'Devolver a Soporte'
+        title: 'Devolución de recepción a Soporte Técnico',
+        message: 'Indique formalmente el motivo de inconformidad con las cantidades registradas por Soporte Técnico:',
+        placeholder: 'Especifique las observaciones o cantidades reales...',
+        confirmText: 'Registrar inconformidad'
     });
     if (!motivo) return;
 
@@ -629,7 +680,7 @@ async function rechazarEntregaDesdePlan(dispatchId) {
     if (typeof saveRecord === 'function') {
         await saveRecord('materialMovements', targetDispatch);
     }
-    if (typeof notify === 'function') notify('✓ Recepción devuelta a soporte para corrección.');
+    if (typeof notify === 'function') notify('La recepción de material ha sido devuelta a Soporte Técnico para su corrección.', 'ok');
     checkTechnicianPendingMaterialPrompt();
 }
 
@@ -693,7 +744,7 @@ async function confirmarEntregaTecnicoDesdePlan(dispatchId) {
     if (typeof saveRecord === 'function') {
         await saveRecord('materialMovements', targetDispatch);
     }
-    if (typeof notify === 'function') notify('✓ Has confirmado la entrega del material a soporte.');
+    if (typeof notify === 'function') notify('Has confirmado la entrega del material a soporte.');
 
     checkTechnicianPendingMaterialPrompt();
 }
@@ -1247,6 +1298,279 @@ function refreshPlanAfterSync() {
     requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'auto' }));
 }
 
+function updateTechnicianMobileBellBadge() {
+    const rawInbox = typeof getStoredNotificationsInbox === 'function' ? getStoredNotificationsInbox() : [];
+    const techInbox = rawInbox.filter(x => x.isMaterial || x.category === 'material' || x.type === 'material' || x.isProductivity || x.type === 'productivity');
+    const unreadCount = techInbox.filter(x => x.unread).length;
+    const badge = document.getElementById('tech-mobile-bell-count');
+    if (badge) {
+        badge.textContent = unreadCount > 9 ? '+9' : String(unreadCount);
+        badge.style.display = unreadCount > 0 ? 'grid' : 'none';
+    }
+}
+
+function updateTechnicianProgressCard() {
+    if (!isTechnicianPlanView()) return;
+    const todayKey = selectedCalendarDate || localDateKey();
+    const allStops = getPlanStopsForView('general');
+    const dayStops = allStops.filter(s => (s.scheduledDate || '') === todayKey);
+    const dayDetails = [];
+    dayStops.forEach(s => {
+        getStopDetails(s).forEach(d => dayDetails.push(d));
+        getStopResolvedHistory(s).forEach(d => dayDetails.push(d));
+    });
+    const uniqueDetailsMap = new Map();
+    dayDetails.forEach(d => uniqueDetailsMap.set(d.id, d));
+    const uniqueDetails = Array.from(uniqueDetailsMap.values());
+
+    const isDone = d => ['completada', 'no_realizado'].includes(d.status || '');
+    const completedDetails = uniqueDetails.filter(isDone).length;
+    const totalDetails = uniqueDetails.length;
+    const pendingDetails = Math.max(0, totalDetails - completedDetails);
+
+    const completedStops = dayStops.filter(s => {
+        const prog = getStopProgress(s);
+        return prog.complete || s.adminReleasedAt;
+    }).length;
+    const totalStops = dayStops.length;
+
+    const highPriorityCount = uniqueDetails.filter(d => !isDone(d) && (
+        String(d.priority || '').toLowerCase() === 'alta' ||
+        String(d.priority || '').toLowerCase() === 'urgente'
+    )).length;
+
+    let pct = 0;
+    if (totalDetails > 0) {
+        pct = Math.round((completedDetails / totalDetails) * 100);
+    } else if (totalStops > 0) {
+        pct = completedStops === totalStops ? 100 : Math.round((completedStops / totalStops) * 100);
+    } else {
+        pct = 100;
+    }
+
+    const pctBadge = document.getElementById('tech-progress-percent-badge');
+    if (pctBadge) {
+        pctBadge.textContent = `${pct}%`;
+        pctBadge.classList.toggle('complete', pct === 100 && (totalDetails > 0 || totalStops > 0));
+    }
+
+    const barFill = document.getElementById('tech-progress-bar-fill');
+    if (barFill) {
+        barFill.style.width = `${pct}%`;
+        barFill.classList.toggle('complete', pct === 100 && (totalDetails > 0 || totalStops > 0));
+    }
+
+    const pueblosEl = document.getElementById('tech-stat-pueblos');
+    if (pueblosEl) pueblosEl.textContent = `${completedStops}/${totalStops} pueblos`;
+
+    const detallesEl = document.getElementById('tech-stat-detalles');
+    if (detallesEl) detallesEl.textContent = `${completedDetails} de ${totalDetails}`;
+
+    const urgentesEl = document.getElementById('tech-stat-urgentes');
+    const urgentPill = document.getElementById('tech-stat-pill-urgent');
+    if (urgentesEl) {
+        urgentesEl.textContent = highPriorityCount > 0 ? `${highPriorityCount} alta prioridad` : '';
+    }
+    if (urgentPill) {
+        urgentPill.style.display = highPriorityCount > 0 ? 'inline-flex' : 'none';
+    }
+}
+
+function openTechnicianProductivitySummary() {
+    if (!isTechnicianPlanView()) return;
+    const date = selectedCalendarDate || localDateKey();
+    const allStops = getPlanStopsForView('general');
+    const dayStops = allStops.filter(s => (s.scheduledDate || '') === date);
+    const dayDetails = [];
+    dayStops.forEach(s => {
+        getStopDetails(s).forEach(d => dayDetails.push(d));
+        getStopResolvedHistory(s).forEach(d => dayDetails.push(d));
+    });
+    const uniqueDetailsMap = new Map();
+    dayDetails.forEach(d => uniqueDetailsMap.set(d.id, d));
+    const uniqueDetails = Array.from(uniqueDetailsMap.values());
+
+    const isDone = d => ['completada', 'no_realizado'].includes(d.status || '');
+    const completedDetails = uniqueDetails.filter(isDone).length;
+    const totalDetails = uniqueDetails.length;
+    const pendingDetails = Math.max(0, totalDetails - completedDetails);
+
+    const completedStops = dayStops.filter(s => {
+        const prog = getStopProgress(s);
+        return prog.complete || s.adminReleasedAt;
+    }).length;
+    const totalStops = dayStops.length;
+
+    const highPriorityCount = uniqueDetails.filter(d => !isDone(d) && (
+        String(d.priority || '').toLowerCase() === 'alta' ||
+        String(d.priority || '').toLowerCase() === 'urgente'
+    )).length;
+
+    let pct = 0;
+    if (totalDetails > 0) {
+        pct = Math.round((completedDetails / totalDetails) * 100);
+    } else if (totalStops > 0) {
+        pct = completedStops === totalStops ? 100 : Math.round((completedStops / totalStops) * 100);
+    } else {
+        pct = 100;
+    }
+
+    const pendingDispatches = typeof getTechnicianPendingDispatches === 'function' ? getTechnicianPendingDispatches() : [];
+    const user = getCurrentUser();
+    const techName = user?.name || user?.username || 'Técnico';
+    const dateFormatted = typeof formatCalendarDate === 'function' ? formatCalendarDate(date) : date;
+
+    let modal = document.getElementById('tech-productivity-summary-mo');
+    if (!modal) {
+        document.body.insertAdjacentHTML('beforeend', `
+            <div class="mo" id="tech-productivity-summary-mo">
+                <div class="md tech-productivity-modal" role="dialog" aria-modal="true" style="max-width:540px;">
+                    <div id="tech-productivity-modal-body"></div>
+                </div>
+            </div>
+        `);
+        modal = document.getElementById('tech-productivity-summary-mo');
+        modal.addEventListener('click', e => { if (e.target === modal) CM('tech-productivity-summary-mo'); });
+    }
+
+    let statusNote = '';
+    if (pct === 100 && (totalDetails > 0 || totalStops > 0)) {
+        statusNote = '<strong>Jornada completada con éxito.</strong> Todos los detalles y paradas programadas para esta fecha han sido atendidos satisfactoriamente.';
+    } else if (highPriorityCount > 0) {
+        statusNote = `<strong>Atención prioritaria:</strong> Tienes ${highPriorityCount} detalle(s) de prioridad alta pendientes de atención. Se recomienda resolverlos a la brevedad.`;
+    } else if (pct >= 50) {
+        statusNote = '<strong>Buen ritmo de avance:</strong> Has superado la mitad de los servicios programados para hoy.';
+    } else {
+        statusNote = '<strong>Jornada en curso:</strong> Revisa tu agenda para continuar con las paradas y detalles programados.';
+    }
+
+    const body = document.getElementById('tech-productivity-modal-body');
+    body.innerHTML = `
+        <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;">
+            <div>
+                <span style="font-size:11px;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:0.04em;">Desempeño y Productividad</span>
+                <h2 style="margin:2px 0 0;font-size:20px;color:#0f172a;">Resumen Diario de Campo</h2>
+                <small style="color:#64748b;">${escapeHtml(techName)} · ${escapeHtml(dateFormatted)}</small>
+            </div>
+            <button class="btn bgh" type="button" onclick="CM('tech-productivity-summary-mo')" style="padding:6px 12px;font-size:12px;font-weight:700;">Cerrar</button>
+        </div>
+
+        <div style="background:linear-gradient(135deg, #0284c7 0%, #0369a1 100%);color:#fff;border-radius:16px;padding:20px;text-align:center;margin-bottom:16px;box-shadow:0 8px 20px rgba(2,132,199,0.18);">
+            <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.9;">Nivel de Avance Registrado</div>
+            <div style="font-size:44px;font-weight:900;line-height:1.1;margin:6px 0;">${pct}%</div>
+            <div style="font-size:13px;opacity:0.95;">${completedDetails} de ${totalDetails} detalles concluidos</div>
+            <div style="margin-top:12px;background:rgba(255,255,255,0.2);height:8px;border-radius:999px;overflow:hidden;">
+                <div style="width:${pct}%;background:#22c55e;height:100%;transition:width 0.4s ease;"></div>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;">
+                <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;">Pueblos Asignados</div>
+                <div style="font-size:20px;font-weight:800;color:#0f172a;margin-top:3px;">${completedStops} / ${totalStops}</div>
+                <small style="font-size:11px;color:#64748b;">${totalStops - completedStops} restantes</small>
+            </div>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;">
+                <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;">Detalles de Servicio</div>
+                <div style="font-size:20px;font-weight:800;color:#0f172a;margin-top:3px;">${completedDetails} / ${totalDetails}</div>
+                <small style="font-size:11px;color:#64748b;">${pendingDetails} pendientes</small>
+            </div>
+            <div style="background:${highPriorityCount > 0 ? '#fff7ed' : '#f0fdf4'};border:1px solid ${highPriorityCount > 0 ? '#fdba74' : '#bbf7d0'};border-radius:12px;padding:12px 14px;">
+                <div style="font-size:11px;font-weight:800;color:${highPriorityCount > 0 ? '#c2410c' : '#15803d'};text-transform:uppercase;">Prioridad Alta</div>
+                <div style="font-size:20px;font-weight:800;color:${highPriorityCount > 0 ? '#ea580c' : '#16a34a'};margin-top:3px;">${highPriorityCount}</div>
+                <small style="font-size:11px;color:${highPriorityCount > 0 ? '#9a3412' : '#166534'};">${highPriorityCount > 0 ? 'Requieren atención' : 'Al día'}</small>
+            </div>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;">
+                <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;">Material de Campo</div>
+                <div style="font-size:14px;font-weight:800;color:#0f172a;margin-top:5px;">${pendingDispatches.length ? 'Entregas pendientes' : 'En orden'}</div>
+                <small style="font-size:11px;color:#64748b;">${pendingDispatches.length ? `${pendingDispatches.length} por confirmar` : 'Sin pendientes'}</small>
+            </div>
+        </div>
+
+        <div style="background:#f1f5f9;border-left:4px solid #0284c7;border-radius:8px;padding:10px 14px;font-size:12px;color:#334155;line-height:1.45;margin-bottom:16px;">
+            ${statusNote}
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:8px;">
+            ${pendingDispatches.length ? `<button type="button" class="btn bg2" onclick="CM('tech-productivity-summary-mo');checkTechnicianPendingMaterialPrompt();">Ver material pendiente</button>` : ''}
+            <button type="button" class="btn bgh" onclick="CM('tech-productivity-summary-mo')">Cerrar resumen</button>
+        </div>
+    `;
+    OM('tech-productivity-summary-mo');
+}
+
+function checkAndTriggerTechnicianProductivityBriefings() {
+    if (!isTechnicianPlanView()) return;
+    const todayKey = localDateKey();
+    const allStops = getPlanStopsForView('general');
+    const dayStops = allStops.filter(s => (s.scheduledDate || '') === todayKey);
+    const dayDetails = [];
+    dayStops.forEach(s => {
+        getStopDetails(s).forEach(d => dayDetails.push(d));
+        getStopResolvedHistory(s).forEach(d => dayDetails.push(d));
+    });
+    const uniqueDetailsMap = new Map();
+    dayDetails.forEach(d => uniqueDetailsMap.set(d.id, d));
+    const uniqueDetails = Array.from(uniqueDetailsMap.values());
+
+    const isDone = d => ['completada', 'no_realizado'].includes(d.status || '');
+    const completedDetails = uniqueDetails.filter(isDone).length;
+    const totalDetails = uniqueDetails.length;
+    const completedStops = dayStops.filter(s => {
+        const prog = getStopProgress(s);
+        return prog.complete || s.adminReleasedAt;
+    }).length;
+    const totalStops = dayStops.length;
+    const highPriorityCount = uniqueDetails.filter(d => !isDone(d) && (
+        String(d.priority || '').toLowerCase() === 'alta' ||
+        String(d.priority || '').toLowerCase() === 'urgente'
+    )).length;
+    const pct = totalDetails > 0 ? Math.round((completedDetails / totalDetails) * 100) : (totalStops > 0 ? (completedStops === totalStops ? 100 : Math.round((completedStops / totalStops) * 100)) : 100);
+
+    const now = new Date();
+    const hour = now.getHours();
+
+    // 1. Resumen Matutino (8:00 AM en adelante)
+    const morningKey = `tech_brief_morning_${todayKey}`;
+    if (hour >= 8 && !localStorage.getItem(morningKey)) {
+        if (totalStops > 0 || totalDetails > 0) {
+            if (typeof addNotificationToInbox === 'function') {
+                addNotificationToInbox({
+                    id: `morning_brief_${todayKey}`,
+                    title: 'Resumen matutino de ruta',
+                    message: `Buen día. Tienes asignados ${totalStops} pueblo(s) con ${totalDetails} detalle(s) programados para hoy${highPriorityCount > 0 ? ` (${highPriorityCount} con prioridad alta)` : ''}. Consulta el orden en tu agenda.`,
+                    type: 'productivity',
+                    isProductivity: true,
+                    createdAt: new Date().toISOString()
+                });
+            }
+            localStorage.setItem(morningKey, '1');
+            if (typeof renderNotificationCenter === 'function') renderNotificationCenter();
+            updateTechnicianMobileBellBadge();
+        }
+    }
+
+    // 2. Cierre de Jornada (6:00 PM / 18:00 en adelante)
+    const eveningKey = `tech_brief_evening_${todayKey}`;
+    if (hour >= 18 && !localStorage.getItem(eveningKey)) {
+        if (totalStops > 0 || totalDetails > 0) {
+            if (typeof addNotificationToInbox === 'function') {
+                addNotificationToInbox({
+                    id: `evening_brief_${todayKey}`,
+                    title: 'Cierre de jornada técnica',
+                    message: `Resumen de actividades: Has concluido ${completedDetails} de ${totalDetails} detalle(s) (${pct}%) en ${totalStops} pueblo(s). Tu avance registrado hoy es del ${pct}%.`,
+                    type: 'productivity',
+                    isProductivity: true,
+                    createdAt: new Date().toISOString()
+                });
+            }
+            localStorage.setItem(eveningKey, '1');
+            if (typeof renderNotificationCenter === 'function') renderNotificationCenter();
+            updateTechnicianMobileBellBadge();
+        }
+    }
+}
+
 function renderPlanKpis() {
     const today = typeof localDateKey === 'function' ? localDateKey() : new Date().toISOString().slice(0,10);
     const allStops = getPlanStops('general');
@@ -1264,33 +1588,9 @@ function renderPlanKpis() {
     const setTechKpi = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
 
     if (isTechnicianPlanView()) {
-        const dayDetails = collectDetails(stops);
-        const generalDetails = collectDetails(allStops);
-        const isDone = detail => ['completada', 'no_realizado'].includes(detail.status || '');
-        const dayDone = dayDetails.filter(isDone).length;
-        const dayPending = Math.max(0, dayDetails.length - dayDone);
-        const generalDone = generalDetails.filter(isDone).length;
-        const generalPending = Math.max(0, generalDetails.length - generalDone);
-        const kpiBar = document.querySelector('.plan-kpi-bar');
-        if (kpiBar) {
-            kpiBar.classList.toggle('tech-summary-general', technicianSummaryMode === 'general');
-            kpiBar.classList.toggle('tech-summary-day', technicianSummaryMode !== 'general');
-            kpiBar.innerHTML = technicianSummaryMode === 'general' ? `
-                <div class="plan-kpi kpi-total"><span class="plan-kpi-icon">&#10003;</span><span class="plan-kpi-copy"><strong>${generalDetails.length}</strong><small>detalles totales</small></span></div>
-                <div class="plan-kpi kpi-pending"><span class="plan-kpi-icon">&#9675;</span><span class="plan-kpi-copy"><strong>${generalPending}</strong><small>detalles faltantes</small></span></div>
-                <div class="plan-kpi kpi-done"><span class="plan-kpi-icon">&#10003;</span><span class="plan-kpi-copy"><strong>${generalDone}</strong><small>detalles completados</small></span></div>
-                <div class="plan-kpi kpi-stops"><span class="plan-kpi-icon">&#9679;</span><span class="plan-kpi-copy"><strong>${allStops.length}</strong><small>paradas totales</small></span></div>` : `
-                <div class="plan-kpi kpi-total"><span class="plan-kpi-icon">&#10003;</span><span class="plan-kpi-copy"><strong>${dayDetails.length}</strong><small>detalles del día</small></span></div>
-                <div class="plan-kpi kpi-pending"><span class="plan-kpi-icon">&#9675;</span><span class="plan-kpi-copy"><strong>${dayPending}</strong><small>faltantes del día</small></span></div>
-                <div class="plan-kpi kpi-done"><span class="plan-kpi-icon">&#10003;</span><span class="plan-kpi-copy"><strong>${dayDone}</strong><small>completados del día</small></span></div>`;
-            kpiBar.style.setProperty('display', 'grid', 'important');
-            kpiBar.style.setProperty('grid-template-columns', technicianSummaryMode === 'general' ? 'repeat(4,minmax(0,1fr))' : 'repeat(3,minmax(0,1fr))', 'important');
-            kpiBar.style.setProperty('overflow-x', 'visible', 'important');
-            kpiBar.querySelectorAll('.plan-kpi').forEach(card => {
-                card.style.setProperty('grid-column', 'auto', 'important');
-                card.style.setProperty('grid-row', 'auto', 'important');
-            });
-        }
+        updateTechnicianProgressCard();
+        checkAndTriggerTechnicianProductivityBriefings();
+        updateTechnicianMobileBellBadge();
         return;
     }
     const uniqueById = new Map();
@@ -1469,6 +1769,7 @@ function renderStopCard(stop, day, index) {
     return `
         <div class="stop-card ${stop.type === 'manual' ? 'manual' : ''} ${doneClass}" data-stop-id="${escapeAttr(stop.id)}" data-stop-day="${escapeAttr(day)}" ondragover="allowPlanStopDrop(event)" ondragleave="clearPlanStopDrop(event)" ondrop="dropPlanStop(event,'${escapeAttr(day)}','${escapeAttr(stop.id)}')">
             <div class="stop-card-heading"><div class="stop-heading-copy"><div class="stop-title clickable-stop-title" title="${escapeAttr(technicianStopName)}" onclick="togglePlanStopDetails('${escapeAttr(stop.id)}')">${escapeHtml(isTechnicianPlanView() ? technicianStopName : (stop.name || eq?.name || node?.name || 'Parada'))}</div><div class="stop-meta">${stop.type === 'manual' ? 'Comunidad / punto manual' : (stop.type === 'node' ? 'Nodo vinculado' : 'Antena registrada')}${lat && lng ? ` · ${lat}, ${lng}` : ''}</div></div>${isPlanReadOnly() ? '' : `<span class="stop-drag-handle" draggable="true" role="button" tabindex="0" title="Arrastra para cambiar el orden" aria-label="Arrastra para cambiar el orden" ondragstart="startPlanStopDrag(event,'${escapeAttr(day)}','${escapeAttr(stop.id)}')" ondragend="endPlanStopDrag()">&#8942;</span>`}</div>
+            ${isTechnicianPlanView() && (lat && lng) ? `<a class="tech-nav-direction-btn" href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" rel="noopener"><svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg> Navegar al pueblo</a>` : ''}
             ${isTechnicianPlanView() && antennaLocationUrl ? `<a class="order-location-link tech-antenna-location" href="${escapeAttr(antennaLocationUrl)}" target="_blank" rel="noopener">Abrir ubicación de la antena</a>` : ''}
             <div class="stop-state-row">
                 <span class="badge ${adminStatus.cls}">${adminStatus.text}</span>
@@ -2130,8 +2431,9 @@ function getIncompleteReason(message) {
 
 async function reportPlanDetailIncomplete(detailId, stopId) {
     if (!isTechnicianPlanView()) return;
-    const reason = await getIncompleteReason('Escribe por qué no terminaste este detalle.');
+    const reason = await getIncompleteReason('Escribe el motivo por el cual no se concluyó este detalle de servicio:');
     if (!reason) return;
+    if (!window.confirm('¿Confirma el registro de este detalle como no realizado en la visita actual?')) return;
     const detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
     const stop = getPlanStops('general').find(item => item.id === stopId && !item.deletedAt);
     if (!detail || !stop) return;
@@ -2149,15 +2451,16 @@ async function reportPlanDetailIncomplete(detailId, stopId) {
     syncStopCompletion(stop);
     stop.updatedAt = now;
     const saved = await saveDB();
-    if (!saved) return notify('No se pudo guardar el reporte.', 'err');
+    if (!saved) return notify('No se pudo guardar el reporte en la nube.', 'err');
     renderPlan();
-    notify('Motivo guardado. Cuenta como atendido y todavía puedes terminar el detalle después.');
+    notify('Se ha registrado el motivo de no conclusión. El detalle permanece disponible para su posterior atención.', 'ok');
 }
 
 async function reportWholeStopIncomplete(stopId) {
     if (!isTechnicianPlanView()) return;
-    const reason = await getIncompleteReason('Escribe por qué no terminaste esta parada completa.');
+    const reason = await getIncompleteReason('Escribe el motivo por el cual no se pudo concluir esta parada completa:');
     if (!reason) return;
+    if (!window.confirm('¿Confirma reprogramar esta parada para continuar el día de mañana?')) return;
     const stop = getPlanStops('general').find(item => item.id === stopId && !item.deletedAt);
     if (!stop) return;
     const now = new Date().toISOString();
@@ -2173,9 +2476,9 @@ async function reportWholeStopIncomplete(stopId) {
         detail.updatedAt = now;
     });
     const saved = await saveDB();
-    if (!saved) return notify('No se pudo guardar el reporte.', 'err');
+    if (!saved) return notify('No se pudo guardar el reporte en la nube.', 'err');
     renderPlan();
-    notify('Motivo guardado. La parada completa continuará mañana.');
+    notify('La parada completa ha sido reprogramada para continuar el día de mañana.', 'ok');
 }
 
 async function assignGeneralPlanDate(value) {
@@ -2294,12 +2597,16 @@ function renderPlanDetailRow(detail, stop, day, historical = false) {
     const technicianLocation = detail.detailLocation
         || detail.technicianReport?.location
         || ((!isNaN(safeFloat(detail.lat)) && !isNaN(safeFloat(detail.lng))) ? `${detail.lat}, ${detail.lng}` : '');
+    const rawPhone = String(detail.clientPhone || detail.phone || detail.technicianReport?.phone || '').replace(/\D/g, '');
+    const phoneCallBtn = (isTechnicianPlanView() && rawPhone)
+        ? `<a href="tel:${escapeAttr(rawPhone)}" class="tech-call-btn" title="Llamar al cliente"><svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> Llamar</a>`
+        : '';
     const technicianActions = isTechnicianPlanView()
         ? (done
-            ? `<button type="button" class="btn bsm tech-detail-edit" onclick="openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Editar terminado</button>`
+            ? `${phoneCallBtn}<button type="button" class="btn bsm tech-detail-edit" onclick="openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Editar solución</button>`
             : (noDone
-                ? `<button type="button" class="btn bsm bg2 tech-detail-finish tech-detail-finish-later" onclick="openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Terminar detalle</button>`
-                : `<button type="button" class="btn bsm bg2 tech-detail-finish" onclick="openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Terminar</button><button type="button" class="btn bsm ba tech-detail-incomplete" onclick="reportPlanDetailIncomplete('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}')">No terminado</button>`))
+                ? `${phoneCallBtn}<button type="button" class="btn bsm bg2 tech-detail-finish tech-detail-finish-later" onclick="openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Concluir detalle</button>`
+                : `${phoneCallBtn}<button type="button" class="btn bsm bg2 tech-detail-finish" onclick="openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Concluir detalle</button><button type="button" class="btn bsm ba tech-detail-incomplete" onclick="reportPlanDetailIncomplete('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}')">No realizado</button>`))
         : '';
     const statusLine = done
         ? `<div class="detail-status-line"><span class="detail-folio">${escapeHtml(getDetailFolio(detail))}</span><span class="plan-category-badge category-${escapeAttr(category)}">${escapeHtml(planCategoryLabel(category))}</span></div>`
@@ -4898,6 +5205,12 @@ async function saveTechnicianCompletion() {
     if (!coordinates || Math.abs(Number(coordinates[1])) > 90 || Math.abs(Number(coordinates[2])) > 180) return notify('Escribe coordenadas válidas, por ejemplo: 18.09563, -99.19604.', 'err');
     if (!workDone) return notify('Describe qué se hizo en el detalle.', 'err');
     if (!technicianCompletionPhotos.length) return notify('Debes agregar al menos una evidencia fotográfica.', 'err');
+
+    const confirmMsg = editingCompleted
+        ? '¿Confirma que desea guardar las modificaciones realizadas al reporte de este servicio?'
+        : '¿Confirma que este detalle de servicio ha sido solucionado satisfactoriamente?';
+    if (!window.confirm(confirmMsg)) return;
+
     const now = new Date().toISOString();
     const actor = getCurrentUser();
     detail.clientName = clientName;
@@ -4938,7 +5251,7 @@ async function saveTechnicianCompletion() {
     technicianCompletionDetailId = '';
     renderPlan();
     openTechnicianCompletionSummary(detail);
-    if (editingCompleted) notify(`Detalle actualizado. Modificado: ${formatPlanDateTime(now)}.`);
+    notify(editingCompleted ? `Reporte de solución actualizado satisfactoriamente (${formatPlanDateTime(now)}).` : 'Detalle concluido y reporte registrado satisfactoriamente.', 'ok');
 }
 
 function openTechnicianCompletionSummary(detail) {
@@ -5181,7 +5494,7 @@ async function shareTechnicianCompletion(detailId) {
 function openTechnicianAddMenu() {
     let modal = document.getElementById('tech-add-menu-mo');
     if (!modal) {
-        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-add-menu-mo"><div class="md tech-add-menu-card"><div class="tech-installation-head"><div><div class="mt2">¿Qué quieres agregar?</div><small>Selecciona el tipo de registro.</small></div><button class="btn bsm bgh" onclick="CM('tech-add-menu-mo')">Cerrar</button></div><div class="tech-add-menu-options"><button type="button" onclick="CM('tech-add-menu-mo');openTechnicianInstallationForm('installation')"><span>＋</span><strong>Instalación nueva</strong><small>Registrar una orden nueva con folio NEW.</small></button><button type="button" onclick="CM('tech-add-menu-mo');openTechnicianInstallationForm('detail')"><span>✓</span><strong>Agregar detalle</strong><small>Guardar un trabajo completado en una parada.</small></button></div></div></div>`);
+        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-add-menu-mo"><div class="md tech-add-menu-card"><div class="tech-installation-head"><div><div class="mt2">¿Qué quieres agregar?</div><small>Selecciona el tipo de registro.</small></div><button class="btn bsm bgh" onclick="CM('tech-add-menu-mo')">Cerrar</button></div><div class="tech-add-menu-options"><button type="button" onclick="CM('tech-add-menu-mo');openTechnicianInstallationForm('installation')"><svg class="tech-btn-svg" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><strong>Instalación nueva</strong><small>Registrar una orden nueva con folio NEW.</small></button><button type="button" onclick="CM('tech-add-menu-mo');openTechnicianInstallationForm('detail')"><svg class="tech-btn-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg><strong>Agregar detalle</strong><small>Guardar un trabajo completado en una parada.</small></button></div></div></div>`);
         modal = document.getElementById('tech-add-menu-mo');
     }
     setTechnicianNavActive(2);
@@ -5192,7 +5505,7 @@ function openTechnicianInstallationForm(mode = 'installation') {
     technicianNewEntryMode = mode === 'detail' ? 'detail' : 'installation';
     let modal = document.getElementById('tech-installation-mo');
     if (!modal) {
-        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-installation-mo"><div class="md tech-installation-modal"><div class="tech-installation-head"><div><div class="mt2">Nueva instalación</div><small id="tech-installation-day-label">Captura los datos y agrega evidencia fotográfica.</small></div><button class="btn bsm bgh" type="button" onclick="CM('tech-installation-mo')">Cerrar</button></div><div class="row2"><div class="fi"><label>Nombre de la persona</label><input id="tech-install-client" placeholder="Nombre completo"></div><div class="fi"><label>Número telefónico</label><input id="tech-install-phone" type="tel" inputmode="tel" placeholder="Ej. 747 123 4567"></div></div><div class="fi"><label>Dirección o ubicación</label><input id="tech-install-location" placeholder="Calle, colonia o enlace de Maps"></div><div class="fi"><label>Pueblo o comunidad</label><input id="tech-install-town" list="tech-install-town-options" placeholder="Selecciona una sugerencia o escribe otra localidad"><datalist id="tech-install-town-options"></datalist><small id="tech-install-town-help">Sugerencias basadas en las actividades del día.</small></div><div class="fi"><label>Descripción de la instalación <span class="optional-label">Opcional</span></label><textarea id="tech-install-detail" rows="4" placeholder="Equipo requerido, referencias u observaciones (opcional)"></textarea></div><div class="tech-evidence-box"><strong>Evidencia fotográfica</strong><small>Toma fotografías o selecciónalas desde el celular. Máximo 6.</small><div class="tech-evidence-actions"><label class="btn bc">📷 Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianInstallationPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">▣ Subir fotos<input type="file" accept="image/*" multiple onchange="addTechnicianInstallationPhotos(this.files);this.value=''" hidden></label></div><div id="tech-install-evidence-preview" class="tech-install-evidence-preview"></div></div><button class="btn bc bfu" type="button" onclick="saveTechnicianInstallation()">Guardar nueva instalación</button></div></div>`);
+        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-installation-mo"><div class="md tech-installation-modal"><div class="tech-installation-head"><div><div class="mt2">Nueva instalación</div><small id="tech-installation-day-label">Captura los datos y agrega evidencia fotográfica.</small></div><button class="btn bsm bgh" type="button" onclick="CM('tech-installation-mo')">Cerrar</button></div><div class="row2"><div class="fi"><label>Nombre de la persona</label><input id="tech-install-client" placeholder="Nombre completo"></div><div class="fi"><label>Número telefónico</label><input id="tech-install-phone" type="tel" inputmode="tel" placeholder="Ej. 747 123 4567"></div></div><div class="fi"><label>Dirección o ubicación</label><input id="tech-install-location" placeholder="Calle, colonia o enlace de Maps"></div><div class="fi"><label>Pueblo o comunidad</label><input id="tech-install-town" list="tech-install-town-options" placeholder="Selecciona una sugerencia o escribe otra localidad"><datalist id="tech-install-town-options"></datalist><small id="tech-install-town-help">Sugerencias basadas en las actividades del día.</small></div><div class="fi"><label>Descripción de la instalación <span class="optional-label">Opcional</span></label><textarea id="tech-install-detail" rows="4" placeholder="Equipo requerido, referencias u observaciones (opcional)"></textarea></div><div class="tech-evidence-box"><strong>Evidencia fotográfica</strong><small>Toma fotografías o selecciónalas desde el celular. Máximo 6.</small><div class="tech-evidence-actions"><label class="btn bc">Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianInstallationPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">Subir fotos<input type="file" accept="image/*" multiple onchange="addTechnicianInstallationPhotos(this.files);this.value=''" hidden></label></div><div id="tech-install-evidence-preview" class="tech-install-evidence-preview"></div></div><button class="btn bc bfu" type="button" onclick="saveTechnicianInstallation()">Guardar nueva instalación</button></div></div>`);
         modal = document.getElementById('tech-installation-mo');
     }
     const installationPhone = document.getElementById('tech-install-phone');

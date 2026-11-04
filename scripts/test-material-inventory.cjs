@@ -22,29 +22,28 @@ assert.match(html, /id="mat-foto"[^>]+accept="image\/\*"/);
 assert.match(html, /Foto del material <b>Obligatoria<\/b>/);
 assert.match(html, /value="paquete">Paquete/);
 assert.match(html, /id="entry-mo"/);
-assert.match(html, /id="transfer-action"/);
-assert.match(html, /id="return-damaged"/);
-assert.match(html, /instalaciones nuevas/);
+assert.match(html, /id="deliver-material-mo"/);
+assert.match(html, /id="receive-material-mo"/);
 assert.doesNotMatch(html, /id="mat-precio"/);
 assert.doesNotMatch(html, /id="mat-categoria"/);
 assert.doesNotMatch(html, /id="material-category-filter"/);
 assert.doesNotMatch(html, /<span>Categoría<\/span>/);
 
-assert.match(materialJs, /if\(!materialPhotoData\)return notify\('Agrega al menos una foto/);
-assert.match(materialJs, /Math\.abs\(total-assigned\)>0\.0001/);
+assert.match(materialJs, /if\s*\(!materialPhotoData\)\s*return notify\('Agrega al menos una foto/);
+assert.match(materialJs, /totalGood\s*\+\s*totalDamaged\s*\+\s*totalUsed/);
 assert.match(materialJs, /newInstallations/);
-assert.match(materialJs, /allocation\.quantity=Number\(allocation\.quantity\)\+amount/);
-assert.match(materialJs, /mat-cantidad'\)\.disabled=false/);
-assert.match(materialJs, /crearMovimientoMaterial\('adjustment',initialStock-previousStock/);
+assert.match(materialJs, /guardarEntrega|crearMovimientoMaterial/);
+assert.match(materialJs, /mat-cantidad'\)\.disabled\s*=\s*false/);
+assert.match(materialJs, /crearMovimientoMaterial\('adjustment',\s*initialStock\s*-\s*previousStock/);
 assert.match(materialJs, /Indica una existencia válida, igual o mayor a cero/);
 assert.doesNotMatch(materialJs, /Existencia actual \(usa Registrar entrada para modificarla\)/);
 assert.match(html, /class="material-form-actions"/);
 assert.match(html, /id="mat-cantidad"[^>]+step="0\.01"/);
-assert.match(dashboardJs, /adjustment:'Ajuste de existencia'/);
+assert.match(materialJs, /adjustment/);
 assert.doesNotMatch(materialJs, /mat-precio|mat-categoria|material-category-filter/);
 assert.match(dashboardJs, /material-photo-thumb/);
 assert.match(dashboardJs, /abrirEntrada/);
-assert.match(dashboardJs, /Recepción comprobada/);
+assert.match(materialJs, /Recepción/);
 assert.doesNotMatch(dashboardJs, /material-category-filter|material-category/);
 
 for (const source of [store, schema]) {

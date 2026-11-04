@@ -34,10 +34,10 @@
     <section class="hero-panel compact-hero users-hero">
       <div><div class="section-chip">Usuarios / Seguridad</div>
       <h1>Gestión de usuarios y roles</h1>
-      <p>Registra administradores, atención a clientes y técnicos con su rol, acceso y zonas asignadas.</p></div>
+      <p>Registra administradores, soporte, atención a clientes y técnicos con su rol, acceso y zonas asignadas.</p></div>
       <div class="stats-grid compact-stats users-stats">
         <div class="stat-card"><span class="users-stat-icon">&#9673;</span><div><div class="label">Usuarios</div><strong id="user-total">0</strong></div></div>
-        <div class="stat-card"><span class="users-stat-icon">&#9638;</span><div><div class="label">Roles</div><strong>3</strong></div></div>
+        <div class="stat-card"><span class="users-stat-icon">&#9638;</span><div><div class="label">Roles</div><strong>4</strong></div></div>
       </div>
     </section>
 
@@ -48,6 +48,7 @@
         <select id="user-filter-role" class="search-input" style="max-width:240px" onchange="resetUserPagination()">
           <option value="all">Todos los roles</option>
           <option value="administrador">Administrador</option>
+          <option value="soporte">Soporte</option>
           <option value="atencion_clientes">Atención a clientes</option>
           <option value="tecnico">Técnico</option>
         </select>
@@ -74,7 +75,7 @@
           <div class="fi"><label>Contraseña</label><input id="user-password" placeholder="********"></div>
         </div>
         <div class="modal-grid">
-          <div class="fi"><label>Rol</label><select id="user-role"><option value="administrador">Administrador</option><option value="atencion_clientes">Atención a clientes</option><option value="tecnico">Técnico</option></select></div>
+          <div class="fi"><label>Rol</label><select id="user-role"><option value="administrador">Administrador</option><option value="soporte">Soporte</option><option value="atencion_clientes">Atención a clientes</option><option value="tecnico">Técnico</option></select></div>
           <div class="fi"><label>Estatus</label><select id="user-status"><option value="activo">Activo</option><option value="inactivo">Inactivo</option></select></div>
         </div>
         <div class="fi"><label>Zonas</label><select id="user-zones" multiple style="height:140px"></select></div>

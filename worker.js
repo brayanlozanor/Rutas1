@@ -122,8 +122,8 @@ function forbidden(requestId) {
 }
 
 function sanitizeDataForSession(data,session) {
-  if (!data||typeof data!=='object'||hasRole(session,'administrador','admin')) return data;
-  if (Array.isArray(data.users)) data.users=hasRole(session,'atencion_clientes')?data.users.filter(user=>['tecnico','administrador','admin'].includes(String(user.role||'').toLowerCase())):data.users.filter(user=>String(user.id||'')===String(session.sub||''));
+  if (!data||typeof data!=='object'||hasRole(session,'administrador','admin','soporte')) return data;
+  if (Array.isArray(data.users)) data.users=hasRole(session,'atencion_clientes')?data.users.filter(user=>['tecnico','administrador','admin','soporte'].includes(String(user.role||'').toLowerCase())):data.users.filter(user=>String(user.id||'')===String(session.sub||''));
   if (Array.isArray(data.auditLog)) data.auditLog=hasRole(session,'atencion_clientes')?data.auditLog.filter(item=>String(item.byRole||'').toLowerCase()==='tecnico'):data.auditLog.filter(item=>String(item.byId||'')===String(session.sub||''));
   return data;
 }
@@ -316,16 +316,16 @@ export default {
       }
 
       if (request.method === 'POST' && url.pathname === '/api/work-orders/review-exit') {
-        if (!hasRole(session,'administrador','admin')) return forbidden(requestId);
+        if (!hasRole(session,'administrador','admin','soporte')) return forbidden(requestId);
         const body = await request.json();
         const result = await recordWorkOrderReviewExit(env,body?.orderId,{id:session.sub,name:session.name,username:session.username});
         return json({ok:true,...result});
       }
 
       if (request.method === 'POST' && url.pathname === '/api/data') {
-        if (!hasRole(session,'administrador','admin')) return forbidden(requestId);
+        if (!hasRole(session,'administrador','admin','soporte')) return forbidden(requestId);
         const body = await request.json();
-        if(Object.prototype.hasOwnProperty.call(body||{},'users')&&!isPrincipalAdministrator(session)) return forbidden(requestId);
+        if(Object.prototype.hasOwnProperty.call(body||{},'users')&&!hasRole(session,'administrador','admin')) return forbidden(requestId);
         const time = await saveFullState(env, body || {});
         return json({ ok:true,time });
       }
@@ -337,15 +337,15 @@ export default {
         if (!LIST_KEYS.has(listKey) || !record || typeof record !== 'object' || !record.id) {
           return json({ ok:false,error:'Parametros invalidos',errorType:'DATOS_INVALIDOS',errorCode:'INVALID_RECORD',requestId },400);
         }
-        if (listKey === 'users' && !isPrincipalAdministrator(session)) return forbidden(requestId);
+        if (listKey === 'users' && !hasRole(session,'administrador','admin')) return forbidden(requestId);
         const result = await upsertRecord(env,listKey,record);
         return json({ ok:true,time:result.time,record:result.record });
       }
 
       if (request.method === 'POST' && url.pathname === '/api/delete-record') {
-        if (!hasRole(session,'administrador','admin')) return forbidden(requestId);
+        if (!hasRole(session,'administrador','admin','soporte')) return forbidden(requestId);
         const body=await request.json();
-        if(String(body?.listKey||'')==='users'&&!isPrincipalAdministrator(session)) return forbidden(requestId);
+        if(String(body?.listKey||'')==='users'&&!hasRole(session,'administrador','admin')) return forbidden(requestId);
         const time=await deleteRecord(env,String(body?.listKey||''),String(body?.id||''));
         return json({ok:true,time});
       }
@@ -358,13 +358,13 @@ export default {
 
       if (request.method === 'POST' && url.pathname === '/api/changes') {
         const body = await request.json();
-        if (!isPrincipalAdministrator(session) && (body?.changes||[]).some(change=>String(change?.key||'')==='users')) return forbidden(requestId);
+        if (!hasRole(session,'administrador','admin') && (body?.changes||[]).some(change=>String(change?.key||'')==='users')) return forbidden(requestId);
         const result = await applyChanges(env,body?.changes||[]);
         return json({ ok:true,time:result.time,touched:result.touched });
       }
 
       if (request.method === 'POST' && url.pathname === '/api/plans/delete') {
-        if (!hasRole(session,'administrador','admin')) return forbidden(requestId);
+        if (!hasRole(session,'administrador','admin','soporte')) return forbidden(requestId);
         const body = await request.json();
         const ids = Array.isArray(body?.ids) ? body.ids : [];
         if (!ids.length) return json({ ok:false,error:'Debes indicar al menos un plan',errorType:'DATOS_INVALIDOS',errorCode:'MISSING_PLAN_IDS',requestId },400);

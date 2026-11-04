@@ -6,8 +6,30 @@
 })();
 
 const ROLE_PAGE_ACCESS = {
-    atencion_clientes: new Set(['dashboard.html', 'mapa.html', 'nodos.html', 'planificar.html', 'ordenes.html', 'historial.html', '']),
-    tecnico: new Set(['planificar.html', 'login.html', 'material.html'])
+    soporte: new Set([
+        'dashboard.html',
+        'mapa.html',
+        'antenas.html',
+        'nodos.html',
+        'planificar.html',
+        'ordenes.html',
+        'material.html',
+        'historial.html',
+        'rutas.html',
+        'login.html',
+        ''
+    ]),
+    atencion_clientes: new Set([
+        'dashboard.html',
+        'mapa.html',
+        'nodos.html',
+        'planificar.html',
+        'ordenes.html',
+        'historial.html',
+        'login.html',
+        ''
+    ]),
+    tecnico: new Set(['planificar.html', 'login.html'])
 };
 
 function getCurrentUser() {
@@ -19,7 +41,12 @@ function getCurrentUser() {
 }
 
 function normalizeRole(role) {
-    return String(role || '').trim().toLowerCase();
+    const raw = String(role || '').trim().toLowerCase();
+    if (raw === 'admin' || raw === 'administrador') return 'administrador';
+    if (raw === 'soporte') return 'soporte';
+    if (raw === 'atencion' || raw === 'atencion_clientes' || raw === 'atencion a clientes' || raw === 'atencion_a_clientes') return 'atencion_clientes';
+    if (raw === 'tecnico') return 'tecnico';
+    return raw;
 }
 
 function repairDisplayText(value) {
@@ -73,15 +100,20 @@ function userHasRole(...roles) {
 }
 
 function isPrincipalAdministratorClient() {
-    const user=getCurrentUser();
-    return userHasRole('administrador','admin')&&normalizeName(user.username)==='abraham';
+    return userHasRole('administrador', 'admin');
 }
 
 function canAccessCurrentPage() {
     const role = normalizeRole(getCurrentUser().role);
+    const currentPage = getCurrentPageName();
+    if (currentPage === 'tecnicos.html') {
+        // Solo el rol administrador puede acceder a la gestión de usuarios
+        return role === 'administrador';
+    }
+    if (role === 'administrador') return true;
     const allowed = ROLE_PAGE_ACCESS[role];
     if (!allowed) return true;
-    return allowed.has(getCurrentPageName());
+    return allowed.has(currentPage);
 }
 
 function checkAuth() {
@@ -94,7 +126,7 @@ function checkAuth() {
     }
     if (!canAccessCurrentPage()) {
         const role = normalizeRole(getCurrentUser().role);
-        window.location.href = role === 'tecnico' ? 'planificar.html' : 'dashboard.html';
+        window.location.href = role === 'tecnico' ? 'planificar.html' : 'mapa.html';
         return false;
     }
     return true;
@@ -783,7 +815,7 @@ function ensureActionConfirmModal() {
     modal.innerHTML = `
         <div class="action-confirm-card" role="dialog" aria-modal="true">
             <div class="action-confirm-icon-wrap danger" id="action-confirm-icon-wrap">
-                <span id="action-confirm-icon">🗑️</span>
+                <span id="action-confirm-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></span>
             </div>
             <div class="action-confirm-copy">
                 <h2 id="action-confirm-title">Confirmar accion</h2>
@@ -813,7 +845,11 @@ function askConfirmation({ title = 'Confirmar accion', message = '', confirmText
     }
     if (cancel) cancel.textContent = cancelText;
     const iconWrap = document.getElementById('action-confirm-icon-wrap');
-    if (icon) icon.textContent = tone === 'ok' ? '✅' : '🗑️';
+    if (icon) {
+        icon.innerHTML = tone === 'ok'
+            ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+            : '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+    }
     if (iconWrap) {
         iconWrap.className = `action-confirm-icon-wrap ${tone === 'ok' ? 'ok' : 'danger'}`;
     }
@@ -984,8 +1020,10 @@ function formatRoleLabel(role) {
     return ({
         administrador: 'Administrador',
         admin: 'Administrador',
-        atencion_clientes: 'Atencion a clientes',
-        tecnico: 'Tecnico'
+        soporte: 'Soporte',
+        atencion_clientes: 'Atención a clientes',
+        atencion: 'Atención a clientes',
+        tecnico: 'Técnico'
     })[normalizeRole(role)] || 'Usuario';
 }
 
@@ -1013,13 +1051,15 @@ function openEvidenceGalleryEncoded(encoded,index=0) {
 }
 
 function hydrateLogoLinks() {
+    const role = normalizeRole(getCurrentUser()?.role);
+    const target = role === 'tecnico' ? 'planificar.html' : 'mapa.html';
     document.querySelectorAll('.logo-link').forEach(el => {
-        el.setAttribute('href', 'mapa.html');
+        el.setAttribute('href', target);
     });
 }
 
 const NAV_ITEMS = [
-    { href: 'dashboard.html', adminOnly: true, icon: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="m3 8 6-5 6 7 6-5"/></svg>', label: 'Dashboard' },
+    { href: 'dashboard.html', icon: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="m3 8 6-5 6 7 6-5"/></svg>', label: 'Dashboard' },
     { href: 'mapa.html', icon: '<svg viewBox="0 0 24 24"><path d="m3 6 5-2 8 3 5-2v13l-5 2-8-3-5 2Z"/><path d="M8 4v13M16 7v13"/></svg>', label: 'Mapa Mikrotiks' },
     { href: 'antenas.html', icon: '<img src="assets/icons/antenna-module-256-v1.png" alt="">', label: 'Antenas' },
     { href: 'nodos.html', icon: '<svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>', label: 'Pueblos' },
@@ -1027,8 +1067,8 @@ const NAV_ITEMS = [
     { href: 'ordenes.html?detailKind=network', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><path d="M12 7v4M5 16v-3h14v3"/></svg>', label: 'Detalles de red' },
     { href: 'ordenes.html?detailKind=physical', icon: '<svg viewBox="0 0 24 24"><path d="M14 6a4 4 0 0 0-5 5L3 17l4 4 6-6a4 4 0 0 0 5-5l-3 3-4-4z"/></svg>', label: 'Detalles físicos' },
     { href: 'material.html', icon: '<svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="m4 7v10l8 4 8-4V7M12 11v10"/></svg>', label: 'Material' },
-    { href: 'historial.html', adminOnly: true, icon: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>', label: 'Historial' },
-    { href: 'tecnicos.html', principalOnly: true, icon: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>', label: 'Usuarios' }
+    { href: 'historial.html', icon: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>', label: 'Historial' },
+    { href: 'tecnicos.html', adminOnly: true, icon: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>', label: 'Usuarios' }
 ];
 
 function buildNavigationHtml() {
@@ -1203,13 +1243,23 @@ function applyModuleVisualIdentity(currentPage = getCurrentPageName()) {
 }
 
 function applyRoleNavigation(role) {
-    const allowed = ROLE_PAGE_ACCESS[role];
+    const norm = normalizeRole(role);
+    const isAdmin = norm === 'administrador';
+    const allowed = ROLE_PAGE_ACCESS[norm];
     document.querySelectorAll('.nav .nb').forEach(link => {
         const fullHref = String(link.getAttribute('href') || '').trim();
         const pageHref = fullHref.split('?')[0].toLowerCase();
         const item = NAV_ITEMS.find(entry => entry.href === fullHref || entry.href.split('?')[0].toLowerCase() === pageHref);
-        const isAdmin = role === 'administrador' || role === 'admin';
-        const canShow = allowed ? allowed.has(pageHref) : ((!item?.adminOnly || isAdmin)&&(!item?.principalOnly||isPrincipalAdministratorClient()));
+        let canShow = false;
+        if (isAdmin) {
+            canShow = true;
+        } else if (item?.adminOnly) {
+            canShow = false;
+        } else if (allowed) {
+            canShow = allowed.has(pageHref);
+        } else {
+            canShow = true;
+        }
         link.hidden = !canShow;
         link.setAttribute('aria-hidden', canShow ? 'false' : 'true');
         link.classList.toggle('role-hidden-nav', !canShow);
@@ -1318,16 +1368,20 @@ function markAllNotificationsAsRead() {
 }
 
 function ensureNotificationCenter() {
-    if (!document.getElementById('notification-bell')) {
-        const btn = document.createElement('button');
+    const isTecnico = typeof userHasRole === 'function' && userHasRole('tecnico');
+    let btn = document.getElementById('notification-bell');
+    if (!btn) {
+        btn = document.createElement('button');
         btn.id = 'notification-bell';
-        btn.className = 'notification-bell floating-notification-bell';
+        btn.className = 'notification-bell floating-notification-bell' + (isTecnico ? ' technician-bell' : '');
         btn.type = 'button';
         btn.setAttribute('aria-label', 'Abrir notificaciones');
-        btn.title = 'Centro de notificaciones';
+        btn.title = isTecnico ? 'Avisos y productividad' : 'Centro de notificaciones';
         btn.onclick = openNotificationPanel;
-        btn.innerHTML = '<span class="notification-bell-icon" aria-hidden="true">🔔</span><span id="notification-count">0</span>';
+        btn.innerHTML = '<span class="notification-bell-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg></span><span id="notification-count">0</span>';
         document.body.appendChild(btn);
+    } else {
+        btn.classList.toggle('technician-bell', isTecnico);
     }
     if (!document.getElementById('notification-panel-mo')) {
         const modal = document.createElement('div');
@@ -1337,8 +1391,8 @@ function ensureNotificationCenter() {
             <div class="md notification-panel" role="dialog" aria-modal="true" style="max-width:620px;">
                 <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
                     <div>
-                        <h2 style="margin:0 0 4px;font-size:20px;">Centro de Notificaciones</h2>
-                        <p id="notification-panel-sub" style="margin:0;color:#64748b;font-size:12px;">Avisos de detalles de red y actividades en tiempo real.</p>
+                        <h2 style="margin:0 0 4px;font-size:20px;">${isTecnico ? 'Notificaciones y Desempeño' : 'Centro de Notificaciones'}</h2>
+                        <p id="notification-panel-sub" style="margin:0;color:#64748b;font-size:12px;">${isTecnico ? 'Avisos de material y resúmenes de tu jornada.' : 'Avisos de detalles de red y actividades en tiempo real.'}</p>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center;">
                         <button class="btn bgh" type="button" style="font-size:11px;padding:4px 9px;" onclick="markAllNotificationsAsRead()">Marcar leídas</button>
@@ -1367,9 +1421,16 @@ function renderNotificationCenter() {
     const list = document.getElementById('notification-list');
     if (!bell) return;
 
+    const isTecnico = typeof userHasRole === 'function' && userHasRole('tecnico');
+    bell.classList.toggle('technician-bell', isTecnico);
+
     const isAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
-    const delReqs = isAdmin && typeof getPendingDeletionRequests === 'function' ? getPendingDeletionRequests() : [];
-    const inbox = getStoredNotificationsInbox();
+    const delReqs = (!isTecnico && isAdmin && typeof getPendingDeletionRequests === 'function') ? getPendingDeletionRequests() : [];
+    const rawInbox = getStoredNotificationsInbox();
+    // Para técnicos: filtrar estrictamente notificaciones de material y productividad; NO mostrar reportes de red
+    const inbox = isTecnico
+        ? rawInbox.filter(x => x.isMaterial || x.category === 'material' || x.type === 'material' || x.isProductivity || x.type === 'productivity')
+        : rawInbox;
     const unreadInbox = inbox.filter(x => x.unread);
 
     const totalUnread = delReqs.length + unreadInbox.length;
@@ -1383,7 +1444,7 @@ function renderNotificationCenter() {
     if (!list) return;
 
     if (!totalUnread && !inbox.length) {
-        list.innerHTML = '<div class="empty-state" style="padding:32px 16px;text-align:center;color:#64748b;font-size:13px;">No tienes notificaciones pendientes.</div>';
+        list.innerHTML = `<div class="empty-state" style="padding:32px 16px;text-align:center;color:#64748b;font-size:13px;">${isTecnico ? 'No tienes avisos de material ni resúmenes pendientes.' : 'No tienes notificaciones pendientes.'}</div>`;
         return;
     }
 
@@ -1416,31 +1477,87 @@ function renderNotificationCenter() {
         });
     }
 
-    // 2. Notificaciones de detalles de red
-    if (inbox.length) {
-        itemsHtml.push(`
-            <div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;margin:12px 0 4px;">
-                Avisos de Detalles de Red
-            </div>
-        `);
-        inbox.forEach(notif => {
-            const dateStr = notif.createdAt ? new Date(notif.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }) : '';
-            const unreadStyle = notif.unread ? 'background:#f0f9ff;border-color:#bae6fd;' : 'background:#ffffff;opacity:0.85;';
-            const accentColor = notif.type === 'resolved' ? '#10b981' : (notif.type === 'returned' ? '#f59e0b' : '#3b82f6');
+    if (isTecnico) {
+        // Notificaciones organizadas para técnico: Material y Productividad
+        const materialItems = inbox.filter(x => x.isMaterial || x.type === 'material' || x.category === 'material');
+        const prodItems = inbox.filter(x => x.isProductivity || x.type === 'productivity');
+
+        if (materialItems.length) {
             itemsHtml.push(`
-                <div class="notification-item" style="${unreadStyle}border-left:4px solid ${accentColor};margin-bottom:8px;cursor:pointer;transition:transform 0.12s;" onclick="markNotificationAsRead('${notif.id}','${notif.url || ''}')">
-                    <div class="notification-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                        <strong style="font-size:13px;color:#0f172a;">${escapeHtml(notif.title)}</strong>
-                        ${notif.unread ? '<span class="badge" style="background:#0284c7;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;">Nuevo</span>' : ''}
-                    </div>
-                    <div style="font-size:12px;color:#334155;margin:4px 0 6px;line-height:1.4;">${escapeHtml(notif.message)}</div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#94a3b8;">
-                        <span>${dateStr}</span>
-                        <span style="color:#2563eb;font-weight:700;">Ver detalle →</span>
-                    </div>
+                <div style="font-size:11px;font-weight:800;color:#0284c7;text-transform:uppercase;letter-spacing:0.04em;margin:10px 0 4px;">
+                    Movimientos y Material (${materialItems.length})
                 </div>
             `);
-        });
+            materialItems.forEach(notif => {
+                const dateStr = notif.createdAt ? new Date(notif.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }) : '';
+                const unreadStyle = notif.unread ? 'background:#f0f9ff;border-color:#bae6fd;' : 'background:#ffffff;opacity:0.85;';
+                itemsHtml.push(`
+                    <div class="notification-item" style="${unreadStyle}border-left:4px solid #0284c7;margin-bottom:8px;cursor:pointer;" onclick="markNotificationAsRead('${notif.id}','${notif.url || ''}');if(typeof checkTechnicianPendingMaterialPrompt==='function')checkTechnicianPendingMaterialPrompt();">
+                        <div class="notification-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                            <strong style="font-size:13px;color:#0f172a;">${escapeHtml(notif.title)}</strong>
+                            ${notif.unread ? '<span class="badge" style="background:#0284c7;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;">Nuevo</span>' : ''}
+                        </div>
+                        <div style="font-size:12px;color:#334155;margin:4px 0 6px;line-height:1.4;">${escapeHtml(notif.message)}</div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#94a3b8;">
+                            <span>${dateStr}</span>
+                            <span style="color:#0284c7;font-weight:700;">Revisar entrega →</span>
+                        </div>
+                    </div>
+                `);
+            });
+        }
+
+        if (prodItems.length) {
+            itemsHtml.push(`
+                <div style="font-size:11px;font-weight:800;color:#10b981;text-transform:uppercase;letter-spacing:0.04em;margin:12px 0 4px;">
+                    Resúmenes de Productividad (${prodItems.length})
+                </div>
+            `);
+            prodItems.forEach(notif => {
+                const dateStr = notif.createdAt ? new Date(notif.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }) : '';
+                const unreadStyle = notif.unread ? 'background:#f0fdf4;border-color:#bbf7d0;' : 'background:#ffffff;opacity:0.85;';
+                itemsHtml.push(`
+                    <div class="notification-item" style="${unreadStyle}border-left:4px solid #10b981;margin-bottom:8px;cursor:pointer;" onclick="markNotificationAsRead('${notif.id}');if(typeof openTechnicianProductivitySummary==='function')openTechnicianProductivitySummary();">
+                        <div class="notification-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                            <strong style="font-size:13px;color:#0f172a;">${escapeHtml(notif.title)}</strong>
+                            ${notif.unread ? '<span class="badge" style="background:#10b981;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;">Nuevo</span>' : ''}
+                        </div>
+                        <div style="font-size:12px;color:#334155;margin:4px 0 6px;line-height:1.4;">${escapeHtml(notif.message)}</div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#94a3b8;">
+                            <span>${dateStr}</span>
+                            <span style="color:#059669;font-weight:700;">Ver desempeño →</span>
+                        </div>
+                    </div>
+                `);
+            });
+        }
+    } else {
+        // 2. Notificaciones de detalles de red
+        if (inbox.length) {
+            itemsHtml.push(`
+                <div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;margin:12px 0 4px;">
+                    Avisos de Detalles de Red
+                </div>
+            `);
+            inbox.forEach(notif => {
+                const dateStr = notif.createdAt ? new Date(notif.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }) : '';
+                const unreadStyle = notif.unread ? 'background:#f0f9ff;border-color:#bae6fd;' : 'background:#ffffff;opacity:0.85;';
+                const accentColor = notif.type === 'resolved' ? '#10b981' : (notif.type === 'returned' ? '#f59e0b' : '#3b82f6');
+                itemsHtml.push(`
+                    <div class="notification-item" style="${unreadStyle}border-left:4px solid ${accentColor};margin-bottom:8px;cursor:pointer;transition:transform 0.12s;" onclick="markNotificationAsRead('${notif.id}','${notif.url || ''}')">
+                        <div class="notification-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                            <strong style="font-size:13px;color:#0f172a;">${escapeHtml(notif.title)}</strong>
+                            ${notif.unread ? '<span class="badge" style="background:#0284c7;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;">Nuevo</span>' : ''}
+                        </div>
+                        <div style="font-size:12px;color:#334155;margin:4px 0 6px;line-height:1.4;">${escapeHtml(notif.message)}</div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#94a3b8;">
+                            <span>${dateStr}</span>
+                            <span style="color:#2563eb;font-weight:700;">Ver detalle →</span>
+                        </div>
+                    </div>
+                `);
+            });
+        }
     }
 
     list.innerHTML = itemsHtml.join('');
@@ -2722,6 +2839,7 @@ async function checkNetworkOrderNotifications() {
   if (getCurrentPageName() === 'login.html') return;
   const user = getCurrentUser();
   if (!user || !user.role) return;
+  if (normalizeRole(user.role) === 'tecnico') return;
 
   try {
     if (typeof fetchDataPage !== 'function') return;
@@ -2910,6 +3028,7 @@ function initNetworkNotifications() {
 
   const user = getCurrentUser();
   if (!user || !user.role) return;
+  if (normalizeRole(user.role) === 'tecnico') return;
 
   _netopsWatcherRunning = true;
   _injectNetworkNotificationStyles();

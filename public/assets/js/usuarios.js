@@ -35,7 +35,7 @@ function userEscape(value) {
 
 function initUsuariosPage() {
   if (!checkAuth()) return;
-  if(typeof isPrincipalAdministratorClient!=='function'||!isPrincipalAdministratorClient()){location.href='mapa.html';return;}
+  if (!userHasRole('administrador', 'admin')) { location.href = 'mapa.html'; return; }
   initCommon();
   loadDB({ showOverlay: false, preferCache: true }).then(() => {
     fillUserZoneOptions();
@@ -56,6 +56,7 @@ function selectedUserZones() {
 function normalizeUserRoleValue(role) {
   const clean = normalizeRole(role);
   if (clean === 'admin' || clean === 'administrador') return 'administrador';
+  if (clean === 'soporte') return 'soporte';
   if (clean === 'atencion' || clean === 'atencion_clientes') return 'atencion_clientes';
   if (clean === 'tecnico') return 'tecnico';
   return '';
