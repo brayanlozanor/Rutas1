@@ -1383,6 +1383,9 @@ function ensureNotificationCenter() {
     } else {
         btn.classList.toggle('technician-bell', isTecnico);
     }
+    if (document.querySelector('.tech-bottom-nav') || document.body.classList.contains('plan-technician-view') || (document.documentElement.dataset.role === 'tecnico')) {
+        btn.style.setProperty('display', 'none', 'important');
+    }
     if (!document.getElementById('notification-panel-mo')) {
         const modal = document.createElement('div');
         modal.id = 'notification-panel-mo';
@@ -1423,6 +1426,9 @@ function renderNotificationCenter() {
 
     const isTecnico = typeof userHasRole === 'function' && userHasRole('tecnico');
     bell.classList.toggle('technician-bell', isTecnico);
+    if (document.querySelector('.tech-bottom-nav') || document.body.classList.contains('plan-technician-view') || (document.documentElement.dataset.role === 'tecnico')) {
+        bell.style.setProperty('display', 'none', 'important');
+    }
 
     const isAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
     const delReqs = (!isTecnico && isAdmin && typeof getPendingDeletionRequests === 'function') ? getPendingDeletionRequests() : [];
@@ -1459,18 +1465,41 @@ function renderNotificationCenter() {
         `);
         delReqs.forEach(req => {
             const label = typeof getRequestTargetLabel === 'function' ? getRequestTargetLabel(req) : (req.targetName || req.nodeName || 'Elemento');
-            const type = typeof getRequestTargetType === 'function' ? getRequestTargetType(req) : (req.nodeId ? 'node' : 'item');
-            const typeLabel = type === 'detail' ? 'Detalle' : (type === 'node' ? 'Pueblo' : (type === 'equipment' ? 'Antena' : 'Elemento'));
+            const type = typeof getRequestTargetType === 'function' ? getRequestTargetType(req) : (req.nodeId ? 'node' : (req.detailId ? 'detail' : 'item'));
+            const targetId = (typeof getRequestTargetId === 'function' ? getRequestTargetId(req) : '') || req.targetId || req.detailId || req.nodeId || req.equipmentId;
+            const order = type === 'detail' ? (state.workOrders || []).find(w => w.id === targetId) : null;
+            const node = type === 'node' ? (state.nodes || []).find(n => n.id === targetId) : null;
+            const eq = type === 'equipment' ? (state.equipment || []).find(e => e.id === targetId) : null;
+
+            const folio = req.folio || order?.folio || (order && typeof getOrderFolio === 'function' ? getOrderFolio(order) : '');
+            const client = req.clientName || order?.clientName || (type === 'detail' ? label : (type === 'equipment' ? (eq?.name || label) : (node?.name || label)));
+            const town = req.town || order?.town || (order && typeof getOrderPlace === 'function' ? getOrderPlace(order) : '') || node?.town || eq?.town || '';
+            const desc = req.description || order?.description || order?.title || '';
+            const isNetwork = (req.detailKind || order?.detailKind) === 'network';
+            const typeLabel = isNetwork ? 'Detalle de red' : (type === 'detail' ? 'Detalle físico' : (type === 'node' ? 'Pueblo' : (type === 'equipment' ? 'Antena' : 'Elemento')));
+            const dateStr = req.createdAt ? new Date(req.createdAt).toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
+
             itemsHtml.push(`
-                <div class="notification-item" style="border-left:4px solid #ef4444;margin-bottom:8px;">
-                    <div class="notification-top">
-                        <strong>${escapeHtml(label)}</strong>
-                        <span class="badge warning">Eliminación</span>
+                <div class="notification-item deletion-request-card" style="border-left:4px solid #ef4444;margin-bottom:10px;padding:12px 14px;background:#fff;border-radius:14px;box-shadow:0 4px 14px rgba(15,23,42,0.06);">
+                    <div class="notification-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px;">
+                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;font-weight:800;font-size:10px;">Solicitud de Eliminación</span>
+                            <span class="badge" style="background:#f1f5f9;color:#334155;font-size:10px;font-weight:700;">${escapeHtml(typeLabel)}</span>
+                            ${folio ? `<span class="badge" style="background:#e0f2fe;color:#0369a1;font-weight:800;font-size:10.5px;">${escapeHtml(folio)}</span>` : ''}
+                        </div>
+                        ${dateStr ? `<small style="color:#94a3b8;font-size:10.5px;font-weight:700;white-space:nowrap;">${escapeHtml(dateStr)}</small>` : ''}
                     </div>
-                    <div class="entity-sub">${typeLabel} · Solicitó: ${escapeHtml(req.requestedByName || 'Usuario')}</div>
-                    <div class="card-actions" style="margin-top:8px;">
-                        <button class="btn bg2" onclick="approveDeletionRequest('${req.id}')">Aprobar</button>
-                        <button class="btn br" onclick="rejectDeletionRequest('${req.id}')">Rechazar</button>
+                    <div style="display:grid;gap:4px;font-size:12px;color:#1e293b;margin:6px 0 10px 0;">
+                        ${client ? `<div><strong style="color:#0f172a;">Cliente / Registro:</strong> ${escapeHtml(client)}</div>` : ''}
+                        ${town ? `<div><strong style="color:#0f172a;">Pueblo / Lugar:</strong> ${escapeHtml(town)}</div>` : ''}
+                        ${desc ? `<div><strong style="color:#0f172a;">Detalle solicitado:</strong> <span style="color:#475569;">${escapeHtml(desc)}</span></div>` : ''}
+                        <div style="font-size:11px;color:#64748b;margin-top:2px;">
+                            <strong>Solicitado por:</strong> ${escapeHtml(req.requestedByName || 'Usuario')}
+                        </div>
+                    </div>
+                    <div class="card-actions" style="display:flex;gap:8px;justify-content:flex-end;">
+                        <button class="btn bg2" style="min-height:30px;padding:4px 12px;font-size:11.5px;font-weight:800;" onclick="approveDeletionRequest('${escapeAttr(req.id)}')">Aprobar eliminación</button>
+                        <button class="btn br" style="min-height:30px;padding:4px 12px;font-size:11.5px;font-weight:800;" onclick="rejectDeletionRequest('${escapeAttr(req.id)}')">Rechazar</button>
                     </div>
                 </div>
             `);

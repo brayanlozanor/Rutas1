@@ -949,9 +949,8 @@ function renderTechnicianRouteOverview() {
             const prevName = getTechnicianStopName(prevStop, prevEq, prevNode);
             legTransitHtml = `
                 <div class="tech-route-leg-transit">
-                    <div class="tech-route-leg-line"></div>
                     <div class="tech-route-leg-badge" title="Distancia estimada por carretera (38 km/h)">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
                         <span>Tramo: <b>~${leg.minutes} min</b> (${leg.km} km) de <b>${escapeHtml(prevName)}</b> a <b>${escapeHtml(stopName)}</b></span>
                     </div>
                 </div>`;

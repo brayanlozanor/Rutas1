@@ -2453,6 +2453,16 @@ body.sidebar-collapsed .floating-notification-bell{
     min-height:56px!important;
     border-radius:20px!important;
   }
+  body:has(.tech-bottom-nav) .floating-notification-bell,
+  body:has(.tech-bottom-nav) button.floating-notification-bell,
+  body.plan-technician-view .floating-notification-bell,
+  body.plan-technician-view button.floating-notification-bell,
+  html[data-role="tecnico"] .floating-notification-bell,
+  html[data-role="tecnico"] button.floating-notification-bell{
+    display:none!important;
+    visibility:hidden!important;
+    pointer-events:none!important;
+  }
 }
 
 /* Ajustes finales: login mas compacto y sidebar presente en todas las paginas */

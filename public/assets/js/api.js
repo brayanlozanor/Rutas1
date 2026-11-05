@@ -939,7 +939,18 @@ async function createDeletionRequest(targetType, targetId, targetName) {
         createdAt: new Date().toISOString()
     };
     if (targetType === 'node') { req.nodeId = targetId; req.nodeName = targetName; }
-    if (targetType === 'detail') { req.detailId = targetId; req.detailName = targetName; }
+    if (targetType === 'detail') {
+        req.detailId = targetId;
+        req.detailName = targetName;
+        const order = (state.workOrders || []).find(w => w.id === targetId && !w.deletedAt);
+        if (order) {
+            req.folio = order.folio || (typeof getOrderFolio === 'function' ? getOrderFolio(order) : '');
+            req.clientName = order.clientName || '';
+            req.town = order.town || (typeof getOrderPlace === 'function' ? getOrderPlace(order) : '') || '';
+            req.description = order.description || order.title || '';
+            req.detailKind = order.detailKind || 'physical';
+        }
+    }
     if (targetType === 'equipment') { req.equipmentId = targetId; req.equipmentName = targetName; }
     state.deletionRequests.push(req);
     recordAudit('solicitó eliminación', req, { targetType, targetId });

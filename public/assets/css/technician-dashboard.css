@@ -41,7 +41,10 @@ body.plan-technician-view .floating-notification-bell,
 body.plan-technician-view button.floating-notification-bell,
 html[data-role="tecnico"] #notification-bell,
 html[data-role="tecnico"] .floating-notification-bell,
-html[data-role="tecnico"] button.floating-notification-bell {
+html[data-role="tecnico"] button.floating-notification-bell,
+body:has(.tech-bottom-nav) #notification-bell,
+body:has(.tech-bottom-nav) .floating-notification-bell,
+body:has(.tech-bottom-nav) button.floating-notification-bell {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
@@ -623,37 +626,12 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar {
   place-items: center;
 }
 
-/* Floating bell ajustada para técnicos: pequeña, discreta y sin tapar nada */
-#notification-bell.technician-bell {
-  width: 40px !important;
-  height: 40px !important;
-  min-width: 40px !important;
-  min-height: 40px !important;
-  border-radius: 12px !important;
-  background: #ffffff !important;
-  border: 1px solid #cbd5e1 !important;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08) !important;
-  color: #334155 !important;
-}
-#notification-bell.technician-bell .notification-bell-icon {
-  width: 24px !important;
-  height: 24px !important;
-  background: #f1f5f9 !important;
-  color: #475569 !important;
-}
-#notification-bell.technician-bell #notification-count {
-  min-width: 18px !important;
-  height: 18px !important;
-  font-size: 10px !important;
-  top: -4px !important;
-  right: -4px !important;
-  background: #0284c7 !important;
-  border: 2px solid #ffffff !important;
-}
-@media (max-width: 760px) {
-  #notification-bell.technician-bell {
-    display: none !important;
-  }
+/* Floating bell para técnicos: siempre oculto porque la campana ya está en la cabecera móvil */
+#notification-bell.technician-bell,
+body:has(.tech-bottom-nav) #notification-bell {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 /* Días de la semana con indicador de trabajo */
@@ -800,6 +778,7 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar {
 }
 .tech-stop-name {
   display: block !important;
+  grid-column: 2 !important;
   font-size: 15px !important;
   font-weight: 800 !important;
   color: #10264a !important;
@@ -808,10 +787,16 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar {
 }
 .tech-stop-badge-col {
   display: flex !important;
+  grid-column: 3 !important;
   align-items: center !important;
   gap: 8px !important;
   white-space: nowrap !important;
   justify-content: flex-end !important;
+}
+.tech-stop-badge-col small,
+.tech-stop-badge-col .tech-stop-progress-text {
+  grid-column: auto !important;
+  display: inline-block !important;
 }
 .tech-stop-progress-text {
   color: #697d94 !important;
@@ -842,7 +827,15 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar {
     font-size: 13px !important;
   }
   .tech-stop-name {
+    grid-column: 2 !important;
     font-size: 13.5px !important;
+  }
+  .tech-stop-badge-col {
+    grid-column: 3 !important;
+  }
+  .tech-stop-badge-col small,
+  .tech-stop-badge-col .tech-stop-progress-text {
+    grid-column: auto !important;
   }
   .tech-stop-progress-text {
     font-size: 10.5px !important;
@@ -1138,17 +1131,7 @@ body.plan-technician-view[data-tech-view="map"] .tech-weather-card {
 }
 
 .tech-route-leg-transit .tech-route-leg-line {
-  position: absolute !important;
-  top: 0 !important;
-  bottom: 0 !important;
-  left: 50% !important;
-  width: 2px !important;
-  transform: translateX(-50%) !important;
-  background: repeating-linear-gradient(to bottom, #cbdbe9, #cbdbe9 4px, transparent 4px, transparent 8px) !important;
-  z-index: 1 !important;
-  border: 0 !important;
-  padding: 0 !important;
-  margin: 0 !important;
+  display: none !important;
 }
 
 .tech-route-leg-transit .tech-route-leg-badge {

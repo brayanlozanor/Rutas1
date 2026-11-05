@@ -33,7 +33,7 @@ const expected = {
   mapa: ['equipment', 'nodes'],
   material: ['materials'],
   nodos: ['nodes'],
-  ordenes: ['operations'],
+  ordenes: ['operations', 'people'],
   planificar: ['materials', 'people', 'planning'],
   rutas: ['routes'],
   'tecnico-ruta': ['materials', 'people', 'planning'],

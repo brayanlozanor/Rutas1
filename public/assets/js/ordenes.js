@@ -77,7 +77,9 @@ function orderReportIcon(type) {
     calendar: '<svg viewBox="0 0 24 24"><path d="M5 5h14v15H5zM8 3v4M16 3v4M5 9h14"/></svg>',
     work: '<svg viewBox="0 0 24 24"><path d="M4 8h16v11H4zM9 8V5h6v3M4 12h16"/></svg>',
     flag: '<svg viewBox="0 0 24 24"><path d="M6 21V4M6 5h11l-2 4 2 4H6"/></svg>',
-    tag: '<svg viewBox="0 0 24 24"><path d="m3 12 9-9h7v7l-9 9z"/><circle cx="16" cy="6" r="1"/></svg>'
+    tag: '<svg viewBox="0 0 24 24"><path d="m3 12 9-9h7v7l-9 9z"/><circle cx="16" cy="6" r="1"/></svg>',
+    clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 6 12 12 16 14"/></svg>',
+    unresolvable: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>'
   };
   return icons[type] || icons.clipboard;
 }
@@ -85,6 +87,40 @@ function orderReportIcon(type) {
 function orderReportField(icon, label, value, options = {}) {
   const content = options.raw ? value : orderEscape(value);
   return `<article class="order-report-field ${options.className || ''}"><span class="order-report-field-icon">${orderReportIcon(icon)}</span><div><small>${orderEscape(label)}</small><strong>${content}</strong></div></article>`;
+}
+
+function canEditOrder(order) {
+  if (!order) return false;
+  const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  if (!user) return false;
+  const uid = String(user.id || '').trim();
+  const uname = normalizeName(user.username || '');
+  const uFullName = normalizeName(user.name || '');
+
+  const orderCreatedById = String(order.createdById || '').trim();
+  const orderCreatedByUsername = normalizeName(order.createdByUsername || '');
+  const orderCreatedByName = normalizeName(order.createdByName || '');
+
+  if (uid && orderCreatedById && uid === orderCreatedById) return true;
+  if (uname && orderCreatedByUsername && uname === orderCreatedByUsername) return true;
+  if (uFullName && orderCreatedByName && uFullName === orderCreatedByName) return true;
+
+  if (!orderCreatedById && !orderCreatedByUsername && !orderCreatedByName) {
+    return true;
+  }
+  return false;
+}
+
+function isCreatedByAttention(order) {
+  if (!order) return false;
+  if (order.originRole === 'atencion_clientes' || order.originRole === 'atencion') return true;
+  if (order.createdByRole === 'atencion_clientes' || order.createdByRole === 'atencion') return true;
+  const user = (state.users || []).find(u =>
+    (order.createdById && String(u.id) === String(order.createdById)) ||
+    (order.createdByUsername && normalizeName(u.username) === normalizeName(order.createdByUsername))
+  );
+  if (user && (user.role === 'atencion_clientes' || user.role === 'atencion')) return true;
+  return false;
 }
 
 let editingWOId = '';
@@ -1574,6 +1610,10 @@ async function openWO(id = '') {
       notify('Los detalles completados no pueden ser editados. Puedes reabrirlo con el botón de reabrir.', 'warn');
       return;
     }
+    if (existing && !canEditOrder(existing)) {
+      notify('Acción restringida: Solo el usuario que creó este detalle puede editarlo.', 'warn');
+      return;
+    }
   }
   editingWOId = id;
   copyingWOFromId = '';
@@ -1843,6 +1883,10 @@ async function saveWO() {
   if (editingWOId) {
     const w = (state.workOrders || []).find(x => x.id === editingWOId);
     if (!w) return;
+    if (!canEditOrder(w)) {
+      notify('Acción no permitida: Solo el usuario que creó este detalle puede editarlo.', 'err');
+      return;
+    }
     Object.assign(w, payload, { updatedAt: new Date().toISOString() });
     savedOrder = w;
     setUpdatedAudit(w, 'modificó orden');
@@ -2054,8 +2098,8 @@ async function reopenCompletedWO(id) {
       return notify('Acción restringida: Únicamente el personal de Atención a clientes puede reabrir reportes de red dirigidos a Soporte técnico.', 'warn');
     }
   } else {
-    if (!isSoporte) {
-      return notify('Acción restringida: Únicamente Soporte técnico o Administración pueden reabrir detalles físicos concluidos.', 'warn');
+    if (!isSoporte && !(isAtencion && isCreatedByAttention(w))) {
+      return notify('Acción restringida: Como Atención a clientes solo puedes reabrir detalles que hayan sido creados desde tu área.', 'warn');
     }
   }
 
@@ -2762,6 +2806,7 @@ async function openOrderTechnicianReport(orderId) {
         return '<span style="color:#64748b;font-weight:600;font-size:12px;font-style:italic;">Pendiente de resolución</span>';
       })(), { raw: true })}
       ${orderReportField('calendar', 'Fecha de creación', order.createdAt ? new Date(order.createdAt).toLocaleString('es-MX') : 'Sin fecha')}
+      ${order.updatedAt && order.updatedAt !== order.createdAt ? orderReportField('clock', 'Última edición', `${new Date(order.updatedAt).toLocaleString('es-MX')}${order.updatedByName ? ` por ${renderUserColorChip(order.updatedByName, order.updatedById)}` : ''}`, { raw: true }) : ''}
       ${viewedSummary ? orderReportField('check', 'Visto', viewedSummary) : ''}
       ${order.reviewOpenedAt ? orderReportField('calendar', 'Abierta para revisión', orderReviewOpenedSummary(order)) : ''}
       ${completed ? orderReportField('calendar', 'Fecha y hora del reporte', detailDate ? new Date(detailDate).toLocaleString('es-MX') : 'Sin fecha') : ''}
@@ -2885,7 +2930,7 @@ function renderWOs() {
                   canReopen = isAtencion || isAdmin;
                 }
               } else {
-                canReopen = isSoporte;
+                canReopen = isSoporte || isAdmin || (isAtencion && isCreatedByAttention(w));
               }
             }
 
@@ -2932,7 +2977,7 @@ function renderWOs() {
                       networkQuickActions = `
                         <button type="button" class="btn net-btn-retake" onclick="takeOverNetworkOrder('${w.id}')" title="Asumir titularidad de la atención técnica"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg> Retomar</button>
                         <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar solución técnica y enviar a validación"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Resolver</button>
-                        <button type="button" class="btn net-btn-unresolvable" onclick="openUnresolvableNetworkModal('${w.id}')" title="Declarar reporte no realizable por imposibilidad técnica">No realizable</button>
+                        <button type="button" class="btn net-btn-unresolvable" onclick="openUnresolvableNetworkModal('${w.id}')" title="Declarar reporte no realizable por imposibilidad técnica"><svg class="btn-action-svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> No realizable</button>
                       `;
                     } else {
                       networkQuickActions = `
@@ -3006,9 +3051,11 @@ function renderWOs() {
                     <button class="btn order-view-report" title="Ver detalle completo" aria-label="Ver detalle completo" onclick="openOrderTechnicianReport('${w.id}')">${orderActionIcon('view')}</button>
                     ${rowReported ? (canReopen ? `
                       <button class="btn order-reopen-action" title="Reabrir detalle para nueva atención" aria-label="Reabrir detalle para nueva atención" onclick="reopenCompletedWO('${w.id}')">${orderActionIcon('reopen')}</button>
-                    ` : '') : `
+                    ` : '') : (canEditOrder(w) ? `
                       <button class="btn order-edit-action" title="Editar información del detalle" aria-label="Editar información del detalle" onclick="openWO('${w.id}')">${orderActionIcon('edit')}</button>
-                    `}
+                    ` : `
+                      <button class="btn order-edit-action order-edit-disabled" disabled style="opacity:0.35;cursor:not-allowed;" title="Solo quien creó el detalle puede editarlo" aria-label="Solo quien creó el detalle puede editarlo">${orderActionIcon('edit')}</button>
+                    `)}
                     <button class="btn order-delete-action" title="${userHasRole('administrador','admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" aria-label="${userHasRole('administrador','admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" onclick="deleteWO('${w.id}')">${orderActionIcon('delete')}</button>
                   </div>
                 </td>

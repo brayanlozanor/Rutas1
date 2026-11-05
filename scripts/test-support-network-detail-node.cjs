@@ -20,3 +20,4 @@ assert.match(ordenesJs, /town: node\?\.town \|\| typedNode \|\| '',/);
 assert.match(ordenesJs, /nodeName: node \? getNodeLabel\(node\) : typedNode,/);
 
 console.log('ALL TESTS PASSED: Support Network Detail Pueblo Field & Persistence OK!');
+

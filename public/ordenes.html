@@ -262,7 +262,7 @@
       </div>
       <div class="card-actions" style="display:flex;justify-content:space-between;align-items:center;">
         <div>
-          <button type="button" class="btn btn-modal-unresolvable" onclick="openUnresolvableNetworkModalFromResolve()">Declarar no realizable</button>
+          <button type="button" class="btn btn-modal-unresolvable" onclick="openUnresolvableNetworkModalFromResolve()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>Declarar no realizable</button>
         </div>
         <div style="display:flex;gap:8px;">
           <button type="button" class="btn bgh" onclick="CM('network-resolve-mo')">Cancelar</button>
@@ -315,7 +315,10 @@
     <div class="md modal-compact network-unresolvable-card">
       <div class="modal-head">
         <div>
-          <h2>Declarar reporte no realizable</h2>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span>
+            <h2 style="margin:0;">Declarar reporte no realizable</h2>
+          </div>
           <p>Notifique a Atención a clientes la justificación técnica por la cual no es posible solucionar la incidencia.</p>
         </div>
         <button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('network-unresolvable-mo')">
@@ -343,7 +346,7 @@
       </div>
       <div class="card-actions">
         <button type="button" class="btn bgh" onclick="CM('network-unresolvable-mo')">Cancelar</button>
-        <button type="button" class="btn btn-danger-unresolvable" onclick="submitNetworkUnresolvable()">Confirmar y notificar imposibilidad</button>
+        <button type="button" class="btn btn-danger-unresolvable" onclick="submitNetworkUnresolvable()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>Confirmar y notificar imposibilidad</button>
       </div>
     </div>
   </div>
