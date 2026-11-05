@@ -1452,8 +1452,24 @@ function applyRoleFormVisibility() {
       const pLabel = phoneFi.querySelector('label');
       if (pLabel) pLabel.textContent = 'Teléfono (opcional)';
     }
-    if (locationFi) locationFi.style.display = 'none';
-    if (nodeGrid) nodeGrid.style.display = 'none';
+    if (locationFi) {
+      locationFi.style.display = '';
+      const lLabel = locationFi.querySelector('label');
+      if (lLabel) lLabel.textContent = 'Ubicación GPS (opcional)';
+      const lInput = document.getElementById('wo-location');
+      if (lInput) lInput.placeholder = 'Coordenadas o referencia de ubicación';
+    }
+    if (nodeGrid) {
+      nodeGrid.style.display = '';
+      nodeGrid.style.gridTemplateColumns = '1fr';
+    }
+    if (nodeFi) {
+      nodeFi.style.display = '';
+      nodeFi.style.gridColumn = '1 / -1';
+      const nLabel = nodeFi.querySelector('label');
+      if (nLabel) nLabel.innerHTML = 'Pueblo vinculado <b class="req-star">* Obligatorio</b>';
+    }
+    if (nodeInput) nodeInput.placeholder = 'Busca un pueblo o escribe uno nuevo...';
     if (typeFi) typeFi.style.display = 'none';
     if (evidenceZone) evidenceZone.style.display = 'none';
 
@@ -1582,8 +1598,9 @@ async function openWO(id = '') {
       document.getElementById('wo-detail').value = w.description || w.title || '';
       syncWODetailKindField(w.detailKind === 'network' ? 'network' : 'physical');
       document.getElementById('wo-category').value = getOrderCategory(w);
-      document.getElementById('wo-node-id').value = w.nodeId || '';
-      document.getElementById('wo-node').value = w.nodeName || w.nodeCode || ''; // si estaba ligado a antena no forzamos nodo
+      const wNode = getOrderNode(w);
+      document.getElementById('wo-node-id').value = w.nodeId || wNode?.id || '';
+      document.getElementById('wo-node').value = wNode ? getNodeLabel(wNode) : (w.nodeName || w.nodeCode || w.town || '');
       if (document.getElementById('wo-equipment-id')) document.getElementById('wo-equipment-id').value = w.equipmentId || '';
       if (document.getElementById('wo-equipment')) document.getElementById('wo-equipment').value = w.equipmentName || getOrderEquipment(w)?.name || '';
       document.getElementById('wo-zone').value = w.region || target.zone || '';
@@ -1725,6 +1742,8 @@ async function saveWO() {
   } else if (targetIsAttention) {
     if (!category) return showWOFieldError('wo-category', 'Selecciona la categoría del requerimiento.');
     if (!specificDetail) return showWOFieldError('wo-detail', 'Escribe el texto o mensaje del requerimiento para Atención a clientes.');
+    if (!typedNode) return showWOFieldError('wo-node', 'Busca un pueblo o escribe uno nuevo.');
+    if (!node) return showWOFieldError('wo-node', 'Selecciona un pueblo registrado o pulsa “Agregar pueblo” para crearlo.');
   } else {
     // Para reportes dirigidos a Soporte
     if (!category) return showWOFieldError('wo-category', 'Selecciona la categoría del detalle.');
@@ -1783,8 +1802,8 @@ async function saveWO() {
     clientName: (targetIsAttention && isNetwork)
       ? (document.getElementById('wo-client')?.value.trim() || 'Atención a clientes')
       : document.getElementById('wo-client').value.trim(),
-    clientPhone: (!targetIsAttention || !isNetwork) ? (document.getElementById('wo-phone')?.value.trim() || '') : '',
-    detailLocation: (!targetIsAttention || !isNetwork) ? (document.getElementById('wo-location')?.value.trim() || '') : '',
+    clientPhone: document.getElementById('wo-phone')?.value.trim() || '',
+    detailLocation: document.getElementById('wo-location')?.value.trim() || '',
     category,
     detailKind: isNetwork ? 'network' : 'physical',
     targetRole,
@@ -1793,18 +1812,18 @@ async function saveWO() {
     assignedUserName,
     title: effectiveDetail,
     description: specificDetail,
-    nodeId: (targetIsAttention && isNetwork) ? '' : (node?.id || ''),
-    nodeCode: (targetIsAttention && isNetwork) ? (node?.nodeCode || typedNode || 'REQ') : (node?.nodeCode || typedNode),
-    nodeName: (targetIsAttention && isNetwork) ? (node ? getNodeLabel(node) : (typedNode || 'Atención a clientes')) : (node ? getNodeLabel(node) : typedNode),
-    town: (targetIsAttention && isNetwork) ? (node?.town || typedNode || 'General') : (node?.town || typedNode),
-    region: (targetIsAttention && isNetwork) ? (region || 'General') : (region || node?.zone || ''),
+    nodeId: node?.id || '',
+    nodeCode: node?.nodeCode || typedNode || '',
+    nodeName: node ? getNodeLabel(node) : typedNode,
+    town: node?.town || typedNode || '',
+    region: region || node?.zone || 'General',
     visitType: (!isNetwork && document.getElementById('wo-type')?.value) ? document.getElementById('wo-type').value : (isNetwork && !targetIsAttention && document.getElementById('wo-type')?.value ? document.getElementById('wo-type').value : 'comunidad'),
     priority: selectedPriority,
     reminderIntervalMin: (!isNaN(customReminderMins) && customReminderMins > 0) ? customReminderMins : undefined,
     // Para órdenes de NODO solo guardamos lat/lng cuando el usuario capturó ubicación válida.
     // No usamos la ubicación del nodo porque la orden puede ser de un cliente o referencia distinta.
-    lat: (!targetIsAttention || !isNetwork) ? (parsed.lat || '') : '',
-    lng: (!targetIsAttention || !isNetwork) ? (parsed.lng || '') : '',
+    lat: parsed.lat || '',
+    lng: parsed.lng || '',
     status: existingWO?.status || 'pendiente',
     equipmentId: linkedEquipmentId,
     equipmentName: linkedEquipmentName
