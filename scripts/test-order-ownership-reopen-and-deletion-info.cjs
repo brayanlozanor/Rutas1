@@ -151,3 +151,4 @@ assert(dashCss.includes('.tech-stop-badge-col') && dashCss.includes('grid-column
 console.log('✓ Test 7 Passed: Technician route stops and transit banner layout verified.');
 
 console.log('\nALL TESTS PASSED: Order Ownership, Reopen Permissions, Unresolvable Icons & Complete Info OK!');
+

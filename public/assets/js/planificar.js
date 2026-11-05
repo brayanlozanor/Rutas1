@@ -1082,7 +1082,7 @@ function applyTechnicianViewportLayout() {
         main?.style.setProperty('transform', 'none', 'important');
         topbar?.style.setProperty('display', 'none', 'important');
         const bell = document.getElementById('notification-bell');
-        if (bell) bell.style.setProperty('display', 'none', 'important');
+        if (bell) bell.remove();
     } else {
         const mobile = window.matchMedia('(max-width: 760px)').matches;
         if (mobile) {

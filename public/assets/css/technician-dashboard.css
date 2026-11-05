@@ -39,9 +39,18 @@ html[data-role="tecnico"] body #plan-panel {
 body.plan-technician-view #notification-bell,
 body.plan-technician-view .floating-notification-bell,
 body.plan-technician-view button.floating-notification-bell,
+body.planificar-page #notification-bell,
+body.planificar-page .floating-notification-bell,
 html[data-role="tecnico"] #notification-bell,
 html[data-role="tecnico"] .floating-notification-bell,
 html[data-role="tecnico"] button.floating-notification-bell,
+#notification-bell.technician-bell,
+.tech-bottom-nav ~ #notification-bell,
+.tech-bottom-nav ~ .floating-notification-bell {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
 body:has(.tech-bottom-nav) #notification-bell,
 body:has(.tech-bottom-nav) .floating-notification-bell,
 body:has(.tech-bottom-nav) button.floating-notification-bell {
