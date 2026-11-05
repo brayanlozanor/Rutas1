@@ -1117,52 +1117,72 @@ body.plan-technician-view[data-tech-view="map"] .tech-weather-card {
   font-weight: 900;
 }
 
-/* Tramo de traslado entre paradas en tech-route-overview */
+/* Tramo de traslado entre paradas en tech-route-overview (Cero cajas cuadradas, cero aplastamiento) */
+.tech-route-stop-names > div.tech-route-leg-transit,
+.tech-route-stop-names > .tech-route-leg-transit,
 .tech-route-leg-transit {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 0;
-  margin: 4px 0;
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 8px 0 !important;
+  margin: 3px 0 8px 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
 }
 
-.tech-route-leg-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 2px;
-  transform: translateX(-50%);
-  background: repeating-linear-gradient(to bottom, #cbdbe9, #cbdbe9 4px, transparent 4px, transparent 8px);
-  z-index: 1;
+.tech-route-leg-transit .tech-route-leg-line {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: 50% !important;
+  width: 2px !important;
+  transform: translateX(-50%) !important;
+  background: repeating-linear-gradient(to bottom, #cbdbe9, #cbdbe9 4px, transparent 4px, transparent 8px) !important;
+  z-index: 1 !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
-.tech-route-leg-badge {
-  position: relative;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border: 1px solid #cbdde9;
-  border-radius: 20px;
-  background: #ffffff;
-  color: #3b536f;
-  font-size: 11px;
-  font-weight: 700;
-  box-shadow: 0 2px 6px rgba(18, 45, 78, 0.06);
-  max-width: 95%;
-  text-align: center;
+.tech-route-leg-transit .tech-route-leg-badge {
+  position: relative !important;
+  z-index: 2 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: auto !important;
+  max-width: 95% !important;
+  padding: 6px 14px !important;
+  border: 1px solid #cbdde9 !important;
+  border-radius: 20px !important;
+  background: #ffffff !important;
+  color: #3b536f !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+  text-align: center !important;
+  box-shadow: 0 2px 7px rgba(18, 45, 78, 0.08) !important;
+  box-sizing: border-box !important;
+  white-space: normal !important;
+  word-break: normal !important;
 }
 
-.tech-route-leg-badge svg {
-  color: #0874e8;
-  flex-shrink: 0;
+.tech-route-leg-transit .tech-route-leg-badge svg {
+  color: #0874e8 !important;
+  flex-shrink: 0 !important;
 }
 
-.tech-route-leg-badge b {
-  color: #0d2746;
+.tech-route-leg-transit .tech-route-leg-badge b {
+  color: #0d2746 !important;
+  font-weight: 800 !important;
 }
 
 /* Badge de carretera total en cabecera del dia del tecnico */
