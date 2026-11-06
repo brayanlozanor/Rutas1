@@ -282,9 +282,19 @@ html body .topbar.app-sidebar .nav .nb[href="usuarios.html"] .nav-emoji svg{opac
   body:not(.sidebar-collapsed) .topbar.app-sidebar .sbar{position:static!important;flex:0 0 auto!important;margin-top:auto!important}
 }
 
-/* Atención a clientes: menú compacto idéntico a la referencia y sin huecos. */
-html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb.role-hidden-nav,
-html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[hidden]{
+/* Menú compacto sin huecos para cualquier rol cuando se ocultan módulos. */
+body .topbar .nav .nb.role-hidden-nav,
+body .topbar.app-sidebar .nav .nb.role-hidden-nav,
+body.sidebar-collapsed .topbar.app-sidebar .nav .nb.role-hidden-nav,
+body .topbar .nav .nb[hidden],
+body .topbar.app-sidebar .nav .nb[hidden],
+body.sidebar-collapsed .topbar.app-sidebar .nav .nb[hidden],
+html:not([data-role="administrador"]):not([data-role="admin"]) body .topbar .nav .nb[href*="tecnicos.html"],
+html:not([data-role="administrador"]):not([data-role="admin"]) body .topbar.app-sidebar .nav .nb[href*="tecnicos.html"],
+html:not([data-role="administrador"]):not([data-role="admin"]) body.sidebar-collapsed .topbar.app-sidebar .nav .nb[href*="tecnicos.html"],
+html:not([data-role="administrador"]):not([data-role="admin"]) body .topbar .nav .nb[href*="usuarios.html"],
+html:not([data-role="administrador"]):not([data-role="admin"]) body .topbar.app-sidebar .nav .nb[href*="usuarios.html"],
+html:not([data-role="administrador"]):not([data-role="admin"]) body.sidebar-collapsed .topbar.app-sidebar .nav .nb[href*="usuarios.html"]{
   display:none!important;
   width:0!important;
   height:0!important;
@@ -295,6 +305,7 @@ html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[hidden]{
   padding:0!important;
   overflow:hidden!important;
   visibility:hidden!important;
+  pointer-events:none!important;
 }
 html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[href="dashboard.html"] .nav-emoji,
 html[data-role="atencion_clientes"] body .topbar.app-sidebar .nav .nb[href="mapa.html"] .nav-emoji,

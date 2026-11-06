@@ -32,3 +32,6 @@ archive/data/
 /wrangler.sync-only.jsonc
 /wrangler.v128-modules.jsonc
 /scripts/test-v128-*.cjs
+
+netops-db-*.sql
+netops-db-*.verification.json

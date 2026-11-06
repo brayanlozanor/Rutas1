@@ -1225,3 +1225,201 @@ body.plan-technician-view[data-tech-view="map"] .tech-weather-card {
     padding: 2px 6px;
   }
 }
+
+
+/* Tramo de traslado entre paradas en tech-route-overview y vista agenda (Cero cajas cuadradas, cero aplastamiento, cero lineas cortadas) */
+.tech-route-stop-names > div.tech-route-leg-transit,
+.tech-route-stop-names > .tech-route-leg-transit,
+.tech-route-leg-transit,
+body.plan-technician-view .plan-inter-stop-transit,
+.plan-inter-stop-transit {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-direction: row !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 8px 0 !important;
+  margin: 4px 0 10px 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+}
+
+.tech-route-leg-transit .tech-route-leg-line,
+body.plan-technician-view .plan-inter-stop-transit .transit-line,
+.tech-route-leg-line {
+  display: none !important;
+}
+
+.tech-route-leg-transit .tech-route-leg-badge,
+body.plan-technician-view .plan-inter-stop-transit .transit-badge,
+.tech-route-leg-badge {
+  position: relative !important;
+  z-index: 2 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px !important;
+  width: auto !important;
+  max-width: 95% !important;
+  padding: 7px 16px !important;
+  border: 1px solid #cbdde9 !important;
+  border-radius: 999px !important;
+  background: #ffffff !important;
+  color: #3b536f !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 5px rgba(22, 50, 82, 0.06) !important;
+  text-align: center !important;
+  line-height: 1.35 !important;
+  white-space: normal !important;
+  word-break: normal !important;
+}
+
+.tech-route-leg-transit .tech-route-leg-badge svg,
+body.plan-technician-view .plan-inter-stop-transit .transit-badge svg {
+  color: #0874e8 !important;
+  flex-shrink: 0 !important;
+}
+
+.tech-route-leg-transit .tech-route-leg-badge b,
+body.plan-technician-view .plan-inter-stop-transit .transit-badge b {
+  color: #0d2746 !important;
+  font-weight: 800 !important;
+}
+
+/* Boton de WhatsApp directo para llamadas y mensajes */
+.tech-wa-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 6px 12px !important;
+  border-radius: 8px !important;
+  background: #25d366 !important;
+  color: #ffffff !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  text-decoration: none !important;
+  box-sizing: border-box !important;
+  transition: background 0.15s ease !important;
+}
+.tech-wa-btn:hover {
+  background: #1ebc59 !important;
+  color: #ffffff !important;
+}
+.tech-wa-btn .tech-btn-svg {
+  width: 14px !important;
+  height: 14px !important;
+  fill: currentColor !important;
+  flex-shrink: 0 !important;
+}
+
+/* Pestañas para Por resolver vs Completados en detalle desplegado */
+.tech-expanded-tabs-bar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-bottom: 8px !important;
+  padding-bottom: 8px !important;
+  border-bottom: 1px solid #e2eaf4 !important;
+}
+.tech-stop-subtab {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 6px 14px !important;
+  border: 1px solid #cbdde9 !important;
+  border-radius: 20px !important;
+  background: #ffffff !important;
+  color: #475569 !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+.tech-stop-subtab:hover {
+  background: #f1f5f9 !important;
+}
+.tech-stop-subtab.active {
+  background: #0874e8 !important;
+  border-color: #0874e8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(8, 116, 232, 0.25) !important;
+}
+
+/* Chip de clima junto al nombre del pueblo */
+.tech-stop-weather-chip {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: middle;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+/* Marcador GPS en tiempo real con pulsacion */
+.tech-realtime-gps-icon {
+  position: relative;
+  width: 24px;
+  height: 24px;
+}
+.gps-pulse-outer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(8, 116, 232, 0.35);
+  animation: gpsPulse 2s infinite ease-out;
+}
+.gps-pulse-inner {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #0874e8;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+@keyframes gpsPulse {
+  0% { transform: scale(0.6); opacity: 1; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+/* Banner de detalle mas cercano */
+.tech-closest-point-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 14px;
+  border: 1px solid #93c5fd;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.tech-closest-point-chip:hover {
+  background: #dbeafe;
+}
+.tech-closest-point-chip svg {
+  flex-shrink: 0;
+  color: #2563eb;
+}

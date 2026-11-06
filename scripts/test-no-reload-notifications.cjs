@@ -4,10 +4,10 @@ const path = require('path');
 
 console.log('Testing Real-Time Only Notifications & No Reload/Refresh Notification Spam...');
 
-const commonJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'assets', 'js', 'common.js'), 'utf8');
-const dashCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'assets', 'css', 'technician-dashboard.css'), 'utf8');
-const styleCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'assets', 'css', 'style.css'), 'utf8');
-const planJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'assets', 'js', 'planificar.js'), 'utf8');
+const commonJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'assets', 'js', 'common.js'), 'utf8').replace(/\r\n/g, '\n');
+const dashCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'assets', 'css', 'technician-dashboard.css'), 'utf8').replace(/\r\n/g, '\n');
+const styleCss = fs.readFileSync(path.join(__dirname, '..', 'public', 'assets', 'css', 'style.css'), 'utf8').replace(/\r\n/g, '\n');
+const planJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'assets', 'js', 'planificar.js'), 'utf8').replace(/\r\n/g, '\n');
 
 // Test 1: Session warmup and cooldown variables exist in common.js
 assert(commonJs.includes('_netopsSessionStartedAt'), 'Must track session start timestamp');

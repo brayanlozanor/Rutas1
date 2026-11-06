@@ -878,6 +878,7 @@
 
     function compressTechPhoto(file) {
       if (!file) return Promise.resolve('');
+      if (typeof optimizeImageForUpload === 'function') return optimizeImageForUpload(file);
       return new Promise((resolve, reject) => {
         const img = new Image();
         const reader = new FileReader();

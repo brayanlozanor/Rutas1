@@ -8,39 +8,40 @@
   box-sizing: border-box;
   width: 100% !important;
   max-width: none !important;
-  padding: 22px 26px 30px !important;
+  padding: 12px 18px 20px !important;
   background: #f5f8fc !important
 }
 
 .orders-page .orders-hero {
   display: grid !important;
-  grid-template-columns: minmax(360px, 1fr) minmax(640px, 790px) !important;
-  min-height: 150px !important;
-  margin: 0 0 16px !important;
-  padding: 20px 26px !important;
+  grid-template-columns: auto auto !important;
+  justify-content: space-between !important;
+  min-height: 0 !important;
+  margin: 0 0 10px !important;
+  padding: 10px 16px !important;
   align-items: center !important;
   border: 1px solid #e3ebf3 !important;
-  border-radius: 14px !important;
+  border-radius: 12px !important;
   background: #fff !important;
-  box-shadow: 0 6px 22px rgba(24, 51, 83, .06) !important
+  box-shadow: 0 3px 12px rgba(24, 51, 83, .04) !important
 }
 
 .orders-page .orders-hero-copy {
   position: relative;
   display: flex !important;
-  min-height: 92px;
+  min-height: 0 !important;
   align-items: center !important;
-  gap: 22px !important;
+  gap: 12px !important;
   padding-left: 0 !important
 }
 
 .orders-page .orders-hero-main {
-  align-self: stretch !important;
+  align-self: center !important;
   display: flex;
   min-width: 0;
   flex-direction: column;
   justify-content: center;
-  gap: 12px
+  gap: 2px
 }
 
 .orders-page .order-detail-tabs {
@@ -101,65 +102,65 @@
   position: relative !important;
   top: auto !important;
   left: auto !important;
-  width: 76px !important;
-  height: 76px !important;
-  flex: 0 0 76px;
-  border-radius: 20px !important;
+  width: 44px !important;
+  height: 44px !important;
+  flex: 0 0 44px;
+  border-radius: 12px !important;
   transform: none !important;
   background: linear-gradient(155deg, #18a9ff 0%, #0874ed 48%, #064bd2 100%);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .65), 0 10px 22px rgba(8, 92, 208, .25)
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .65), 0 4px 10px rgba(8, 92, 208, .2)
 }
 
 .orders-page .orders-module-icon svg {
-  width: 42px !important;
-  height: 42px !important;
+  width: 24px !important;
+  height: 24px !important;
   stroke: #fff !important
 }
 
 .orders-page .orders-hero h1 {
-  margin: 0 0 5px !important;
+  margin: 0 !important;
   color: #0d2044 !important;
-  font: 800 32px/1.12 Manrope, Inter, sans-serif !important;
-  letter-spacing: -.8px
+  font: 800 20px/1.2 Manrope, Inter, sans-serif !important;
+  letter-spacing: -.4px
 }
 
 .orders-page .orders-hero p {
-  max-width: 430px;
+  max-width: 420px;
   margin: 0 !important;
   color: #61748f !important;
-  font-size: 12px !important;
-  line-height: 1.5 !important
+  font-size: 11px !important;
+  line-height: 1.3 !important
 }
 
 .orders-page .orders-stats {
   display: grid !important;
-  grid-template-columns: repeat(4, minmax(135px, 1fr)) !important;
-  gap: 13px !important
+  grid-template-columns: repeat(4, auto) !important;
+  gap: 10px !important
 }
 
 .orders-page .orders-stats .stat-card {
   position: relative;
   box-sizing: border-box;
   display: flex !important;
-  min-height: 104px !important;
-  padding: 17px 15px 22px !important;
+  min-height: 48px !important;
+  padding: 8px 14px 12px !important;
   align-items: center !important;
-  gap: 12px !important;
+  gap: 10px !important;
   border: 1px solid #e2eaf2 !important;
-  border-radius: 12px !important;
+  border-radius: 10px !important;
   background: #fff !important;
-  box-shadow: 0 5px 15px rgba(18, 42, 76, .07) !important;
+  box-shadow: 0 2px 8px rgba(18, 42, 76, .05) !important;
   overflow: hidden
 }
 
 .orders-page .orders-stats .stat-card:after {
   content: "";
   position: absolute;
-  right: 15px;
-  bottom: 13px;
-  left: 15px;
-  height: 4px;
-  border-radius: 5px;
+  right: 12px;
+  bottom: 4px;
+  left: 12px;
+  height: 3px;
+  border-radius: 4px;
   background: #e4eaf0
 }
 
@@ -167,11 +168,11 @@
   content: "";
   position: absolute;
   z-index: 1;
-  bottom: 13px;
-  left: 15px;
+  bottom: 4px;
+  left: 12px;
   width: 72%;
-  height: 4px;
-  border-radius: 5px;
+  height: 3px;
+  border-radius: 4px;
   background: #0874e8
 }
 
@@ -192,14 +193,14 @@
 
 .orders-page .order-stat-icon {
   display: grid !important;
-  width: 42px !important;
-  height: 42px !important;
-  flex: 0 0 42px;
+  width: 30px !important;
+  height: 30px !important;
+  flex: 0 0 30px;
   place-items: center;
   border-radius: 50% !important;
   background: #eaf3ff !important;
   color: #0874e8 !important;
-  font-size: 25px !important;
+  font-size: 16px !important;
   font-weight: 800 !important
 }
 
@@ -227,35 +228,36 @@
 
 .orders-page .orders-stats strong {
   color: #0d2044 !important;
-  font-size: 25px !important;
+  font-size: 18px !important;
   line-height: 1 !important
 }
 
 .orders-page .orders-filter-card {
   display: block !important;
-  margin: 0 0 14px !important;
-  padding: 14px !important;
+  margin: 0 0 10px !important;
+  padding: 8px 12px !important;
   border: 1px solid #e1e9f1 !important;
-  border-radius: 14px !important;
+  border-radius: 12px !important;
   background: #fff !important;
-  box-shadow: 0 5px 18px rgba(18, 42, 76, .06) !important;
+  box-shadow: 0 3px 12px rgba(18, 42, 76, .04) !important;
   overflow: visible !important
 }
 
 .orders-page .order-filter-topbar {
   display: grid;
-  grid-template-columns: 180px 172px minmax(300px, 1fr);
-  gap: 12px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid #e6edf4
+  grid-template-columns: 140px 140px minmax(280px, 1fr);
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #edf2f7
 }
 
 .orders-page .order-filter-topbar .btn {
-  height: 46px !important;
-  min-height: 46px !important;
-  border-radius: 8px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  border-radius: 7px !important;
   font-size: 11px !important;
-  font-weight: 800 !important
+  font-weight: 700 !important;
+  padding: 0 12px !important
 }
 
 .orders-page .order-new-button {
@@ -287,10 +289,10 @@
 .orders-page .order-search-box svg {
   position: absolute;
   z-index: 2;
-  top: 14px;
-  left: 15px;
-  width: 18px;
-  height: 18px;
+  top: 9px;
+  left: 11px;
+  width: 15px;
+  height: 15px;
   fill: none;
   stroke: #7187a2;
   stroke-width: 2;
@@ -300,11 +302,11 @@
 .orders-page .order-search {
   box-sizing: border-box;
   width: 100% !important;
-  height: 46px !important;
-  min-height: 46px !important;
-  padding: 0 16px 0 44px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 14px 0 34px !important;
   border: 1px solid #d7e1eb !important;
-  border-radius: 8px !important;
+  border-radius: 7px !important;
   background: #fff !important;
   color: #233955 !important;
   font-size: 11px !important;
@@ -319,13 +321,13 @@
 
 .orders-page .order-google-filter-bar {
   display: flex;
-  min-height: 54px;
+  min-height: 36px;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 6px;
+  gap: 4px;
+  padding: 4px 2px 2px;
   overflow: visible;
-  border-bottom: 1px solid #e6edf4
+  border-bottom: 1px solid #edf2f7
 }
 
 .orders-page .order-filter-menu-wrap {
@@ -335,13 +337,13 @@
 
 .orders-page .order-google-filter {
   display: inline-flex;
-  height: 36px;
-  min-height: 36px;
+  height: 28px;
+  min-height: 28px;
   align-items: center;
-  gap: 7px;
-  padding: 0 13px;
+  gap: 5px;
+  padding: 0 10px;
   border: 1px solid transparent;
-  border-radius: 18px;
+  border-radius: 14px;
   background: transparent;
   color: #263b56;
   font: 700 10px Inter, sans-serif;
@@ -454,25 +456,25 @@
 
 .orders-page .order-google-sort {
   display: flex;
-  height: 36px;
+  height: 28px;
   flex: 0 0 auto;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   margin-left: auto;
-  padding: 0 8px 0 12px;
+  padding: 0 6px 0 10px;
   border-left: 1px solid #e1e8ef;
   color: #52667f;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   white-space: nowrap
 }
 
 .orders-page .order-google-sort select {
-  height: 30px;
+  height: 26px;
   border: 0;
   background: transparent;
   color: #203752;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   outline: 0;
   cursor: pointer
@@ -540,7 +542,7 @@
 }
 
 .orders-page .orders-table-card .table-wrap {
-  max-height: calc(100dvh - 420px) !important;
+  max-height: calc(100dvh - 250px) !important;
   overflow: auto !important;
   border: 0 !important;
   border-radius: 0 !important;
@@ -625,7 +627,7 @@
   gap: 7px !important
 }
 
-.orders-page .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend):not(.net-btn-physical) {
+.orders-page .order-actions .btn:not(.net-btn-open):not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend):not(.net-btn-physical) {
   display: grid !important;
   width: 32px !important;
   height: 32px !important;
@@ -976,7 +978,7 @@
     flex-wrap: nowrap !important
   }
 
-  .orders-page .orders-table-card .order-actions .btn:not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend):not(.net-btn-physical) {
+  .orders-page .orders-table-card .order-actions .btn:not(.net-btn-open):not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend):not(.net-btn-physical) {
     flex: 0 0 32px !important;
     width: 32px !important;
     min-width: 32px !important
@@ -3480,5 +3482,1448 @@
 @media (max-width: 860px) {
   .orders-page .order-table-footer {
     padding-right: 68px !important;
+  }
+}
+
+/* ==========================================================================
+   REESTRUCTURACIÓN DE DETALLES DE RED: CHAT Y CIERRE POR AMBAS PARTES
+   ========================================================================== */
+
+.net-btn-open {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  width: 88px !important;
+  min-width: 88px !important;
+  max-width: 88px !important;
+  padding: 0 6px !important;
+  border-radius: 7px !important;
+  background: linear-gradient(135deg, #0284c7, #0369a1) !important;
+  color: #fff !important;
+  font-size: 10.5px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  border: 1px solid #0369a1 !important;
+  box-sizing: border-box !important;
+  cursor: pointer !important;
+  box-shadow: 0 2px 5px rgba(3, 105, 161, 0.2) !important;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease !important;
+}
+
+.net-btn-open:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(3, 105, 161, 0.35) !important;
+  background: linear-gradient(135deg, #0369a1, #075985) !important;
+}
+
+.net-btn-open svg {
+  width: 15px !important;
+  height: 15px !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
+  fill: none !important;
+  flex-shrink: 0 !important;
+}
+
+.net-btn-retake svg {
+  width: 14px !important;
+  height: 14px !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
+  fill: none !important;
+}
+
+.order-chat-section {
+  margin-top: 18px;
+  border: 1px solid #e1eaf3;
+  border-radius: 14px;
+  background: #f8fafc;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.order-chat-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: #fff;
+  border-bottom: 1px solid #e5edf5;
+  gap: 12px;
+}
+
+.order-chat-head-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.order-chat-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #eef5ff;
+  color: #0874e8;
+  flex: 0 0 36px;
+}
+
+.order-chat-messages {
+  max-height: 380px;
+  min-height: 160px;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #f8fafc;
+  scrollbar-gutter: stable;
+}
+
+.chat-bubble {
+  display: flex;
+  flex-direction: column;
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  position: relative;
+  box-sizing: border-box;
+  word-break: break-word;
+}
+
+.chat-bubble.mine {
+  align-self: flex-end;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  color: #0369a1;
+  border-bottom-right-radius: 3px;
+  box-shadow: 0 2px 8px rgba(3, 105, 161, 0.06);
+}
+
+.chat-bubble.theirs {
+  align-self: flex-start;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #1e293b;
+  border-bottom-left-radius: 3px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+.chat-bubble.system {
+  align-self: center;
+  background: #f1f5f9;
+  border: 1px dashed #cbd5e1;
+  color: #475569;
+  font-size: 11.5px;
+  border-radius: 20px;
+  padding: 6px 16px;
+  max-width: 90%;
+  text-align: center;
+}
+
+.chat-bubble-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.chat-bubble-role-badge {
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.chat-bubble-text {
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.chat-bubble-time {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 4px;
+  text-align: right;
+}
+
+.chat-bubble-photo-thumb {
+  margin-top: 6px;
+  border-radius: 8px;
+  max-width: 180px;
+  max-height: 120px;
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  object-fit: cover;
+  transition: transform 0.15s ease;
+}
+
+.chat-bubble-photo-thumb:hover {
+  transform: scale(1.02);
+}
+
+.chat-system-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 14px 0;
+  text-align: center;
+}
+
+.chat-divider-pill {
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.order-chat-composer-wrap {
+  padding: 12px 16px;
+  background: #fff;
+  border-top: 1px solid #e5edf5;
+}
+
+.order-chat-composer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.order-chat-input {
+  flex: 1;
+  height: 38px;
+  min-height: 38px;
+  border: 1px solid #d5e1ee;
+  border-radius: 9px;
+  padding: 0 12px;
+  font-size: 12px;
+  background: #fff;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.order-chat-input:focus {
+  border-color: #0874e8;
+}
+
+.order-chat-attach-btn {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid #d5e1ee;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+  flex: 0 0 38px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.order-chat-attach-btn:hover {
+  background: #edf5ff;
+  color: #0874e8;
+}
+
+.order-chat-send-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 9px;
+  background: #0874e8;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background 0.15s ease;
+}
+
+.order-chat-send-btn:hover {
+  background: #065ec0;
+}
+
+.order-chat-restricted-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #475569;
+  font-weight: 600;
+}
+
+.order-report-footer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+
+.footer-actions-left,
+.footer-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.closure-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.closure-badge.completed {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.closure-badge.waiting {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+
+
+/* Asegurar que modales de resolución, devolución y no realizable aparezcan POR ENCIMA del detalle */
+#network-resolve-mo,
+#network-return-mo,
+#network-unresolvable-mo {
+  z-index: 25000 !important;
+}
+
+/* Modales de confirmación y prompts en primer plano absoluto por encima de cualquier otro modal */
+#action-confirm-mo,
+#action-prompt-mo,
+.action-confirm-mo,
+body #action-confirm-mo,
+body:has(.topbar.app-sidebar) #action-confirm-mo,
+body #action-prompt-mo,
+body:has(.topbar.app-sidebar) #action-prompt-mo {
+  z-index: 100000 !important;
+}
+
+/* Compactar sección de resumen en el modal del detalle para dar máxima prioridad al chat */
+.order-tech-report-card .order-report-summary {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  margin: 0 0 10px !important;
+}
+
+.order-tech-report-card .order-report-field {
+  min-height: 48px !important;
+  padding: 8px 12px !important;
+  border-radius: 10px !important;
+  gap: 8px !important;
+}
+
+.order-tech-report-card .order-report-field-icon {
+  width: 28px !important;
+  height: 28px !important;
+  flex: 0 0 28px !important;
+}
+
+.order-tech-report-card .order-report-field-icon svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.order-tech-report-card .order-report-field small {
+  font-size: 8.5px !important;
+  margin-bottom: 2px !important;
+}
+
+.order-tech-report-card .order-report-field strong {
+  font-size: 11.5px !important;
+}
+
+.order-report-request {
+  padding: 8px 12px !important;
+  margin-top: 8px !important;
+}
+
+.order-report-evidence-accordion summary {
+  transition: background 0.15s ease;
+}
+
+.order-report-evidence-accordion summary:hover {
+  background: #f1f6fb !important;
+}
+
+@media (max-width: 1100px) {
+  .order-tech-report-card .order-report-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .order-tech-report-card .order-report-summary {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Priorizar tabla compactando cabecera y barra de filtros de Detalles de Red (Image 3) */
+.orders-page .orders-hero {
+  padding: 6px 14px !important;
+  margin: 0 0 6px !important;
+}
+.orders-page .orders-module-icon {
+  width: 34px !important;
+  height: 34px !important;
+  flex: 0 0 34px !important;
+  border-radius: 9px !important;
+}
+.orders-page .orders-module-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+.orders-page .orders-hero h1 {
+  font-size: 16px !important;
+  line-height: 1.15 !important;
+}
+.orders-page .orders-hero p {
+  font-size: 10px !important;
+}
+.orders-page .orders-stats {
+  gap: 8px !important;
+}
+.orders-page .orders-stats .stat-card {
+  min-height: 36px !important;
+  padding: 4px 10px 6px !important;
+  gap: 8px !important;
+  border-radius: 8px !important;
+}
+.orders-page .order-stat-icon {
+  width: 24px !important;
+  height: 24px !important;
+  flex: 0 0 24px !important;
+  font-size: 13px !important;
+}
+.orders-page .orders-stats .label {
+  font-size: 8.5px !important;
+  margin-bottom: 1px !important;
+}
+.orders-page .orders-stats strong {
+  font-size: 15px !important;
+}
+.orders-page .orders-filter-card {
+  padding: 6px 10px !important;
+  margin: 0 0 6px !important;
+  border-radius: 10px !important;
+}
+.orders-page .order-filter-topbar {
+  padding-bottom: 5px !important;
+  gap: 6px !important;
+}
+.orders-page .order-filter-topbar .btn {
+  height: 30px !important;
+  min-height: 30px !important;
+  font-size: 11px !important;
+  padding: 0 10px !important;
+}
+.orders-page .order-search {
+  height: 30px !important;
+  min-height: 30px !important;
+  font-size: 11px !important;
+}
+.orders-page .order-search-box svg {
+  top: 7px !important;
+  width: 14px !important;
+  height: 14px !important;
+}
+.orders-page .order-google-filter {
+  min-height: 28px !important;
+  padding: 3px 9px !important;
+  font-size: 10.5px !important;
+}
+.orders-page .order-google-sort select {
+  height: 28px !important;
+  font-size: 10.5px !important;
+}
+.orders-page .order-google-filter-bar {
+  padding-top: 5px !important;
+  gap: 6px !important;
+}
+
+
+/* Barra esencial ultra-compacta en modal de Detalle de Red */
+.order-report-essential-bar {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+.order-report-essential-bar .essential-bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.order-report-essential-bar .essential-bar-item small {
+  font-size: 8.5px;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.order-report-essential-bar .essential-bar-item strong {
+  font-size: 12px;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.order-report-essential-bar .essential-phone {
+  font-size: 10px;
+  color: #0874e8;
+  font-weight: 600;
+}
+.order-report-essential-bar .essential-bar-item.wide {
+  grid-column: 1 / -1;
+  border-top: 1px dashed #e2e8f0;
+  padding-top: 6px;
+  margin-top: 2px;
+}
+.order-report-essential-bar .essential-request-text {
+  font-size: 11.5px;
+  color: #334155;
+  line-height: 1.35;
+}
+
+/* Acordeón Ver todos los detalles técnicos y fotos */
+.order-full-details-accordion {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  margin-bottom: 10px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+.order-full-details-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: #f8fafc;
+  cursor: pointer;
+  user-select: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #334155;
+  transition: background 0.15s ease;
+}
+.order-full-details-summary:hover {
+  background: #f1f5f9;
+}
+.order-full-details-summary .summary-toggle-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #1e293b;
+}
+.order-full-details-summary .summary-toggle-hint {
+  font-size: 10.5px;
+  color: #0874e8;
+  font-weight: 600;
+}
+.order-full-details-content {
+  padding: 12px 14px;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* ==========================================================================
+   BOTONES IGUALES EN TABLA, HOVER INTENSO, FILA SELECCIONADA Y ACCIÓN PENDIENTE
+   ========================================================================== */
+/* Alineación estricta, proporción equilibrada de Detalle y tamaño compacto en Acción */
+@media (min-width: 1101px) {
+  .orders-page .order-table {
+    min-width: 1060px !important;
+    width: 100% !important;
+    table-layout: fixed !important;
+  }
+  .orders-page .order-table th:nth-child(1),
+  .orders-page .order-table td:nth-child(1) {
+    width: 8.5% !important;
+  }
+  .orders-page .order-table th:nth-child(2),
+  .orders-page .order-table td:nth-child(2) {
+    width: 9% !important;
+  }
+  .orders-page .order-table th:nth-child(3),
+  .orders-page .order-table td:nth-child(3) {
+    width: 14.5% !important;
+  }
+  .orders-page .order-table th:nth-child(4),
+  .orders-page .order-table td:nth-child(4) {
+    width: 14.5% !important;
+  }
+  .orders-page .order-table th:nth-child(5),
+  .orders-page .order-table td:nth-child(5) {
+    width: 18% !important;
+    max-width: 240px !important;
+  }
+  .orders-page .order-table th:nth-child(6),
+  .orders-page .order-table td:nth-child(6) {
+    width: 8% !important;
+  }
+  .orders-page .order-table th:nth-child(7),
+  .orders-page .order-table td:nth-child(7) {
+    width: 8% !important;
+  }
+  .orders-page .order-table th:nth-child(8),
+  .orders-page .order-table td:nth-child(8) {
+    width: 146px !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+    overflow: hidden !important;
+  }
+  .orders-page .order-table th:nth-child(9),
+  .orders-page .order-table td:nth-child(9) {
+    width: 252px !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    overflow: hidden !important;
+  }
+}
+
+.orders-page .order-detail-cell {
+  max-width: 100% !important;
+}
+.orders-page .order-detail-text {
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.32 !important;
+  max-width: 100% !important;
+  word-break: break-word !important;
+}
+
+.orders-page .order-actions {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-wrap: nowrap !important;
+  gap: 5px !important;
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  vertical-align: middle !important;
+}
+
+.orders-page .order-actions .net-btn-open,
+.orders-page .order-actions .net-btn-retake {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 88px !important;
+  min-width: 88px !important;
+  max-width: 88px !important;
+  flex: 0 0 88px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  padding: 0 6px !important;
+  margin: 0 !important;
+  gap: 4px !important;
+  font-size: 10.5px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  border-radius: 7px !important;
+  box-sizing: border-box !important;
+  white-space: nowrap !important;
+}
+
+.orders-page .order-actions .net-btn-open svg,
+.orders-page .order-actions .net-btn-retake svg {
+  width: 13px !important;
+  height: 13px !important;
+  flex-shrink: 0 !important;
+  margin: 0 !important;
+}
+
+.orders-page .order-actions .btn:not(.net-btn-open):not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend):not(.net-btn-physical) {
+  display: inline-grid !important;
+  place-items: center !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  flex: 0 0 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 7px !important;
+  box-sizing: border-box !important;
+}
+
+.orders-page .order-actions .btn:not(.net-btn-open):not(.net-btn-resolve):not(.net-btn-confirm):not(.net-btn-return):not(.net-btn-retake):not(.net-btn-attend):not(.net-btn-physical) svg {
+  width: 14px !important;
+  height: 14px !important;
+  margin: 0 !important;
+}
+
+.orders-page .order-actions .btn:disabled,
+.orders-page .order-actions .net-btn-retake-disabled {
+  opacity: 0.35 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Hover más intenso y borde nítido al seleccionar un detalle */
+.orders-page .order-table tbody tr {
+  cursor: pointer;
+  transition: background-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.orders-page .order-table tbody tr:hover,
+.orders-page .order-table tbody tr:hover > td {
+  background-color: #dbeafe !important;
+}
+
+/* Resaltado de fila cuando el usuario actual debe confirmar cierre / no realizable / físicos */
+.orders-page .order-table tbody tr.order-row-action-required > td {
+  background-color: #fffbeb !important;
+}
+
+.orders-page .order-table tbody tr.order-row-action-required:hover,
+.orders-page .order-table tbody tr.order-row-action-required:hover > td {
+  background-color: #fef3c7 !important;
+}
+
+@media (min-width: 1101px) {
+  .orders-page .order-table tbody tr.order-row-action-required > td:first-child {
+    box-shadow: inset 4px 0 0 #f59e0b !important;
+  }
+
+  .orders-page .order-table tbody tr.order-row-selected > td {
+    background-color: #e0f2fe !important;
+    border-top: 2px solid #0284c7 !important;
+    border-bottom: 2px solid #0284c7 !important;
+  }
+
+  .orders-page .order-table tbody tr.order-row-selected > td:first-child {
+    border-left: 3px solid #0284c7 !important;
+  }
+
+  .orders-page .order-table tbody tr.order-row-selected > td:last-child {
+    border-right: 3px solid #0284c7 !important;
+  }
+
+  .orders-page .order-table tbody tr.order-row-selected:hover > td {
+    background-color: #bae6fd !important;
+  }
+
+  .orders-page .order-table tbody tr.order-row-selected.order-row-action-required > td {
+    background-color: #fef3c7 !important;
+  }
+
+  .orders-page .order-table tbody tr.order-row-selected.order-row-action-required > td:first-child {
+    box-shadow: inset 4px 0 0 #f59e0b !important;
+  }
+}
+
+@media (max-width: 1100px) {
+  .orders-page .orders-table-card .order-table tbody tr.order-row-action-required {
+    border: 2px solid #f59e0b !important;
+    background-color: #fffbeb !important;
+  }
+
+  .orders-page .orders-table-card .order-table tbody tr.order-row-selected {
+    border: 2px solid #0284c7 !important;
+    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.2) !important;
+    background-color: #f0f9ff !important;
+  }
+}
+
+.orders-page .order-state-cell {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.orders-page .order-state-cell .order-status-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+@keyframes orderActionPulse {
+  0%, 100% { box-shadow: 0 2px 6px rgba(217, 119, 6, 0.28); }
+  50% { box-shadow: 0 2px 11px rgba(245, 158, 11, 0.55); }
+}
+
+.orders-page .order-action-needed-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  padding: 3px 7px !important;
+  border-radius: 6px !important;
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  color: #ffffff !important;
+  border: 1px solid #b45309 !important;
+  font-size: 9.5px !important;
+  font-weight: 800 !important;
+  line-height: 1.15 !important;
+  white-space: normal !important;
+  text-align: center !important;
+  word-break: break-word !important;
+  max-width: 100% !important;
+  width: auto !important;
+  box-sizing: border-box !important;
+  cursor: pointer !important;
+  animation: orderActionPulse 2.2s infinite ease-in-out;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.orders-page .order-action-needed-pill.is-unresolvable-pill {
+  background: linear-gradient(135deg, #dc2626, #b91c1c) !important;
+  border-color: #991b1b !important;
+}
+
+.orders-page .order-action-needed-pill.is-physical-pill {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
+  border-color: #5b21b6 !important;
+}
+
+.orders-page .order-action-needed-pill:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+.orders-page .order-waiting-other-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  padding: 2px 6px !important;
+  border-radius: 6px !important;
+  background: #f8fafc !important;
+  color: #64748b !important;
+  border: 1px solid #cbd5e1 !important;
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  line-height: 1.15 !important;
+  white-space: normal !important;
+  text-align: center !important;
+  word-break: break-word !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.order-chat-head {
+  flex-wrap: wrap !important;
+}
+
+.order-chat-status-pill {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  max-width: 100% !important;
+}
+
+.closure-badge {
+  white-space: normal !important;
+  line-height: 1.25 !important;
+  text-align: center !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Botones de acciones en el pie del modal del chat (sin descuadrarse) */
+.order-report-footer-actions .btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  min-height: 36px !important;
+  height: 36px !important;
+  padding: 0 14px !important;
+  border-radius: 9px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  width: auto !important;
+  max-width: none !important;
+  transition: transform 0.12s ease, filter 0.12s ease, background 0.12s ease !important;
+}
+
+.order-report-footer-actions .btn svg.btn-action-svg {
+  width: 15px !important;
+  height: 15px !important;
+  stroke: currentColor !important;
+  stroke-width: 2 !important;
+  fill: none !important;
+  flex-shrink: 0 !important;
+}
+
+.order-report-footer-actions .net-btn-retake {
+  background: #eff6ff !important;
+  border: 1px solid #93c5fd !important;
+  color: #1d4ed8 !important;
+}
+
+.order-report-footer-actions .net-btn-retake:hover {
+  background: #dbeafe !important;
+}
+
+.order-report-footer-actions .net-btn-physical {
+  background: #f5f3ff !important;
+  border: 1px solid #c4b5fd !important;
+  color: #6d28d9 !important;
+}
+
+.order-report-footer-actions .net-btn-physical:hover {
+  background: #ede9fe !important;
+}
+
+.order-report-footer-actions .net-btn-physical.net-btn-physical-confirm {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
+  border-color: #5b21b6 !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 10px rgba(109, 40, 217, 0.25) !important;
+}
+
+.order-report-footer-actions .net-btn-resolve {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+  border: 1px solid #1e40af !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.24) !important;
+}
+
+.order-report-footer-actions .net-btn-confirm {
+  background: linear-gradient(135deg, #059669, #047857) !important;
+  border: 1px solid #065f46 !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25) !important;
+}
+
+/* Compensación de body { zoom: 0.8 } en escritorio para modales de confirmación y prompt */
+@media (min-width: 901px) {
+  #action-confirm-mo,
+  #action-prompt-mo,
+  body #action-confirm-mo,
+  body #action-prompt-mo {
+    left: 0 !important;
+    top: 0 !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 125vw !important;
+    height: 125dvh !important;
+  }
+}
+
+/* ==========================================================================
+   CUADROS DE ACCIÓN ANCHOS EN EL CHAT CON COLORES DISTINTIVOS POR ACCIÓN
+   ========================================================================== */
+.chat-bubble.system {
+  align-self: center !important;
+  width: min(94%, 840px) !important;
+  max-width: 94% !important;
+  background: #f8fafc !important;
+  border-width: 1px 1px 1px 5px !important;
+  border-style: solid !important;
+  border-color: #cbd5e1 !important;
+  border-left-color: #64748b !important;
+  color: #334155 !important;
+  font-size: 12px !important;
+  border-radius: 12px !important;
+  padding: 10px 16px !important;
+  text-align: left !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05) !important;
+}
+
+.chat-bubble.system strong {
+  color: #0f172a;
+}
+
+.chat-system-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chat-system-title {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.chat-system-author {
+  font-weight: 600;
+  opacity: 0.92;
+}
+
+.chat-system-time {
+  font-size: 10.5px;
+  font-weight: 700;
+  opacity: 0.78;
+  white-space: nowrap;
+}
+
+.chat-system-note {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 500;
+}
+
+.chat-system-photos {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+/* 1. Creado / registrado (Azul cielo) */
+.chat-bubble.system.system-created {
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+  border-left-color: #0284c7 !important;
+  color: #0c4a6e !important;
+}
+.chat-bubble.system.system-created strong {
+  color: #0369a1 !important;
+}
+
+/* 2. En atención iniciada (Ámbar cálido) */
+.chat-bubble.system.system-attending {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+  border-left-color: #f59e0b !important;
+  color: #78350f !important;
+}
+.chat-bubble.system.system-attending strong {
+  color: #b45309 !important;
+}
+
+/* 3. Retomado / reasignado (Azul índigo) */
+.chat-bubble.system.system-retaken {
+  background: #eff6ff !important;
+  border-color: #bfdbfe !important;
+  border-left-color: #2563eb !important;
+  color: #1e3a8a !important;
+}
+.chat-bubble.system.system-retaken strong {
+  color: #1d4ed8 !important;
+}
+
+/* 4. Enviado a concluir / resuelto (Verde esmeralda) */
+.chat-bubble.system.system-resolved {
+  background: #f0fdf4 !important;
+  border-color: #86efac !important;
+  border-left-color: #16a34a !important;
+  color: #14532d !important;
+}
+.chat-bubble.system.system-resolved strong {
+  color: #15803d !important;
+}
+
+/* 5. Devuelto / observaciones de retorno (Naranja intenso) */
+.chat-bubble.system.system-returned {
+  background: #fff7ed !important;
+  border-color: #fed7aa !important;
+  border-left-color: #ea580c !important;
+  color: #7c2d12 !important;
+}
+.chat-bubble.system.system-returned strong {
+  color: #c2410c !important;
+}
+
+/* 6. Caso concluido formalmente (Verde azulado / Teal) */
+.chat-bubble.system.system-completed {
+  background: #f0fdfa !important;
+  border-color: #99f6e4 !important;
+  border-left-color: #0d9488 !important;
+  color: #134e4a !important;
+}
+.chat-bubble.system.system-completed strong {
+  color: #0f766e !important;
+}
+
+/* 7. No realizable / rechazado (Rojo carmesí) */
+.chat-bubble.system.system-failed {
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+  border-left-color: #dc2626 !important;
+  color: #7f1d1d !important;
+}
+.chat-bubble.system.system-failed strong {
+  color: #b91c1c !important;
+}
+
+/* 8. Propuesta o acuerdo a Detalles Físicos (Violeta) */
+.chat-bubble.system.system-physical {
+  background: #f5f3ff !important;
+  border-color: #ddd6fe !important;
+  border-left-color: #7c3aed !important;
+  color: #4c1d95 !important;
+}
+.chat-bubble.system.system-physical strong {
+  color: #6d28d9 !important;
+}
+
+@media (max-width: 760px) {
+  .order-report-essential-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .chat-bubble.system {
+    width: 98% !important;
+    max-width: 98% !important;
+    padding: 9px 12px !important;
+  }
+}
+
+/* ==========================================================================
+   COLORES DISTINTIVOS POR CADA ESTADO (COHERENTES Y DIFERENCIADOS)
+   1. Pendiente     -> Ámbar (#f59e0b)
+   2. En atención   -> Azul (#2563eb)
+   3. Resuelto      -> Cian / Turquesa (#0891b2)
+   4. Devuelto      -> Naranja (#ea580c)
+   5. No realizado  -> Rojo (#dc2626)
+   6. Concluido     -> Verde esmeralda (#059669)
+   7. Revisado      -> Violeta (#7c3aed)
+   ========================================================================== */
+.orders-page .order-status-badge.is-pending,
+.order-report-status.is-pending {
+  background: #fffbeb !important;
+  color: #b45309 !important;
+  border: 1px solid #fcd34d !important;
+}
+.orders-page .order-status-badge.is-pending .order-status-dot,
+.order-filter-status-dot.is-pending {
+  background: #f59e0b !important;
+}
+
+.orders-page .order-status-badge.is-reviewing,
+.order-report-status.is-reviewing {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1px solid #93c5fd !important;
+}
+.orders-page .order-status-badge.is-reviewing .order-status-dot,
+.order-filter-status-dot.is-reviewing {
+  background: #2563eb !important;
+}
+
+.orders-page .order-status-badge.is-resolving,
+.order-report-status.is-resolving {
+  background: #ecfeff !important;
+  color: #0e7490 !important;
+  border: 1px solid #67e8f9 !important;
+}
+.orders-page .order-status-badge.is-resolving .order-status-dot,
+.order-filter-status-dot.is-resolving {
+  background: #0891b2 !important;
+}
+
+.orders-page .order-status-badge.is-returned,
+.order-report-status.is-returned {
+  background: #fff7ed !important;
+  color: #c2410c !important;
+  border: 1px solid #fdba74 !important;
+}
+.orders-page .order-status-badge.is-returned .order-status-dot,
+.order-filter-status-dot.is-returned {
+  background: #ea580c !important;
+}
+
+.orders-page .order-status-badge.is-unresolvable,
+.order-report-status.is-unresolvable {
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+  border: 1px solid #fca5a5 !important;
+}
+.orders-page .order-status-badge.is-unresolvable .order-status-dot,
+.order-filter-status-dot.is-unresolvable {
+  background: #dc2626 !important;
+}
+
+.orders-page .order-status-badge.is-done,
+.order-report-status.is-done {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border: 1px solid #6ee7b7 !important;
+}
+.orders-page .order-status-badge.is-done .order-status-dot,
+.order-filter-status-dot.is-done {
+  background: #059669 !important;
+}
+
+.orders-page .order-status-badge.is-reviewed,
+.order-report-status.is-reviewed {
+  background: #f5f3ff !important;
+  color: #6d28d9 !important;
+  border: 1px solid #c4b5fd !important;
+}
+.orders-page .order-status-badge.is-reviewed .order-status-dot,
+.order-filter-status-dot.is-reviewed {
+  background: #7c3aed !important;
+}
+
+.order-filter-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.order-filter-menu-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 4px 0;
+}
+
+.order-filter-sort-shortcut {
+  font-weight: 600 !important;
+  color: #334155 !important;
+}
+
+/* ==========================================================================
+   BOTONES Y MODALES DE GUÍA (COLORES Y FLUJO DE TRABAJO)
+   ========================================================================== */
+.order-subtle-guides-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 6px;
+}
+
+.order-subtle-help-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 999px;
+  border: 1.5px solid #93c5fd;
+  background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%);
+  color: #1e40af;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.12);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.order-subtle-help-btn.is-colors-guide {
+  border-color: #93c5fd;
+  background: linear-gradient(135deg, #eff6ff 0%, #e0e7ff 100%);
+  color: #1d4ed8;
+}
+
+.order-subtle-help-btn.is-colors-guide:hover {
+  background: linear-gradient(135deg, #dbeafe 0%, #c7d2fe 100%);
+  border-color: #60a5fa;
+  color: #1e3a8a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+}
+
+.order-subtle-help-btn.is-workflow-guide {
+  border-color: #5eead4;
+  background: linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%);
+  color: #0f766e;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.12);
+}
+
+.order-subtle-help-btn.is-workflow-guide:hover {
+  background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%);
+  border-color: #2dd4bf;
+  color: #115e59;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(13, 148, 136, 0.2);
+}
+
+.order-subtle-help-btn svg {
+  opacity: 0.95;
+  flex-shrink: 0;
+}
+
+.network-guide-modal {
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.network-guide-body {
+  overflow-y: auto;
+  padding: 4px 2px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.network-guide-section h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.network-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.network-guide-item {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.network-guide-item p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #475569;
+}
+
+.network-guide-grid-compact {
+  gap: 6px;
+}
+
+.network-guide-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.guide-color-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.network-workflow-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.network-workflow-steps > li {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid #64748b;
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #334155;
+}
+
+.network-workflow-steps > li > strong {
+  display: block;
+  font-size: 13px;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.network-workflow-steps > li p {
+  margin: 0 0 4px;
+}
+
+.network-workflow-steps > li p:last-child {
+  margin-bottom: 0;
+}
+
+.network-workflow-steps ul {
+  margin: 4px 0 6px 18px;
+  padding: 0;
+}
+
+@media (max-width: 680px) {
+  .network-guide-grid {
+    grid-template-columns: 1fr;
   }
 }

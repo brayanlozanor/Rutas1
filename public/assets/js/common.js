@@ -29,7 +29,7 @@ const ROLE_PAGE_ACCESS = {
         'login.html',
         ''
     ]),
-    tecnico: new Set(['planificar.html', 'login.html'])
+    tecnico: new Set(['planificar.html', 'material.html', 'historial.html', 'login.html', ''])
 };
 
 function getCurrentUser() {
@@ -106,7 +106,7 @@ function isPrincipalAdministratorClient() {
 function canAccessCurrentPage() {
     const role = normalizeRole(getCurrentUser().role);
     const currentPage = getCurrentPageName();
-    if (currentPage === 'tecnicos.html') {
+    if (currentPage === 'tecnicos.html' || currentPage === 'usuarios.html') {
         // Solo el rol administrador puede acceder a la gestión de usuarios
         return role === 'administrador';
     }
@@ -321,7 +321,108 @@ function showAdminDetailCompletionForm() {
     setTimeout(() => document.getElementById('admin-completion-name')?.focus(), 50);
 }
 
+/* Optimizador único de imágenes: reduce el peso al mínimo conservando nitidez.
+   - Lado mayor máximo 1600 px (suficiente para leer etiquetas/pantallas ampliando).
+   - WebP cuando el navegador lo soporta (≈30-40% menor que JPEG a igual calidad); si no, JPEG.
+   - Ajusta la calidad progresivamente hasta quedar bajo ~180 KB; si aún excede, reduce dimensiones (mín. 1024 px).
+   - Respeta la orientación EXIF y pone fondo blanco a imágenes con transparencia. */
+const IMAGE_UPLOAD_MAX_SIDE = 1600;
+const IMAGE_UPLOAD_MIN_SIDE = 1024;
+const IMAGE_UPLOAD_TARGET_BYTES = 180 * 1024;
+let imageUploadWebpSupported = null;
+
+function imageUploadSupportsWebp() {
+  if (imageUploadWebpSupported === null) {
+    try {
+      const c = document.createElement('canvas'); c.width = c.height = 1;
+      imageUploadWebpSupported = c.toDataURL('image/webp').startsWith('data:image/webp');
+    } catch (_) { imageUploadWebpSupported = false; }
+  }
+  return imageUploadWebpSupported;
+}
+
+async function decodeImageForUpload(file) {
+  if (typeof createImageBitmap === 'function') {
+    try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (_) {}
+  }
+  const src = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+  return await new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function canvasToBlobForUpload(canvas, type, quality) {
+  return new Promise(resolve => {
+    if (canvas.toBlob) canvas.toBlob(blob => resolve(blob), type, quality);
+    else resolve(null);
+  });
+}
+
+function blobToDataUrlForUpload(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function optimizeImageForUpload(file, options = {}) {
+  if (!file) return '';
+  const maxSide = options.maxSide || IMAGE_UPLOAD_MAX_SIDE;
+  const minSide = options.minSide || IMAGE_UPLOAD_MIN_SIDE;
+  const target = options.targetBytes || IMAGE_UPLOAD_TARGET_BYTES;
+  const image = await decodeImageForUpload(file);
+  const width = image.width || image.naturalWidth;
+  const height = image.height || image.naturalHeight;
+  const type = imageUploadSupportsWebp() ? 'image/webp' : 'image/jpeg';
+  const qualities = [0.82, 0.76, 0.7, 0.64, 0.58];
+  let side = Math.min(maxSide, Math.max(width, height));
+  let best = null;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  while (true) {
+    const scale = Math.min(1, side / Math.max(width, height));
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    for (const q of qualities) {
+      const blob = await canvasToBlobForUpload(canvas, type, q);
+      if (!blob) {
+        const dataUrl = canvas.toDataURL(type, q);
+        if (!best || dataUrl.length < best.size) best = { dataUrl, size: dataUrl.length * 0.75 };
+        if (dataUrl.length * 0.75 <= target) { image.close?.(); return dataUrl; }
+        continue;
+      }
+      if (!best || blob.size < best.size) best = { blob, size: blob.size };
+      if (blob.size <= target) {
+        image.close?.();
+        return await blobToDataUrlForUpload(blob);
+      }
+    }
+    if (side <= minSide) break;
+    side = Math.max(minSide, Math.round(side * 0.82));
+  }
+  image.close?.();
+  if (!best) return '';
+  return best.dataUrl || await blobToDataUrlForUpload(best.blob);
+}
+window.optimizeImageForUpload = optimizeImageForUpload;
+
 function compressAdminDetailCompletionImage(file) {
+    if (typeof optimizeImageForUpload === 'function') return optimizeImageForUpload(file);
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = reject;
@@ -676,10 +777,16 @@ function _injectActionConfirmStyles() {
     const style = document.createElement('style');
     style.id = 'action-confirm-styles';
     style.textContent = `
-        #action-confirm-mo {
+        #action-confirm-mo,
+        #action-prompt-mo,
+        .action-confirm-mo,
+        body #action-confirm-mo,
+        body:has(.topbar.app-sidebar) #action-confirm-mo,
+        body #action-prompt-mo,
+        body:has(.topbar.app-sidebar) #action-prompt-mo {
             box-sizing: border-box !important;
             position: fixed !important;
-            z-index: 2147483000 !important;
+            z-index: 100000 !important;
             inset: 0 !important;
             width: 100vw !important;
             height: 100dvh !important;
@@ -690,9 +797,23 @@ function _injectActionConfirmStyles() {
             isolation: isolate !important;
         }
         @media (min-width: 901px) {
-            #action-confirm-mo { height: 125dvh !important; }
+            #action-confirm-mo,
+            #action-prompt-mo,
+            .action-confirm-mo,
+            body #action-confirm-mo,
+            body:has(.topbar.app-sidebar) #action-confirm-mo,
+            body #action-prompt-mo,
+            body:has(.topbar.app-sidebar) #action-prompt-mo {
+                right: auto !important;
+                bottom: auto !important;
+                width: 125vw !important;
+                height: 125dvh !important;
+                max-width: none !important;
+                max-height: none !important;
+            }
         }
-        #action-confirm-mo.open { display:flex; animation: acmo-fadein .18s ease; }
+        #action-confirm-mo.open,
+        #action-prompt-mo.open { display:flex !important; animation: acmo-fadein .18s ease; }
         @keyframes acmo-fadein { from { opacity:0; } to { opacity:1; } }
         .action-confirm-card {
             background: #fff;
@@ -884,44 +1005,93 @@ function ensureActionPromptModal() {
     modal.id = 'action-prompt-mo';
     modal.className = 'mo action-confirm-mo';
     modal.innerHTML = `
-        <div class="action-confirm-card" role="dialog" aria-modal="true" style="border-color:rgba(239,68,68,.3);max-width:540px">
-            <div class="action-confirm-icon-wrap danger" id="action-prompt-icon-wrap" style="background:#fff1f2;border:2px solid #fecdd3;color:#e11d48;font-size:24px;display:grid;place-items:center">
-                <span>↩️</span>
+        <div class="action-confirm-card" id="action-prompt-card" role="dialog" aria-modal="true" style="border-color:rgba(2,132,199,.25);max-width:560px;margin:auto">
+            <div class="action-confirm-icon-wrap" id="action-prompt-icon-wrap" style="background:#eff6ff;border:2px solid #bfdbfe;color:#0284c7;font-size:24px;display:grid;place-items:center">
+                <span id="action-prompt-icon">📝</span>
             </div>
-            <div class="action-confirm-copy" style="width:100%">
-                <h2 id="action-prompt-title" style="color:#0f172a;margin:0 0 6px">Devolver a soporte</h2>
-                <p id="action-prompt-message" style="color:#64748b;margin:0">Indica el motivo por el cual no estás de acuerdo con el material o cantidades indicadas:</p>
+            <div class="action-confirm-copy" style="width:100%;min-width:0">
+                <h2 id="action-prompt-title" style="color:#0f172a;margin:0 0 6px;font-size:20px">Registrar motivo</h2>
+                <p id="action-prompt-message" style="color:#64748b;margin:0;font-size:13px;line-height:1.5">Indica el motivo o comentario:</p>
                 <div style="margin-top:12px">
                     <textarea id="action-prompt-input" rows="3" placeholder="Escribe el motivo aquí..." style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:10px 12px;font-size:13px;font-family:inherit;resize:vertical;outline:none"></textarea>
                 </div>
             </div>
             <div class="action-confirm-actions">
                 <button class="btn btn-cancel-confirm" id="action-prompt-cancel" type="button">Cancelar</button>
-                <button class="btn btn-ok-danger" id="action-prompt-ok" type="button" style="background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff">Devolver a soporte</button>
+                <button class="btn btn-ok-danger" id="action-prompt-ok" type="button" style="background:linear-gradient(135deg,#0284c7,#0369a1);color:#fff;border:none">Confirmar</button>
             </div>
         </div>`;
     document.body.appendChild(modal);
     return modal;
 }
 
-function askReasonPrompt({ title = 'Devolver a soporte', message = '', placeholder = 'Indica el motivo...', confirmText = 'Devolver a soporte', cancelText = 'Cancelar' } = {}) {
+function askReasonPrompt({
+    title = 'Devolver a soporte',
+    message = '',
+    placeholder = 'Indica el motivo...',
+    confirmText = 'Confirmar',
+    cancelText = 'Cancelar',
+    initialValue = '',
+    tone = '',
+    emptyWarning = ''
+} = {}) {
     const modal = ensureActionPromptModal();
+    const cardEl = document.getElementById('action-prompt-card');
+    const iconWrap = document.getElementById('action-prompt-icon-wrap');
+    const iconEl = document.getElementById('action-prompt-icon');
     const titleEl = document.getElementById('action-prompt-title');
     const messageEl = document.getElementById('action-prompt-message');
     const inputEl = document.getElementById('action-prompt-input');
     const ok = document.getElementById('action-prompt-ok');
     const cancel = document.getElementById('action-prompt-cancel');
+
+    const resolvedTone = tone || (/devolver|rechazar/i.test(title) ? 'danger' : (/concluir|resolver/i.test(title) ? 'ok' : 'primary'));
+    if (cardEl) {
+        cardEl.style.borderColor = resolvedTone === 'danger'
+            ? 'rgba(239,68,68,.28)'
+            : (resolvedTone === 'ok' ? 'rgba(16,185,129,.28)' : 'rgba(2,132,199,.25)');
+    }
+    if (iconWrap) {
+        if (resolvedTone === 'danger') {
+            iconWrap.style.background = '#fff1f2';
+            iconWrap.style.borderColor = '#fecdd3';
+            iconWrap.style.color = '#e11d48';
+        } else if (resolvedTone === 'ok') {
+            iconWrap.style.background = '#ecfdf5';
+            iconWrap.style.borderColor = '#a7f3d0';
+            iconWrap.style.color = '#059669';
+        } else {
+            iconWrap.style.background = '#eff6ff';
+            iconWrap.style.borderColor = '#bfdbfe';
+            iconWrap.style.color = '#0284c7';
+        }
+    }
+    if (iconEl) {
+        iconEl.textContent = resolvedTone === 'danger' ? '↩️' : (resolvedTone === 'ok' ? '✓' : '📋');
+    }
+    if (ok) {
+        ok.style.background = resolvedTone === 'danger'
+            ? 'linear-gradient(135deg,#ef4444,#dc2626)'
+            : (resolvedTone === 'ok' ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#0284c7,#0369a1)');
+        ok.style.color = '#fff';
+        ok.textContent = confirmText;
+    }
+
     if (titleEl) titleEl.textContent = title;
     if (messageEl) messageEl.textContent = message;
     if (inputEl) {
         inputEl.placeholder = placeholder;
-        inputEl.value = '';
+        inputEl.value = initialValue || '';
     }
-    if (ok) ok.textContent = confirmText;
     if (cancel) cancel.textContent = cancelText;
 
     modal.classList.add('open');
-    setTimeout(() => inputEl?.focus(), 80);
+    setTimeout(() => {
+        if (inputEl) {
+            inputEl.focus();
+            if (initialValue) inputEl.select();
+        }
+    }, 80);
 
     return new Promise(resolve => {
         const done = val => {
@@ -934,7 +1104,7 @@ function askReasonPrompt({ title = 'Devolver a soporte', message = '', placehold
         const onOk = () => {
             const text = (inputEl?.value || '').trim();
             if (!text) {
-                if (typeof notify === 'function') notify('Por favor indica el motivo para devolver a soporte.', 'warn');
+                if (typeof notify === 'function') notify(emptyWarning || 'Por favor escribe el motivo o comentario requerido.', 'warn');
                 inputEl?.focus();
                 return;
             }
@@ -952,15 +1122,51 @@ function askReasonPrompt({ title = 'Devolver a soporte', message = '', placehold
 
 function closeTopModal() {
     const openModals = Array.from(document.querySelectorAll('.mo.open'));
-    const modal = openModals[openModals.length - 1];
+    if (!openModals.length) return false;
+    // Ordenar por z-index efectivo para cerrar únicamente la ventana superior activa
+    const sorted = openModals
+        .map((el, idx) => ({
+            el,
+            idx,
+            z: parseInt((typeof window !== 'undefined' && window.getComputedStyle) ? window.getComputedStyle(el).zIndex : '0', 10) || 0
+        }))
+        .sort((a, b) => (a.z !== b.z ? a.z - b.z : a.idx - b.idx));
+    const modal = sorted[sorted.length - 1]?.el;
     if (!modal) return false;
+
+    if (modal.id === 'action-confirm-mo') {
+        const cancelBtn = document.getElementById('action-confirm-cancel');
+        if (cancelBtn) {
+            cancelBtn.click();
+        } else {
+            modal.classList.remove('open');
+        }
+        return true;
+    }
+    if (modal.id === 'action-prompt-mo') {
+        const cancelBtn = document.getElementById('action-prompt-cancel');
+        if (cancelBtn) {
+            cancelBtn.click();
+        } else {
+            modal.classList.remove('open');
+        }
+        return true;
+    }
+    if (modal.id === 'plan-assignment-mo' && typeof resolvePlanAssignment === 'function') {
+        resolvePlanAssignment(false);
+        return true;
+    }
     // Si es el mapa fullscreen del planificador, delegar al cierre especializado para limpiar overflow
     if (modal.id === 'plan-map-fullscreen-mo' && typeof closePlanFullMap === 'function') {
         closePlanFullMap();
         return true;
     }
-    if(modal.id==='evidence-viewer-mo'){
+    if (modal.id === 'evidence-viewer-mo') {
         closeEvidenceViewer();
+        return true;
+    }
+    if (modal.id === 'order-tech-report-mo' && typeof requestCloseOrderReport === 'function') {
+        requestCloseOrderReport();
         return true;
     }
     const beforeClose = new CustomEvent('netops:before-modal-close', {
@@ -1072,7 +1278,8 @@ const NAV_ITEMS = [
 ];
 
 function buildNavigationHtml() {
-    return NAV_ITEMS.map(item => `<a href="${item.href}" class="nb">${item.label}</a>`).join('');
+    const isAdmin = normalizeRole(getCurrentUser()?.role) === 'administrador';
+    return NAV_ITEMS.filter(item => !item.adminOnly || isAdmin).map(item => `<a href="${item.href}" class="nb">${item.label}</a>`).join('');
 }
 
 function ensureAppTopbar() {
@@ -1111,8 +1318,13 @@ function ensureAppTopbar() {
     const nav = topbar.querySelector('.nav');
     if (nav) {
         nav.querySelectorAll('a[href="ordenes.html"], a[href="ordenes.html/"]').forEach(l => l.remove());
+        const isAdmin = normalizeRole(getCurrentUser()?.role) === 'administrador';
         NAV_ITEMS.forEach(item => {
             let link = nav.querySelector(`a[href="${item.href}"]`);
+            if (item.adminOnly && !isAdmin) {
+                if (link) link.remove();
+                return;
+            }
             if (!link) {
                 link = document.createElement('a');
                 link.href = item.href;
@@ -1260,10 +1472,18 @@ function applyRoleNavigation(role) {
         } else {
             canShow = true;
         }
+        if (!isAdmin && (item?.adminOnly || pageHref === 'tecnicos.html' || pageHref === 'usuarios.html')) {
+            link.remove();
+            return;
+        }
         link.hidden = !canShow;
         link.setAttribute('aria-hidden', canShow ? 'false' : 'true');
         link.classList.toggle('role-hidden-nav', !canShow);
-        link.style.display = canShow ? '' : 'none';
+        if (canShow) {
+            link.style.removeProperty('display');
+        } else {
+            link.style.setProperty('display', 'none', 'important');
+        }
     });
 }
 
@@ -1303,10 +1523,13 @@ function setStoredNotificationsInbox(items) {
   } catch (e) {}
 }
 
-function addNotificationToInbox({ id, title, message, type, orderId = '', url = '', createdAt = new Date().toISOString() }) {
+function addNotificationToInbox({ id, title, message, type, orderId = '', eventId = '', url = '', createdAt = new Date().toISOString() }) {
   const inbox = getStoredNotificationsInbox();
-  // Evitar duplicados idénticos; preservar estado leído para evitar que recargas o refrescos lo vuelvan no leído
-  const existingIdx = inbox.findIndex(x => x.id === id || (x.orderId === orderId && x.type === type));
+  // Evitar duplicados idénticos; en mensajes de chat permitir múltiples notificaciones usando eventId único por mensaje
+  const existingIdx = inbox.findIndex(x =>
+    (id && x.id === id) ||
+    (eventId ? x.eventId === eventId : (x.orderId === orderId && x.type === type))
+  );
   if (existingIdx >= 0) {
     return;
   }
@@ -1316,6 +1539,7 @@ function addNotificationToInbox({ id, title, message, type, orderId = '', url = 
     message,
     type,
     orderId,
+    eventId,
     url,
     unread: true,
     createdAt
@@ -1628,6 +1852,7 @@ function initCommon() {
     applyModuleVisualIdentity(current);
     ensureNotificationCenter();
     initNetworkNotifications();
+    initServiceWorker();
 }
 
 let activityFeedbackTimer = null;
@@ -1746,7 +1971,7 @@ function sharedDetailReviewOpenedSummary(detail) {
 }
 
 async function markSharedDetailInReviewOnOpen(detail,refreshName='') {
-  if (!detail || detail.deletedAt || detail.reviewOpenedAt || !userHasRole('administrador','admin')) return false;
+  if (!detail || detail.deletedAt || detail.reviewOpenedAt || !userHasRole('administrador','admin','soporte')) return false;
   if (detail.status === 'completada' || detail.status === 'no_realizado') return false;
   const actor=getCurrentUser(); const auditStart=Array.isArray(state.auditLog)?state.auditLog.length:0;
   detail.reviewOpenedAt=new Date().toISOString();detail.reviewOpenedById=actor.id||'';detail.reviewOpenedByName=actor.name||actor.username||'Administrador';detail.reviewOpenedByUsername=actor.username||'';
@@ -2029,6 +2254,12 @@ function _injectNetworkNotificationStyles() {
     .netops-toast-retaken { border-left-color: #0284c7; }
     .netops-toast-retaken .netops-toast-icon { background: #f0f9ff; color: #0284c7; }
 
+    .netops-toast-chat_message { border-left-color: #0284c7; }
+    .netops-toast-chat_message .netops-toast-icon { background: #e0f2fe; color: #0284c7; }
+
+    .netops-toast-physical_proposed { border-left-color: #7c3aed; }
+    .netops-toast-physical_proposed .netops-toast-icon { background: #f5f3ff; color: #7c3aed; }
+
     .netops-toast-deleted { border-left-color: #dc2626; }
     .netops-toast-deleted .netops-toast-icon { background: #fef2f2; color: #dc2626; }
 
@@ -2103,13 +2334,18 @@ function getNetopsAudioContext() {
 
 function unlockNetopsAudioOnInteraction() {
   if (typeof window === 'undefined') return;
+  let permAsked = false;
   const unlock = () => {
     const ctx = getNetopsAudioContext();
     if (ctx && ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
     }
+    if (!permAsked) {
+      permAsked = true;
+      requestNotificationPermissionOnce();
+    }
   };
-  ['pointerdown', 'keydown', 'touchstart'].forEach(evt => {
+  ['pointerdown', 'keydown', 'touchstart', 'click'].forEach(evt => {
     window.addEventListener(evt, unlock, { passive: true });
   });
 }
@@ -2230,6 +2466,8 @@ function showRightScreenNotification({
     sent_to_physical: '<svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
     resent: '<svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>',
     retaken: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>',
+    chat_message: '<svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+    physical_proposed: '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
     deleted: '<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>'
   };
 
@@ -2303,32 +2541,73 @@ function requestNotificationPermissionOnce() {
   }
 }
 
-function triggerDesktopNotification({ title, message, url = '', orderId = '' }) {
+
+function initServiceWorker() {
+  try {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('/sw.js').then(() => {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        const data = event?.data;
+        if (data && data.type === 'NETOPS_OPEN_NOTIFICATION_TARGET') {
+          if (data.orderId && typeof markNotificationReadByOrderId === 'function') {
+            markNotificationReadByOrderId(data.orderId);
+          }
+          if (data.orderId && window.location.pathname.includes('ordenes') && typeof openOrderTechnicianReport === 'function') {
+            openOrderTechnicianReport(data.orderId);
+          } else if (data.url) {
+            window.location.href = data.url;
+          }
+        }
+      });
+    }).catch(() => {});
+  } catch (e) {}
+}
+
+function triggerDesktopNotification({ title, message, url = '', orderId = '', eventId = '' }) {
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission === 'granted') {
     try {
       const logoUrl = window.location.origin + '/assets/brand/wifimex-logo.jpg';
-      const notif = new Notification(title, {
+      const tag = 'netops-network-' + (eventId || orderId || Date.now());
+      const options = {
         body: message,
         icon: logoUrl,
         badge: logoUrl,
-        tag: 'netops-network-' + (orderId || Date.now()),
-        renotify: false
-      });
-      notif.onclick = () => {
-        try {
-          window.focus();
-        } catch (e) {}
-        if (orderId && typeof markNotificationReadByOrderId === 'function') {
-          markNotificationReadByOrderId(orderId);
-        }
-        if (orderId && window.location.pathname.includes('ordenes') && typeof openOrderTechnicianReport === 'function') {
-          openOrderTechnicianReport(orderId);
-        } else if (url) {
-          window.location.href = url;
-        }
-        notif.close();
+        tag,
+        renotify: true,
+        requireInteraction: false,
+        data: { url, orderId }
       };
+
+      const createWindowNotification = () => {
+        try {
+          const notif = new Notification(title, options);
+          notif.onclick = () => {
+            try { window.focus(); } catch (e) {}
+            if (orderId && typeof markNotificationReadByOrderId === 'function') {
+              markNotificationReadByOrderId(orderId);
+            }
+            if (orderId && window.location.pathname.includes('ordenes') && typeof openOrderTechnicianReport === 'function') {
+              openOrderTechnicianReport(orderId);
+            } else if (url) {
+              window.location.href = url;
+            }
+            notif.close();
+          };
+        } catch (err) {}
+      };
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistration().then(reg => {
+          if (reg && typeof reg.showNotification === 'function') {
+            reg.showNotification(title, options).catch(createWindowNotification);
+          } else {
+            createWindowNotification();
+          }
+        }).catch(createWindowNotification);
+      } else {
+        createWindowNotification();
+      }
     } catch (e) {
       console.warn('No se pudo emitir la notificación de escritorio', e);
     }
@@ -2436,15 +2715,16 @@ function notifyNetworkDetailEvent({
   message,
   type = 'info',
   orderId = '',
+  eventId = '',
   sound = true,
   desktop = true,
   force = false
 }) {
   const now = Date.now();
-  // Evitar duplicados del mismo tipo y orden en los últimos 60 segundos
-  const notifKey = `${type}_${orderId || title}`;
+  // Evitar duplicados del mismo tipo y orden en los últimos 60 segundos; si hay eventId único (mensajes de chat), deduplicar por mensaje
+  const notifKey = eventId ? `${type}_${orderId}_${eventId}` : `${type}_${orderId || title}`;
   const lastTime = _netopsRecentlyNotified.get(notifKey) || 0;
-  if (!force && (now - lastTime < 60000)) {
+  if (eventId ? lastTime > 0 : (!force && (now - lastTime < 60000))) {
     return;
   }
   _netopsRecentlyNotified.set(notifKey, now);
@@ -2475,17 +2755,20 @@ function notifyNetworkDetailEvent({
     message,
     type,
     orderId,
+    eventId,
     url,
     createdAt: new Date().toISOString()
   });
 
-  // 3. Notificación de escritorio si la pestaña está en segundo plano y no está calentando la sesión
-  if (desktop && !isSessionWarmingUp && (document.hidden || !document.hasFocus())) {
+  // 3. Notificación nativa en tarjetas a la derecha de la pantalla del sistema operativo (aun fuera de la página o con navegador en segundo plano/minimizado)
+  const isOnOrdersPage = window.location.pathname.includes('ordenes');
+  if (desktop && (!isSessionWarmingUp || force) && (document.hidden || !document.hasFocus() || !isOnOrdersPage)) {
     triggerDesktopNotification({
       title,
       message,
       url,
-      orderId
+      orderId,
+      eventId
     });
   }
 }
@@ -2561,31 +2844,73 @@ function checkPriorityUnresolvedReminders(orders = []) {
 
   for (const order of orders) {
     if (order.detailKind !== 'network' || order.deletedAt) continue;
-    const isUnresolved = order.status === 'pendiente' || order.status === 'devuelto_soporte' || order.status === 'en_revision' || order.status === 'resuelto_soporte';
+    const isUnresolved = order.status !== 'completada' && order.status !== 'no_realizado';
     if (!isUnresolved) continue;
 
-    const hasAssignment = !!(order.assignedUserId || order.assignedUserName);
-    const isAssignedToMe = isOrderAssignedToUser(order, user);
-    const isCreatedByMe = isOrderCreatorOrAssigner(order, user);
+    // Solo recordar a quienes están dentro del caso
+    if (typeof isUserInCase === 'function' && !isUserInCase(order, user)) continue;
+
+    const followUps = Array.isArray(order.followUps) ? order.followUps : [];
+    const chatMessages = followUps.filter(f => f.action === 'chat_message');
+    const uId = String(user.id || '').toLowerCase();
+    const uName = normalizeName(user.name || user.username || '');
 
     let shouldRemindMe = false;
     let reminderTitle = '';
     let reminderMsg = '';
     let reminderType = 'info';
 
-    if (order.status === 'resuelto_soporte') {
-      // Pendiente de validación por Atención a clientes
-      const hasCreator = !!(order.createdById || order.createdByName || order.createdByUsername);
-      shouldRemindMe = hasCreator ? isCreatedByMe : userHasRole('atencion_clientes');
-      reminderTitle = 'Pendiente validar solución con cliente';
-      reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Aún no se ha validado si el servicio quedó restablecido.`;
-      reminderType = 'resolved';
+    if (!chatMessages.length) {
+      // No hay mensajes en el chat todavía
+      const hasOpened = !!order.reviewOpenedAt && (
+        (order.reviewOpenedById && String(order.reviewOpenedById).toLowerCase() === uId) ||
+        isOrderAssignedToUser(order, user)
+      );
+
+      const isSupportToAttention = isNetworkSupportToAttention(order);
+      const isCreator = isOrderCreatorOrAssigner(order, user);
+
+      // Si el usuario es quien debe atender/abrir el detalle (contraparte del creador o asignado)
+      if (!isCreator || isOrderAssignedToUser(order, user)) {
+        if (!hasOpened) {
+          shouldRemindMe = true;
+          reminderTitle = 'Chat pendiente de abrir';
+          reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Aún no has abierto el chat de este caso.`;
+          reminderType = 'unopened_chat';
+        } else {
+          // Ya lo abrió pero no ha contestado
+          shouldRemindMe = true;
+          reminderTitle = 'Mensaje pendiente de responder';
+          reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Chat abierto sin respuesta registrada.`;
+          reminderType = 'unanswered_chat';
+        }
+      }
     } else {
-      // Pendiente en Soporte técnico
-      shouldRemindMe = hasAssignment ? isAssignedToMe : userHasRole('administrador', 'admin', 'soporte');
-      reminderTitle = 'Reporte de red pendiente de atención';
-      reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Prioridad ${order.priority || 'media'}. Sigue pendiente de atención técnica.`;
-      reminderType = order.status === 'devuelto_soporte' ? 'returned' : 'new_order';
+      // Ya hay mensajes en el chat
+      const lastMsg = chatMessages[chatMessages.length - 1];
+      const isLastFromMe = (lastMsg.byId && String(lastMsg.byId).toLowerCase() === uId) ||
+        (lastMsg.byUserId && String(lastMsg.byUserId).toLowerCase() === uId) ||
+        (lastMsg.byName && normalizeName(lastMsg.byName) === uName);
+
+      // Si el último mensaje lo envió este mismo usuario (ej. Atención esperando respuesta del cliente o Soporte):
+      // NO ENVIAR RECORDATORIO. Ya respondió y está esperando.
+      if (!isLastFromMe) {
+        const lastMsgTime = new Date(lastMsg.at || now).getTime();
+        const openedAtTime = order.reviewOpenedAt ? new Date(order.reviewOpenedAt).getTime() : 0;
+        const hasOpenedSince = openedAtTime >= lastMsgTime;
+
+        if (!hasOpenedSince) {
+          shouldRemindMe = true;
+          reminderTitle = 'Chat pendiente de abrir';
+          reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Tienes un mensaje sin abrir en este caso.`;
+          reminderType = 'unopened_chat';
+        } else {
+          shouldRemindMe = true;
+          reminderTitle = 'Mensaje pendiente de responder';
+          reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Mensaje pendiente de contestar en este chat.`;
+          reminderType = 'unanswered_chat';
+        }
+      }
     }
 
     if (!shouldRemindMe) continue;
@@ -2596,7 +2921,7 @@ function checkPriorityUnresolvedReminders(orders = []) {
       : (Number(intervals[prio]) || DEFAULT_PRIORITY_MINUTES[prio] || 30);
     const intervalMs = intervalMins * 60 * 1000;
 
-    const key = `${order.id}_${user.id || user.username}_${order.status}`;
+    const key = `${order.id}_${user.id || user.username}_${reminderType}`;
     const lastTime = Number(lastReminders[key]) || 0;
 
     if (!lastTime) {
@@ -2608,13 +2933,12 @@ function checkPriorityUnresolvedReminders(orders = []) {
       touched = true;
       if (now - _netopsSessionStartedAt >= 8000) {
         notifyNetworkDetailEvent({
-        title: reminderTitle,
-        message: reminderMsg,
-        type: reminderType,
-        orderId: order.id
-        ,
-        force: true
-      });
+          title: reminderTitle,
+          message: reminderMsg,
+          type: reminderType,
+          orderId: order.id,
+          force: true
+        });
       }
     }
   }
@@ -2659,16 +2983,160 @@ function isOrderCreatorOrAssigner(order, user) {
   return false;
 }
 
+function isUserInCase(order, user) {
+  if (!order || !user) return false;
+  if (typeof userHasRole === 'function' && userHasRole('administrador', 'admin')) return true;
+
+  const uid = String(user.id || '').trim().toLowerCase();
+  const uname = String(user.username || '').trim().toLowerCase();
+  const name = String(user.name || '').trim().toLowerCase();
+
+  // 1. Creador del detalle
+  if (isOrderCreatorOrAssigner(order, user)) return true;
+
+  // 2. Asignado actualmente
+  if (isOrderAssignedToUser(order, user)) return true;
+
+  // 3. Quien está atendiendo / revisando
+  const reviewId = String(order.reviewOpenedById || '').trim().toLowerCase();
+  const reviewName = String(order.reviewOpenedByName || '').trim().toLowerCase();
+  if (reviewId && (reviewId === uid || reviewId === uname)) return true;
+  if (reviewName && (reviewName === name || reviewName === uname)) return true;
+
+  // 4. Quien haya participado en el historial o chat de este caso
+  const followUps = Array.isArray(order.followUps) ? order.followUps : [];
+  const participated = followUps.some(f => {
+    const fId = String(f.byId || f.byUserId || '').trim().toLowerCase();
+    const fName = String(f.byName || '').trim().toLowerCase();
+    return (fId && (fId === uid || fId === uname)) || (fName && (fName === name || fName === uname));
+  });
+  if (participated) return true;
+
+  return false;
+}
+
+function getKnownUsersByArea() {
+  let supportList = Array.isArray(window.netopsSupportUsers) ? window.netopsSupportUsers : [];
+  let attentionList = Array.isArray(window.netopsAttentionUsers) ? window.netopsAttentionUsers : [];
+  if (!supportList.length) {
+    try {
+      const cached = JSON.parse(localStorage.getItem('netops_cached_support_users') || '[]');
+      if (Array.isArray(cached)) supportList = cached;
+    } catch (e) {}
+  }
+  if (!attentionList.length) {
+    try {
+      const cached = JSON.parse(localStorage.getItem('netops_cached_attention_users') || '[]');
+      if (Array.isArray(cached)) attentionList = cached;
+    } catch (e) {}
+  }
+  const stateUsers = Array.isArray(state?.users) ? state.users : [];
+  return { supportList, attentionList, stateUsers };
+}
+
+function resolveUserAreaRole(userId, userName, explicitRole = '') {
+  const normRole = String(explicitRole || '').trim().toLowerCase();
+  if (normRole === 'atencion_clientes' || normRole === 'atencion') return 'atencion_clientes';
+  if (normRole === 'soporte') return 'soporte';
+
+  const idTokens = String(userId || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const nameTokens = String(userName || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  if (!idTokens.length && !nameTokens.length) return '';
+
+  const { supportList, attentionList, stateUsers } = getKnownUsersByArea();
+  const matchesEntry = (u) => {
+    if (!u) return false;
+    const uId = String(u.id || '').trim().toLowerCase();
+    const uName = String(u.name || '').trim().toLowerCase();
+    const uUser = String(u.username || '').trim().toLowerCase();
+    return (uId && idTokens.includes(uId)) ||
+      (uName && nameTokens.includes(uName)) ||
+      (uUser && (idTokens.includes(uUser) || nameTokens.includes(uUser)));
+  };
+
+  if (attentionList.some(matchesEntry)) return 'atencion_clientes';
+  const matchedSupport = supportList.find(matchesEntry);
+  if (matchedSupport) {
+    const sRole = String(matchedSupport.role || '').trim().toLowerCase();
+    if (!sRole || sRole === 'soporte') return 'soporte';
+  }
+  const matchedStateUser = stateUsers.find(matchesEntry);
+  if (matchedStateUser) {
+    const r = String(matchedStateUser.role || '').trim().toLowerCase();
+    if (r === 'atencion_clientes' || r === 'atencion') return 'atencion_clientes';
+    if (r === 'soporte') return 'soporte';
+  }
+  return '';
+}
+
+function getOrderAssignedAreaRole(order) {
+  if (!order) return '';
+  const byAssigned = resolveUserAreaRole(order.assignedUserId, order.assignedUserName, order.assignedUserRole);
+  if (byAssigned) return byAssigned;
+  const byReviewer = resolveUserAreaRole(order.reviewOpenedById, order.reviewOpenedByName, order.reviewOpenedByRole);
+  if (byReviewer) return byReviewer;
+  return '';
+}
+
 function isNetworkSupportToAttention(order) {
   if (!order) return false;
-  if (order.targetRole === 'atencion_clientes') return true;
+  if (typeof order.sentToAttention === 'boolean') return order.sentToAttention;
+  const assignedArea = getOrderAssignedAreaRole(order);
+  if (assignedArea === 'atencion_clientes') return true;
+  if (assignedArea === 'soporte') return false;
+  if (order.targetRole === 'atencion_clientes' || order.targetRole === 'atencion') return true;
   if (order.targetRole === 'soporte') return false;
   if (order.originRole === 'soporte') return true;
-  if (order.originRole === 'atencion_clientes') return false;
+  if (order.originRole === 'atencion_clientes' || order.originRole === 'atencion') return false;
   const creatorRole = String(order.createdByRole || '').toLowerCase();
+  if (creatorRole === 'soporte') return true;
+  if (creatorRole === 'atencion_clientes' || creatorRole === 'atencion') return false;
   if (creatorRole === 'administrador' || creatorRole === 'admin') return true;
-  if (creatorRole === 'atencion_clientes') return false;
   return ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(order.category);
+}
+
+function canUserRetakeNetworkOrder(order, user = getCurrentUser()) {
+  if (!order || order.detailKind !== 'network') return false;
+  if (order.status === 'completada' || order.status === 'no_realizado') return false;
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+  const isAdmin = userHasRole('administrador', 'admin');
+  if (isAdmin) return false;
+  if (!isSoporte && !isAtencion) return false;
+
+  const assignedArea = getOrderAssignedAreaRole(order);
+  const isSentToAttention = isNetworkSupportToAttention(order);
+
+  // Regla estricta: Soporte NUNCA puede retomar casos asignados a Atención a clientes y viceversa
+  if (assignedArea === 'atencion_clientes' || isSentToAttention) {
+    if (!isAtencion || isSoporte) return false;
+  }
+  if (assignedArea === 'soporte' || !isSentToAttention) {
+    if (!isSoporte || isAtencion) return false;
+  }
+
+  const u = user || getCurrentUser();
+  const isAssignedToMe = isOrderAssignedToUser(order, u);
+  const hasAssignee = Boolean(String(order.assignedUserId || '').trim() || String(order.assignedUserName || '').trim());
+  const isAssignedToOther = hasAssignee && !isAssignedToMe;
+  const reviewerId = String(order.reviewOpenedById || '').trim().toLowerCase();
+  const reviewerName = String(order.reviewOpenedByName || '').trim().toLowerCase();
+  const myId = String(u?.id || '').trim().toLowerCase();
+  const myName = String(u?.name || u?.username || '').trim().toLowerCase();
+  const isCheckingByOther = (reviewerId && reviewerId !== myId) || (!reviewerId && reviewerName && reviewerName !== myName);
+
+  return isAssignedToOther || isCheckingByOther || !hasAssignee;
+}
+
+function getLatestOrderChatMessage(order) {
+  const followUps = Array.isArray(order?.followUps) ? order.followUps : [];
+  for (let i = followUps.length - 1; i >= 0; i--) {
+    const f = followUps[i];
+    if (f && f.action === 'chat_message' && !f.isAutoActionMirror) {
+      return f;
+    }
+  }
+  return null;
 }
 
 /**
@@ -2679,6 +3147,7 @@ function broadcastNetworkOrderChange(order, transition, extraMeta = {}) {
     if (!order) return;
     const user = getCurrentUser();
     const cache = getStoredNetworkStateCache();
+    const latestChat = getLatestOrderChatMessage(order);
     cache[order.id] = {
       status: order.status || 'pendiente',
       updatedAt: order.updatedAt || new Date().toISOString(),
@@ -2697,9 +3166,14 @@ function broadcastNetworkOrderChange(order, transition, extraMeta = {}) {
       createdById: order.createdById || order.createdBy || '',
       createdByName: order.createdByName || '',
       createdByUsername: order.createdByUsername || '',
+      lastChatMsgId: latestChat?.id || cache[order.id]?.lastChatMsgId || '',
       lastTransition: transition
     };
     setStoredNetworkStateCache(cache);
+
+    const folio = (typeof getWorkOrderFolio === 'function')
+      ? getWorkOrderFolio(order)
+      : (order.folio || (String(order.id || '').startsWith('RED-') ? order.id : `RED-${order.id}`));
 
     const payload = {
       ...extraMeta,
@@ -2708,7 +3182,9 @@ function broadcastNetworkOrderChange(order, transition, extraMeta = {}) {
       orderId: order.id,
       order: {
         id: order.id,
+        folio,
         status: order.status,
+        updatedAt: order.updatedAt || new Date().toISOString(),
         detailKind: order.detailKind || 'network',
         clientName: order.clientName || '',
         town: order.town || order.nodeName || '',
@@ -2726,6 +3202,8 @@ function broadcastNetworkOrderChange(order, transition, extraMeta = {}) {
         createdByName: order.createdByName || '',
         createdByUsername: order.createdByUsername || '',
         solution: order.technicianReport?.solution || '',
+        technicianReport: order.technicianReport || {},
+        followUps: Array.isArray(order.followUps) ? order.followUps.slice(-50) : [],
         note: (Array.isArray(order.followUps) ? order.followUps.slice(-1)[0]?.note : '') || ''
       },
       byUserId: user.id || '',
@@ -2751,21 +3229,35 @@ function handleNetworkOrderEvent(payload) {
   if (!payload || payload.type !== 'NETWORK_ORDER_EVENT') return;
   const user = getCurrentUser();
   if (!user || !user.role) return;
-  if (payload.timestamp && Math.abs(Date.now() - payload.timestamp) > 30000) return;
+  if (payload.timestamp && Math.abs(Date.now() - payload.timestamp) > 600000) return;
 
   const { transition, order } = payload;
 
-  // Actualizar estado reactivo en memoria para que se refleje inmediatamente en la tabla sin recargar
+  // Actualizar estado reactivo en memoria para que se refleje inmediatamente en la tabla y en el chat abierto sin recargar
+  let syncedOrder = order;
   if (order && typeof state !== 'undefined' && Array.isArray(state.workOrders)) {
     const existing = state.workOrders.find(x => x.id === order.id);
     if (existing) {
       if (order.status) existing.status = order.status;
+      if (order.detailKind) existing.detailKind = order.detailKind;
       if (order.assignedUserId !== undefined) existing.assignedUserId = order.assignedUserId;
       if (order.assignedUserName !== undefined) existing.assignedUserName = order.assignedUserName;
       if (order.reviewOpenedById !== undefined) existing.reviewOpenedById = order.reviewOpenedById;
       if (order.reviewOpenedByName !== undefined) existing.reviewOpenedByName = order.reviewOpenedByName;
       if (order.reviewOpenedAt !== undefined) existing.reviewOpenedAt = order.reviewOpenedAt;
       if (order.updatedAt !== undefined) existing.updatedAt = order.updatedAt;
+      if (Array.isArray(order.followUps) && order.followUps.length) existing.followUps = order.followUps;
+      if (order.technicianReport && typeof order.technicianReport === 'object') {
+        existing.technicianReport = { ...(existing.technicianReport || {}), ...order.technicianReport };
+      }
+      syncedOrder = existing;
+    }
+  }
+
+  // Si la modal del detalle está abierta para esta orden, refrescar el chat y botones en tiempo real
+  if (order && typeof currentOrderReportId !== 'undefined' && currentOrderReportId === order.id) {
+    if (typeof updateOrderChatLive === 'function') {
+      updateOrderChatLive(syncedOrder);
     }
   }
 
@@ -2944,6 +3436,17 @@ function handleNetworkOrderEvent(payload) {
       });
       }
     }
+  } else if (transition === 'review_deferred') {
+    const shouldNotify = isUserInvolvedInReport || (isSupportToAttention ? isSoporte : isAtencion);
+    if (shouldNotify) {
+      notifyNetworkDetailEvent({
+        title: 'Atención no realizada',
+        message: `${actor} indicó que no atenderá este detalle por ahora${payload.reason ? `: ${payload.reason}` : '.'}`,
+        type: 'returned',
+        orderId: order.id,
+        force: true
+      });
+    }
   } else if (transition === 'unresolvable') {
     const shouldNotify = isUserInvolvedInReport || (isSupportToAttention ? (hasAssignment ? isAssignedToMe : isSoporte) : (hasAssignment ? isAssignedToMe : isAtencion));
     if (shouldNotify) {
@@ -3008,14 +3511,25 @@ function handleNetworkOrderEvent(payload) {
     ,
         force: true
       });
+  } else if (transition === 'physical_proposed' && payload.byUserId !== user.id) {
+    const proposedBySoporte = payload.proposedBy === 'soporte';
+    const shouldNotify = isUserInvolvedInReport || (proposedBySoporte ? isAtencion : isSoporte) || userHasRole('administrador', 'admin');
+    if (shouldNotify) {
+      notifyNetworkDetailEvent({
+        title: 'Propuesta a detalles físicos',
+        message: `${actor} propuso enviar este caso a detalles físicos. Requiere tu confirmación.`,
+        type: 'physical_proposed',
+        orderId: order.id,
+        force: true
+      });
+    }
   } else if (transition === 'sent_to_physical' && payload.byUserId !== user.id) {
-    if (isSoporte || userHasRole('tecnico')) {
+    if (isSoporte || isAtencion || userHasRole('tecnico')) {
       notifyNetworkDetailEvent({
         title: 'Derivado a detalle físico',
-        message: `${actor} turnó este detalle a trabajo en campo.`,
+        message: `${actor} confirmó el pase de este detalle a trabajo en campo.`,
         type: 'sent_to_physical',
-        orderId: order.id
-      ,
+        orderId: order.id,
         force: true
       });
     }
@@ -3025,20 +3539,45 @@ function handleNetworkOrderEvent(payload) {
         title: 'Reporte reenviado',
         message: `${actor} reenvió este reporte para atención.`,
         type: 'resent',
-        orderId: order.id
-      ,
+        orderId: order.id,
         force: true
       });
     }
   } else if (transition === 'deleted' && payload.byUserId !== user.id) {
     notifyNetworkDetailEvent({
-        title: 'Detalle eliminado',
-        message: `${actor} eliminó este detalle del sistema.`,
-        type: 'deleted',
-        orderId: order.id
-    ,
-        force: true
-      });
+      title: 'Detalle eliminado',
+      message: `${actor} eliminó este detalle del sistema.`,
+      type: 'deleted',
+      orderId: order.id,
+      force: true
+    });
+  } else if (transition === 'chat_message') {
+    const isOwnSender = (payload.byUserId && payload.byUserId === user.id) || (payload.senderId && payload.senderId === user.id);
+    if (!isOwnSender) {
+      const folio = order.folio || (order.id ? (String(order.id).startsWith('RED-') ? order.id : `RED-${order.id}`) : 'Detalle');
+      const sender = payload.senderName || payload.byName || 'Mensaje';
+      const latestChat = getLatestOrderChatMessage(order);
+      const rawText = payload.messageText || latestChat?.note || (payload.hasPhoto ? 'Imagen adjunta' : 'Nuevo mensaje');
+      const textPreview = rawText.length > 65 ? rawText.slice(0, 62) + '...' : rawText;
+      const isTargetTeamPool = !hasAssignment && (isSupportToAttention ? isAtencion : isSoporte);
+      const shouldNotify = isUserInvolvedInReport || (typeof isUserInCase === 'function' && isUserInCase(syncedOrder || order, user)) || isTargetTeamPool || userHasRole('administrador', 'admin');
+      const msgEventId = payload.messageId || latestChat?.id || ('msg_' + (payload.timestamp || Date.now()));
+      if (shouldNotify) {
+        notifyNetworkDetailEvent({
+          title: `Mensaje en ${folio}`,
+          message: `${sender}: ${textPreview}`,
+          type: 'chat_message',
+          orderId: order.id,
+          eventId: msgEventId,
+          force: true
+        });
+      }
+    }
+    if (typeof currentOrderReportId !== 'undefined' && currentOrderReportId === order.id) {
+      if (typeof updateOrderChatLive === 'function') {
+        updateOrderChatLive(syncedOrder || order);
+      }
+    }
   } else if (transition === 'retaken' && payload.byUserId !== user.id) {
     if (isPrevAssignee) {
       notifyNetworkDetailEvent({
@@ -3093,6 +3632,7 @@ async function checkNetworkOrderNotifications() {
     if (isFirstSessionPoll) {
       for (const order of orders) {
         if (!order || !order.id || order.detailKind !== 'network' || order.deletedAt) continue;
+        const latestChat = getLatestOrderChatMessage(order);
         cache[order.id] = {
           status: order.status || 'pendiente',
           updatedAt: order.updatedAt || order.createdAt || new Date().toISOString(),
@@ -3109,7 +3649,8 @@ async function checkNetworkOrderNotifications() {
           reviewOpenedAt: order.reviewOpenedAt || '',
           createdById: order.createdById || '',
           createdByName: order.createdByName || '',
-          createdByUsername: order.createdByUsername || ''
+          createdByUsername: order.createdByUsername || '',
+          lastChatMsgId: latestChat?.id || ''
         };
       }
       setStoredNetworkStateCache(cache);
@@ -3126,6 +3667,8 @@ async function checkNetworkOrderNotifications() {
       const orderTitle = order.title || order.description || '';
       const client = order.clientName || 'Cliente';
       const place = order.town || order.nodeName || 'Red';
+      const latestChat = getLatestOrderChatMessage(order);
+      const latestChatId = latestChat?.id || '';
 
       const hasAssignment = !!(order.assignedUserId || order.assignedUserName);
       const isAssignedToMe = isOrderAssignedToUser(order, user);
@@ -3151,29 +3694,30 @@ async function checkNetworkOrderNotifications() {
           reviewOpenedAt: order.reviewOpenedAt || '',
           createdById: order.createdById || '',
           createdByName: order.createdByName || '',
-          createdByUsername: order.createdByUsername || ''
+          createdByUsername: order.createdByUsername || '',
+          lastChatMsgId: latestChatId
         };
         updated = true;
 
         const orderTime = new Date(order.updatedAt || order.createdAt || now).getTime();
-        const isHappeningNow = Math.abs(now - orderTime) <= 25000;
+        const isHappeningNow = Math.abs(now - orderTime) <= 600000;
         if (isHappeningNow && currentStatus === 'pendiente') {
           const shouldNotifyNew = isSupportToAttention
             ? (hasAssignment ? isAssignedToMe : (userHasRole('atencion_clientes') && !isOwnCreator))
-            : (hasAssignment ? isAssignedToMe : (userHasRole('administrador', 'admin') && !isOwnCreator));
+            : (hasAssignment ? isAssignedToMe : (userHasRole('administrador', 'admin', 'soporte') && !isOwnCreator));
           if (shouldNotifyNew) {
             notifyNetworkDetailEvent({
-        title: isSupportToAttention ? 'Nuevo requerimiento' : 'Nuevo reporte de red',
-        message: `${client ? client + ' · ' : ''}${place}`,
-        type: 'new_order',
-        orderId: order.id
-            
-      });
+              title: isSupportToAttention ? 'Nuevo requerimiento' : 'Nuevo reporte de red',
+              message: `${client ? client + ' · ' : ''}${place}`,
+              type: 'new_order',
+              orderId: order.id
+            });
           }
         }
-      } else if (prev.status !== currentStatus || (order.updatedAt && prev.updatedAt && order.updatedAt !== prev.updatedAt)) {
-        // Transición de estado o actualización detectada
+      } else if (prev.status !== currentStatus || (order.updatedAt && prev.updatedAt && order.updatedAt !== prev.updatedAt) || (latestChatId && latestChatId !== (prev.lastChatMsgId || ''))) {
+        // Transición de estado, actualización o nuevo mensaje de chat detectado
         const oldStatus = prev.status;
+        const hadNewChatMsg = !!(latestChat && latestChatId && latestChatId !== (prev.lastChatMsgId || ''));
         cache[order.id] = {
           ...prev,
           status: currentStatus,
@@ -3188,15 +3732,60 @@ async function checkNetworkOrderNotifications() {
           reviewOpenedAt: order.reviewOpenedAt || prev.reviewOpenedAt || '',
           createdById: order.createdById || prev.createdById || '',
           createdByName: order.createdByName || prev.createdByName || '',
-          createdByUsername: order.createdByUsername || prev.createdByUsername || ''
+          createdByUsername: order.createdByUsername || prev.createdByUsername || '',
+          lastChatMsgId: latestChatId || prev.lastChatMsgId || ''
         };
         updated = true;
+
+        // Sincronizar orden en memoria y chat abierto en vivo
+        if (typeof state !== 'undefined' && Array.isArray(state.workOrders)) {
+          const inMem = state.workOrders.find(x => x.id === order.id);
+          if (inMem) {
+            Object.assign(inMem, order);
+          }
+        }
+        if (typeof currentOrderReportId !== 'undefined' && currentOrderReportId === order.id && typeof updateOrderChatLive === 'function') {
+          updateOrderChatLive(order);
+        }
+
+        // Notificar mensaje nuevo de chat recibido desde otra sesión/computadora
+        if (hadNewChatMsg) {
+          const msgSenderId = String(latestChat.byId || latestChat.byUserId || '').trim().toLowerCase();
+          const msgSenderName = normalizeName(latestChat.byName || '');
+          const myId = String(user.id || '').trim().toLowerCase();
+          const myName = normalizeName(user.name || user.username || '');
+          const isMyMsg = (msgSenderId && msgSenderId === myId) || (msgSenderName && msgSenderName === myName);
+          const msgTime = new Date(latestChat.at || order.updatedAt || now).getTime();
+          const isRecentChat = Math.abs(now - msgTime) <= 600000;
+          const isTargetTeamPool = !hasAssignment && (isSupportToAttention ? userHasRole('atencion_clientes') : userHasRole('soporte'));
+          const shouldNotifyChat = !isMyMsg && isRecentChat && (
+            isAssignedToMe ||
+            isCreatedByMe ||
+            (typeof isUserInCase === 'function' && isUserInCase(order, user)) ||
+            isTargetTeamPool ||
+            userHasRole('administrador', 'admin')
+          );
+          if (shouldNotifyChat) {
+            const folio = (typeof getWorkOrderFolio === 'function') ? getWorkOrderFolio(order) : (`RED-${order.id}`);
+            const hasPhoto = Array.isArray(latestChat.photos) && latestChat.photos.length > 0;
+            const rawText = latestChat.note || (hasPhoto ? 'Imagen adjunta' : 'Nuevo mensaje');
+            const preview = rawText.length > 65 ? rawText.slice(0, 62) + '...' : rawText;
+            notifyNetworkDetailEvent({
+              title: `Mensaje en ${folio}`,
+              message: `${latestChat.byName || 'Usuario'}: ${preview}`,
+              type: 'chat_message',
+              orderId: order.id,
+              eventId: latestChatId,
+              force: true
+            });
+          }
+        }
 
         const isOwnUpdater = (order.updatedById && order.updatedById === user.id) || (order.updatedByUsername && order.updatedByUsername === user.username);
         const clientLabel = (client && client.trim().length > 1 && !['cliente', 'atención a clientes'].includes(client.trim().toLowerCase())) ? ` · ${client.trim()}` : '';
 
         const orderTime = new Date(order.updatedAt || order.createdAt || now).getTime();
-        const isHappeningNow = Math.abs(now - orderTime) <= 25000;
+        const isHappeningNow = Math.abs(now - orderTime) <= 600000;
         if (isHappeningNow && !isOwnUpdater && prev.assignedUserId === user.id && order.assignedUserId && order.assignedUserId !== user.id) {
           const actor = order.assignedUserName || order.reviewOpenedByName || 'Personal de soporte';
           notifyNetworkDetailEvent({
@@ -3255,12 +3844,13 @@ async function checkNetworkOrderNotifications() {
               : (hasAssignment ? isAssignedToMe : userHasRole('atencion_clientes'));
             if (shouldNotifyUnres) {
               notifyNetworkDetailEvent({
-        title: 'Reporte no realizable',
-        message: 'Soporte notificó que no es posible resolver este reporte.',
-        type: 'unresolvable',
-        orderId: order.id
-              
-      });
+                title: 'Reporte no realizable',
+                message: isSupportToAttention
+                  ? 'Atención notificó que no es posible realizar este requerimiento. Confirma para concluir.'
+                  : 'Soporte notificó que no es posible resolver este reporte. Confirma para concluir.',
+                type: 'unresolvable',
+                orderId: order.id
+              });
             }
           } else if (currentStatus === 'completada' && (oldStatus === 'resuelto_soporte' || oldStatus === 'en_revision' || oldStatus === 'pendiente' || oldStatus === 'no_realizado')) {
             const shouldNotifyConfirmed = isSupportToAttention
@@ -3296,7 +3886,7 @@ async function checkNetworkOrderNotifications() {
     if (updated) {
       setStoredNetworkStateCache(cache);
       // Auto-actualizar la vista sin necesidad de recargar la página
-      if (!isFirstRun) {
+      if (!isFirstSessionPoll) {
         if (typeof loadOrderPage === 'function') {
           loadOrderPage();
         } else if (typeof renderWOs === 'function') {
@@ -3346,7 +3936,10 @@ function initNetworkNotifications() {
     }
   });
 
-  // 3. Poller en segundo plano: cada 4s visible, 10s en segundo plano para sincronización en tiempo real
+  initServiceWorker();
+  requestNotificationPermissionOnce();
+
+  // 3. Poller en segundo plano con Web Worker para que las notificaciones lleguen aun cuando no estén en la página o el navegador esté minimizado/en otra ventana
   let intervalMs = 4000;
   const runPoll = () => {
     checkNetworkOrderNotifications();
@@ -3354,14 +3947,32 @@ function initNetworkNotifications() {
 
   _netopsWatcherInterval = setInterval(runPoll, intervalMs);
 
+  try {
+    if (typeof Worker !== 'undefined' && typeof Blob !== 'undefined' && typeof URL !== 'undefined') {
+      const workerBlob = new Blob([
+        'setInterval(function(){ postMessage("tick"); }, 5000);'
+      ], { type: 'application/javascript' });
+      const bgWorker = new Worker(URL.createObjectURL(workerBlob));
+      bgWorker.onmessage = () => {
+        if (document.hidden || !document.hasFocus()) {
+          runPoll();
+        }
+      };
+    }
+  } catch (e) {}
+
   document.addEventListener('visibilitychange', () => {
     clearInterval(_netopsWatcherInterval);
     if (!document.hidden) {
       runPoll();
       _netopsWatcherInterval = setInterval(runPoll, 4000);
     } else {
-      _netopsWatcherInterval = setInterval(runPoll, 10000);
+      _netopsWatcherInterval = setInterval(runPoll, 6000);
     }
+  });
+
+  window.addEventListener('focus', () => {
+    runPoll();
   });
 
   // Carga inicial

@@ -812,19 +812,31 @@ function workOrderQuery(page = {}) {
   if(to){clauses.push('(w.created_at<? OR w.completed_at<?)');binds.push(to,to);}
   const sort = text(page?.sort);
   const statusRank = `CASE
-    WHEN w.status = 'resuelto_soporte' THEN 0
+    WHEN w.status IN ('resuelto_soporte', 'no_realizado') THEN 0
     WHEN COALESCE(w.status,'pendiente') IN ('pendiente','devuelto_soporte') THEN 1
     WHEN w.status = 'en_revision' THEN 2
-    WHEN w.status IN ('completada','no_realizado','revisado') THEN 4
+    WHEN w.status = 'revisado' THEN 3
+    WHEN w.status = 'completada' THEN 4
     ELSE 3
+  END`;
+  const detailedStatusRank = `CASE
+    WHEN w.status = 'resuelto_soporte' THEN 0
+    WHEN w.status = 'no_realizado' THEN 1
+    WHEN w.status = 'devuelto_soporte' THEN 2
+    WHEN COALESCE(w.status,'pendiente') = 'pendiente' THEN 3
+    WHEN w.status = 'en_revision' THEN 4
+    WHEN w.status = 'revisado' THEN 5
+    WHEN w.status = 'completada' THEN 6
+    ELSE 5
   END`;
   const resentFirst = "CASE WHEN w.status='pendiente' AND w.last_resent_at IS NOT NULL THEN 0 ELSE 1 END, w.last_resent_at DESC";
   const priorityRank = "CASE COALESCE(w.priority,'media') WHEN 'muy_alta' THEN 0 WHEN 'alta' THEN 1 WHEN 'media' THEN 2 ELSE 3 END";
-  const selectedOrder = sort === 'newest' ? 'w.created_at DESC, w.rowid DESC'
-    : sort === 'oldest' ? 'w.created_at ASC, w.rowid ASC'
+  const selectedOrder = sort === 'status' ? `${detailedStatusRank} ASC, ${priorityRank}, COALESCE(w.completed_at, w.updated_at, w.created_at) DESC, w.rowid DESC`
+    : sort === 'newest' ? 'COALESCE(w.completed_at, w.created_at) DESC, w.rowid DESC'
+    : sort === 'oldest' ? 'COALESCE(w.completed_at, w.created_at) ASC, w.rowid ASC'
     : sort === 'town' ? "lower(COALESCE(w.town_legacy,w.node_name_legacy,w.node_code_legacy,'')) ASC, w.rowid ASC"
     : sort === 'client' ? "lower(COALESCE(w.client_name,'')) ASC, w.rowid ASC"
-    : `${priorityRank}, w.created_at DESC, w.rowid DESC`;
+    : `${priorityRank}, COALESCE(w.completed_at, w.created_at) DESC, w.rowid DESC`;
   const orderBy = `${statusRank} ASC, ${resentFirst}, ${selectedOrder}`;
   return {where:clauses.length ? ` WHERE ${clauses.join(' AND ')}` : '',binds,orderBy};
 }
@@ -898,7 +910,21 @@ async function loadWorkOrders(env, ctx, page = null) {
     if (row.review_opened_at) out.reviewOpenedAt = row.review_opened_at;
     addActorFields(out,'reviewOpenedBy',ctx.users.get(row.review_opened_by));
     out.assignedUserId = row.assigned_user_id || '';
-    out.assignedUserName = ctx.users?.get(row.assigned_user_id)?.name || row.assigned_user_name || '';
+    const firstAssignedId = String(row.assigned_user_id || '').split(',')[0].trim();
+    let assignedUserObj = firstAssignedId ? ctx.users?.get(firstAssignedId) : null;
+    if (!assignedUserObj && row.assigned_user_name && ctx.users) {
+      const targetName = String(row.assigned_user_name).split(',')[0].trim().toLowerCase();
+      if (targetName) {
+        for (const u of ctx.users.values()) {
+          if (String(u.name || '').trim().toLowerCase() === targetName || String(u.username || '').trim().toLowerCase() === targetName) {
+            assignedUserObj = u;
+            break;
+          }
+        }
+      }
+    }
+    out.assignedUserName = assignedUserObj?.name || row.assigned_user_name || '';
+    if (assignedUserObj?.role) out.assignedUserRole = normalizeRole(assignedUserObj.role);
     out.targetRole = row.target_role || '';
     out.originRole = row.origin_role || '';
     if (row.reviewed_at) out.reviewedAt = row.reviewed_at;
@@ -1439,8 +1465,8 @@ export async function loadStatePart(env, part, page = {}) {
       all(env,`SELECT u.id,u.name,u.username,u.color,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('administrador','admin','soporte') ORDER BY lower(u.name),lower(u.username)`),
       all(env,`SELECT u.id,u.name,u.username,u.color,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`)
     ]);
-    const mappedSupportUsers = supportUsers.map(user=>({id:user.id,name:user.name||user.username||'Soporte',username:user.username,color:user.color||''}));
-    const mappedAttentionUsers = attentionUsers.map(user=>({id:user.id,name:user.name||user.username||'Atención',username:user.username,color:user.color||''}));
+    const mappedSupportUsers = supportUsers.map(user=>({id:user.id,name:user.name||user.username||'Soporte',username:user.username,color:user.color||'',role:normalizeRole(user.role)}));
+    const mappedAttentionUsers = attentionUsers.map(user=>({id:user.id,name:user.name||user.username||'Atención',username:user.username,color:user.color||'',role:normalizeRole(user.role)}));
     if (page?.windowed !== '1') {
       const totalRow=await first(env,`SELECT COUNT(*) AS total FROM work_orders w LEFT JOIN zones z ON z.id=w.zone_id${query.where}`,query.binds);
       return {workOrders,deletionRequests,total:Number(totalRow?.total)||0,supportUsers:mappedSupportUsers,attentionUsers:mappedAttentionUsers};

@@ -63,8 +63,35 @@ function historyRowBelongsToPrincipal(row) {
   return [row?.byUsername,row?.byName].map(normalizeName).some(value=>value==='abraham'||value==='abraham paula iglesias');
 }
 
+function isTechnicianHistoryView() {
+  return typeof userHasRole === 'function' && userHasRole('tecnico');
+}
+
+function historyViewerTechnicianAliases() {
+  const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  const aliases = new Set([user?.id, user?.userId, user?.username, user?.usuario, user?.name, user?.nombre].map(normalizeName).filter(Boolean));
+  const tech = (state.technicians || []).find(t =>
+    !t.deletedAt && (
+      (user?.id && (String(t.userId || '') === String(user.id) || String(t.id || '') === String(user.id))) ||
+      (user?.username && (normalizeName(t.usuario || '') === normalizeName(user.username) || normalizeName(t.nombre || '') === normalizeName(user.username))) ||
+      (user?.name && normalizeName(t.nombre || '') === normalizeName(user.name))
+    )
+  );
+  if (tech) {
+    [tech.id, tech.userId, tech.usuario, tech.username, tech.nombre, tech.name].map(normalizeName).filter(Boolean).forEach(a => aliases.add(a));
+  }
+  return aliases;
+}
+
 function historyRowsForViewer() {
   const rows = (state.auditLog || []).filter(row=>!historyRowBelongsToPrincipal(row));
+  if (isTechnicianHistoryView()) {
+    const myAliases = historyViewerTechnicianAliases();
+    return rows.filter(row => {
+      const rowAliases = [row?.byId, row?.byUsername, row?.byName].map(normalizeName).filter(Boolean);
+      return rowAliases.some(alias => myAliases.has(alias));
+    });
+  }
   if (isAttentionHistoryView()) {
     // Atención a clientes solo ve cuando un técnico completa detalles y cuando soporte resuelve uno
     return rows.filter(row => {
@@ -257,12 +284,24 @@ function changeHistoryPageSize(value) { historyPageSize = Number(value) || 25; h
 
 async function initHistoryPage() {
   initCommon();
-  if (!userHasRole('administrador','admin','atencion_clientes')) { location.href='mapa.html'; return; }
+  if (!userHasRole('administrador','admin','soporte','atencion_clientes','tecnico')) {
+    location.href = userHasRole('tecnico') ? 'planificar.html' : 'mapa.html';
+    return;
+  }
   const today = historyDateKey();
   document.getElementById('history-date').value = today;
   await loadDB({ loadingTitle:'Cargando historial', loadingSubtitle:'Consultando los movimientos registrados.' });
   rebuildHistoryTechnicianAliases();
-  if (isAttentionHistoryView()) {
+  if (isTechnicianHistoryView()) {
+    const eyebrow = document.querySelector('.history-eyebrow');
+    const heading = document.querySelector('.history-heading h1');
+    const copy = document.querySelector('.history-heading p');
+    const search = document.getElementById('history-search');
+    if (eyebrow) eyebrow.textContent = 'Mi Actividad / Historial';
+    if (heading) heading.textContent = 'Mi historial de actividades';
+    if (copy) copy.textContent = 'Consulta los detalles completados y movimientos registrados en tu cuenta.';
+    if (search) search.placeholder = 'Buscar folio, cliente o movimiento...';
+  } else if (isAttentionHistoryView()) {
     const eyebrow = document.querySelector('.history-eyebrow');
     const heading = document.querySelector('.history-heading h1');
     const copy = document.querySelector('.history-heading p');

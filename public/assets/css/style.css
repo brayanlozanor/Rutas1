@@ -3916,11 +3916,17 @@ body:not(.tech-route-body):not(.login-page) .wide-shell{
   contain:layout paint!important;
 }
 
-/* Final role lock: Atencion a clientes cannot see admin-only menu items */
+/* Final role lock: Only administrador can see admin-only menu items ("Usuarios") */
 .topbar .nav .nb.role-hidden-nav,
 .topbar.app-sidebar .nav .nb.role-hidden-nav,
+body.sidebar-collapsed .topbar.app-sidebar .nav .nb.role-hidden-nav,
 .topbar .nav .nb[hidden],
 .topbar.app-sidebar .nav .nb[hidden],
+body.sidebar-collapsed .topbar.app-sidebar .nav .nb[hidden],
+html:not([data-role="administrador"]):not([data-role="admin"]) .topbar .nav .nb[href*="tecnicos.html"],
+html:not([data-role="administrador"]):not([data-role="admin"]) .topbar.app-sidebar .nav .nb[href*="tecnicos.html"],
+html:not([data-role="administrador"]):not([data-role="admin"]) .topbar .nav .nb[href*="usuarios.html"],
+html:not([data-role="administrador"]):not([data-role="admin"]) .topbar.app-sidebar .nav .nb[href*="usuarios.html"],
 html[data-role="atencion_clientes"] .topbar .nav .nb[href="antenas.html"],
 html[data-role="atencion_clientes"] .topbar.app-sidebar .nav .nb[href="antenas.html"],
 html[data-role="atencion_clientes"] .topbar .nav .nb[href="tecnicos.html"],

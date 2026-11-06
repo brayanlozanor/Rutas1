@@ -67,7 +67,7 @@ function isPlanReadOnly() {
 }
 
 function canManagePlanStops() {
-    return typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+    return typeof userHasRole === 'function' && userHasRole('administrador', 'admin', 'soporte');
 }
 
 function isTechnicianPlanView() {
@@ -130,7 +130,33 @@ async function initPlanificarPage() {
     setTimeout(initPlanMap, 100);
 }
 
+
+function checkTechnicianDailyStopsNotice() {
+    try {
+        if (!isTechnicianPlanView()) return;
+        const today = localDateKey();
+        const sessionKey = `tech_daily_notice_${today}`;
+        if (sessionStorage.getItem(sessionKey)) return;
+        const todayStops = getPlanStopsForView('general').filter(stop => stop.scheduledDate === today);
+        if (!todayStops.length) return;
+        sessionStorage.setItem(sessionKey, '1');
+        const totalDetails = todayStops.reduce((sum, s) => sum + getStopDetails(s).length, 0);
+        const msg = `Tienes ${todayStops.length} parada${todayStops.length === 1 ? '' : 's'} asignada${todayStops.length === 1 ? '' : 's'} para hoy con ${totalDetails} detalle${totalDetails === 1 ? '' : 's'}.`;
+        notify(msg);
+        if (typeof triggerDesktopNotification === 'function') {
+            triggerDesktopNotification({
+                title: 'WiFiMex · Ruta de Hoy',
+                message: msg,
+                url: '/planificar.html'
+            });
+        }
+    } catch (e) {
+        console.warn('Daily notice check failed:', e);
+    }
+}
+
 function configureTechnicianDashboard() {
+    checkTechnicianDailyStopsNotice();
     if (!isTechnicianPlanView()) return;
     applyTechnicianViewportLayout();
     if (!document.body.dataset.techView) document.body.dataset.techView = 'details';
@@ -870,27 +896,44 @@ function renderTechnicianRouteOverview() {
         const isExpanded = expandedTechRouteStopIds.has(stop.id);
         const stopName = getTechnicianStopName(stop, equipment, node);
         const details = getStopDetails(stop);
+        const pendingDetails = details.filter(d => !['completada', 'no_realizado'].includes(d.status || ''));
+        const completedDetails = details.filter(d => ['completada', 'no_realizado'].includes(d.status || ''));
+
+        let currentSubtab = techStopSubtabs.get(stop.id);
+        if (!currentSubtab) {
+            currentSubtab = pendingDetails.length > 0 ? 'pending' : (completedDetails.length > 0 ? 'completed' : 'pending');
+        }
+        const activeList = currentSubtab === 'completed' ? completedDetails : pendingDetails;
 
         const detailsHtml = isExpanded ? `
             <div class="tech-route-stop-expanded-details" id="tech-stop-expanded-${escapeAttr(stop.id)}">
-                <div class="tech-expanded-header">
-                    <span>Detalles asignados a esta parada (${details.length})</span>
+                <div class="tech-expanded-tabs-bar">
+                    <button type="button" class="tech-stop-subtab ${currentSubtab === 'pending' ? 'active' : ''}" onclick="event.stopPropagation();setTechnicianStopSubtab('${escapeAttr(stop.id)}','pending')">
+                        Por resolver (${pendingDetails.length})
+                    </button>
+                    <button type="button" class="tech-stop-subtab ${currentSubtab === 'completed' ? 'active' : ''}" onclick="event.stopPropagation();setTechnicianStopSubtab('${escapeAttr(stop.id)}','completed')">
+                        Completados (${completedDetails.length})
+                    </button>
                 </div>
-                ${details.length ? details.map(detail => {
+                ${activeList.length ? activeList.map(detail => {
                     const done = detail.status === 'completada';
                     const noDone = detail.status === 'no_realizado';
                     const category = getPlanDetailCategory(detail);
                     const folio = getDetailFolio(detail);
                     const client = detail.clientName || 'Sin cliente registrado';
                     const rawPhone = String(detail.clientPhone || detail.phone || detail.technicianReport?.phone || '').replace(/\D/g, '');
-                    const phone = detail.clientPhone || detail.phone || '';
+                    const hasValidPhone = rawPhone.length >= 7 && !/^0+$/.test(rawPhone);
                     const detailText = getWorkOrderRequestedText(detail, 'Sin especificación');
                     const locInfo = getDetailLocationInfo(detail);
 
-                    const phoneBtn = rawPhone ? `
+                    const phoneBtn = hasValidPhone ? `
                         <a href="tel:${escapeAttr(rawPhone)}" class="tech-call-btn" title="Llamar al cliente" onclick="event.stopPropagation()">
                             <svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                             Llamar
+                        </a>
+                        <a href="https://wa.me/52${escapeAttr(rawPhone.slice(-10))}" target="_blank" rel="noopener" class="tech-wa-btn" title="Enviar WhatsApp al cliente" onclick="event.stopPropagation()">
+                            <svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 3.5A11.9 11.9 0 0 0 12 0C5.4 0 0 5.4 0 12c0 2.1.5 4.1 1.6 5.9L0 24l6.3-1.6c1.7 1 3.7 1.6 5.7 1.6 6.6 0 12-5.4 12-12 0-3.2-1.2-6.2-3.5-8.5zm-8.5 18.5c-1.8 0-3.5-.5-5-1.4l-.4-.2-3.7 1 1-3.6-.2-.4c-1-1.6-1.5-3.4-1.5-5.4 0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10zm5.5-7.5c-.3-.2-1.8-.9-2.1-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.3-.5-2.5-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6.1-.1.3-.3.5-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5-.1-.2-.7-1.7-.9-2.3-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1.1 1.1-1.1 2.6s1.1 3 1.3 3.2c.2.2 2.2 3.4 5.3 4.8.7.3 1.3.5 1.8.7.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2.1-1.5.3-.7.3-1.4.2-1.5-.1-.2-.3-.3-.6-.4z"/></svg>
+                            WhatsApp
                         </a>` : '';
 
                     const actionsHtml = `
@@ -937,7 +980,7 @@ function renderTechnicianRouteOverview() {
                             </div>
                         </div>
                     `;
-                }).join('') : '<div class="tech-route-detail-empty">No hay detalles asignados a esta parada.</div>'}
+                }).join('') : `<div class="tech-route-detail-empty">${currentSubtab === 'completed' ? 'No hay detalles completados en esta parada.' : 'No hay detalles pendientes en esta parada.'}</div>`}
             </div>` : '';
 
         let legTransitHtml = '';
@@ -959,7 +1002,7 @@ function renderTechnicianRouteOverview() {
             <div class="tech-route-stop-item ${isExpanded ? 'expanded' : ''}">
                 <button type="button" class="tech-route-stop-btn ${isExpanded ? 'active' : ''}" onclick="toggleTechnicianRouteStopDetails('${escapeAttr(stop.id)}')">
                     <span>${index + 1}</span>
-                    <strong class="tech-stop-name">${escapeHtml(stopName)}</strong>
+                    <strong class="tech-stop-name">${escapeHtml(stopName)}<span class="tech-stop-weather-chip" id="tech-overview-weather-${escapeAttr(stop.id)}"></span></strong>
                     <div class="tech-stop-badge-col">
                         <small class="tech-stop-progress-text">${progress.done}/${progress.total} detalles hechos</small>
                         <svg class="tech-chevron-icon ${isExpanded ? 'open' : ''}" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -969,6 +1012,13 @@ function renderTechnicianRouteOverview() {
             </div>
         `;
     }).join('') : '<div class="plan-empty">No hay paradas para este día.</div>';
+    updateStopsWeatherBadges(stops);
+}
+
+const techStopSubtabs = new Map();
+function setTechnicianStopSubtab(stopId, tabName) {
+    techStopSubtabs.set(stopId, tabName);
+    renderTechnicianRouteOverview();
 }
 
 function openTechnicianRouteStop(stopId) {
@@ -1053,8 +1103,65 @@ function renderTechnicianDayMap() {
             `);
         }
     });
-    if (points.length) technicianDayMap.fitBounds(points.map(point => [point.lat, point.lng]), { padding:[28,28], maxZoom:15 });
-    else technicianDayMap.setView([17.55, -99.50], 8);
+    const applyPointsBounds = () => {
+        if (points.length) technicianDayMap.fitBounds(points.map(point => [point.lat, point.lng]), { padding:[28,28], maxZoom:15 });
+        else technicianDayMap.setView([17.55, -99.50], 8);
+    };
+
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+            const userLat = pos.coords.latitude;
+            const userLng = pos.coords.longitude;
+            const pulseIcon = L.divIcon({
+                className: 'tech-realtime-gps-icon',
+                html: '<div class="gps-pulse-outer"></div><div class="gps-pulse-inner"></div>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            L.marker([userLat, userLng], { icon: pulseIcon, zIndexOffset: 1000 })
+                .bindPopup('<strong>Tu ubicación en tiempo real</strong>')
+                .addTo(technicianDayMapLayer);
+
+            let closest = null;
+            let minKm = Infinity;
+            points.forEach(p => {
+                if (p.detail && !['completada', 'no_realizado'].includes(p.detail.status || '')) {
+                    const km = calculateHaversineKm(userLat, userLng, p.lat, p.lng);
+                    if (km < minKm) {
+                        minKm = km;
+                        closest = { ...p, km };
+                    }
+                }
+            });
+
+            const chipContainer = element.closest('.tech-day-map-card') || element.parentElement;
+            let chip = document.getElementById('tech-closest-point-chip');
+            if (!chip && chipContainer) {
+                chip = document.createElement('div');
+                chip.id = 'tech-closest-point-chip';
+                chip.className = 'tech-closest-point-chip';
+                element.before(chip);
+            }
+            if (chip) {
+                if (closest) {
+                    chip.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg><span>Detalle más cercano: <b>${escapeHtml(closest.name)}</b> (~${closest.km.toFixed(1)} km)</span>`;
+                    chip.onclick = () => {
+                        technicianDayMap?.setView([closest.lat, closest.lng], 16, { animate: true });
+                    };
+                    chip.style.display = 'flex';
+                } else {
+                    chip.style.display = 'none';
+                }
+            }
+
+            const allCoords = points.map(p => [p.lat, p.lng]).concat([[userLat, userLng]]);
+            technicianDayMap.fitBounds(allCoords, { padding: [28, 28], maxZoom: 15 });
+        }, () => {
+            applyPointsBounds();
+        }, { enableHighAccuracy: true, timeout: 8000 });
+    } else {
+        applyPointsBounds();
+    }
     const dateLabel = document.getElementById('tech-day-map-date');
     if (dateLabel) dateLabel.textContent = `${formatCalendarDate(date)} · ${points.length} ubicación${points.length === 1 ? '' : 'es'}`;
     setTimeout(() => technicianDayMap?.invalidateSize(), 50);
@@ -2068,7 +2175,7 @@ async function fetchTownWeather(lat, lng, townName) {
         const memoryData = weatherMemoryCache.get(coordKey);
         lastWeatherWidgetData = memoryData;
         renderWeatherWidget(memoryData, townName);
-        return;
+        return memoryData;
     }
     try {
         const cachedStr = sessionStorage.getItem(cacheKey);
@@ -2077,7 +2184,7 @@ async function fetchTownWeather(lat, lng, townName) {
             if (Date.now() - cached.timestamp < 3600000) {
                 lastWeatherWidgetData = cached.data;
                 renderWeatherWidget(cached.data, townName);
-                return;
+                return cached.data;
             }
         }
     } catch (e) {}
@@ -2122,6 +2229,39 @@ async function fetchTownWeather(lat, lng, townName) {
     } catch (err) {
         renderWeatherFallback(townName);
     }
+}
+
+
+function updateStopsWeatherBadges(stops) {
+    if (!stops || !stops.length) return;
+    stops.forEach(stop => {
+        const p = getStopCurrentPosition(stop);
+        if (isNaN(p.lat) || isNaN(p.lng)) return;
+        const els = [
+            document.getElementById(`tech-stop-weather-${stop.id}`),
+            document.getElementById(`tech-overview-weather-${stop.id}`)
+        ].filter(Boolean);
+        if (!els.length) return;
+        const coordKey = `${safeFloat(p.lat).toFixed(2)}_${safeFloat(p.lng).toFixed(2)}`;
+        if (weatherMemoryCache.has(coordKey)) {
+            const w = weatherMemoryCache.get(coordKey);
+            const label = w.temp !== undefined ? `${w.temp}°C ${w.label || ''}` : (w.label || '');
+            els.forEach(el => {
+                el.textContent = label;
+                el.style.display = 'inline-flex';
+            });
+            return;
+        }
+        fetchTownWeather(p.lat, p.lng, stop.name).then(w => {
+            if (w) {
+                const label = w.temp !== undefined ? `${w.temp}°C ${w.label || ''}` : (w.label || '');
+                els.forEach(el => {
+                    el.textContent = label;
+                    el.style.display = 'inline-flex';
+                });
+            }
+        }).catch(() => {});
+    });
 }
 
 function renderWeatherWidget(wx, townName) {
@@ -2808,6 +2948,7 @@ function renderPlanDays() {
         }).join('');
         return `<div class="day-col"><div class="day-head"><span>${escapeHtml(label)}</span>${dayTravelBadge}</div><div class="day-body">${stopsHtml}</div></div>`;
     }).join('') || `<div class="plan-empty">${isTechnicianPlanView() ? `No tienes paradas asignadas para ${formatCalendarDate(selectedCalendarDate || today)}.` : 'No hay paradas en esta fecha.'}</div>`;
+    updateStopsWeatherBadges(visible);
 
     if (!isTechnicianPlanView()) {
         renderRouteIntelligenceWidget(visible, 0);
@@ -2847,11 +2988,10 @@ function renderStopCard(stop, day, index) {
 
     return `
         <div class="stop-card ${stop.type === 'manual' ? 'manual' : ''} ${doneClass}" data-stop-id="${escapeAttr(stop.id)}" data-stop-day="${escapeAttr(day)}" ondragover="allowPlanStopDrop(event)" ondragleave="clearPlanStopDrop(event)" ondrop="dropPlanStop(event,'${escapeAttr(day)}','${escapeAttr(stop.id)}')">
-            <div class="stop-card-heading"><div class="stop-heading-copy"><div class="stop-title clickable-stop-title" title="${escapeAttr(technicianStopName)}" onclick="togglePlanStopDetails('${escapeAttr(stop.id)}')">${escapeHtml(isTechnicianPlanView() ? technicianStopName : (stop.name || eq?.name || node?.name || 'Parada'))}</div><div class="stop-meta">${stop.type === 'manual' ? 'Comunidad / punto manual' : (stop.type === 'node' ? 'Nodo vinculado' : 'Antena registrada')}${lat && lng ? ` · ${lat}, ${lng}` : ''}</div></div>${isPlanReadOnly() ? '' : `<span class="stop-drag-handle" draggable="true" role="button" tabindex="0" title="Arrastra para cambiar el orden" aria-label="Arrastra para cambiar el orden" ondragstart="startPlanStopDrag(event,'${escapeAttr(day)}','${escapeAttr(stop.id)}')" ondragend="endPlanStopDrag()">&#8942;</span>`}</div>
+            <div class="stop-card-heading"><div class="stop-heading-copy"><div class="stop-title clickable-stop-title" title="${escapeAttr(technicianStopName)}" onclick="togglePlanStopDetails('${escapeAttr(stop.id)}')">${escapeHtml(isTechnicianPlanView() ? technicianStopName : (stop.name || eq?.name || node?.name || 'Parada'))}<span class="tech-stop-weather-chip" id="tech-stop-weather-${escapeAttr(stop.id)}"></span></div><div class="stop-meta">${stop.type === 'manual' ? 'Comunidad / punto manual' : (stop.type === 'node' ? 'Nodo vinculado' : 'Antena registrada')}${lat && lng ? ` · ${lat}, ${lng}` : ''}</div></div>${isPlanReadOnly() ? '' : `<span class="stop-drag-handle" draggable="true" role="button" tabindex="0" title="Arrastra para cambiar el orden" aria-label="Arrastra para cambiar el orden" ondragstart="startPlanStopDrag(event,'${escapeAttr(day)}','${escapeAttr(stop.id)}')" ondragend="endPlanStopDrag()">&#8942;</span>`}</div>
             ${isTechnicianPlanView() && (puebloNavUrl || antennaLocationUrl) ? `
                 <div class="tech-stop-actions-row">
-                    ${puebloNavUrl ? `<a class="tech-nav-direction-btn" href="${escapeAttr(puebloNavUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg> Navegar al pueblo</a>` : ''}
-                    ${antennaLocationUrl ? `<a class="order-location-link tech-antenna-location" href="${escapeAttr(antennaLocationUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Abrir ubicación de la antena</a>` : ''}
+                    <a class="tech-nav-direction-btn" href="${escapeAttr(antennaLocationUrl || puebloNavUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg> Navegar al pueblo</a>
                 </div>` : ''}
             <div class="stop-state-row">
                 <span class="badge ${adminStatus.cls}">${adminStatus.text}</span>
@@ -3114,8 +3254,11 @@ function renderGeneralPlanAssigneeSelect() {
     options.push(...techs.map(t => {
         const isCurrent = t.id === currentAssigned;
         const inTeam = assignedTechs.some(at => at.id === t.id);
-        const marker = inTeam ? ' · en equipo' : (isCurrent ? ' · asignado' : '');
-        return `<option value="${escapeAttr(t.id)}">${escapeHtml(t.nombre || t.usuario || 'Técnico')}${marker}</option>`;
+        const otherPlan = getGeneralPlanAssignedToTech(t.id, plan?.id || '');
+        const marker = inTeam
+            ? ' · en equipo'
+            : (isCurrent ? ' · asignado' : (otherPlan ? ` · asignado a "${otherPlan.name || 'otro plan'}"` : ''));
+        return `<option value="${escapeAttr(t.id)}">${escapeHtml(t.nombre || t.usuario || 'Técnico')}${escapeHtml(marker)}</option>`;
     }));
     options.push('<option value="__team__">👥 Asignar equipo (varios técnicos)...</option>');
     sel.innerHTML = options.join('');
@@ -3175,6 +3318,10 @@ function openTeamAssignmentModal() {
         listEl.innerHTML = techs.map(t => {
             const checked = currentTechIds.has(t.id) ? 'checked' : '';
             const initials = (t.nombre || t.usuario || 'T').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+            const otherPlan = getGeneralPlanAssignedToTech(t.id, plan.id);
+            const otherPlanTag = otherPlan
+                ? `<small style="display:block;color:#b45309;font-size:11px;font-weight:800;margin-top:2px;">Actualmente asignado a: “${escapeHtml(otherPlan.name || 'otro plan')}”</small>`
+                : '';
             return `
                 <label class="plan-team-tech-option">
                     <input type="checkbox" name="plan-team-member" value="${escapeAttr(t.id)}" ${checked}>
@@ -3182,6 +3329,7 @@ function openTeamAssignmentModal() {
                     <span class="tech-info-mini">
                         <strong>${escapeHtml(t.nombre || t.usuario)}</strong>
                         <small>${escapeHtml(t.telefono || t.rol || 'Técnico de campo')}</small>
+                        ${otherPlanTag}
                     </span>
                 </label>
             `;
@@ -3196,9 +3344,56 @@ async function confirmTeamAssignment() {
     const checkboxes = Array.from(document.querySelectorAll('#plan-team-tech-list input[name="plan-team-member"]:checked'));
     const selectedIds = checkboxes.map(cb => cb.value);
 
+    // Verificar si alguno de los técnicos seleccionados ya tiene otro plan asignado antes de moverlo
+    const conflicts = selectedIds
+        .map(id => ({
+            tech: (state.technicians || []).find(t => t.id === id && !t.deletedAt),
+            otherPlan: getGeneralPlanAssignedToTech(id, plan.id)
+        }))
+        .filter(item => item.otherPlan);
+
+    if (conflicts.length === 1) {
+        const { tech, otherPlan } = conflicts[0];
+        const confirmed = await requestPlanAssignmentConfirmation({
+            plan,
+            tech,
+            occupiedPlan: otherPlan,
+            unassign: false
+        });
+        if (!confirmed) return;
+    } else if (conflicts.length > 1) {
+        const detailLines = conflicts
+            .map(item => `• ${item.tech?.nombre || item.tech?.usuario || 'Técnico'}: asignado al plan “${item.otherPlan.name || 'otro plan'}”`)
+            .join('\n');
+        const confirmed = await askConfirmation({
+            title: 'Técnicos ya asignados a otro plan',
+            message: `Los siguientes técnicos ya tienen otro plan asignado:\n${detailLines}\n\n¿Deseas pasarlos al plan “${plan.name || 'actual'}”?`,
+            confirmText: 'Sí, pasarlos a este plan',
+            cancelText: 'Cancelar',
+            tone: 'ok'
+        });
+        if (!confirmed) return;
+    }
+
+    // Un técnico solo puede pertenecer a un plan: remover de otros planes
+    const allGeneralPlans = getGeneralPlans();
+    allGeneralPlans.forEach(otherPlan => {
+        if (!otherPlan || otherPlan.id === plan.id || otherPlan.deletedAt) return;
+        let otherTechs = Array.isArray(otherPlan.assignedTechIds) ? [...otherPlan.assignedTechIds] : (otherPlan.assignedTechId ? [otherPlan.assignedTechId] : []);
+        const filtered = otherTechs.filter(id => !selectedIds.includes(id));
+        if (filtered.length !== otherTechs.length) {
+            otherPlan.assignedTechIds = filtered;
+            otherPlan.assignedTechId = filtered[0] || '';
+            if (!filtered.length) {
+                otherPlan.assignedAt = '';
+            }
+            otherPlan.updatedAt = new Date().toISOString();
+        }
+    });
+
     plan.assignedTechIds = selectedIds;
     plan.assignedTechId = selectedIds[0] || '';
-    plan.assignedAt = selectedIds.length ? new Date().toISOString() : '';
+    plan.assignedAt = selectedIds.length ? (plan.assignedAt || new Date().toISOString()) : '';
     plan.updatedAt = new Date().toISOString();
 
     const saved = await saveDB();
@@ -3254,8 +3449,12 @@ function openDuplicateGeneralPlanModal() {
     }
     if (techSelect) {
         const techs = (state.technicians || []).filter(t => !t.deletedAt && t.estado !== 'inactivo');
-        techSelect.innerHTML = ['<option value="">Sin técnico asignado (asignar después)</option>']
-            .concat(techs.map(t => `<option value="${escapeAttr(t.id)}" ${t.id !== plan.assignedTechId ? 'selected' : ''}>${escapeHtml(t.nombre || t.usuario)}</option>`))
+        techSelect.innerHTML = ['<option value="" selected>Sin técnico asignado (asignar después)</option>']
+            .concat(techs.map(t => {
+                const otherPlan = getGeneralPlanAssignedToTech(t.id, '');
+                const label = `${t.nombre || t.usuario || 'Técnico'}${otherPlan ? ` · asignado a "${otherPlan.name || 'otro plan'}"` : ''}`;
+                return `<option value="${escapeAttr(t.id)}">${escapeHtml(label)}</option>`;
+            }))
             .join('');
     }
     OM('plan-duplicate-mo');
@@ -3271,6 +3470,37 @@ async function confirmDuplicateGeneralPlan() {
     const techSelect = document.getElementById('plan-duplicate-tech');
     const newName = (nameInput?.value || '').trim() || `${origPlan.name} (Copia)`;
     const targetTechId = techSelect?.value || '';
+    const targetTech = targetTechId ? (state.technicians || []).find(t => t.id === targetTechId && !t.deletedAt) : null;
+    const occupiedPlan = targetTechId ? getGeneralPlanAssignedToTech(targetTechId, '') : null;
+
+    if (occupiedPlan) {
+        const confirmed = await requestPlanAssignmentConfirmation({
+            plan: { name: newName },
+            tech: targetTech,
+            occupiedPlan,
+            unassign: false
+        });
+        if (!confirmed) return;
+    }
+
+    if (targetTechId) {
+        const allGeneralPlans = getGeneralPlans();
+        allGeneralPlans.forEach(otherPlan => {
+            if (!otherPlan || otherPlan.deletedAt) return;
+            const otherTechs = Array.isArray(otherPlan.assignedTechIds)
+                ? [...otherPlan.assignedTechIds]
+                : (otherPlan.assignedTechId ? [otherPlan.assignedTechId] : []);
+            if (otherTechs.includes(targetTechId) || otherPlan.assignedTechId === targetTechId) {
+                const filtered = otherTechs.filter(id => id !== targetTechId);
+                otherPlan.assignedTechIds = filtered;
+                otherPlan.assignedTechId = filtered[0] || '';
+                if (!filtered.length) {
+                    otherPlan.assignedAt = '';
+                }
+                otherPlan.updatedAt = new Date().toISOString();
+            }
+        });
+    }
 
     // Create deep clone of stops with fresh unique IDs
     const clonedStops = (origPlan.stops || []).map(s => {
@@ -3839,15 +4069,31 @@ function requestPlanAssignmentConfirmation({ plan, tech, occupiedPlan = null, un
     const techName = document.getElementById('plan-assignment-tech');
     const warning = document.getElementById('plan-assignment-warning');
     const confirm = document.getElementById('plan-assignment-confirm')?.querySelector('span:last-child');
-    if (title) title.textContent = unassign ? 'Dejar plan sin técnico' : 'Asignar técnico a la ruta';
-    if (message) message.textContent = unassign ? 'La ruta volverá al plan general compartido.' : 'El técnico podrá consultar y trabajar esta ruta desde su agenda.';
-    if (planName) planName.textContent = plan?.name || 'Plan general';
-    if (techName) techName.textContent = unassign ? 'Sin técnico asignado' : (tech?.nombre || 'Técnico');
+    const techDisplayName = tech?.nombre || tech?.usuario || 'este técnico';
+    const currentPlanName = plan?.name || 'Plan general';
+    const occupiedPlanName = occupiedPlan?.name || 'otro plan';
+
+    if (title) {
+        title.textContent = unassign
+            ? 'Dejar plan sin técnico'
+            : (occupiedPlan ? 'Técnico ya asignado a otro plan' : 'Asignar técnico a la ruta');
+    }
+    if (message) {
+        message.textContent = unassign
+            ? 'La ruta volverá al plan general compartido.'
+            : (occupiedPlan
+                ? `El técnico ${techDisplayName} ya tiene asignado el plan “${occupiedPlanName}”. ¿Deseas pasarlo al plan “${currentPlanName}”?`
+                : 'El técnico podrá consultar y trabajar esta ruta desde su agenda.');
+    }
+    if (planName) planName.textContent = currentPlanName;
+    if (techName) techName.textContent = unassign ? 'Sin técnico asignado' : techDisplayName;
     if (warning) {
         warning.hidden = !occupiedPlan;
-        warning.textContent = occupiedPlan ? `Este técnico está asignado a “${occupiedPlan.name || 'otro plan'}”. Al continuar se moverá a esta ruta.` : '';
+        warning.textContent = occupiedPlan
+            ? `Actualmente tiene asignado el plan “${occupiedPlanName}”. Si confirmas, dejará “${occupiedPlanName}” y pasará al plan “${currentPlanName}”.`
+            : '';
     }
-    if (confirm) confirm.textContent = unassign ? 'Quitar asignación' : (occupiedPlan ? 'Asignar y mover' : 'Confirmar asignación');
+    if (confirm) confirm.textContent = unassign ? 'Quitar asignación' : (occupiedPlan ? 'Sí, pasar a este plan' : 'Confirmar asignación');
     OM('plan-assignment-mo');
     return new Promise(resolve => { pendingPlanAssignmentResolver = resolve; });
 }
@@ -3875,11 +4121,21 @@ async function assignGeneralPlanToTech(techId) {
         renderGeneralPlanAssigneeSelect();
         return;
     }
-    if (occupied) {
-        occupied.assignedTechId = '';
-        occupied.assignedTechIds = [];
-        occupied.assignedAt = '';
-        occupied.updatedAt = new Date().toISOString();
+    if (targetTechId) {
+        const allGeneralPlans = getGeneralPlans();
+        allGeneralPlans.forEach(otherPlan => {
+            if (!otherPlan || otherPlan.id === plan.id || otherPlan.deletedAt) return;
+            let otherTechs = Array.isArray(otherPlan.assignedTechIds) ? [...otherPlan.assignedTechIds] : (otherPlan.assignedTechId ? [otherPlan.assignedTechId] : []);
+            if (otherTechs.includes(targetTechId) || otherPlan.assignedTechId === targetTechId) {
+                const filtered = otherTechs.filter(id => id !== targetTechId);
+                otherPlan.assignedTechIds = filtered;
+                otherPlan.assignedTechId = filtered[0] || '';
+                if (!filtered.length) {
+                    otherPlan.assignedAt = '';
+                }
+                otherPlan.updatedAt = new Date().toISOString();
+            }
+        });
     }
     plan.assignedTechId = targetTechId;
     plan.assignedTechIds = targetTechId ? [targetTechId] : [];
@@ -6589,6 +6845,16 @@ function getPlanMapStops() {
     });
 }
 
+
+function setTechnicianNoPhone() {
+    const el = document.getElementById('tech-completion-phone');
+    if (el) el.value = '0000000000';
+}
+function setTechnicianInstallNoPhone() {
+    const el = document.getElementById('tech-install-phone');
+    if (el) el.value = '0000000000';
+}
+
 function openTechnicianCompletionForm(detailId) {
     if (!isTechnicianPlanView()) return;
     const detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
@@ -6598,7 +6864,7 @@ function openTechnicianCompletionForm(detailId) {
     technicianCompletionPhotos = getAdminTechReportPhotos(detail.technicianReport || {}).slice(0, 6);
     let modal = document.getElementById('tech-completion-mo');
     if (!modal) {
-        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-completion-mo"><div class="md tech-installation-modal tech-completion-modal"><div class="tech-installation-head"><div><div class="mt2">Terminar detalle</div><small>Completa el reporte antes de marcar el trabajo como terminado.</small></div><button class="btn bsm bgh" type="button" onclick="CM('tech-completion-mo')">Cerrar</button></div><div class="row2"><div class="fi"><label>Nombre del cliente</label><input id="tech-completion-client" placeholder="Nombre completo"></div><div class="fi"><label>Número telefónico</label><input id="tech-completion-phone" type="tel" inputmode="tel" placeholder="Ej. 747 123 4567"></div></div><div class="fi"><label>Ubicación en coordenadas</label><div class="tech-coordinate-row"><input id="tech-completion-location" class="mono" placeholder="18.09563, -99.19604"><button class="btn bgh" type="button" onclick="useCurrentTechnicianCoordinates()">Usar mi ubicación</button></div></div><div class="fi"><label>¿Qué se hizo en el detalle?</label><textarea id="tech-completion-work" rows="4" placeholder="Describe el trabajo realizado"></textarea></div><div class="fi"><label>Observaciones <span class="optional-label">Opcional</span></label><textarea id="tech-completion-notes" rows="3" placeholder="Observaciones adicionales"></textarea></div><div class="tech-evidence-box"><strong>Evidencias obligatorias</strong><small>Agrega al menos una fotografía. Máximo 6.</small><div class="tech-evidence-actions"><label class="btn bc">Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">Seleccionar de galería<input type="file" accept="image/*" multiple onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label></div><div id="tech-completion-evidence-preview" class="tech-install-evidence-preview"></div></div><div class="tech-completion-actions-row" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;"><button class="btn bc bfu" type="button" style="flex:1 1 200px;" onclick="saveTechnicianCompletion()">Guardar y marcar como terminado</button><button class="btn ba tech-modal-btn-incomplete" type="button" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:800;padding:0 18px;min-height:50px;border-radius:14px;cursor:pointer;" onclick="markCurrentDetailIncompleteFromModal()">No concluido / No realizado</button></div></div></div>`);
+        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-completion-mo"><div class="md tech-installation-modal tech-completion-modal"><div class="tech-installation-head"><div><div class="mt2">Terminar detalle</div><small>Completa el reporte antes de marcar el trabajo como terminado.</small></div><button class="btn bsm bgh" type="button" onclick="CM('tech-completion-mo')">Cerrar</button></div><div class="row2"><div class="fi"><label>Nombre del cliente</label><input id="tech-completion-client" placeholder="Nombre completo"></div><div class="fi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><label style="margin:0;">Número telefónico</label><button type="button" class="btn bsm bgh" style="font-size:11px;padding:2px 8px;height:24px;min-height:24px;cursor:pointer;" onclick="setTechnicianNoPhone()">No tiene número</button></div><input id="tech-completion-phone" type="tel" inputmode="tel" placeholder="10 dígitos (o 'No tiene número')"></div></div><div class="fi"><label>Ubicación en coordenadas</label><div class="tech-coordinate-row"><input id="tech-completion-location" class="mono" placeholder="18.09563, -99.19604"><button class="btn bgh" type="button" onclick="useCurrentTechnicianCoordinates()">Usar mi ubicación</button></div></div><div class="fi"><label>¿Qué se hizo en el detalle?</label><textarea id="tech-completion-work" rows="4" placeholder="Describe el trabajo realizado"></textarea></div><div class="fi"><label>Observaciones <span class="optional-label">Opcional</span></label><textarea id="tech-completion-notes" rows="3" placeholder="Observaciones adicionales"></textarea></div><div class="tech-evidence-box"><strong>Evidencias obligatorias</strong><small>Agrega al menos una fotografía. Máximo 6.</small><div class="tech-evidence-actions"><label class="btn bc">Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">Seleccionar de galería<input type="file" accept="image/*" multiple onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label></div><div id="tech-completion-evidence-preview" class="tech-install-evidence-preview"></div></div><div class="tech-completion-actions-row" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;"><button class="btn bc bfu" type="button" style="flex:1 1 200px;" onclick="saveTechnicianCompletion()">Guardar y marcar como terminado</button><button class="btn ba tech-modal-btn-incomplete" type="button" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:800;padding:0 18px;min-height:50px;border-radius:14px;cursor:pointer;" onclick="markCurrentDetailIncompleteFromModal()">No concluido / No realizado</button></div></div></div>`);
         modal = document.getElementById('tech-completion-mo');
     }
     const completionPhone = document.getElementById('tech-completion-phone');
@@ -6678,6 +6944,10 @@ async function saveTechnicianCompletion() {
     const observations = document.getElementById('tech-completion-notes')?.value.trim() || '';
     const coordinates = location.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
     if (!clientName) return notify('Escribe el nombre del cliente.', 'err');
+    const rawPhoneDigits = phone.replace(/\D/g, '');
+    if (!rawPhoneDigits || (rawPhoneDigits.length < 10 && rawPhoneDigits !== '0000000000')) {
+        return notify('El número telefónico es obligatorio (10 dígitos). Si no tiene número, pulsa "No tiene número".', 'err');
+    }
     if (!coordinates || Math.abs(Number(coordinates[1])) > 90 || Math.abs(Number(coordinates[2])) > 180) return notify('Escribe coordenadas válidas, por ejemplo: 18.09563, -99.19604.', 'err');
     if (!workDone) return notify('Describe qué se hizo en el detalle.', 'err');
     if (!technicianCompletionPhotos.length) return notify('Debes agregar al menos una evidencia fotográfica.', 'err');
@@ -6971,9 +7241,7 @@ async function shareTechnicianCompletion(detailId) {
     const folio = getDetailFolio(detail);
     const isNoDone = detail.status === 'no_realizado' || detail.technicianReport?.result === 'no_realizado';
     const reason = detail.technicianReport?.reason || '';
-    const shareText = isNoDone
-        ? `WiFiMex - Reporte de Incidencia\nFolio: ${folio}\nCliente: ${detail.clientName || 'Sin cliente'}\nEstado: No realizado / No concluido\nMotivo: ${reason}`
-        : `WiFiMex - Reporte de Servicio\nFolio: ${folio}\nCliente: ${detail.clientName || 'Sin cliente'}\nEstado: Concluido satisfactoriamente`;
+    const shareText = `Folio: ${folio}`;
     let canvas;
     let blob;
     try {
@@ -7019,7 +7287,7 @@ function openTechnicianInstallationForm(mode = 'installation') {
     technicianNewEntryMode = mode === 'detail' ? 'detail' : 'installation';
     let modal = document.getElementById('tech-installation-mo');
     if (!modal) {
-        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-installation-mo"><div class="md tech-installation-modal"><div class="tech-installation-head"><div><div class="mt2">Nueva instalación</div><small id="tech-installation-day-label">Captura los datos y agrega evidencia fotográfica.</small></div><button class="btn bsm bgh" type="button" onclick="CM('tech-installation-mo')">Cerrar</button></div><div class="row2"><div class="fi"><label>Nombre de la persona</label><input id="tech-install-client" placeholder="Nombre completo"></div><div class="fi"><label>Número telefónico</label><input id="tech-install-phone" type="tel" inputmode="tel" placeholder="Ej. 747 123 4567"></div></div><div class="fi"><label>Dirección o ubicación</label><input id="tech-install-location" placeholder="Calle, colonia o enlace de Maps"></div><div class="fi"><label>Pueblo o comunidad</label><input id="tech-install-town" list="tech-install-town-options" placeholder="Selecciona una sugerencia o escribe otra localidad"><datalist id="tech-install-town-options"></datalist><small id="tech-install-town-help">Sugerencias basadas en las actividades del día.</small></div><div class="fi"><label>Descripción de la instalación <span class="optional-label">Opcional</span></label><textarea id="tech-install-detail" rows="4" placeholder="Equipo requerido, referencias u observaciones (opcional)"></textarea></div><div class="tech-evidence-box"><strong>Evidencia fotográfica</strong><small>Toma fotografías o selecciónalas desde el celular. Máximo 6.</small><div class="tech-evidence-actions"><label class="btn bc">Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianInstallationPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">Subir fotos<input type="file" accept="image/*" multiple onchange="addTechnicianInstallationPhotos(this.files);this.value=''" hidden></label></div><div id="tech-install-evidence-preview" class="tech-install-evidence-preview"></div></div><button class="btn bc bfu" type="button" onclick="saveTechnicianInstallation()">Guardar nueva instalación</button></div></div>`);
+        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-installation-mo"><div class="md tech-installation-modal"><div class="tech-installation-head"><div><div class="mt2">Nueva instalación</div><small id="tech-installation-day-label">Captura los datos y agrega evidencia fotográfica.</small></div><button class="btn bsm bgh" type="button" onclick="CM('tech-installation-mo')">Cerrar</button></div><div class="row2"><div class="fi"><label>Nombre de la persona</label><input id="tech-install-client" placeholder="Nombre completo"></div><div class="fi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><label style="margin:0;">Número telefónico</label><button type="button" class="btn bsm bgh" style="font-size:11px;padding:2px 8px;height:24px;min-height:24px;cursor:pointer;" onclick="setTechnicianInstallNoPhone()">No tiene número</button></div><input id="tech-install-phone" type="tel" inputmode="tel" placeholder="10 dígitos (o 'No tiene número')"></div></div><div class="fi"><label>Dirección o ubicación</label><input id="tech-install-location" placeholder="Calle, colonia o enlace de Maps"></div><div class="fi"><label>Pueblo o comunidad</label><input id="tech-install-town" list="tech-install-town-options" placeholder="Selecciona una sugerencia o escribe otra localidad"><datalist id="tech-install-town-options"></datalist><small id="tech-install-town-help">Sugerencias basadas en las actividades del día.</small></div><div class="fi"><label>Descripción de la instalación <span class="optional-label">Opcional</span></label><textarea id="tech-install-detail" rows="4" placeholder="Equipo requerido, referencias u observaciones (opcional)"></textarea></div><div class="tech-evidence-box"><strong>Evidencia fotográfica</strong><small>Toma fotografías o selecciónalas desde el celular. Máximo 6.</small><div class="tech-evidence-actions"><label class="btn bc">Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianInstallationPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">Subir fotos<input type="file" accept="image/*" multiple onchange="addTechnicianInstallationPhotos(this.files);this.value=''" hidden></label></div><div id="tech-install-evidence-preview" class="tech-install-evidence-preview"></div></div><button class="btn bc bfu" type="button" onclick="saveTechnicianInstallation()">Guardar nueva instalación</button></div></div>`);
         modal = document.getElementById('tech-installation-mo');
     }
     const installationPhone = document.getElementById('tech-install-phone');
@@ -7182,6 +7450,7 @@ async function addTechnicianInstallationPhotos(fileList) {
 }
 
 function compressTechnicianPhoto(file) {
+    if (typeof optimizeImageForUpload === 'function') return optimizeImageForUpload(file);
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = reject;
@@ -7230,6 +7499,10 @@ async function saveTechnicianInstallation() {
     const town = enteredTown || selectedNode?.town || selectedStop?.town || selectedStop?.name || '';
     if (isDetail && !selectedStop) return notify('Selecciona la parada donde realizaste el detalle.', 'err');
     if (isDetail && !description) return notify('Describe el trabajo realizado.', 'err');
+    const rawInstallPhone = phone.replace(/\D/g, '');
+    if (!rawInstallPhone || (rawInstallPhone.length < 10 && rawInstallPhone !== '0000000000')) {
+        return notify('El número telefónico es obligatorio (10 dígitos). Si no tiene, pulsa el botón "No tiene número".', 'err');
+    }
     if (!clientName || !detailLocation || !town || !technicianInstallationPhotos.length) {
         notify('Completa nombre, ubicación, comunidad y agrega al menos una foto.', 'err');
         return;
@@ -7285,6 +7558,11 @@ async function saveTechnicianInstallation() {
     }
     CM('tech-installation-mo');
     technicianInstallationPhotos = [];
+    const groupText = isDetail
+        ? `WiFiMex · Detalle Registrado en Campo\nFolio: ${order.folio}\nCliente: ${order.clientName}\nPueblo: ${order.town}\nTrabajo: ${order.title}\nTécnico: ${order.technicianReport?.completedByName || 'Técnico'}`
+        : `WiFiMex · Nueva Instalación\nFolio: ${order.folio}\nCliente: ${order.clientName}\nPueblo: ${order.town}\nUbicación: ${order.detailLocation}\nTeléfono: ${order.clientPhone || 'Sin número'}\nTécnico: ${order.technicianReport?.completedByName || 'Técnico'}`;
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(groupText)}`;
+    window.open(waUrl, '_blank');
     if (isDetail) {
         renderPlan();
         openTechnicianCompletionSummary(order);
@@ -7437,7 +7715,7 @@ function toggleLinkedDetailStatus(detailId) {
 async function togglePlanDetailStatus(detailId) {
     const detail = state.workOrders.find(w => w.id === detailId && !w.deletedAt);
     if (!detail) return;
-    if (detail.status !== 'completada' && userHasRole('administrador', 'admin', 'atencion_clientes')) {
+    if (detail.status !== 'completada' && userHasRole('administrador', 'admin', 'soporte', 'atencion_clientes')) {
         openAdminDetailCompletion(detail, async completion => {
             if (completion.withInformation) {
                 detail.clientName = completion.clientName;

@@ -217,6 +217,10 @@ async function loadOrderPage({ scroll = false } = {}) {
       window.netopsSupportUsers = data.supportUsers;
       try { localStorage.setItem('netops_cached_support_users', JSON.stringify(data.supportUsers)); } catch (e) {}
     }
+    if (Array.isArray(data.attentionUsers)) {
+      window.netopsAttentionUsers = data.attentionUsers;
+      try { localStorage.setItem('netops_cached_attention_users', JSON.stringify(data.attentionUsers)); } catch (e) {}
+    }
     if (typeof _previousStateSaved !== 'undefined' && _previousStateSaved) {
       _previousStateSaved.workOrders = cloneData(state.workOrders);
     }
@@ -494,9 +498,13 @@ function initOrdenesPage() {
         showOrderReviewDecision(pendingOrderReviewDecisionId);
         return;
       }
-      if (event.key !== 'Escape' || !document.getElementById('order-tech-report-mo')?.classList.contains('open')) return;
-      if (document.getElementById('order-review-decision-mo')?.classList.contains('open')) return;
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const reportModal = document.getElementById('order-tech-report-mo');
+      if (!reportModal?.classList.contains('open')) return;
+      const hasOtherOpenModal = Array.from(document.querySelectorAll('.mo.open')).some(el => el !== reportModal);
+      if (hasOtherOpenModal) return;
       event.preventDefault();
+      event.stopImmediatePropagation();
       requestCloseOrderReport();
     });
     document.addEventListener('click',interceptOrderReviewNavigation,true);
@@ -577,6 +585,7 @@ function bindWOEvidenceEvents() {
 }
 
 function compressWOEvidenceImage(file) {
+  if (typeof optimizeImageForUpload === 'function') return optimizeImageForUpload(file);
   return new Promise((resolve,reject) => {
     const reader = new FileReader();
     reader.onerror = reject;
@@ -699,14 +708,43 @@ function getOrderFilterOptions(kind) {
   return ORDER_FILTER_META[kind]?.options || [];
 }
 
+function getStatusFilterDotClass(statusValue) {
+  const s = String(statusValue || '').toLowerCase();
+  if (s === 'pendiente') return 'is-pending';
+  if (s === 'en_revision') return 'is-reviewing';
+  if (s === 'resuelto_soporte') return 'is-resolving';
+  if (s === 'devuelto_soporte') return 'is-returned';
+  if (s === 'no_realizado') return 'is-unresolvable';
+  if (s === 'completada') return 'is-done';
+  if (s === 'revisado') return 'is-reviewed';
+  return 'is-pending';
+}
+
+function sortOrdersByStatusFromFilter(event) {
+  event?.stopPropagation();
+  const sortSelect = document.getElementById('wo-sort');
+  if (sortSelect) {
+    sortSelect.value = 'status';
+    closeOrderFilterMenus();
+    resetOrderPagination();
+  }
+}
+
 function renderOrderFilterMenus() {
+  const currentSort = document.getElementById('wo-sort')?.value || 'priority';
   document.querySelectorAll('[data-order-filter-menu]').forEach(menu => {
     const kind = menu.dataset.orderFilterMenu;
     const options = getOrderFilterOptions(kind);
-    menu.innerHTML = options.length ? options.map(([value, label]) => {
+    const statusSortHeader = kind === 'status'
+      ? `<button type="button" class="order-filter-option order-filter-sort-shortcut ${currentSort === 'status' ? 'is-selected' : ''}" onclick="sortOrdersByStatusFromFilter(event)"><span class="order-filter-check">${currentSort === 'status' ? '✓' : '⇅'}</span><span>Ordenar tabla por estado</span></button><div class="order-filter-menu-divider"></div>`
+      : '';
+    menu.innerHTML = options.length ? statusSortHeader + options.map(([value, label]) => {
       const selected = activeOrderFilters[kind]?.has(String(value));
       const safeValue = encodeURIComponent(value).replace(/'/g, '%27');
-      return `<button type="button" class="order-filter-option ${selected ? 'is-selected' : ''}" onclick="toggleOrderFilterOption('${kind}','${safeValue}',event)"><span class="order-filter-check">${selected ? '✓' : ''}</span><span>${orderEscape(label)}</span></button>`;
+      const dotHtml = kind === 'status'
+        ? `<span class="order-filter-status-dot ${getStatusFilterDotClass(value)}" aria-hidden="true"></span>`
+        : '';
+      return `<button type="button" class="order-filter-option ${selected ? 'is-selected' : ''}" onclick="toggleOrderFilterOption('${kind}','${safeValue}',event)"><span class="order-filter-check">${selected ? '✓' : ''}</span>${dotHtml}<span>${orderEscape(label)}</span></button>`;
     }).join('') : '<span class="order-filter-menu-empty">Sin opciones disponibles</span>';
   });
   updateOrderFilterButtons();
@@ -1941,18 +1979,44 @@ function orderFilters() {
 
 function getOrderLifecycleRank(order) {
   const status = String(order?.status || 'pendiente').toLowerCase();
-  const isSentToAttention = typeof isNetworkSupportToAttention === 'function' ? isNetworkSupportToAttention(order) : false;
+  // Hasta abajo siempre los ya concluidos
+  if (status === 'completada') return 5;
 
-  // 1° Resolver/Responder (requerimientos en atención) y Resolver (reportes de red en atención)
-  if (status === 'en_revision') {
-    return isSentToAttention ? 0 : 1;
-  }
-  // 2° Atender: pendientes y devueltos para iniciar atención
-  if (status === 'pendiente' || status === 'devuelto_soporte') return 2;
-  // 3° Y al final los resueltos (resueltos por soporte / en validación y completados)
-  if (status === 'resuelto_soporte') return 3;
-  if (['completada', 'no_realizado', 'revisado'].includes(status)) return 4;
+  const pendingAction = typeof getNetworkPendingActionMeta === 'function'
+    ? getNetworkPendingActionMeta(order)
+    : null;
+
+  // 1° Al principio: detalles en los que el usuario actual debe realizar una acción inmediata
+  // (confirmar cierre, confirmar no realizable o confirmar envío a físicos)
+  if (pendingAction?.requiresMyAction) return 0;
+
+  // 2° Detalles que requieren atención directa (devueltos o pendientes de iniciar)
+  if (status === 'devuelto_soporte') return 1;
+  if (status === 'pendiente') return 2;
+
+  // 3° Detalles actualmente en atención / conversación activa
+  if (status === 'en_revision') return 3;
+
+  // 4° Detalles esperando confirmación de la otra parte (resuelto_soporte, no_realizado en espera, revisado)
+  if (status === 'resuelto_soporte' || status === 'no_realizado' || status === 'revisado') return 4;
+
   return 3;
+}
+
+function getOrderStatusSortRank(order) {
+  const status = String(order?.status || 'pendiente').toLowerCase();
+  if (status === 'completada') return 7;
+  const pendingAction = typeof getNetworkPendingActionMeta === 'function'
+    ? getNetworkPendingActionMeta(order)
+    : null;
+  if (pendingAction?.requiresMyAction) return 0;
+  if (status === 'devuelto_soporte') return 1;
+  if (status === 'pendiente') return 2;
+  if (status === 'en_revision') return 3;
+  if (status === 'resuelto_soporte') return 4;
+  if (status === 'no_realizado') return 5;
+  if (status === 'revisado') return 6;
+  return 6;
 }
 
 function getOrderPriorityRank(order) {
@@ -1963,21 +2027,45 @@ function getOrderPriorityRank(order) {
   return 3;
 }
 
+function getOrderConcludedTimestamp(order) {
+  return new Date(order?.completedAt || order?.updatedAt || order?.createdAt || 0).getTime();
+}
+
 function filteredOrders() {
   const rawList = (state.workOrders || []).filter(w => !w.deletedAt);
   const activeSort = document.getElementById('wo-sort')?.value || 'priority';
 
   return rawList.slice().sort((a, b) => {
-    // 1° Ciclo de vida: Atender -> Resolver -> Por validar -> Completados al final
-    const rankA = getOrderLifecycleRank(a);
-    const rankB = getOrderLifecycleRank(b);
+    // 1° Orden lógico principal: Acción requerida al principio -> Activos -> En espera -> Concluidos hasta abajo
+    const rankA = activeSort === 'status' ? getOrderStatusSortRank(a) : getOrderLifecycleRank(a);
+    const rankB = activeSort === 'status' ? getOrderStatusSortRank(b) : getOrderLifecycleRank(b);
     if (rankA !== rankB) return rankA - rankB;
 
-    // Resent first
+    // Si ambos están concluidos, ordenar por fecha de conclusión (más recientes primero, salvo orden explícito)
+    const isDoneA = String(a?.status || '').toLowerCase() === 'completada';
+    const isDoneB = String(b?.status || '').toLowerCase() === 'completada';
+    if (isDoneA && isDoneB) {
+      if (activeSort === 'oldest') {
+        return getOrderConcludedTimestamp(a) - getOrderConcludedTimestamp(b);
+      }
+      if (activeSort === 'town') {
+        return (getOrderTown(a) || '').localeCompare(getOrderTown(b) || '', 'es');
+      }
+      if (activeSort === 'client') {
+        return (a.clientName || '').localeCompare(b.clientName || '', 'es');
+      }
+      return getOrderConcludedTimestamp(b) - getOrderConcludedTimestamp(a);
+    }
+
+    // Reenviados primero dentro de pendientes
     const resentA = (a.status === 'pendiente' && a.lastResentAt) ? 0 : 1;
     const resentB = (b.status === 'pendiente' && b.lastResentAt) ? 0 : 1;
     if (resentA !== resentB) return resentA - resentB;
 
+    if (activeSort === 'status') {
+      const statusCmp = getOrderStatusSortRank(a) - getOrderStatusSortRank(b);
+      if (statusCmp !== 0) return statusCmp;
+    }
     if (activeSort === 'newest') {
       return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
     }
@@ -2139,6 +2227,9 @@ async function reopenCompletedWO(id) {
   }
 
   notify('Detalle reabierto.', 'ok');
+  if (typeof updateOrderChatLive === 'function') {
+    updateOrderChatLive(w);
+  }
   await loadOrderPage();
 }
 
@@ -2232,11 +2323,35 @@ function recordUnconfirmedOrderReviewExit() {
   }
 }
 
+function hasUserViewedOrderInCurrentCycle(order, actor = getCurrentUser()) {
+  const followUps = Array.isArray(order?.followUps) ? order.followUps : [];
+  let start = 0;
+  for (let i = followUps.length - 1; i >= 0; i--) {
+    const act = String(followUps[i]?.action || '').trim().toLowerCase();
+    if (act === 'reabierto' || act === 'reopened' || act === 'resent') { start = i + 1; break; }
+  }
+  const actorId = String(actor?.id || '').trim().toLowerCase();
+  const actorNames = [actor?.name, actor?.username].map(v => normalizeName(v || '')).filter(Boolean);
+  if (!actorId && !actorNames.length) return false;
+  return followUps.slice(start).some(item => {
+    if (String(item?.action || '').trim().toLowerCase() !== 'viewed') return false;
+    const itemId = String(item?.byId || item?.byUserId || '').trim().toLowerCase();
+    if (actorId && itemId) return actorId === itemId;
+    const itemName = normalizeName(item?.byName || item?.byUsername || '');
+    return !!itemName && actorNames.includes(itemName);
+  });
+}
+
 async function markWOViewedOnOpen(order) {
-  if (!order || order.deletedAt || !userHasRole('administrador','admin','soporte')) return false;
+  if (!order || order.deletedAt || !userHasRole('administrador','admin','soporte','atencion_clientes')) return false;
   if (order.detailKind !== 'network') return false;
   if (order.status === 'completada' || order.status === 'no_realizado') return false;
   const actor = getCurrentUser();
+  // Solo se registra la primera vista de cada usuario por ciclo (se reinicia al reabrir/reenviar)
+  if (hasUserViewedOrderInCurrentCycle(order, actor)) {
+    if (orderNeedsReviewDecision(order)) rememberPendingOrderReviewDecision(order.id);
+    return false;
+  }
   const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
   appendOrderFollowUp(order,'viewed','Visto');
   setUpdatedAudit(order,'vio detalle de orden');
@@ -2340,12 +2455,14 @@ async function saveOrderReviewDecision(attendNow) {
     appendOrderFollowUp(order,'review_opened','En revisión');
     setUpdatedAudit(order,'confirmó que atenderá el detalle');
   } else {
-    appendOrderFollowUp(order,'review_deferred','No se atenderá ahora',reason);
     setUpdatedAudit(order,'pospuso la revisión del detalle');
   }
   const saved = await saveRecordWithAudit('workOrders',order,auditStart);
   buttons.forEach(button => { button.disabled = false; });
   if (!saved) return;
+  if (!attendNow && typeof broadcastNetworkOrderChange === 'function') {
+    try { broadcastNetworkOrderChange(order, 'review_deferred', { reason }); } catch (e) {}
+  }
   const shouldReload = pendingOrderReviewReload;
   const destination = pendingOrderReviewDestination;
   pendingOrderReviewReload = false;
@@ -2506,22 +2623,141 @@ async function sendWOToPhysical(id) {
   await saveOrderWorkflow(order,'envió detalle a físicos','El mismo folio fue enviado a Detalles físicos.');
 }
 
+function getPhysicalDerivationStatus(order) {
+  const followUps = Array.isArray(order?.followUps) ? order.followUps : [];
+  let resetIdx = -1;
+  for (let i = followUps.length - 1; i >= 0; i--) {
+    const act = String(followUps[i]?.action || '').toLowerCase();
+    if (act === 'reopened' || act === 'reabierto' || act === 'physical_rejected' || act === 'physical') {
+      resetIdx = i;
+      break;
+    }
+  }
+  const relevant = resetIdx >= 0 ? followUps.slice(resetIdx + 1) : followUps;
+  let latestProp = null;
+  for (let i = relevant.length - 1; i >= 0; i--) {
+    const act = String(relevant[i]?.action || '').toLowerCase();
+    if (act === 'physical_proposed_soporte' || act === 'physical_proposed_atencion') {
+      latestProp = relevant[i];
+      break;
+    }
+  }
+  if (!latestProp || order?.detailKind === 'physical' || order?.status === 'completada') {
+    return { pending: false, proposedBy: '', proposedByName: '', note: '', at: '' };
+  }
+  return {
+    pending: true,
+    proposedBy: latestProp.action === 'physical_proposed_soporte' ? 'soporte' : 'atencion',
+    proposedByName: latestProp.byName || '',
+    note: latestProp.note || 'Requiere visita presencial para revisión física en sitio.',
+    at: latestProp.at || ''
+  };
+}
+
 async function promptSendNetworkToPhysical(id) {
   const order = (state.workOrders || []).find(item => item.id === id && !item.deletedAt);
   if (!order) return notify('No se encontró el detalle solicitado.', 'err');
+  if (order.status === 'completada') {
+    return notify('El caso ya está concluido. Reábrelo primero si requiere visita física.', 'warn');
+  }
 
-  const client = order.clientName || 'el cliente';
+  const physStatus = getPhysicalDerivationStatus(order);
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+  const isAdmin = userHasRole('administrador', 'admin');
+
+  // Si la contraparte ya propuso enviarlo a físicos, permitir confirmar directamente
+  if (physStatus.pending) {
+    const canConfirm = physStatus.proposedBy === 'soporte' ? (isAtencion || isAdmin) : (isSoporte || isAdmin);
+    if (canConfirm) {
+      return confirmSendNetworkToPhysical(id);
+    }
+    return notify('Ya enviaste la propuesta para pasar a Detalles Físicos. En espera de confirmación de la otra parte.', 'warn');
+  }
+
+  const note = await askReasonPrompt({
+    title: 'Proponer envío a Detalles Físicos',
+    message: 'Para enviar a Detalles Físicos ambas partes deben estar de acuerdo. Indica el motivo o instrucción para visita en campo:',
+    placeholder: 'Describe por qué requiere revisión física en sitio...',
+    initialValue: 'Requiere visita presencial para revisión física en sitio.',
+    confirmText: 'Enviar propuesta',
+    cancelText: 'Cancelar',
+    tone: 'primary',
+    emptyWarning: 'Por favor indica el motivo para enviar a Detalles Físicos.'
+  });
+  if (!note || !note.trim()) return;
+
+  const currentUser = getCurrentUser();
+  const userName = currentUser.name || currentUser.username || (isSoporte ? 'Soporte técnico' : 'Atención a clientes');
+  const proposedBy = (isSoporte && !isAtencion) ? 'soporte' : (isAtencion ? 'atencion' : (isNetworkSupportToAttention(order) ? 'soporte' : 'atencion'));
+  const roleLabel = proposedBy === 'soporte' ? 'Soporte técnico' : 'Atención a clientes';
+  const now = new Date().toISOString();
+
+  order.updatedAt = now;
+  order.updatedById = currentUser.id || '';
+
+  appendSharedNetworkFollowUp(
+    order,
+    `physical_proposed_${proposedBy}`,
+    `Pase a Detalles Físicos propuesto por ${roleLabel}`,
+    note.trim()
+  );
+  setUpdatedAudit(order, 'propuso derivar detalle de red a detalles físicos');
+
+  updateOrderChatLive(order);
+  renderWOs();
+
+  const saved = await saveRecord('workOrders', order);
+  if (!saved) {
+    notify('No se pudo registrar la propuesta. Intente nuevamente.', 'err');
+    return;
+  }
+
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(order, 'physical_proposed', { proposedBy });
+    }
+  } catch (e) {
+    console.warn('broadcastNetworkOrderChange error:', e);
+  }
+
+  updateOrderChatLive(order);
+  renderWOs();
+  notify('Propuesta enviada al chat. La otra parte debe confirmar para transferir a Detalles Físicos.', 'ok');
+}
+
+async function confirmSendNetworkToPhysical(id) {
+  const order = (state.workOrders || []).find(item => item.id === id && !item.deletedAt);
+  if (!order) return notify('No se encontró el detalle solicitado.', 'err');
+
+  const physStatus = getPhysicalDerivationStatus(order);
+  if (!physStatus.pending) {
+    return promptSendNetworkToPhysical(id);
+  }
+
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+  const isAdmin = userHasRole('administrador', 'admin');
+  const canConfirm = physStatus.proposedBy === 'soporte' ? (isAtencion || isAdmin) : (isSoporte || isAdmin);
+  if (!canConfirm) {
+    return notify('La otra parte involucrada debe confirmar el acuerdo para enviar a Detalles Físicos.', 'warn');
+  }
+
   const folio = getOrderFolio(order);
-  const promptMessage = `Derivar folio ${folio} (${client}) directo a Detalles Físicos.\n\nEscribe el motivo o instrucción para la visita en campo:`;
-  const defaultNote = 'Requiere visita presencial para revisión física en sitio.';
-  const reason = window.prompt(promptMessage, defaultNote);
-  if (reason === null) return;
-  const note = reason.trim() || defaultNote;
+  const confirmed = await askConfirmation({
+    title: '¿Confirmar pase a Detalles Físicos?',
+    message: `${physStatus.proposedByName || 'La contraparte'} propuso enviar este caso a campo ("${physStatus.note}"). Al aceptar, ambas partes estarán de acuerdo y pasará a Detalles Físicos.`,
+    confirmText: 'Sí, enviar a Físicos',
+    cancelText: 'Cancelar',
+    tone: 'ok'
+  });
+  if (!confirmed) return;
 
+  const note = physStatus.note || 'Requiere visita presencial para revisión física en sitio.';
   const previousCategory = orderCategoryLabel(getOrderCategory(order));
   const previousDetail = order.description || order.title || '';
   const currentUser = getCurrentUser();
-  const userName = currentUser.name || currentUser.username || 'Atención a clientes';
+  const userName = currentUser.name || currentUser.username || (isSoporte ? 'Soporte técnico' : 'Atención a clientes');
   const now = new Date().toISOString();
 
   order.detailKind = 'physical';
@@ -2543,10 +2779,10 @@ async function promptSendNetworkToPhysical(id) {
   appendSharedNetworkFollowUp(
     order,
     'physical',
-    'Derivado a Detalle Físico',
-    `${note} · Solicitado por: ${userName} · Origen: ${previousCategory}${previousDetail ? ` · Reporte original: ${previousDetail}` : ''}`
+    'Derivado a Detalle Físico por acuerdo mutuo',
+    `${note} · Propuesto por ${physStatus.proposedByName || 'Equipo'} y confirmado por ${userName} · Origen: ${previousCategory}${previousDetail ? ` · Reporte original: ${previousDetail}` : ''}`
   );
-  setUpdatedAudit(order, 'derivó detalle de red a detalles físicos para visita en campo');
+  setUpdatedAudit(order, 'confirmó acuerdo para derivar detalle de red a detalles físicos');
 
   const saved = await saveRecord('workOrders', order);
   if (!saved) {
@@ -2562,8 +2798,61 @@ async function promptSendNetworkToPhysical(id) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
 
-  notify(`El folio ${folio} fue transferido a Detalles Físicos exitosamente.`, 'ok');
+  if (currentOrderReportId === order.id) {
+    currentOrderReportId = '';
+    CM('order-tech-report-mo');
+  }
+
+  notify(`El folio ${folio} fue transferido a Detalles Físicos por acuerdo de ambas partes.`, 'ok');
   await loadOrderPage();
+}
+
+async function rejectSendNetworkToPhysical(id) {
+  const order = (state.workOrders || []).find(item => item.id === id && !item.deletedAt);
+  if (!order) return notify('No se encontró el detalle solicitado.', 'err');
+  const physStatus = getPhysicalDerivationStatus(order);
+  if (!physStatus.pending) return;
+
+  const reason = await askReasonPrompt({
+    title: 'Rechazar pase a Detalles Físicos',
+    message: 'Indica brevemente por qué este caso debe continuar atendiéndose en Detalles de Red:',
+    placeholder: 'Ej. Aún podemos validar configuración remota con el cliente...',
+    confirmText: 'Mantener en Red',
+    cancelText: 'Cancelar',
+    tone: 'danger',
+    emptyWarning: 'Por favor indica el motivo para mantener el caso en Detalles de Red.'
+  });
+  if (!reason || !reason.trim()) return;
+
+  const currentUser = getCurrentUser();
+  const userName = currentUser.name || currentUser.username || 'Usuario';
+  const now = new Date().toISOString();
+  order.updatedAt = now;
+  order.updatedById = currentUser.id || '';
+
+  appendSharedNetworkFollowUp(
+    order,
+    'physical_rejected',
+    'Pase a Detalles Físicos descartado',
+    `${userName}: ${reason.trim()}`
+  );
+  setUpdatedAudit(order, 'descartó propuesta de envío a detalles físicos');
+
+  updateOrderChatLive(order);
+  renderWOs();
+
+  const saved = await saveRecord('workOrders', order);
+  if (!saved) return notify('No se pudo guardar la respuesta.', 'err');
+
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(order, 'updated');
+    }
+  } catch (e) {}
+
+  updateOrderChatLive(order);
+  renderWOs();
+  notify('El caso permanece en Detalles de Red.', 'ok');
 }
 
 async function openWOCopy(id) {
@@ -2743,6 +3032,907 @@ function orderHasViewableReport(order) {
   return hasDetails && getOrderReportPhotos(order).length > 0;
 }
 
+
+let orderChatAttachedPhoto = '';
+let selectedOrderRowId = '';
+
+function selectOrderRow(orderId, event) {
+  if (!orderId) return;
+  selectedOrderRowId = String(orderId);
+  const rows = document.querySelectorAll('#orders-table .order-table tbody tr[data-order-id]');
+  rows.forEach(tr => {
+    tr.classList.toggle('order-row-selected', tr.getAttribute('data-order-id') === selectedOrderRowId);
+  });
+}
+
+function canRoleDeclareUnresolvable(order) {
+  if (!order || order.detailKind !== 'network') return false;
+  if (userHasRole('administrador', 'admin')) return true;
+  const isSentToAttention = isNetworkSupportToAttention(order);
+  // Solo quien recibe el reporte puede enviarlo como no realizable
+  return isSentToAttention ? userHasRole('atencion_clientes') : userHasRole('soporte');
+}
+
+function canRoleConfirmUnresolvable(order) {
+  if (!order || order.detailKind !== 'network') return false;
+  if (userHasRole('administrador', 'admin')) return true;
+  const isSentToAttention = isNetworkSupportToAttention(order);
+  // Quien envió el reporte debe confirmar que no se puede realizar
+  return isSentToAttention ? userHasRole('soporte') : userHasRole('atencion_clientes');
+}
+
+function isUserInCase(order, user) {
+  if (!order || !user) return false;
+  if (typeof userHasRole === 'function' && userHasRole('administrador', 'admin')) return true;
+
+  const uid = String(user.id || '').trim().toLowerCase();
+  const uname = String(user.username || '').trim().toLowerCase();
+  const name = String(user.name || '').trim().toLowerCase();
+
+  if (isOrderCreatorOrAssigner(order, user)) return true;
+  if (isOrderAssignedToUser(order, user)) return true;
+
+  const reviewId = String(order.reviewOpenedById || '').trim().toLowerCase();
+  const reviewName = String(order.reviewOpenedByName || '').trim().toLowerCase();
+  if (reviewId && (reviewId === uid || reviewId === uname)) return true;
+  if (reviewName && (reviewName === name || reviewName === uname)) return true;
+
+  const followUps = Array.isArray(order.followUps) ? order.followUps : [];
+  const participated = followUps.some(f => {
+    const fId = String(f.byId || f.byUserId || '').trim().toLowerCase();
+    const fName = String(f.byName || '').trim().toLowerCase();
+    return (fId && (fId === uid || fId === uname)) || (fName && (fName === name || fName === uname));
+  });
+  if (participated) return true;
+
+  return false;
+}
+
+function getOrderClosureStatus(order) {
+  const followUps = Array.isArray(order?.followUps) ? order.followUps : [];
+  let lastResetIdx = -1;
+  for (let i = followUps.length - 1; i >= 0; i--) {
+    const act = String(followUps[i]?.action || '').toLowerCase();
+    if (act === 'reopened' || act === 'reabierto' || act === 'devuelto_soporte') {
+      lastResetIdx = i;
+      break;
+    }
+  }
+  const relevantFollowUps = lastResetIdx >= 0 ? followUps.slice(lastResetIdx + 1) : followUps;
+  const isSentToAttention = isNetworkSupportToAttention(order);
+
+  const supportConfirmed = relevantFollowUps.find(f =>
+    f.action === 'closure_proposed_soporte' ||
+    f.action === 'closure_confirmed_soporte' ||
+    (!isSentToAttention && f.action === 'resuelto_soporte')
+  );
+
+  const attentionConfirmed = relevantFollowUps.find(f =>
+    f.action === 'closure_proposed_atencion' ||
+    f.action === 'closure_confirmed_atencion' ||
+    f.action === 'confirmed_atencion' ||
+    (isSentToAttention && f.action === 'resuelto_soporte')
+  );
+
+  return {
+    supportConfirmed: !!supportConfirmed,
+    supportBy: supportConfirmed?.byName || '',
+    supportAt: supportConfirmed?.at || '',
+    attentionConfirmed: !!attentionConfirmed,
+    attentionBy: attentionConfirmed?.byName || '',
+    attentionAt: attentionConfirmed?.at || '',
+    bothConfirmed: (!!supportConfirmed && !!attentionConfirmed) || order?.status === 'completada'
+  };
+}
+
+function getOrderPendingUserAction(order) {
+  if (!order || order.detailKind !== 'network' || order.status === 'completada') {
+    return { requiresMyAction: false, waitingOther: false, badge: '', kind: '' };
+  }
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+  const isAdmin = userHasRole('administrador', 'admin');
+  const isSentToAttention = isNetworkSupportToAttention(order);
+
+  if (order.status === 'no_realizado') {
+    if (canRoleConfirmUnresolvable(order)) {
+      return { requiresMyAction: true, waitingOther: false, badge: 'Confirmar no realizable', kind: 'unresolvable' };
+    }
+    return {
+      requiresMyAction: false,
+      waitingOther: true,
+      badge: isSentToAttention ? 'Espera a Soporte' : 'Espera a Atención',
+      kind: 'unresolvable'
+    };
+  }
+
+  const closureStatus = getOrderClosureStatus(order);
+  const closurePending = order.status === 'resuelto_soporte' || (isSentToAttention ? closureStatus.attentionConfirmed : closureStatus.supportConfirmed);
+  if (closurePending) {
+    const myTurn = isSentToAttention ? (isSoporte || isAdmin) : (isAtencion || isAdmin);
+    if (myTurn) {
+      return { requiresMyAction: true, waitingOther: false, badge: 'Confirmar cierre', kind: 'closure' };
+    }
+    return {
+      requiresMyAction: false,
+      waitingOther: true,
+      badge: isSentToAttention ? 'Por confirmar Soporte' : 'Por confirmar Atención',
+      kind: 'closure'
+    };
+  }
+
+  const physStatus = getPhysicalDerivationStatus(order);
+  if (physStatus.pending) {
+    const myTurn = physStatus.proposedBy === 'soporte' ? (isAtencion || isAdmin) : (isSoporte || isAdmin);
+    if (myTurn) {
+      return { requiresMyAction: true, waitingOther: false, badge: 'Confirmar a Físicos', kind: 'physical' };
+    }
+    return {
+      requiresMyAction: false,
+      waitingOther: true,
+      badge: 'Propuesto a Físicos',
+      kind: 'physical'
+    };
+  }
+
+  return { requiresMyAction: false, waitingOther: false, badge: '', kind: '' };
+}
+
+function getOrderChatStatusBadgeHtml(order) {
+  const isCompleted = order.status === 'completada';
+  const closureStatus = getOrderClosureStatus(order);
+  const physStatus = getPhysicalDerivationStatus(order);
+  const isSentToAttention = isNetworkSupportToAttention(order);
+
+  if (isCompleted) {
+    return '<span class="closure-badge completed">Caso concluido por ambas partes</span>';
+  }
+  if (order.status === 'no_realizado') {
+    return `<span class="closure-badge waiting" style="background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;">No realizable · Espera a ${isSentToAttention ? 'Soporte' : 'Atención'}</span>`;
+  }
+  if (physStatus.pending) {
+    return `<span class="closure-badge waiting" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;">Pase a Físicos propuesto · Espera acuerdo</span>`;
+  }
+  if (isSentToAttention) {
+    if (closureStatus.attentionConfirmed || order.status === 'resuelto_soporte') {
+      return '<span class="closure-badge waiting">Atención envió a concluir · Espera a Soporte</span>';
+    }
+    return '<span class="closure-badge" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">En proceso por Atención a clientes</span>';
+  }
+  if (closureStatus.supportConfirmed || order.status === 'resuelto_soporte') {
+    return '<span class="closure-badge waiting">Soporte propuso cierre · Espera a Atención</span>';
+  }
+  return '<span class="closure-badge" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">Conversación activa</span>';
+}
+
+function renderOrderChatComposerInnerHtml(order) {
+  const currentUser = getCurrentUser();
+  const isInCase = isUserInCase(order, currentUser);
+  const isCompleted = order.status === 'completada';
+  const isSentToAttention = isNetworkSupportToAttention(order);
+
+  if (isCompleted) {
+    // REGLA: Mientras el detalle esté concluido no se puede seguir conversando hasta que se vuelva a abrir
+    return `
+      <div class="order-chat-closed-banner" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px 16px;background:#f8fafc;border-radius:10px;color:#64748b;font-size:12px;font-weight:600;border:1px dashed #cbd5e1;text-align:center;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Detalle concluido. La conversación está cerrada y no se pueden enviar más mensajes mientras el detalle esté cerrado. Debe reabrirse para continuar.</span>
+      </div>
+    `;
+  }
+  if (!isInCase) {
+    const canRetake = typeof canUserRetakeNetworkOrder === 'function'
+      ? canUserRetakeNetworkOrder(order, user)
+      : (!isCompleted && order.status !== 'no_realizado' && (isSentToAttention ? userHasRole('atencion_clientes') : userHasRole('soporte')));
+    return `
+      <div class="order-chat-restricted-banner">
+        <span>Solo los involucrados en este caso pueden enviar mensajes.</span>
+        ${canRetake ? `
+          <button type="button" class="btn net-btn-retake" onclick="takeOverAndJoinChat('${order.id}')" style="min-height:30px;padding:3px 10px;font-size:11px;">
+            Retomar caso para participar
+          </button>
+        ` : ''}
+      </div>
+    `;
+  }
+  return `
+    <div class="order-chat-composer">
+      <input type="file" id="order-chat-file" accept="image/*" style="display:none;" onchange="handleOrderChatFileSelect(event)">
+      <button type="button" class="order-chat-attach-btn" onclick="document.getElementById('order-chat-file').click()" title="Adjuntar imagen o pegar con Ctrl+V">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      </button>
+      <input type="text" id="order-chat-input" class="order-chat-input" placeholder="Escribe un mensaje o pega una captura con Ctrl+V..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendOrderChatMessage('${order.id}');}">
+      <button type="button" class="order-chat-send-btn" onclick="sendOrderChatMessage('${order.id}')">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Enviar
+      </button>
+    </div>
+    <div id="order-chat-photo-preview" style="display:none;margin-top:8px;align-items:center;gap:8px;"></div>
+  `;
+}
+
+function renderOrderChat(order) {
+  const statusBadgeHtml = getOrderChatStatusBadgeHtml(order);
+  const messagesHtml = renderOrderChatMessagesHtml(order);
+  const composerHtml = renderOrderChatComposerInnerHtml(order);
+
+  return `
+    <section class="order-chat-section">
+      <div class="order-chat-head">
+        <div class="order-chat-head-left">
+          <span class="order-chat-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </span>
+          <div>
+            <strong style="font-size:13.5px;color:#0f172a;">Conversación y Seguimiento del Caso</strong>
+            <p style="margin:0;font-size:11px;color:#64748b;">Mensajes directos entre los involucrados en esta orden</p>
+          </div>
+        </div>
+        <div class="order-chat-status-pill">
+          ${statusBadgeHtml}
+        </div>
+      </div>
+      <div id="order-chat-messages" class="order-chat-messages">
+        ${messagesHtml}
+      </div>
+      <div class="order-chat-composer-wrap">
+        ${composerHtml}
+      </div>
+    </section>
+  `;
+}
+
+function renderOrderChatMessagesHtml(order) {
+  const currentUser = getCurrentUser();
+  const uId = String(currentUser.id || '').toLowerCase();
+  const uName = normalizeName(currentUser.name || currentUser.username || '');
+  const followUps = Array.isArray(order.followUps) ? order.followUps : [];
+
+  if (!followUps.length) {
+    return `<div style="text-align:center;padding:24px 12px;color:#94a3b8;font-size:12px;">No hay mensajes registrados aún en este caso. Escribe el primer mensaje a continuación.</div>`;
+  }
+
+  const items = [];
+  for (let idx = 0; idx < followUps.length; idx++) {
+    const step = followUps[idx];
+    const action = String(step.action || '').toLowerCase();
+    const label = String(step.label || '').toLowerCase();
+
+    // REGLA INSTITUCIONAL: Excluir estrictamente el "visto" y "atención no realizada" (solo notificación) del chat
+    if (
+      action === 'viewed' ||
+      action === 'review_opened' ||
+      action === 'review_deferred' ||
+      action === 'review_exit_unconfirmed' ||
+      action === 'atencion_no_realizada' ||
+      label.includes('visto') ||
+      label.includes('abierta para revisión') ||
+      label.includes('atención no realizada') ||
+      label.includes('atencion no realizada') ||
+      label.includes('no se atenderá') ||
+      label.includes('salió sin confirmar')
+    ) {
+      continue;
+    }
+
+    // Evitar duplicar tarjetas si resuelto_soporte viene seguido inmediatamente por closure_proposed_* con la misma nota
+    if (action === 'resuelto_soporte') {
+      const nextStep = followUps[idx + 1];
+      const nextAct = String(nextStep?.action || '').toLowerCase();
+      if ((nextAct === 'closure_proposed_soporte' || nextAct === 'closure_proposed_atencion') && String(nextStep?.note || '').trim() === String(step.note || '').trim()) {
+        continue;
+      }
+    }
+
+    // Omitir espejos automáticos heredados cuando ya existe la tarjeta ancha de acción en el flujo
+    if (action === 'chat_message' && (step.isAutoActionMirror || /^(\[Enviado a concluir|\[Conclusión registrada|\[Resolución técnica registrada|✓ \[Caso concluido formalmente\]|\[Observación de devolución)/.test(String(step.note || '').trim()))) {
+      const prevAct = String(followUps[idx - 1]?.action || '').toLowerCase();
+      if (prevAct && prevAct !== 'chat_message') {
+        continue;
+      }
+    }
+
+    const atStr = step.at ? new Date(step.at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+
+    if (action === 'chat_message') {
+      const isMine = (step.byId && String(step.byId).toLowerCase() === uId) ||
+        (step.byUserId && String(step.byUserId).toLowerCase() === uId) ||
+        (step.byName && normalizeName(step.byName) === uName);
+      const role = step.byRole || (step.label ? step.label : 'Usuario');
+      const authorChip = renderUserColorChip(step.byName || 'Usuario', step.byId || step.byUserId);
+      const photos = Array.isArray(step.photos) ? step.photos : (step.photo ? [step.photo] : []);
+
+      items.push(`
+        <div class="chat-bubble ${isMine ? 'mine' : 'theirs'}">
+          <div class="chat-bubble-author">
+            ${authorChip}
+            <span class="chat-bubble-role-badge">${orderEscape(role)}</span>
+          </div>
+          ${step.note ? `<div class="chat-bubble-text">${orderEscape(step.note)}</div>` : ''}
+          ${photos.length ? `
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+              ${photos.map((ph) => `
+                <img src="${orderEscape(ph)}" class="chat-bubble-photo-thumb" onclick="openEvidenceGallery(['${orderEscape(ph)}'], 0)" alt="Evidencia adjunta" title="Clic para ampliar imagen">
+              `).join('')}
+            </div>
+          ` : ''}
+          <div class="chat-bubble-time">${orderEscape(atStr)}</div>
+        </div>
+      `);
+    } else if (action === 'reabierto' || action === 'reopened') {
+      items.push(`
+        <div class="chat-system-divider">
+          <span class="chat-divider-pill">Caso reabierto por ${orderEscape(step.byName || 'Usuario')} (${orderEscape(atStr)}) · Historial previo conservado</span>
+        </div>
+      `);
+    } else {
+      // Cuadros de acción anchos con paleta de colores distintiva por cada tipo de acción
+      let systemClass = 'system-created';
+      let icon = '📌';
+      if (action === 'resuelto_soporte' || action.startsWith('closure_proposed') || label.includes('resuelto') || label.includes('solución') || label.includes('conclusión enviada')) {
+        systemClass = 'system-resolved';
+        icon = '🛠️';
+      } else if (action === 'devuelto_soporte' || label.includes('devuelto') || label.includes('retorno')) {
+        systemClass = 'system-returned';
+        icon = '↩️';
+      } else if (action === 'completada' || action === 'concluido' || action.startsWith('closure_confirmed') || label.includes('concluid') || label.includes('cierre confirmado')) {
+        systemClass = 'system-completed';
+        icon = '✓';
+      } else if (action === 'retomado' || label.includes('retomado') || label.includes('reasign')) {
+        systemClass = 'system-retaken';
+        icon = '🔄';
+      } else if (action === 'en_atencion' || action === 'atencion_iniciada' || label.includes('atención iniciada') || label.includes('atención técnica iniciada')) {
+        systemClass = 'system-attending';
+        icon = '⚡';
+      } else if (action === 'no_realizado' || action === 'physical_rejected' || label.includes('no realizable') || label.includes('no realizada') || label.includes('descartado')) {
+        systemClass = 'system-failed';
+        icon = '🚫';
+      } else if (action === 'physical' || action.startsWith('physical_proposed') || label.includes('físico')) {
+        systemClass = 'system-physical';
+        icon = '📋';
+      } else if (action === 'created' || label.includes('creado') || label.includes('registrad')) {
+        systemClass = 'system-created';
+        icon = '🆕';
+      }
+
+      const systemTitle = step.label || (action === 'resuelto_soporte' ? 'Resolución técnica' : (action === 'devuelto_soporte' ? 'Observaciones de retorno' : (action === 'retomado' ? 'Caso reasignado' : action)));
+      const stepPhotos = Array.isArray(step.photos) ? step.photos : (Array.isArray(step.evidencePhotos) ? step.evidencePhotos : (step.photo ? [step.photo] : []));
+      items.push(`
+        <div class="chat-bubble system ${systemClass}">
+          <div class="chat-system-card-head">
+            <span class="chat-system-title"><strong>${orderEscape(systemTitle)}</strong>${step.byName ? ` <span class="chat-system-author">por <strong>${orderEscape(step.byName)}</strong></span>` : ''}</span>
+            ${atStr ? `<small class="chat-system-time">${orderEscape(atStr)}</small>` : ''}
+          </div>
+          ${step.note ? `<div class="chat-system-note">${orderEscape(step.note)}</div>` : ''}
+          ${stepPhotos.length ? `
+            <div class="chat-system-photos">
+              ${stepPhotos.map(ph => `
+                <img src="${orderEscape(ph)}" class="chat-bubble-photo-thumb" onclick="openEvidenceGallery(['${orderEscape(ph)}'], 0)" alt="Evidencia" title="Clic para ampliar evidencia">
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `);
+    }
+  }
+
+  if (!items.length) {
+    return `<div style="text-align:center;padding:24px 12px;color:#94a3b8;font-size:12px;">Inicia la conversación escribiendo a continuación.</div>`;
+  }
+
+  return items.join('');
+}
+
+function renderOrderFooterActions(order) {
+  if (order.detailKind !== 'network') {
+    return `
+      <div class="order-report-footer-actions">
+        <div class="footer-actions-left"></div>
+        <div class="footer-actions-right">
+          <button type="button" class="btn bgh" onclick="requestCloseOrderReport()">Cerrar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  const currentUser = getCurrentUser();
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+  const isAdmin = userHasRole('administrador', 'admin');
+  const isCompleted = order.status === 'completada';
+  const isUnresolvablePending = order.status === 'no_realizado';
+  const rowReported = isCompleted || isUnresolvablePending;
+  const isSentToAttention = isNetworkSupportToAttention(order);
+
+  let canReopen = false;
+  if (isCompleted) {
+    canReopen = isSentToAttention ? (isSoporte || isAdmin) : (isAtencion || isAdmin);
+  }
+
+  const isAssignedToOther = (order.assignedUserId || order.assignedUserName) && !isOrderAssignedToUser(order, currentUser);
+  const isCheckingByOther = order.reviewOpenedById && order.reviewOpenedById !== currentUser.id;
+  const assignedArea = typeof getOrderAssignedAreaRole === 'function' ? getOrderAssignedAreaRole(order) : '';
+  const allowedRoleToRetake = (assignedArea === 'atencion_clientes' || isSentToAttention)
+    ? (isAtencion && !isSoporte)
+    : (isSoporte && !isAtencion);
+  const canRetake = typeof canUserRetakeNetworkOrder === 'function'
+    ? canUserRetakeNetworkOrder(order, currentUser)
+    : (!rowReported && allowedRoleToRetake && (isAssignedToOther || isCheckingByOther || !order.assignedUserId));
+
+  const closureStatus = getOrderClosureStatus(order);
+  const physStatus = getPhysicalDerivationStatus(order);
+  const canDeclareUnres = canRoleDeclareUnresolvable(order);
+  const canConfirmUnres = canRoleConfirmUnresolvable(order);
+
+  let physicalActionHtml = '';
+  if (!isCompleted) {
+    if (physStatus.pending) {
+      const canConfirmPhys = physStatus.proposedBy === 'soporte' ? (isAtencion || isAdmin) : (isSoporte || isAdmin);
+      if (canConfirmPhys) {
+        physicalActionHtml = `
+          <button type="button" class="btn net-btn-physical net-btn-physical-confirm" onclick="confirmSendNetworkToPhysical('${order.id}')" title="Confirmar acuerdo para enviar a Detalles Físicos">
+            <svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Aceptar pase a Físicos
+          </button>
+          <button type="button" class="btn net-btn-unresolvable" onclick="rejectSendNetworkToPhysical('${order.id}')" title="Mantener este caso en Detalles de Red">
+            Rechazar pase
+          </button>
+        `;
+      } else {
+        physicalActionHtml = `
+          <span class="closure-badge waiting" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;">Pase a Físicos propuesto · Espera acuerdo</span>
+        `;
+      }
+    } else {
+      physicalActionHtml = `
+        <button type="button" class="btn net-btn-physical" onclick="promptSendNetworkToPhysical('${order.id}')" title="Proponer envío a Detalles Físicos (requiere acuerdo de ambas partes)">
+          <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Enviar a Detalles Físicos
+        </button>
+      `;
+    }
+  }
+
+  let unresolvableActionHtml = '';
+  if (!isCompleted && !isUnresolvablePending && canDeclareUnres) {
+    unresolvableActionHtml = `
+      <button type="button" class="btn net-btn-unresolvable" onclick="openUnresolvableNetworkModal('${order.id}')" title="Notificar como no realizable (la otra parte deberá confirmar)">
+        <svg class="btn-action-svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> No realizable
+      </button>
+    `;
+  }
+
+  let closureButtonsHtml = '';
+  if (isCompleted) {
+    closureButtonsHtml = `
+      <span class="closure-badge completed">Concluido por ambas partes</span>
+      ${canReopen ? `
+        <button type="button" class="btn order-reopen-action" style="min-height:34px;padding:0 14px;font-size:12px;font-weight:800;gap:6px;" onclick="reopenCompletedWO('${order.id}')" title="Reabrir detalle para nueva atención">
+          ${orderActionIcon('reopen')} Reabrir detalle
+        </button>
+      ` : ''}
+    `;
+  } else if (isUnresolvablePending) {
+    if (canConfirmUnres) {
+      closureButtonsHtml = `
+        <button type="button" class="btn net-btn-confirm" style="background:linear-gradient(135deg,#dc2626,#b91c1c);border-color:#b91c1c;" onclick="confirmNetworkUnresolvableConcluded('${order.id}')" title="Confirmar que no se puede realizar y concluir el caso">
+          <svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Confirmar no realizable
+        </button>
+      `;
+    } else {
+      closureButtonsHtml = `
+        <span class="closure-badge waiting" style="background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;">No realizable enviado · Espera a ${isSentToAttention ? 'Soporte' : 'Atención'}</span>
+      `;
+    }
+  } else {
+    // REGLA INSTITUCIONAL:
+    // Si el detalle fue asignado a Atención (isSentToAttention):
+    //   - Atención manda a concluir.
+    //   - Soporte no puede retomar ni enviar a concluir; solo confirma y cierra una vez que Atención lo envió.
+    // Si el detalle fue asignado a Soporte (!isSentToAttention):
+    //   - Soporte manda a concluir.
+    //   - Atención no puede retomar ni enviar a concluir; solo confirma satisfacción y cierra una vez que Soporte lo envió.
+    if (isSentToAttention) {
+      if (closureStatus.attentionConfirmed || order.status === 'resuelto_soporte') {
+        if (isSoporte || isAdmin) {
+          closureButtonsHtml = `
+            <button type="button" class="btn net-btn-confirm" onclick="confirmTwoPartyClosure('${order.id}')" title="Confirmar solución y concluir caso formalmente">
+              <svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Confirmar y cerrar
+            </button>
+          `;
+        } else {
+          closureButtonsHtml = `
+            <span class="closure-badge waiting">Enviado a concluir · Espera a Soporte</span>
+          `;
+        }
+      } else {
+        if (isAtencion || isAdmin) {
+          closureButtonsHtml = `
+            <button type="button" class="btn net-btn-resolve" onclick="proposeTwoPartyClosure('${order.id}')" title="Mandar a concluir este caso a Soporte técnico">
+              <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Mandar a concluir
+            </button>
+          `;
+        } else {
+          closureButtonsHtml = `
+            <span class="closure-badge waiting">En proceso por Atención a clientes</span>
+          `;
+        }
+      }
+    } else {
+      if (closureStatus.supportConfirmed || order.status === 'resuelto_soporte') {
+        if (isAtencion || isAdmin) {
+          closureButtonsHtml = `
+            <button type="button" class="btn net-btn-confirm" onclick="confirmTwoPartyClosure('${order.id}')" title="Confirmar satisfacción del cliente y concluir caso">
+              <svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Confirmar y cerrar
+            </button>
+          `;
+        } else {
+          closureButtonsHtml = `
+            <span class="closure-badge waiting">Cierre propuesto · Espera a Atención</span>
+          `;
+        }
+      } else {
+        if (isSoporte || isAdmin) {
+          closureButtonsHtml = `
+            <button type="button" class="btn net-btn-resolve" onclick="proposeTwoPartyClosure('${order.id}')" title="Registrar solución técnica y mandar a concluir">
+              <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Mandar a concluir
+            </button>
+          `;
+        } else {
+          closureButtonsHtml = `
+            <span class="closure-badge waiting">En atención por Soporte técnico</span>
+          `;
+        }
+      }
+    }
+  }
+
+  return `
+    <div class="order-report-footer-actions">
+      <div class="footer-actions-left">
+        ${canRetake ? `
+          <button type="button" class="btn net-btn-retake" onclick="takeOverAndJoinChat('${order.id}')" title="Asignarme la atención de este caso">
+            <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg> Retomar caso
+          </button>
+        ` : ''}
+        ${physicalActionHtml}
+        ${unresolvableActionHtml}
+      </div>
+      <div class="footer-actions-right">
+        ${closureButtonsHtml}
+      </div>
+    </div>
+  `;
+}
+
+async function sendOrderChatMessage(orderId) {
+  const order = (state.workOrders || []).find(x => x.id === orderId && !x.deletedAt);
+  if (!order) return notify('No se encontró el detalle.', 'err');
+
+  // REGLA: mientras el detalle esté concluido no se puede seguir conversando hasta que se vuelva a abrir
+  if (order.status === 'completada') {
+    return notify('El detalle está concluido. Debe reabrirse para continuar la conversación.', 'warn');
+  }
+
+  const currentUser = getCurrentUser();
+  if (typeof isUserInCase === 'function' && !isUserInCase(order, currentUser)) {
+    return notify('Solo los involucrados en este caso pueden enviar mensajes. Puedes presionar "Retomar caso" para participar.', 'warn');
+  }
+
+  const input = document.getElementById('order-chat-input');
+  const text = (input?.value || '').trim();
+  const photo = orderChatAttachedPhoto || '';
+
+  if (!text && !photo) {
+    if (input) input.focus();
+    return notify('Por favor escribe un mensaje para enviar.', 'warn');
+  }
+
+  const userName = currentUser.name || currentUser.username || 'Usuario';
+  const userRole = currentUser.role || (userHasRole('soporte') ? 'soporte' : (userHasRole('atencion_clientes') ? 'atencion_clientes' : 'administrador'));
+  const now = new Date().toISOString();
+
+  const msgEntry = {
+    id: gid('cmsg'),
+    action: 'chat_message',
+    label: 'Mensaje',
+    note: text,
+    at: now,
+    byId: currentUser.id || '',
+    byUserId: currentUser.id || '',
+    byName: userName,
+    byRole: userRole,
+    photos: photo ? [photo] : []
+  };
+
+  order.followUps = [...(Array.isArray(order.followUps) ? order.followUps : []), msgEntry].slice(-60);
+  order.updatedAt = now;
+  order.updatedById = currentUser.id || '';
+
+  if (order.status === 'resuelto_soporte' || order.status === 'devuelto_soporte' || order.status === 'pendiente') {
+    order.status = 'en_revision';
+  }
+
+  if (!order.reviewOpenedById) {
+    order.reviewOpenedById = currentUser.id || '';
+    order.reviewOpenedByName = userName;
+    order.reviewOpenedAt = now;
+  }
+
+  if (input) input.value = '';
+  orderChatAttachedPhoto = '';
+  const preview = document.getElementById('order-chat-photo-preview');
+  if (preview) {
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+  }
+
+  updateOrderChatLive(order);
+  renderWOs();
+
+  setUpdatedAudit(order, 'envió mensaje en detalle de red');
+  const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
+  const ok = await saveRecordWithAudit('workOrders', order, auditStart);
+
+  if (ok) {
+    try {
+      if (typeof broadcastNetworkOrderChange === 'function') {
+        broadcastNetworkOrderChange(order, 'chat_message', {
+          messageId: msgEntry.id,
+          messageText: text || (photo ? 'Imagen adjunta' : ''),
+          hasPhoto: !!photo,
+          senderName: userName,
+          senderId: currentUser.id || '',
+          senderRole: userRole
+        });
+      }
+    } catch (e) {
+      console.warn('broadcast error:', e);
+    }
+  }
+
+  const activeInput = document.getElementById('order-chat-input');
+  if (activeInput) activeInput.focus();
+}
+
+function setOrderChatAttachedPhoto(dataUrl) {
+  if (!dataUrl) return;
+  orderChatAttachedPhoto = dataUrl;
+  const preview = document.getElementById('order-chat-photo-preview');
+  if (preview) {
+    preview.style.display = 'flex';
+    preview.innerHTML = `
+      <div style="position:relative;display:inline-block;">
+        <img src="${orderChatAttachedPhoto}" style="max-height:60px;max-width:90px;border-radius:6px;border:1px solid #cbd5e1;object-fit:cover;cursor:zoom-in;" onclick="openEvidenceGallery([orderChatAttachedPhoto], 0)" title="Clic para ampliar">
+        <button type="button" onclick="removeOrderChatAttachedPhoto()" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;background:#ef4444;color:#fff;border:none;border-radius:50%;cursor:pointer;font-size:11px;display:grid;place-items:center;">✕</button>
+      </div>
+      <span style="font-size:11px;color:#64748b;">Imagen adjunta lista para enviar con el mensaje</span>
+    `;
+  }
+}
+
+async function attachOrderChatImageFile(file, fromPaste = false) {
+  if (!file || !file.type || !file.type.startsWith('image/')) {
+    return notify('Por favor selecciona un archivo de imagen válido.', 'warn');
+  }
+  try {
+    let dataUrl = '';
+    if (typeof compressWOEvidenceImage === 'function') {
+      dataUrl = await compressWOEvidenceImage(file);
+    }
+    if (!dataUrl) {
+      dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = ev => resolve(ev.target?.result || '');
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+    if (dataUrl) {
+      setOrderChatAttachedPhoto(dataUrl);
+      if (fromPaste) notify('Imagen pegada lista para enviar en el chat.', 'ok');
+      document.getElementById('order-chat-input')?.focus();
+    }
+  } catch (err) {
+    notify('No se pudo adjuntar la imagen.', 'err');
+  }
+}
+
+function handleOrderChatFileSelect(event) {
+  const file = event?.target?.files?.[0];
+  if (!file) return;
+  void attachOrderChatImageFile(file, false);
+  if (event?.target) event.target.value = '';
+}
+
+function removeOrderChatAttachedPhoto() {
+  orderChatAttachedPhoto = '';
+  const fileInput = document.getElementById('order-chat-file');
+  if (fileInput) fileInput.value = '';
+  const preview = document.getElementById('order-chat-photo-preview');
+  if (preview) {
+    preview.style.display = 'none';
+    preview.innerHTML = '';
+  }
+}
+
+async function takeOverAndJoinChat(orderId) {
+  await takeOverNetworkOrder(orderId);
+  openOrderTechnicianReport(orderId);
+}
+
+async function proposeTwoPartyClosure(orderId) {
+  const order = (state.workOrders || []).find(x => x.id === orderId && !x.deletedAt);
+  if (!order) return notify('No se encontró el detalle.', 'err');
+
+  const currentUser = getCurrentUser();
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+  const isAdmin = userHasRole('administrador', 'admin');
+  const isSentToAttention = isNetworkSupportToAttention(order);
+
+  if (isSentToAttention) {
+    if (!isAtencion && !isAdmin) {
+      return notify('Acción restringida: Este detalle está asignado a Atención a clientes. Solo Atención puede mandar a concluir.', 'warn');
+    }
+    const note = await askReasonPrompt({
+      title: 'Mandar a concluir caso',
+      message: 'Indica el motivo o confirmación para mandar a concluir este caso a Soporte técnico:',
+      placeholder: 'Ej. Cliente contactado, servicio restablecido y validado...',
+      confirmText: 'Mandar a concluir',
+      cancelText: 'Cancelar',
+      initialValue: ''
+    });
+    if (!note || !note.trim()) return;
+
+    const now = new Date().toISOString();
+    order.status = 'resuelto_soporte';
+    order.updatedAt = now;
+    order.updatedById = currentUser.id || '';
+    order.attentionSolvedAt = now;
+    order.attentionSolvedById = currentUser.id || '';
+    order.attentionSolvedByName = currentUser.name || currentUser.username || 'Atención a clientes';
+
+    appendSharedNetworkFollowUp(
+      order,
+      'closure_proposed_atencion',
+      'Conclusión enviada por Atención a clientes',
+      note.trim()
+    );
+
+    setUpdatedAudit(order, 'envió a concluir detalle de red');
+    updateOrderChatLive(order);
+    renderWOs();
+
+    const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
+    await saveRecordWithAudit('workOrders', order, auditStart);
+
+    try {
+      if (typeof broadcastNetworkOrderChange === 'function') {
+        broadcastNetworkOrderChange(order, 'resolved');
+      }
+    } catch (e) {}
+
+    notify('Caso enviado a concluir. En espera de confirmación de Soporte técnico.', 'ok');
+    updateOrderChatLive(order);
+    renderWOs();
+  } else {
+    if (!isSoporte && !isAdmin) {
+      return notify('Acción restringida: Este reporte está en manos de Soporte técnico. Solo Soporte puede mandar a concluir.', 'warn');
+    }
+    openResolveNetworkModal(orderId);
+  }
+}
+
+async function confirmTwoPartyClosure(orderId) {
+  const order = (state.workOrders || []).find(x => x.id === orderId && !x.deletedAt);
+  if (!order) return notify('No se encontró el detalle.', 'err');
+
+  const currentUser = getCurrentUser();
+  const userName = currentUser.name || currentUser.username || 'Usuario';
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+
+  const confirmed = await askConfirmation({
+    title: '¿Confirmar cierre del caso?',
+    message: 'Se confirmará la conformidad del servicio y el detalle quedará oficialmente concluido por ambas partes.',
+    confirmText: 'Sí, confirmar y cerrar',
+    cancelText: 'Cancelar',
+    tone: 'ok'
+  });
+  if (!confirmed) return;
+
+  const now = new Date().toISOString();
+  order.status = 'completada';
+  order.completedAt = now;
+  order.updatedAt = now;
+  order.updatedById = currentUser.id || '';
+
+  const confirmAction = isSoporte ? 'closure_confirmed_soporte' : 'closure_confirmed_atencion';
+  const roleLabel = isSoporte ? 'Soporte técnico' : (isAtencion ? 'Atención a clientes' : 'Administración');
+
+  appendSharedNetworkFollowUp(
+    order,
+    confirmAction,
+    `Cierre confirmado por ${roleLabel}`,
+    `${userName} confirmó la conformidad del servicio. Caso concluido por ambas partes.`
+  );
+
+  setUpdatedAudit(order, 'concluyó detalle de red por mutuo acuerdo');
+  updateOrderChatLive(order);
+  renderWOs();
+
+  const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
+  const saved = await saveRecordWithAudit('workOrders', order, auditStart);
+  if (!saved) return notify('No se pudo guardar el cierre. Intente nuevamente.', 'err');
+
+  try {
+    if (typeof broadcastNetworkOrderChange === 'function') {
+      broadcastNetworkOrderChange(order, 'confirmed');
+    }
+  } catch (e) {}
+
+  notify('Detalle concluido satisfactoriamente por ambas partes.', 'ok');
+  updateOrderChatLive(order);
+  renderWOs();
+}
+
+function updateOrderChatLive(updatedOrder) {
+  if (!updatedOrder) return;
+  let targetOrder = updatedOrder;
+  const existing = (state.workOrders || []).find(x => x.id === updatedOrder.id);
+  if (existing && existing !== updatedOrder) {
+    Object.assign(existing, updatedOrder);
+    targetOrder = existing;
+  }
+  const modal = document.getElementById('order-tech-report-mo');
+  if (modal && modal.classList.contains('open') && currentOrderReportId === targetOrder.id) {
+    const messagesBox = document.getElementById('order-chat-messages');
+    if (messagesBox) {
+      messagesBox.innerHTML = renderOrderChatMessagesHtml(targetOrder);
+      messagesBox.scrollTop = messagesBox.scrollHeight;
+    }
+
+    const pill = modal.querySelector('.order-chat-status-pill');
+    if (pill) {
+      pill.innerHTML = getOrderChatStatusBadgeHtml(targetOrder);
+    }
+
+    const composerWrap = modal.querySelector('.order-chat-composer-wrap');
+    if (composerWrap) {
+      const currentUser = getCurrentUser();
+      const shouldHaveActiveInput = targetOrder.status !== 'completada' && isUserInCase(targetOrder, currentUser);
+      const hasActiveInput = !!composerWrap.querySelector('#order-chat-input');
+      if (!shouldHaveActiveInput || !hasActiveInput) {
+        composerWrap.innerHTML = renderOrderChatComposerInnerHtml(targetOrder);
+        if (shouldHaveActiveInput && orderChatAttachedPhoto) {
+          setOrderChatAttachedPhoto(orderChatAttachedPhoto);
+        }
+      }
+    }
+
+    const footerEl = modal.querySelector('.order-report-footer-actions');
+    if (footerEl) {
+      footerEl.outerHTML = renderOrderFooterActions(targetOrder);
+    }
+
+    const essentialStatusEl = modal.querySelector('.order-report-essential-bar .order-report-status');
+    if (essentialStatusEl) {
+      const statusMeta = getOrderStatusMeta(targetOrder);
+      essentialStatusEl.className = `order-report-status ${targetOrder.status === 'completada' ? 'is-completed' : (targetOrder.status === 'resuelto_soporte' ? 'is-resolving' : (targetOrder.status === 'devuelto_soporte' ? 'is-returned' : (targetOrder.status === 'no_realizado' ? 'is-failed' : 'is-pending')))}`;
+      essentialStatusEl.textContent = statusMeta.label;
+    }
+
+    const essentialItems = modal.querySelectorAll('.order-report-essential-bar .essential-bar-item');
+    if (essentialItems[3]) {
+      const assignedDiv = essentialItems[3].querySelector('div');
+      if (assignedDiv) {
+        assignedDiv.innerHTML = targetOrder.assignedUserName
+          ? renderUserColorChip(targetOrder.assignedUserName, targetOrder.assignedUserId)
+          : '<span style="color:#64748b;font-weight:600;font-size:12px;">Sin asignar</span>';
+      }
+    }
+  }
+}
+
 async function openOrderTechnicianReport(orderId) {
   let order = (state.workOrders || []).find(item => item.id === orderId && !item.deletedAt);
   if (!order) return notify('No se encontro el detalle solicitado.', 'err');
@@ -2752,6 +3942,8 @@ async function openOrderTechnicianReport(orderId) {
   await markWOViewedOnOpen(order);
   order = (state.workOrders || []).find(item => item.id === orderId && !item.deletedAt) || order;
   currentOrderReportId = order.id;
+  selectedOrderRowId = String(order.id);
+  selectOrderRow(order.id);
   const report = order.technicianReport || {};
   const completed = order.status === 'completada' || !!report.completedAt;
   const reportStatus = getOrderStatusMeta(order).label;
@@ -2778,81 +3970,174 @@ async function openOrderTechnicianReport(orderId) {
   }
   const card = document.getElementById('order-tech-report-card');
   card.classList.toggle('is-completed-report', completed);
-  card.innerHTML = `<div class="modal-head order-report-head"><div class="order-report-head-main"><span class="order-report-title-icon">${orderReportIcon('clipboard')}</span><div><h2>${completed ? 'Reporte del técnico' : 'Detalle de la orden'}</h2><p>${orderReportIcon('pin')}<span>${orderEscape(getOrderPlace(order))}</span><em>${orderEscape(getOrderFolio(order))}</em></p></div></div><button type="button" class="order-report-close" aria-label="Cerrar" onclick="requestCloseOrderReport()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
-    <div class="order-report-summary">
-      ${orderReportField('user', 'Nombre del cliente', order.clientName || 'Sin nombre')}
-      ${orderReportField('phone', 'Número telefónico', phone)}
-      ${orderReportField('pin', 'Lugar', getOrderPlace(order))}
-      ${orderReportField('target', 'Ubicación capturada', capturedLocation)}
-      ${orderReportField('check', 'Estado', `<span class="order-report-status ${order.status === 'completada' ? 'is-completed' : (order.status === 'resuelto_soporte' ? 'is-resolving' : (order.status === 'devuelto_soporte' ? 'is-returned' : (order.status === 'no_realizado' ? 'is-failed' : 'is-pending')))}">${orderEscape(reportStatus)}</span>`, { raw: true, className: 'status-field' })}
-      ${orderReportField('user', 'Capturado por', renderUserColorChip(order.createdByName || order.createdByUsername || 'Sin registro', order.createdById), { raw: true })}
-      ${orderReportField('user', 'Asignado a', order.assignedUserName ? renderUserColorChip(order.assignedUserName, order.assignedUserId) : '<span style="color:#64748b;font-weight:600;font-size:12px;">Sin asignar</span>', { raw: true })}
-      ${orderReportField('check', 'Resuelto por', (() => {
-        const resolverName = report.completedByName || order.completedByName || (visibleFollowUps.find(f => f.action === 'resuelto_soporte' || f.action === 'solved')?.user) || '';
-        const resolverId = report.completedBy || report.completedById || '';
-        if (resolverName) {
-          const chip = renderUserColorChip(resolverName, resolverId);
-          if (order.status === 'completada') {
-            return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + chip + ' <span style="font-size:11px;color:#059669;font-weight:700;">✓ Aceptado y concluido por Atención</span></div>';
-          }
-          if (order.status === 'resuelto_soporte') {
-            return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + chip + ' <span style="font-size:11px;color:#d97706;font-weight:700;">⏳ En revisión de Atención</span></div>';
-          }
-          return chip;
-        }
-        if (order.status === 'no_realizado') {
-          return '<span style="color:#dc2626;font-weight:600;font-size:12px;font-style:italic;">No realizable (Sin resolver)</span>';
-        }
-        return '<span style="color:#64748b;font-weight:600;font-size:12px;font-style:italic;">Pendiente de resolución</span>';
-      })(), { raw: true })}
-      ${orderReportField('calendar', 'Fecha de creación', order.createdAt ? new Date(order.createdAt).toLocaleString('es-MX') : 'Sin fecha')}
-      ${order.updatedAt && order.updatedAt !== order.createdAt ? orderReportField('clock', 'Última edición', `${new Date(order.updatedAt).toLocaleString('es-MX')}${order.updatedByName ? ` por ${renderUserColorChip(order.updatedByName, order.updatedById)}` : ''}`, { raw: true }) : ''}
-      ${viewedSummary ? orderReportField('check', 'Visto', viewedSummary) : ''}
-      ${order.reviewOpenedAt ? orderReportField('calendar', 'Abierta para revisión', orderReviewOpenedSummary(order)) : ''}
-      ${completed ? orderReportField('calendar', 'Fecha y hora del reporte', detailDate ? new Date(detailDate).toLocaleString('es-MX') : 'Sin fecha') : ''}
-      ${orderReportField('work', 'Tipo de trabajo', getOrderDisplayType(order))}
-      ${orderReportField('flag', 'Prioridad', pl(order.priority || 'media'))}
-      ${orderReportField('tag', 'Categoría', orderCategoryLabel(getOrderCategory(order)))}
-    </div>
-    <section class="order-report-block order-report-request"><span class="order-report-field-icon">${orderReportIcon('clipboard')}</span><div><small>Detalle solicitado</small><p>${orderEscape(requestedDetail)}</p></div></section>
-    ${report.solution ? `<section class="order-report-block"><small>Trabajo realizado</small><p>${orderEscape(report.solution)}</p></section>` : ''}
-    ${report.observations ? `<section class="order-report-block"><small>Observaciones</small><p>${orderEscape(report.observations)}</p></section>` : ''}
-    ${report.reason ? `<section class="order-report-block warning"><small>Motivo</small><p>${orderEscape(report.reason)}</p></section>` : ''}
-    ${report.materialUsed ? `<section class="order-report-block"><small>Material utilizado</small><p>${orderEscape(report.materialUsed)}</p></section>` : ''}
-    ${renderOrderFollowUpTimeline(visibleFollowUps)}
-    ${materialItems.length ? `<section class="order-report-block"><small>Materiales registrados</small><div class="order-report-materials">${materialItems.map(item => `<span><strong>${orderEscape(item.name || item.nombre || 'Material')}</strong> · ${orderEscape(item.quantity ?? item.cantidad ?? '')} ${orderEscape(item.unit || item.unidad || '')}</span>`).join('')}</div></section>` : ''}
-    <section class="order-report-evidence-strip">
-      <div class="evidence-strip-head">
-        <strong>Evidencias gráficas registradas (${photos.length})</strong>
-        <span class="evidence-strip-sub">Fotografías y capturas del flujo completo</span>
-      </div>
-      ${photos.length ? `
-        <div class="evidence-strip-grid">
-          ${photos.map((photo, index) => `
-            <button type="button" class="evidence-strip-thumb" onclick="openOrderReportEvidence('${orderEscape(order.id)}', ${index})" title="Ver evidencia ${index + 1}">
-              <img src="${orderEscape(photo)}" alt="Evidencia ${index + 1}">
-              <span class="evidence-strip-num">${index + 1}</span>
-            </button>
-          `).join('')}
+
+  let bodyContent = '';
+  if (order.detailKind === 'network') {
+    // REGLA DE DETALLES DE RED:
+    // El chat va al frente de inmediato con el seguimiento adjunto como eventos resaltados.
+    // Los metadatos completos y las fotos van ocultos bajo "Ver todos los detalles y fotos".
+    bodyContent = `
+      <div class="order-report-essential-bar">
+        <div class="essential-bar-item">
+          <small>CLIENTE</small>
+          <strong>${orderEscape(order.clientName || 'Sin cliente')}</strong>
+          ${order.clientPhone ? `<span class="essential-phone">${orderEscape(order.clientPhone)}</span>` : ''}
         </div>
-      ` : `
-        <div class="evidence-strip-empty">Sin evidencias fotográficas adjuntas.</div>
-      `}
-    </section>
-    ${!completed ? (order.status === 'resuelto_soporte' ? '<div class="order-report-pending" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0"><strong>✓ Resuelto por Soporte:</strong> En espera de que Atención a clientes confirme la satisfacción con el cliente.</div>' : (order.status === 'devuelto_soporte' ? `<div class="order-report-pending" style="background:#fff1f2;color:#be123c;border-color:#fecdd3"><strong>⚠️ Devuelto a Soporte:</strong> ${orderEscape(order.returnReason || 'Atención a clientes indicó que el cliente sigue presentando fallas.')}${order.returnByName ? `<div style="font-size:12px;margin-top:5px;color:#9f1239;">Devuelto por: <strong>${orderEscape(order.returnByName)}</strong></div>` : ''}</div>` : '<div class="order-report-pending">Esta orden sigue pendiente. Se muestran los datos capturados al registrarla.</div>')) : ''}` +
-    ((order.detailKind === 'network' && (userHasRole('atencion_clientes') || userHasRole('administrador', 'admin')) && (order.status === 'resuelto_soporte' || order.status === 'no_realizado')) ? `
-      <div class="order-report-conclude-actions" style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0;flex-wrap:wrap;">
-        ${order.status === 'resuelto_soporte' ? `
-          <button type="button" class="btn net-btn-confirm" onclick="requestCloseOrderReport();confirmNetworkClientSatisfied('${order.id}')" title="Confirmar satisfacción del cliente y concluir reporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Conforme</button>
-          <button type="button" class="btn net-btn-return" onclick="requestCloseOrderReport();openReturnNetworkModal('${order.id}')" title="Devolver reporte a Soporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
-        ` : `
-          <button type="button" class="btn net-btn-confirm" onclick="requestCloseOrderReport();confirmNetworkUnresolvableConcluded('${order.id}')" title="Concluir trámite formalmente"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Concluir</button>
-          <button type="button" class="btn net-btn-return" onclick="requestCloseOrderReport();openReturnNetworkModal('${order.id}')" title="Devolver reporte a Soporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
-        `}
-        <button type="button" class="btn net-btn-physical" onclick="requestCloseOrderReport();promptSendNetworkToPhysical('${order.id}')" title="Derivar este reporte directo a Detalles Físicos"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Enviar a Detalles Físicos</button>
+        <div class="essential-bar-item">
+          <small>LUGAR</small>
+          <strong>${orderEscape(getOrderPlace(order))}</strong>
+        </div>
+        <div class="essential-bar-item">
+          <small>ESTADO</small>
+          <span class="order-report-status ${order.status === 'completada' ? 'is-completed' : (order.status === 'resuelto_soporte' ? 'is-resolving' : (order.status === 'devuelto_soporte' ? 'is-returned' : (order.status === 'no_realizado' ? 'is-failed' : 'is-pending')))}">${orderEscape(reportStatus)}</span>
+        </div>
+        <div class="essential-bar-item">
+          <small>ASIGNADO A</small>
+          <div>${order.assignedUserName ? renderUserColorChip(order.assignedUserName, order.assignedUserId) : '<span style="color:#64748b;font-weight:600;font-size:12px;">Sin asignar</span>'}</div>
+        </div>
+        <div class="essential-bar-item wide">
+          <small>DETALLE SOLICITADO</small>
+          <div class="essential-request-text"><span class="order-category-badge" style="margin-right:6px;">${orderEscape(orderCategoryLabel(getOrderCategory(order)))}</span>${orderEscape(requestedDetail)}</div>
+        </div>
       </div>
-    ` : '');
+
+      <details class="order-full-details-accordion">
+        <summary class="order-full-details-summary">
+          <span class="summary-toggle-title">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            <strong>Ver todos los detalles técnicos y fotos</strong> (${photos.length} fotos)
+          </span>
+          <span class="summary-toggle-hint">Mostrar / Ocultar ▾</span>
+        </summary>
+        <div class="order-full-details-content">
+          <div class="order-report-summary">
+            ${orderReportField('user', 'Nombre del cliente', order.clientName || 'Sin nombre')}
+            ${orderReportField('phone', 'Número telefónico', phone)}
+            ${orderReportField('pin', 'Lugar', getOrderPlace(order))}
+            ${orderReportField('target', 'Ubicación capturada', capturedLocation)}
+            ${orderReportField('check', 'Estado', `<span class="order-report-status ${order.status === 'completada' ? 'is-completed' : (order.status === 'resuelto_soporte' ? 'is-resolving' : (order.status === 'devuelto_soporte' ? 'is-returned' : (order.status === 'no_realizado' ? 'is-failed' : 'is-pending')))}">${orderEscape(reportStatus)}</span>`, { raw: true, className: 'status-field' })}
+            ${orderReportField('user', 'Capturado por', renderUserColorChip(order.createdByName || order.createdByUsername || 'Sin registro', order.createdById), { raw: true })}
+            ${orderReportField('user', 'Asignado a', order.assignedUserName ? renderUserColorChip(order.assignedUserName, order.assignedUserId) : '<span style="color:#64748b;font-weight:600;font-size:12px;">Sin asignar</span>', { raw: true })}
+            ${orderReportField('check', 'Resuelto por', (() => {
+              const resolverName = report.completedByName || order.completedByName || (visibleFollowUps.find(f => f.action === 'resuelto_soporte' || f.action === 'solved')?.user) || '';
+              const resolverId = report.completedBy || report.completedById || '';
+              if (resolverName) {
+                const chip = renderUserColorChip(resolverName, resolverId);
+                if (order.status === 'completada') {
+                  return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + chip + ' <span style="font-size:11px;color:#059669;font-weight:700;">Aceptado y concluido por Atención</span></div>';
+                }
+                if (order.status === 'resuelto_soporte') {
+                  return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + chip + ' <span style="font-size:11px;color:#d97706;font-weight:700;">En revisión de Atención</span></div>';
+                }
+                return chip;
+              }
+              if (order.status === 'no_realizado') {
+                return '<span style="color:#dc2626;font-weight:600;font-size:12px;font-style:italic;">No realizable (Sin resolver)</span>';
+              }
+              return '<span style="color:#64748b;font-weight:600;font-size:12px;font-style:italic;">Pendiente de resolución</span>';
+            })(), { raw: true })}
+            ${orderReportField('calendar', 'Fecha de creación', order.createdAt ? new Date(order.createdAt).toLocaleString('es-MX') : 'Sin fecha')}
+            ${order.updatedAt && order.updatedAt !== order.createdAt ? orderReportField('clock', 'Última edición', `${new Date(order.updatedAt).toLocaleString('es-MX')}${order.updatedByName ? ` por ${renderUserColorChip(order.updatedByName, order.updatedById)}` : ''}`, { raw: true }) : ''}
+            ${completed ? orderReportField('calendar', 'Fecha y hora del reporte', detailDate ? new Date(detailDate).toLocaleString('es-MX') : 'Sin fecha') : ''}
+            ${orderReportField('work', 'Tipo de trabajo', getOrderDisplayType(order))}
+            ${orderReportField('flag', 'Prioridad', pl(order.priority || 'media'))}
+            ${orderReportField('tag', 'Categoría', orderCategoryLabel(getOrderCategory(order)))}
+          </div>
+          <section class="order-report-block order-report-request"><span class="order-report-field-icon">${orderReportIcon('clipboard')}</span><div><small>Detalle solicitado</small><p>${orderEscape(requestedDetail)}</p></div></section>
+          ${report.solution ? `<section class="order-report-block"><small>Trabajo realizado</small><p>${orderEscape(report.solution)}</p></section>` : ''}
+          ${report.observations ? `<section class="order-report-block"><small>Observaciones</small><p>${orderEscape(report.observations)}</p></section>` : ''}
+          ${report.reason ? `<section class="order-report-block warning"><small>Motivo</small><p>${orderEscape(report.reason)}</p></section>` : ''}
+          ${report.materialUsed ? `<section class="order-report-block"><small>Material utilizado</small><p>${orderEscape(report.materialUsed)}</p></section>` : ''}
+          ${materialItems.length ? `<section class="order-report-block"><small>Materiales registrados</small><div class="order-report-materials">${materialItems.map(item => `<span><strong>${orderEscape(item.name || item.nombre || 'Material')}</strong> · ${orderEscape(item.quantity ?? item.cantidad ?? '')} ${orderEscape(item.unit || item.unidad || '')}</span>`).join('')}</div></section>` : ''}
+          <div class="order-report-evidence-strip" style="margin-top:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;padding:12px;">
+            <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              Evidencias fotográficas (${photos.length})
+            </div>
+            ${photos.length ? `
+              <div class="evidence-strip-grid">
+                ${photos.map((photo, index) => `
+                  <button type="button" class="evidence-strip-thumb" onclick="openOrderReportEvidence('${orderEscape(order.id)}', ${index})" title="Ver evidencia ${index + 1}">
+                    <img src="${orderEscape(photo)}" alt="Evidencia ${index + 1}">
+                    <span class="evidence-strip-num">${index + 1}</span>
+                  </button>
+                `).join('')}
+              </div>
+            ` : `
+              <div class="evidence-strip-empty" style="padding:8px;text-align:center;color:#94a3b8;font-size:11.5px;">Sin evidencias fotográficas adjuntas.</div>
+            `}
+          </div>
+        </div>
+      </details>
+
+      ${renderOrderChat(order)}
+      ${renderOrderFooterActions(order)}
+    `;
+  } else {
+    // Vista clásica para órdenes físicas
+    bodyContent = `
+      <div class="order-report-summary">
+        ${orderReportField('user', 'Nombre del cliente', order.clientName || 'Sin nombre')}
+        ${orderReportField('phone', 'Número telefónico', phone)}
+        ${orderReportField('pin', 'Lugar', getOrderPlace(order))}
+        ${orderReportField('target', 'Ubicación capturada', capturedLocation)}
+        ${orderReportField('check', 'Estado', `<span class="order-report-status ${order.status === 'completada' ? 'is-completed' : (order.status === 'resuelto_soporte' ? 'is-resolving' : (order.status === 'devuelto_soporte' ? 'is-returned' : (order.status === 'no_realizado' ? 'is-failed' : 'is-pending')))}">${orderEscape(reportStatus)}</span>`, { raw: true, className: 'status-field' })}
+        ${orderReportField('user', 'Capturado por', renderUserColorChip(order.createdByName || order.createdByUsername || 'Sin registro', order.createdById), { raw: true })}
+        ${orderReportField('user', 'Asignado a', order.assignedUserName ? renderUserColorChip(order.assignedUserName, order.assignedUserId) : '<span style="color:#64748b;font-weight:600;font-size:12px;">Sin asignar</span>', { raw: true })}
+        ${orderReportField('check', 'Resuelto por', report.completedByName || order.completedByName || 'Pendiente', { raw: true })}
+        ${orderReportField('calendar', 'Fecha de creación', order.createdAt ? new Date(order.createdAt).toLocaleString('es-MX') : 'Sin fecha')}
+        ${order.updatedAt && order.updatedAt !== order.createdAt ? orderReportField('clock', 'Última edición', `${new Date(order.updatedAt).toLocaleString('es-MX')}${order.updatedByName ? ` por ${renderUserColorChip(order.updatedByName, order.updatedById)}` : ''}`, { raw: true }) : ''}
+        ${orderReportField('work', 'Tipo de trabajo', getOrderDisplayType(order))}
+        ${orderReportField('flag', 'Prioridad', pl(order.priority || 'media'))}
+        ${orderReportField('tag', 'Categoría', orderCategoryLabel(getOrderCategory(order)))}
+      </div>
+      <section class="order-report-block order-report-request"><span class="order-report-field-icon">${orderReportIcon('clipboard')}</span><div><small>Detalle solicitado</small><p>${orderEscape(requestedDetail)}</p></div></section>
+      ${report.solution ? `<section class="order-report-block"><small>Trabajo realizado</small><p>${orderEscape(report.solution)}</p></section>` : ''}
+      ${report.observations ? `<section class="order-report-block"><small>Observaciones</small><p>${orderEscape(report.observations)}</p></section>` : ''}
+      ${report.reason ? `<section class="order-report-block warning"><small>Motivo</small><p>${orderEscape(report.reason)}</p></section>` : ''}
+      ${report.materialUsed ? `<section class="order-report-block"><small>Material utilizado</small><p>${orderEscape(report.materialUsed)}</p></section>` : ''}
+      ${renderOrderFollowUpTimeline(visibleFollowUps)}
+      ${materialItems.length ? `<section class="order-report-block"><small>Materiales registrados</small><div class="order-report-materials">${materialItems.map(item => `<span><strong>${orderEscape(item.name || item.nombre || 'Material')}</strong> · ${orderEscape(item.quantity ?? item.cantidad ?? '')} ${orderEscape(item.unit || item.unidad || '')}</span>`).join('')}</div></section>` : ''}
+      <div class="order-report-evidence-strip" style="margin-top:10px;">
+        ${photos.length ? `
+          <div class="evidence-strip-grid">
+            ${photos.map((photo, index) => `
+              <button type="button" class="evidence-strip-thumb" onclick="openOrderReportEvidence('${orderEscape(order.id)}', ${index})" title="Ver evidencia ${index + 1}">
+                <img src="${orderEscape(photo)}" alt="Evidencia ${index + 1}">
+                <span class="evidence-strip-num">${index + 1}</span>
+              </button>
+            `).join('')}
+          </div>
+        ` : `
+          <div class="evidence-strip-empty" style="padding:8px;text-align:center;color:#94a3b8;font-size:11.5px;">Sin evidencias fotográficas adjuntas.</div>
+        `}
+      </div>
+      ${renderOrderFooterActions(order)}
+    `;
+  }
+
+  card.innerHTML = `<div class="modal-head order-report-head"><div class="order-report-head-main"><span class="order-report-title-icon">${orderReportIcon('clipboard')}</span><div><h2>${completed ? 'Reporte del técnico' : 'Detalle de la orden'}</h2><p>${orderReportIcon('pin')}<span>${orderEscape(getOrderPlace(order))}</span><em>${orderEscape(getOrderFolio(order))}</em></p></div></div><button type="button" class="order-report-close" aria-label="Cerrar" onclick="requestCloseOrderReport()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+    ${bodyContent}`;
   OM('order-tech-report-mo');
+
+  if (order.detailKind === 'network') {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const chatSection = card.querySelector('.order-chat-section');
+        if (chatSection) {
+          card.scrollTop = Math.max(0, chatSection.offsetTop - 10);
+        }
+        const messagesBox = document.getElementById('order-chat-messages');
+        if (messagesBox) {
+          messagesBox.scrollTop = messagesBox.scrollHeight;
+        }
+        const chatInput = document.getElementById('order-chat-input');
+        if (chatInput && order.status !== 'completada') {
+          chatInput.focus();
+        }
+      }, 50);
+    });
+  }
 }
 
 function openOrderReportEvidence(orderId, index) {
@@ -2934,98 +4219,51 @@ function renderWOs() {
               }
             }
 
+            const pendingAction = getOrderPendingUserAction(w);
+            const rowIsDoneVisual = w.detailKind === 'network' ? (w.status === 'completada') : rowReported;
             let networkQuickActions = '';
             if (w.detailKind === 'network') {
-              if (w.status === 'pendiente' || w.status === 'devuelto_soporte') {
-                if (isSentToAttention) {
-                  // Requerimiento enviado por Soporte hacia Atención a clientes
-                  if (isAtencion) {
-                    networkQuickActions = `
-                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Iniciar atención y seguimiento de este requerimiento"><svg class="btn-action-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Atender</button>
-                    `;
-                  } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de atención por Atención a clientes">En Atención</span>`;
-                  }
-                } else {
-                  // Detalle de red recibido por Soporte: primero tendrá el botón que diga "Atender"
-                  if (isSoporte) {
-                    networkQuickActions = `
-                      <button type="button" class="btn net-btn-attend" onclick="startAttendingNetworkOrder('${w.id}')" title="Iniciar atención técnica de este reporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Atender</button>
-                    `;
-                  } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="En espera de atención técnica por Soporte">En Soporte</span>`;
-                  }
-                }
-              } else if (w.status === 'en_revision') {
-                // Ya se encuentra en atención: el cuadrito cambió de color y ahora se puede Resolver
-                if (isSentToAttention) {
-                  if (isAtencion) {
-                    networkQuickActions = `
-                      <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar respuesta formal al requerimiento"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Responder</button>
-                    `;
-                  } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="Atención a clientes está atendiendo este requerimiento">En atención</span>`;
-                  }
-                } else {
-                  // Detalle de red en atención por Soporte
-                  if (isSoporte) {
-                    const isAssignedToOther = w.assignedUserId && !isOrderAssignedToUser(w, currentActor);
-                    const isCheckingByOther = w.reviewOpenedById && w.reviewOpenedById !== currentActor.id;
-                    const canRetake = isAssignedToOther || isCheckingByOther;
+              const isAssignedToOther = (w.assignedUserId || w.assignedUserName) && !isOrderAssignedToUser(w, currentActor);
+              const isCheckingByOther = w.reviewOpenedById && w.reviewOpenedById !== currentActor.id;
+              const assignedArea = typeof getOrderAssignedAreaRole === 'function' ? getOrderAssignedAreaRole(w) : '';
+              const belongsToAttention = assignedArea === 'atencion_clientes' || isSentToAttention;
+              const allowedRoleToRetake = belongsToAttention
+                ? (isAtencion && !isSoporte)
+                : (isSoporte && !isAtencion);
+              const canRetake = typeof canUserRetakeNetworkOrder === 'function'
+                ? canUserRetakeNetworkOrder(w, currentActor)
+                : (!rowReported && allowedRoleToRetake && (isAssignedToOther || isCheckingByOther || !w.assignedUserId));
 
-                    if (canRetake) {
-                      networkQuickActions = `
-                        <button type="button" class="btn net-btn-retake" onclick="takeOverNetworkOrder('${w.id}')" title="Asumir titularidad de la atención técnica"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg> Retomar</button>
-                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar solución técnica y enviar a validación"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Resolver</button>
-                        <button type="button" class="btn net-btn-unresolvable" onclick="openUnresolvableNetworkModal('${w.id}')" title="Declarar reporte no realizable por imposibilidad técnica"><svg class="btn-action-svg" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg> No realizable</button>
-                      `;
-                    } else {
-                      networkQuickActions = `
-                        <button type="button" class="btn net-btn-resolve" onclick="openResolveNetworkModal('${w.id}')" title="Registrar solución técnica y enviar a validación"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Resolver</button>
-                      `;
-                    }
-                  } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="Soporte técnico está atendiendo este reporte">En atención</span>`;
-                  }
-                }
-              } else if (w.status === 'resuelto_soporte') {
-                if (isSentToAttention) {
-                  // Requerimiento que Soporte envió a Atención y ya fue respondido: Soporte valida si queda Conforme o lo Devuelve
-                  if (isSoporte) {
-                    networkQuickActions = `
-                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Confirmar respuesta de Atención y concluir requerimiento"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Conforme</button>
-                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Devolver requerimiento a Atención con observaciones"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
-                    `;
-                  } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Soporte técnico valide la respuesta">En validación</span>`;
-                  }
-                } else {
-                  // Reporte de red que Soporte resolvió: SOLO Atención a clientes debe validar con el cliente. Soporte NO lo valida.
-                  if (isAtencion) {
-                    networkQuickActions = `
-                      <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkClientSatisfied('${w.id}')" title="Confirmar satisfacción del cliente y concluir reporte"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Conforme</button>
-                      <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Devolver reporte a Soporte por falla persistente o inconformidad"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
-                      <button type="button" class="btn net-btn-physical" onclick="promptSendNetworkToPhysical('${w.id}')" title="Derivar este reporte directo a Detalles Físicos"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> A Físicos</button>
-                    `;
-                  } else {
-                    networkQuickActions = `<span class="net-pill-waiting" title="Esperando que Atención a clientes valide la conformidad con el cliente">Por validar</span>`;
-                  }
-                }
-              } else if (w.status === 'no_realizado') {
-                if (isAtencion) {
-                  networkQuickActions = `
-                    <button type="button" class="btn net-btn-confirm" onclick="confirmNetworkUnresolvableConcluded('${w.id}')" title="Concluir trámite indicando imposibilidad técnica"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Concluir</button>
-                    <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${w.id}')" title="Devolver reporte a Soporte con nuevas observaciones"><svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver</button>
-                    <button type="button" class="btn net-btn-physical" onclick="promptSendNetworkToPhysical('${w.id}')" title="Derivar este reporte directo a Detalles Físicos"><svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> A Físicos</button>
-                  `;
-                } else {
-                  networkQuickActions = `<span class="net-pill-waiting" style="background:#fef2f2;color:#b91c1c;border-color:#fecdd3;" title="Soporte reportó imposibilidad técnica para solucionar este reporte">No realizado</span>`;
-                }
-              }
+              const retakeDisabledReason = rowReported
+                ? 'El detalle ya fue concluido'
+                : (!allowedRoleToRetake
+                  ? (belongsToAttention ? 'Asignado a Atención a clientes' : 'Asignado a Soporte técnico')
+                  : 'Ya estás a cargo de este caso');
+
+              networkQuickActions = `
+                <button type="button" class="btn net-btn-open" onclick="event.stopPropagation();selectOrderRow('${w.id}');openOrderTechnicianReport('${w.id}')" title="Abrir detalle y conversación" aria-label="Abrir detalle y conversación">
+                  <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Abrir chat
+                </button>
+                ${canRetake ? `
+                  <button type="button" class="btn net-btn-retake" onclick="event.stopPropagation();selectOrderRow('${w.id}');takeOverNetworkOrder('${w.id}')" title="Asignarme la atención de este caso">
+                    <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg> Retomar
+                  </button>
+                ` : `
+                  <button type="button" class="btn net-btn-retake net-btn-retake-disabled" disabled title="${orderEscape(retakeDisabledReason)}" aria-label="${orderEscape(retakeDisabledReason)}">
+                    <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg> Retomar
+                  </button>
+                `}
+              `;
             }
 
+            const trClasses = [
+              rowIsDoneVisual ? 'order-row-done' : '',
+              selectedOrderRowId === String(w.id) ? 'order-row-selected' : '',
+              pendingAction.requiresMyAction ? 'order-row-action-required' : ''
+            ].filter(Boolean).join(' ');
+
             return `
-              <tr class="${rowReported ? 'order-row-done' : ''}">
+              <tr data-order-id="${orderEscape(w.id)}" onclick="selectOrderRow('${w.id}', event)" class="${trClasses}">
                 <td data-label="Folio"><strong class="order-folio">${orderEscape(getOrderFolio(w))}</strong></td>
                 <td data-label="Zona">${orderEscape(getZoneLabel(target.zone || w.region) || '--')}</td>
                 <td data-label="Lugar"><strong class="order-place-main">${orderEscape(getOrderPlace(w))}</strong></td>
@@ -3044,14 +4282,21 @@ function renderWOs() {
                 </td>
                 <td data-label="Tipo">${orderEscape(getOrderDisplayType(w))}</td>
                 <td data-label="Prioridad"><span class="priority-badge priority-${orderEscape(w.priority || 'media')}"><span class="priority-dot"></span>${orderEscape(pl(w.priority || 'media'))}</span></td>
-                <td data-label="Estado"><span class="order-status-badge ${rowStatus.className}">${orderEscape(rowStatus.label)}</span></td>
+                <td data-label="Estado">
+                  <div class="order-state-cell">
+                    <span class="order-status-badge ${rowStatus.className}">${orderEscape(rowStatus.label)}</span>
+                    ${pendingAction.requiresMyAction ? `<button type="button" class="order-action-needed-pill is-${pendingAction.kind || 'action'}-pill" onclick="event.stopPropagation();selectOrderRow('${w.id}');openOrderTechnicianReport('${w.id}')" title="Se requiere tu confirmación en este detalle">${orderEscape(pendingAction.badge)}</button>` : (pendingAction.waitingOther ? `<span class="order-waiting-other-pill is-${pendingAction.kind || 'waiting'}-pill">${orderEscape(pendingAction.badge)}</span>` : '')}
+                  </div>
+                </td>
                 <td data-label="Acción">
                   <div class="order-actions">
                     ${networkQuickActions}
-                    <button class="btn order-view-report" title="Ver detalle completo" aria-label="Ver detalle completo" onclick="openOrderTechnicianReport('${w.id}')">${orderActionIcon('view')}</button>
+                    ${w.detailKind !== 'network' ? `<button class="btn order-view-report" title="Ver detalle completo" aria-label="Ver detalle completo" onclick="openOrderTechnicianReport('${w.id}')">${orderActionIcon('view')}</button>` : ''}
                     ${rowReported ? (canReopen ? `
-                      <button class="btn order-reopen-action" title="Reabrir detalle para nueva atención" aria-label="Reabrir detalle para nueva atención" onclick="reopenCompletedWO('${w.id}')">${orderActionIcon('reopen')}</button>
-                    ` : '') : (canEditOrder(w) ? `
+                      <button class="btn order-reopen-action" title="Reabrir detalle para nueva atención" aria-label="Reabrir detalle para nueva atención" onclick="event.stopPropagation();reopenCompletedWO('${w.id}')">${orderActionIcon('reopen')}</button>
+                    ` : `
+                      <button class="btn order-reopen-action order-reopen-disabled" disabled style="opacity:0.35;cursor:not-allowed;" title="No tienes permiso para reabrir este detalle" aria-label="No tienes permiso para reabrir este detalle">${orderActionIcon('reopen')}</button>
+                    `) : (canEditOrder(w) ? `
                       <button class="btn order-edit-action" title="Editar información del detalle" aria-label="Editar información del detalle" onclick="openWO('${w.id}')">${orderActionIcon('edit')}</button>
                     ` : `
                       <button class="btn order-edit-action order-edit-disabled" disabled style="opacity:0.35;cursor:not-allowed;" title="Solo quien creó el detalle puede editarlo" aria-label="Solo quien creó el detalle puede editarlo">${orderActionIcon('edit')}</button>
@@ -3173,8 +4418,9 @@ function openResolveNetworkModal(id) {
     .find(f => f.action === 'devuelto_soporte');
 
   if (summary) {
-    const isCheckingByOther = order.reviewOpenedByName && order.reviewOpenedById !== currentUser.id;
-    const isAssignedToOther = order.assignedUserId && !isOrderAssignedToUser(order, currentUser);
+    const canRetakeHere = typeof canUserRetakeNetworkOrder === 'function' ? canUserRetakeNetworkOrder(order, currentUser) : false;
+    const isCheckingByOther = canRetakeHere && order.reviewOpenedByName && order.reviewOpenedById !== currentUser.id;
+    const isAssignedToOther = canRetakeHere && (order.assignedUserId || order.assignedUserName) && !isOrderAssignedToUser(order, currentUser);
 
     summary.innerHTML = `
       ${isCheckingByOther ? `
@@ -3208,7 +4454,7 @@ function openResolveNetworkModal(id) {
       </div>
       ${order.status === 'devuelto_soporte' ? `
         <div class="netres-alert-returned" style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;padding:12px 14px;border-radius:9px;margin-top:12px;">
-          <div style="font-size:12px;font-weight:800;display:flex;align-items:center;gap:6px;">⚠️ Motivo de devolución (${isSentToAttention ? 'Aclaración solicitada' : 'Cliente no conforme'}):</div>
+          <div style="font-size:12px;font-weight:800;display:flex;align-items:center;gap:6px;">Motivo de devolución (${isSentToAttention ? 'Aclaración solicitada' : 'Cliente no conforme'}):</div>
           <div style="margin-top:5px;font-size:13px;font-weight:600;line-height:1.45;color:#7f1d1d;">${orderEscape(order.returnReason || returnFollowUp?.note || 'Se solicitó aclaración o revisión.')}</div>
           ${order.returnByName ? `<div style="font-size:11px;color:#991b1b;margin-top:4px;opacity:0.9;">Devuelto por: <strong>${orderEscape(order.returnByName)}</strong></div>` : ''}
         </div>
@@ -3240,6 +4486,11 @@ function openResolveNetworkModal(id) {
     });
   }
 
+  const unresModalBtn = document.querySelector('#network-resolve-mo .btn-modal-unresolvable');
+  if (unresModalBtn) {
+    unresModalBtn.style.display = canRoleDeclareUnresolvable(order) ? '' : 'none';
+  }
+
   OM('network-resolve-mo');
   setTimeout(() => document.getElementById('netres-solution')?.focus(), 100);
 }
@@ -3261,6 +4512,16 @@ async function submitNetworkResolution() {
   if (!order) return notify('No se encontró el detalle de red solicitado.', 'err');
 
   const isSentToAttention = isNetworkSupportToAttention(order);
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+
+  if (isSentToAttention && isSoporte && !userHasRole('administrador', 'admin')) {
+    return notify('Acción restringida: Los detalles asignados a Atención a clientes deben ser atendidos y concluidos por Atención.', 'warn');
+  }
+  if (!isSentToAttention && isAtencion && !userHasRole('administrador', 'admin')) {
+    return notify('Acción restringida: Los detalles asignados a Soporte técnico deben ser resueltos por Soporte.', 'warn');
+  }
+
   const folio = getOrderFolio(order);
   const confirmed = await askConfirmation({
     title: isSentToAttention ? '¿Confirmar envío de respuesta?' : '¿Confirmar resolución técnica?',
@@ -3298,7 +4559,12 @@ async function submitNetworkResolution() {
   };
 
   const actionTag = isSentToAttention ? 'Atendido por Atención a clientes' : 'Resuelto por Soporte técnico';
-  appendSharedNetworkFollowUp(order, 'resuelto_soporte', actionTag, solution);
+  appendSharedNetworkFollowUp(order, 'resuelto_soporte', actionTag, solution, netresEvidencePhotos);
+  if (isSentToAttention) {
+    appendSharedNetworkFollowUp(order, 'closure_proposed_atencion', 'Conclusión enviada por Atención a clientes', solution, netresEvidencePhotos);
+  } else {
+    appendSharedNetworkFollowUp(order, 'closure_proposed_soporte', 'Resolución confirmada por Soporte', solution, netresEvidencePhotos);
+  }
   setUpdatedAudit(order, isSentToAttention ? 'respondió requerimiento a Soporte' : 'resolvió reporte de red');
 
   let saved = false;
@@ -3321,6 +4587,7 @@ async function submitNetworkResolution() {
   }
 
   CM('network-resolve-mo');
+  updateOrderChatLive(order);
   try {
     if (typeof broadcastNetworkOrderChange === 'function') {
       broadcastNetworkOrderChange(order, 'resolved');
@@ -3330,6 +4597,7 @@ async function submitNetworkResolution() {
   }
   notify('Detalle resuelto.', 'ok');
   await loadOrderPage();
+  updateOrderChatLive(order);
 }
 
 async function startAttendingNetworkOrder(id) {
@@ -3389,6 +4657,7 @@ async function startAttendingNetworkOrder(id) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
 
+  updateOrderChatLive(order);
   notify('Detalle en atención.', 'ok');
   renderWOs();
 }
@@ -3399,6 +4668,21 @@ async function takeOverNetworkOrder(id) {
   }
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle de red.', 'err');
+
+  const assignedArea = typeof getOrderAssignedAreaRole === 'function' ? getOrderAssignedAreaRole(order) : '';
+  const isSentToAttention = isNetworkSupportToAttention(order);
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+
+  if ((assignedArea === 'atencion_clientes' || isSentToAttention) && (isSoporte || !isAtencion)) {
+    return notify('Acción restringida: Este caso fue asignado a Atención a clientes y no puede ser retomado por Soporte técnico.', 'warn');
+  }
+  if ((assignedArea === 'soporte' || !isSentToAttention) && (isAtencion || !isSoporte)) {
+    return notify('Acción restringida: Este caso fue asignado a Soporte técnico y no puede ser retomado por Atención a clientes.', 'warn');
+  }
+  if (typeof canUserRetakeNetworkOrder === 'function' && !canUserRetakeNetworkOrder(order, getCurrentUser())) {
+    return notify('Acción restringida: No es posible retomar este caso con tu rol actual.', 'warn');
+  }
 
   const currentAttendant = order.reviewOpenedByName || order.assignedUserName || 'otro integrante del equipo';
   const folio = getOrderFolio(order);
@@ -3449,6 +4733,7 @@ async function takeOverNetworkOrder(id) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
 
+  updateOrderChatLive(order);
   notify('Detalle a tu cargo.', 'ok');
 
   if (document.getElementById('network-resolve-mo')?.classList.contains('open') && document.getElementById('netres-order-id')?.value === id) {
@@ -3558,6 +4843,7 @@ async function submitNetworkReturn() {
   }
 
   CM('network-return-mo');
+  updateOrderChatLive(order);
   try {
     if (typeof broadcastNetworkOrderChange === 'function') {
       broadcastNetworkOrderChange(order, 'returned');
@@ -3567,6 +4853,7 @@ async function submitNetworkReturn() {
   }
   notify('Detalle devuelto.', 'warn');
   await loadOrderPage();
+  updateOrderChatLive(order);
 }
 
 async function confirmNetworkClientSatisfied(id) {
@@ -3615,8 +4902,10 @@ async function confirmNetworkClientSatisfied(id) {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
+  updateOrderChatLive(order);
   notify('Detalle concluido.', 'ok');
   await loadOrderPage();
+  updateOrderChatLive(order);
 }
 
 // Auto-apertura si se recibe orderId en la URL
@@ -3647,15 +4936,12 @@ function handleNetretEvidenceFiles(event) {
 function readNetretFiles(files) {
   files.forEach(file => {
     if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target.result;
+    compressWOEvidenceImage(file).then(dataUrl => {
       if (dataUrl && !netretEvidencePhotos.includes(dataUrl)) {
         netretEvidencePhotos.push(dataUrl);
         renderNetretEvidencePreview();
       }
-    };
-    reader.readAsDataURL(file);
+    }).catch(() => notify('No se pudo procesar la imagen.', 'err'));
   });
 }
 
@@ -3683,6 +4969,15 @@ let netunresEvidencePhotos = [];
 function openUnresolvableNetworkModal(id) {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle solicitado.', 'err');
+  const isSentToAttention = isNetworkSupportToAttention(order);
+  if (!canRoleDeclareUnresolvable(order)) {
+    return notify(
+      isSentToAttention
+        ? 'Acción restringida: Solo Atención a clientes (quien recibe el reporte) puede notificarlo como no realizable.'
+        : 'Acción restringida: Solo Soporte técnico (quien recibe el reporte) puede notificarlo como no realizable.',
+      'warn'
+    );
+  }
   if (typeof markNotificationReadByOrderId === 'function') {
     markNotificationReadByOrderId(id);
   }
@@ -3691,6 +4986,13 @@ function openUnresolvableNetworkModal(id) {
   document.getElementById('netunres-reason').value = '';
   netunresEvidencePhotos = [];
   renderNetunresEvidencePreview();
+
+  const subTitle = document.querySelector('#network-unresolvable-mo .modal-modern-subtitle');
+  if (subTitle) {
+    subTitle.textContent = isSentToAttention
+      ? 'Indique el motivo por el cual no es posible realizar este requerimiento. Soporte técnico deberá confirmarlo para cerrar.'
+      : 'Indique la justificación técnica por la cual no es posible resolver este reporte. Atención a clientes deberá confirmarlo para cerrar.';
+  }
 
   const summary = document.getElementById('netunres-order-summary');
   if (summary) {
@@ -3701,7 +5003,7 @@ function openUnresolvableNetworkModal(id) {
       </div>
       <div class="netres-summary-row">
         <span><strong>Pueblo:</strong> ${orderEscape(order.town || order.nodeName || 'Red')}</span>
-        <span><strong>Asignado:</strong> ${orderEscape(order.assignedUserName || 'Equipo de Soporte')}</span>
+        <span><strong>Asignado:</strong> ${orderEscape(order.assignedUserName || (isSentToAttention ? 'Equipo de Atención' : 'Equipo de Soporte'))}</span>
       </div>
       <div class="netres-summary-detail">
         <strong>Detalle reportado:</strong> ${orderEscape(order.description || order.title || 'Incidencia técnica')}
@@ -3730,15 +5032,12 @@ function handleNetunresEvidenceFiles(event) {
 function readNetunresFiles(files) {
   files.forEach(file => {
     if (!file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target.result;
+    compressWOEvidenceImage(file).then(dataUrl => {
       if (dataUrl && !netunresEvidencePhotos.includes(dataUrl)) {
         netunresEvidencePhotos.push(dataUrl);
         renderNetunresEvidencePreview();
       }
-    };
-    reader.readAsDataURL(file);
+    }).catch(() => notify('No se pudo procesar la imagen.', 'err'));
   });
 }
 
@@ -3763,26 +5062,36 @@ async function submitNetworkUnresolvable() {
   const reason = document.getElementById('netunres-reason')?.value.trim();
   if (!id) return;
   if (!reason) {
-    notify('Por favor ingrese la justificación técnica por la cual no es posible solucionar el reporte.', 'err');
+    notify('Por favor ingrese la justificación por la cual no es posible realizar el reporte.', 'err');
     document.getElementById('netunres-reason')?.focus();
     return;
   }
 
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle solicitado.', 'err');
+  const isSentToAttention = isNetworkSupportToAttention(order);
+  if (!canRoleDeclareUnresolvable(order)) {
+    return notify(
+      isSentToAttention
+        ? 'Acción restringida: Solo Atención a clientes puede enviar este reporte como no realizable.'
+        : 'Acción restringida: Solo Soporte técnico puede enviar este reporte como no realizable.',
+      'warn'
+    );
+  }
 
-  const folio = getOrderFolio(order);
+  const counterpartyName = isSentToAttention ? 'Soporte técnico' : 'Atención a clientes';
   const confirmed = await askConfirmation({
     title: '¿Declarar reporte no realizable?',
-    message: 'El estado del reporte cambiará a "No realizado" con la justificación técnica especificada. ¿Desea continuar?',
-    confirmText: 'Sí, declarar no realizable',
+    message: `El reporte pasará a "No realizado" y se notificará a ${counterpartyName} para que confirme que no se puede realizar. ¿Desea continuar?`,
+    confirmText: 'Sí, notificar no realizable',
     cancelText: 'Cancelar',
     tone: 'danger'
   });
   if (!confirmed) return;
 
   const currentUser = getCurrentUser();
-  const userName = currentUser.name || currentUser.username || 'Personal de soporte';
+  const declarerRoleLabel = isSentToAttention ? 'Atención a clientes' : 'Soporte técnico';
+  const userName = currentUser.name || currentUser.username || declarerRoleLabel;
   const now = new Date().toISOString();
 
   order.status = 'no_realizado';
@@ -3798,8 +5107,8 @@ async function submitNetworkUnresolvable() {
     evidencePhotos: [...(order.technicianReport?.evidencePhotos || []), ...netunresEvidencePhotos]
   };
 
-  appendSharedNetworkFollowUp(order, 'no_realizado', 'Atención no realizada', reason, netunresEvidencePhotos);
-  setUpdatedAudit(order, 'declaró reporte no realizable por causas técnicas');
+  appendSharedNetworkFollowUp(order, 'no_realizado', `Notificado como no realizable por ${declarerRoleLabel}`, reason, netunresEvidencePhotos);
+  setUpdatedAudit(order, 'declaró reporte no realizable en espera de confirmación');
 
   const saved = await saveRecord('workOrders', order);
   if (!saved) {
@@ -3808,6 +5117,7 @@ async function submitNetworkUnresolvable() {
   }
 
   CM('network-unresolvable-mo');
+  updateOrderChatLive(order);
   try {
     if (typeof broadcastNetworkOrderChange === 'function') {
       broadcastNetworkOrderChange(order, 'unresolvable');
@@ -3815,26 +5125,37 @@ async function submitNetworkUnresolvable() {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify('Reporte marcado como no realizado.', 'ok');
+  notify(`Notificado como no realizable. En espera de confirmación de ${counterpartyName}.`, 'ok');
   await loadOrderPage();
+  updateOrderChatLive(order);
 }
 
 async function confirmNetworkUnresolvableConcluded(id) {
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle solicitado.', 'err');
 
-  const folio = getOrderFolio(order);
+  const isSentToAttention = isNetworkSupportToAttention(order);
+  if (!canRoleConfirmUnresolvable(order)) {
+    return notify(
+      isSentToAttention
+        ? 'Acción restringida: Soporte técnico debe confirmar que el reporte no se puede realizar.'
+        : 'Acción restringida: Atención a clientes debe confirmar que el reporte no se puede realizar.',
+      'warn'
+    );
+  }
+
   const confirmed = await askConfirmation({
     title: '¿Concluir trámite de reporte?',
-    message: '¿Confirma dar por concluido este reporte registrando la imposibilidad técnica?',
-    confirmText: 'Sí, concluir trámite',
+    message: '¿Confirma que no es posible realizar este detalle para dar por concluido el caso por ambas partes?',
+    confirmText: 'Sí, confirmar y concluir',
     cancelText: 'Cancelar',
-    tone: 'warning'
+    tone: 'ok'
   });
   if (!confirmed) return;
 
   const currentUser = getCurrentUser();
-  const userName = currentUser.name || currentUser.username || 'Atención a clientes';
+  const confirmRoleLabel = isSentToAttention ? 'Soporte técnico' : 'Atención a clientes';
+  const userName = currentUser.name || currentUser.username || confirmRoleLabel;
   const now = new Date().toISOString();
 
   order.status = 'completada';
@@ -3843,8 +5164,16 @@ async function confirmNetworkUnresolvableConcluded(id) {
   order.updatedAt = now;
   order.updatedById = currentUser.id || '';
 
-  appendSharedNetworkFollowUp(order, 'completada', 'Concluido sin solución técnica', `Atención a clientes (${userName}) dio por concluido formalmente el reporte tras valorar la imposibilidad técnica.`);
-  setUpdatedAudit(order, 'concluyó reporte sin solución técnica aplicada');
+  appendSharedNetworkFollowUp(
+    order,
+    'completada',
+    `No realizable confirmado por ${confirmRoleLabel}`,
+    `${confirmRoleLabel} (${userName}) confirmó que el caso no se puede realizar y dio por concluido formalmente el detalle.`
+  );
+  setUpdatedAudit(order, 'confirmó reporte no realizable y concluyó trámite');
+
+  updateOrderChatLive(order);
+  renderWOs();
 
   const saved = await saveRecord('workOrders', order);
   if (!saved) {
@@ -3859,11 +5188,12 @@ async function confirmNetworkUnresolvableConcluded(id) {
   } catch (e) {
     console.warn('broadcastNetworkOrderChange error:', e);
   }
-  notify('Detalle concluido.', 'ok');
+  notify('Confirmado como no realizable y concluido.', 'ok');
   await loadOrderPage();
+  updateOrderChatLive(order);
 }
 
-// Escucha global de pegado (Ctrl + V) para evidencias en modales de devolución y no realizable
+// Escucha global de pegado (Ctrl + V) para evidencias en modales y en el chat del caso
 document.addEventListener('paste', (e) => {
   const returnMo = document.getElementById('network-return-mo');
   if (returnMo && returnMo.classList.contains('open')) {
@@ -3873,6 +5203,7 @@ document.addEventListener('paste', (e) => {
       e.preventDefault();
       readNetretFiles(imgItems.map(x => x.getAsFile()).filter(Boolean));
     }
+    return;
   }
   const unresMo = document.getElementById('network-unresolvable-mo');
   if (unresMo && unresMo.classList.contains('open')) {
@@ -3882,5 +5213,48 @@ document.addEventListener('paste', (e) => {
       e.preventDefault();
       readNetunresFiles(imgItems.map(x => x.getAsFile()).filter(Boolean));
     }
+    return;
+  }
+  const resolveMo = document.getElementById('network-resolve-mo');
+  if (resolveMo && resolveMo.classList.contains('open')) {
+    return;
+  }
+  const confirmMo = document.getElementById('action-confirm-mo');
+  const promptMo = document.getElementById('action-prompt-mo');
+  if (confirmMo?.classList.contains('open') || promptMo?.classList.contains('open')) {
+    return;
+  }
+  const chatReportMo = document.getElementById('order-tech-report-mo');
+  if (chatReportMo && chatReportMo.classList.contains('open')) {
+    const items = Array.from(e.clipboardData?.items || []);
+    const imgItem = items.find(x => x.type && x.type.startsWith('image/'));
+    if (imgItem) {
+      const chatInput = document.getElementById('order-chat-input');
+      if (!chatInput) {
+        notify('Debes ser participante activo en un caso abierto para adjuntar imágenes en el chat.', 'warn');
+        return;
+      }
+      const file = imgItem.getAsFile();
+      if (file) {
+        e.preventDefault();
+        void attachOrderChatImageFile(file, true);
+      }
+    }
   }
 });
+
+function openNetworkColorsGuideModal() {
+  if (typeof OM === 'function') {
+    OM('network-colors-guide-mo');
+  } else {
+    document.getElementById('network-colors-guide-mo')?.classList.add('open');
+  }
+}
+
+function openNetworkWorkflowGuideModal() {
+  if (typeof OM === 'function') {
+    OM('network-workflow-guide-mo');
+  } else {
+    document.getElementById('network-workflow-guide-mo')?.classList.add('open');
+  }
+}

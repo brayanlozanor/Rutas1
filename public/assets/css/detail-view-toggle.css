@@ -772,8 +772,7 @@ body:has(.topbar.app-sidebar) .detail-readonly-mo>.detail-readonly-card{
 }
 
 /* Dialogs launched from the antenna detail sheet must sit above that sheet. */
-body:has(.topbar.app-sidebar) #ant-move-detail-node-mo,
-body:has(.topbar.app-sidebar) #action-confirm-mo{
+body:has(.topbar.app-sidebar) #ant-move-detail-node-mo{
   box-sizing:border-box!important;
   position:fixed!important;
   z-index:18000!important;
@@ -801,8 +800,7 @@ body:has(.topbar.app-sidebar) #ant-move-detail-node-mo>.md{
 }
 
 @media(min-width:901px){
-  body:has(.topbar.app-sidebar) #ant-move-detail-node-mo,
-  body:has(.topbar.app-sidebar) #action-confirm-mo{height:125dvh!important}
+  body:has(.topbar.app-sidebar) #ant-move-detail-node-mo{height:125dvh!important}
 }
 
 @media(max-width:620px){
