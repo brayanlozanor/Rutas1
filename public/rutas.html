@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css?v=20260902-evidence-viewer-v1">
   <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3">
+  <link rel="stylesheet" href="assets/css/preset-routes.css?v=20261111-preset-routes-v1">
   <script>try{document.documentElement.dataset.role=(JSON.parse(localStorage.getItem('user')||'{}').role||'').toLowerCase()}catch(e){}</script>
 </head>
 <body class="routes-page" onload="initRutasPage()">
@@ -41,8 +42,12 @@
         </button>
         <input type="file" id="cf-rutas" accept=".csv" multiple style="display:none" onchange="impCSVRutas(this)">
 
-        <button class="btn bgh bsm bfu" data-routes-edit style="margin-bottom:10px" onclick="abrirModalRuta()">
+        <button class="btn bgh bsm bfu" data-routes-edit style="margin-bottom:6px" onclick="abrirModalRuta()">
           + Crear Texto Manual
+        </button>
+
+        <button class="btn bo2 bsm bfu" style="margin-bottom:10px" onclick="openPresetRoutesModal()">
+          📋 Rutas Recomendadas (52)
         </button>
 
         <input id="rrs" 
@@ -125,7 +130,8 @@
   <div class="nt" id="nt"></div>
 
 <script src="assets/js/api.js?v=20260831-global-loading-map-height-v10"></script>
-  <script src="assets/js/common.js?v=20260902-evidence-viewer-v2"></script>
+  <script src="assets/js/common.js?v=20261106-grouped-notifications-v3"></script>
+  <script src="assets/js/preset-routes.js?v=20261111-preset-routes-v1"></script>
   <script src="assets/js/rutas.js?v=20260826-server-pagination-v1"></script>
 </body>
 </html>

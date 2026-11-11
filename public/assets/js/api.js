@@ -50,7 +50,7 @@ const DATA_PARTS_BY_PAGE = {
     'antenas.html': ['equipment'],
     'nodos.html': ['nodes'],
     'ordenes.html': ['operations', 'people'],
-    'mapa.html': ['equipment', 'nodes'],
+    'mapa.html': ['map'],
     'planificar.html': ['people', 'materials', 'planning'],
     'tecnico-ruta.html': ['people', 'materials', 'planning'],
     'material.html': ['materials'],
@@ -59,7 +59,7 @@ const DATA_PARTS_BY_PAGE = {
     'dashboard.html': ['operations', 'people'],
     'historial.html': ['audit']
 };
-const ALL_DATA_PARTS = ['equipment', 'nodes', 'materials', 'routes', 'operations', 'people', 'activity', 'audit', 'planning'];
+const ALL_DATA_PARTS = ['equipment', 'nodes', 'materials', 'routes', 'operations', 'people', 'activity', 'audit', 'planning', 'map'];
 const RECORD_PREFIX_BY_KEY = {
     equipment: 'equipment',
     nodes: 'node',
@@ -451,6 +451,9 @@ async function autoSyncTick({ force = false, silent = true } = {}) {
         if (!token) return false;
         if (!lastSyncToken) {
             lastSyncToken = token;
+            if (!window.netopsCloudLoadOk || ((state.workOrders && !state.workOrders.length) && (location.pathname || '').includes('ordenes'))) {
+                return syncFromCloud({ silent, force: true });
+            }
             return false;
         }
         // `force` permite comprobar al volver a la pestaña, pero nunca debe
@@ -1615,6 +1618,7 @@ async function fetchRemoteState(timeoutMs = 5000, options = {}) {
                 : requestPaged(part,key,scopedParams(part)||{});
         };
         const taskByPart = {
+            map: () => requestPart('map',0,PAGE_SIZE,{},syncMetaPart === 'map'),
             equipment: () => loadPagedOrWindowed('equipment','equipment'),
             nodes: () => loadPagedOrWindowed('nodes','nodes'),
             materials: () => loadPagedOrWindowed('materials','materials'),
@@ -1673,10 +1677,13 @@ async function fetchRemoteState(timeoutMs = 5000, options = {}) {
         workOrders: safeParse(d.workOrders),
         technicians: safeParse(d.technicians),
         users: safeParse(d.users),
+        supportUsers: safeParse(d.supportUsers),
+        attentionUsers: safeParse(d.attentionUsers),
         techAccessLog: safeParse(d.techAccessLog),
         deletionRequests: safeParse(d.deletionRequests),
         auditLog: safeParse(d.auditLog),
         materials: safeParse(d.materials),
+        materialMovements: safeParse(d.materialMovements),
         routes: safeParse(d.routes),
         weekPlan: d.weekPlan || {},
         prepChecked: d.prepChecked || {},
@@ -1689,6 +1696,14 @@ async function fetchRemoteState(timeoutMs = 5000, options = {}) {
 }
 function applyStateData(data) {
     window.netopsPageMeta = data?.__pageMeta || {};
+    if (Array.isArray(data?.supportUsers) && data.supportUsers.length) {
+        window.netopsSupportUsers = data.supportUsers;
+        try { localStorage.setItem('netops_cached_support_users', JSON.stringify(data.supportUsers)); } catch (e) {}
+    }
+    if (Array.isArray(data?.attentionUsers) && data.attentionUsers.length) {
+        window.netopsAttentionUsers = data.attentionUsers;
+        try { localStorage.setItem('netops_cached_attention_users', JSON.stringify(data.attentionUsers)); } catch (e) {}
+    }
     state.equipment   = Array.isArray(data.equipment) ? data.equipment : [];
     state.nodes       = Array.isArray(data.nodes) ? data.nodes : [];
     state.workOrders  = Array.isArray(data.workOrders) ? data.workOrders : [];
@@ -1777,6 +1792,14 @@ function renderAfterSync() {
             try { window[name](); } catch(e) { console.warn(`No se pudo refrescar ${name}`, e); }
         }
     });
+
+    if (typeof loadOrderPage === 'function' && document.body.classList.contains('orders-page')) {
+        try {
+            loadOrderPage();
+        } catch(e) {
+            console.warn('No se pudo refrescar loadOrderPage', e);
+        }
+    }
 
     // renderAntenas: si el panel de detalles esta abierto, solo refrescar la lista interna
     if (typeof renderAntenas === 'function') {
@@ -2011,7 +2034,11 @@ function startAutoSync() {
             }, delay);
         };
         window.addEventListener('online', () => {
+            lastSyncToken = '';
             scheduleWakeSync({ silent: false, delay: 0 });
+            if (!window.netopsCloudLoadOk && typeof loadDB === 'function') {
+                loadDB({ showOverlay: false, preferCache: false }).catch(() => {});
+            }
         });
         window.addEventListener('focus', () => {
             scheduleWakeSync();
@@ -2055,6 +2082,8 @@ async function loadDB(options = {}) {
         }
         applyStateData(remoteState);
         saveLastGoodCloudState(remoteState, options.parts);
+        window.netopsCloudLoadOk = true;
+        window.netopsUsingCachedState = false;
         localStorage.removeItem(BACKUP_KEY);
         localStorage.removeItem(PENDING_CHANGES_KEY);
         clearLocalDirty();
@@ -2171,11 +2200,10 @@ async function saveRecord(listKey, record, { notifyUser = false } = {}) {
     try {
         await postRecordToCloud(listKey, record);
         // Actualizar el estado local y prevState para que el cambio persista de inmediato
-        if (state[listKey] && Array.isArray(state[listKey])) {
-            const idx = state[listKey].findIndex(item => item?.id === record.id);
-            if (idx >= 0) state[listKey][idx] = cloneData(record);
-            else state[listKey].unshift(cloneData(record));
-        }
+        if (!Array.isArray(state[listKey])) state[listKey] = [];
+        const idx = state[listKey].findIndex(item => item?.id === record.id);
+        if (idx >= 0) state[listKey][idx] = cloneData(record);
+        else state[listKey].unshift(cloneData(record));
         if (_previousStateSaved) {
             const arr = _previousStateSaved[listKey];
             if (Array.isArray(arr)) {

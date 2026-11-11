@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css?v=20260902-edit-stock-v1">
   <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3">
-  <link rel="stylesheet" href="assets/css/material-dispatches.css?v=20261031-subtle-badge-v1">
+  <link rel="stylesheet" href="assets/css/material-dispatches.css?v=20261110-print-v1">
   <script>try{document.documentElement.dataset.role=(JSON.parse(localStorage.getItem('user')||'{}').role||'').toLowerCase()}catch(e){}</script>
 </head>
 <body class="material-page" onload="initMaterialPage()">
@@ -645,13 +645,78 @@
     </div>
   </div>
 
+  <!-- ====================================================================
+       MODAL: FIRMA DIGITAL DE CONFORMIDAD (ENTREGA Y RECEPCIÓN)
+       ==================================================================== -->
+  <div class="mo" id="material-signature-mo" style="z-index: 100002 !important;">
+    <div class="md material-signature-dialog" style="max-width:540px;">
+      <div class="material-modal-head">
+        <div>
+          <div class="mt2" id="signature-modal-title">Firma Digital de Conformidad</div>
+          <small id="signature-modal-subtitle">Dibuja tu firma en el recuadro para validar el documento.</small>
+        </div>
+        <button type="button" class="btn bsm bgh" onclick="cancelSignaturePrompt()">✕</button>
+      </div>
+      <div id="signature-signer-badge" style="margin:8px 0;padding:6px 12px;background:#f1f5f9;border-radius:8px;font-size:12px;color:#334155;">
+        Firmante: <strong id="signature-modal-signer-name">Usuario</strong> (<span id="signature-modal-signer-role">Responsable</span>)
+      </div>
+      <div class="signature-canvas-container" style="margin:12px 0;background:#ffffff;border:2px dashed #94a3b8;border-radius:12px;position:relative;touch-action:none;box-shadow:inset 0 2px 4px rgba(0,0,0,0.02)">
+        <canvas id="material-signature-canvas" width="490" height="200" style="display:block;width:100%;height:200px;cursor:crosshair;"></canvas>
+        <div class="signature-guideline" style="position:absolute;bottom:35px;left:24px;right:24px;border-bottom:1.5px solid #cbd5e1;pointer-events:none;text-align:right;color:#94a3b8;font-size:11px;">
+          Línea de firma digital ✕
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button type="button" class="btn bsm bgh" onclick="clearSignatureCanvas()">🧹 Limpiar firma</button>
+        <div style="display:flex;gap:8px;">
+          <button type="button" class="btn bsm bgh" onclick="cancelSignaturePrompt()">Cancelar</button>
+          <button type="button" class="btn bsm bg2" id="signature-confirm-btn" onclick="confirmSignaturePrompt()" style="font-weight:700">✓ Confirmar y Firmar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================================
+       MODAL: FORMATO DE ENTREGA Y RECEPCIÓN DE MATERIAL
+       ==================================================================== -->
+  <div class="mo" id="material-oficio-mo">
+    <div class="md oficio-modal-dialog" style="max-width:860px;width:95vw;max-height:94vh;display:flex;flex-direction:column;padding:0;overflow:hidden;border-radius:18px;">
+      <div class="oficio-modal-toolbar" style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px;background:#f8fafc;border-bottom:1px solid #e2e8f0;flex-shrink:0;gap:12px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:22px;">📄</span>
+          <div>
+            <strong style="font-size:14px;color:#0f172a;display:block;">Formato de Material</strong>
+            <small style="color:#64748b;font-size:11px;">WiFi-Mex</small>
+          </div>
+        </div>
+        <div class="oficio-tabs-bar" id="oficio-modal-tabs">
+          <button type="button" class="oficio-tab-btn active" id="oficio-tab-btn-entrega" onclick="cambiarPestanaOficio('entrega')">
+            <span>📦</span> <span>Entrega de material</span>
+          </button>
+          <button type="button" class="oficio-tab-btn" id="oficio-tab-btn-recepcion" onclick="cambiarPestanaOficio('recepcion')">
+            <span>📥</span> <span>Recepción de material</span>
+          </button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button type="button" class="btn bsm bc" onclick="imprimirOficioMaterial()" style="display:inline-flex;align-items:center;gap:6px;font-weight:700;">
+            <span>🖨️</span> <span>Imprimir / PDF</span>
+          </button>
+          <button type="button" class="btn bsm bgh" onclick="CM('material-oficio-mo')">✕ Cerrar</button>
+        </div>
+      </div>
+      <div id="material-oficio-content" style="flex:1;overflow-y:auto;padding:24px;background:#ffffff;">
+        <!-- El contenido del formato se generará dinámicamente -->
+      </div>
+    </div>
+  </div>
+
   <datalist id="material-names-datalist"></datalist>
 
   <div class="nt" id="nt"></div>
 
-  <script src="assets/js/api.js?v=20260831-global-loading-map-height-v10"></script>
-  <script src="assets/js/common.js?v=20261031-disputes-v1"></script>
-  <script src="assets/js/material.js?v=20261031-disputes-v2"></script>
-  <script src="assets/js/material-dashboard.js?v=20261030-inventory-redesign-v5"></script>
+  <script src="assets/js/api.js?v=20261110-print-v1"></script>
+  <script src="assets/js/common.js?v=20261110-print-v1"></script>
+  <script src="assets/js/material.js?v=20261110-print-v1"></script>
+  <script src="assets/js/material-dashboard.js?v=20261110-print-v1"></script>
 </body>
 </html>

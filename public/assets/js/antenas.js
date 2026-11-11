@@ -143,6 +143,7 @@ function resetAntennaForm() {
   document.getElementById('ant-form-title').textContent = 'Registrar antena';
   ['ant-name','ant-ip','ant-ssid','ant-lat','ant-lng','ant-notes','ant-zone-preview'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('ant-type').value = 'mikrotik';
+  const towerBtn = document.getElementById('ant-edit-tower-btn'); if (towerBtn) towerBtn.style.display = 'none';
 }
 
 function previewAntennaZone() {
@@ -177,7 +178,9 @@ async function saveAntenna() {
 function editAntenna(id) {
   const antenna = (state.equipment || []).find(item => item.id === id && !item.deletedAt); if (!antenna) return;
   editingAntennaId = id; document.getElementById('ant-form-title').textContent = 'Editar antena';
-  document.getElementById('ant-name').value = antenna.name || ''; document.getElementById('ant-ip').value = antenna.ip || ''; document.getElementById('ant-ssid').value = antenna.ssid || ''; document.getElementById('ant-lat').value = antenna.lat ?? ''; document.getElementById('ant-lng').value = antenna.lng ?? ''; document.getElementById('ant-type').value = antenna.type || 'mikrotik'; document.getElementById('ant-notes').value = antenna.notes || ''; previewAntennaZone(); OM('antena-mo');
+  document.getElementById('ant-name').value = antenna.name || ''; document.getElementById('ant-ip').value = antenna.ip || ''; document.getElementById('ant-ssid').value = antenna.ssid || ''; document.getElementById('ant-lat').value = antenna.lat ?? ''; document.getElementById('ant-lng').value = antenna.lng ?? ''; document.getElementById('ant-type').value = antenna.type || 'mikrotik'; document.getElementById('ant-notes').value = antenna.notes || ''; previewAntennaZone();
+  const towerBtn = document.getElementById('ant-edit-tower-btn'); if (towerBtn) towerBtn.style.display = 'inline-flex';
+  OM('antena-mo');
 }
 
 async function deleteAntenna(id) {
@@ -216,7 +219,12 @@ function renderAntenas() {
   wrap.innerHTML = `<div class="list-grid">${visible.map(eq => {
     const st = index.statusByEquipment.get(eq.id) || getPriorityStatusFromDetails([]); const details = index.detailsByEquipment.get(eq.id) || [];
     const deleteReq = findDeletionRequest('equipment', eq.id);
-    return `<article class="entity-card antenna-compact-card ${st.key}"><div class="entity-title"><div><h3>${antennaEscape(eq.name || 'Antena')}</h3><div class="entity-sub">${antennaEscape(getZoneLabel(eq.region))}</div></div><span class="badge" style="background:${st.color}22;color:${st.color};border-color:${st.color}55">${st.label}</span></div><div class="meta-list antenna-compact-meta"><div class="meta-row"><span>Coordenadas</span><strong>${antennaEscape(`${Number(eq.lat).toFixed(6)}, ${Number(eq.lng).toFixed(6)}`)}</strong></div><div class="meta-row"><span>Detalles pendientes</span><strong>${details.length}</strong></div></div><div class="antenna-icon-actions"><button class="ant-icon-btn primary" title="Ver detalles" aria-label="Ver detalles" onclick="openAntennaDetails('${eq.id}')"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button><button class="ant-icon-btn add" title="Agregar detalle" aria-label="Agregar detalle" onclick="openAntennaDetails('${eq.id}', true)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button><button class="ant-icon-btn link" title="Nodos vinculados" aria-label="Nodos vinculados" onclick="openAntennaNodeLinks('${eq.id}')"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg></button><button class="ant-icon-btn edit" title="Editar antena" aria-label="Editar antena" onclick="editAntenna('${eq.id}')"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="ant-icon-btn delete" title="${userHasRole('administrador','admin') ? 'Eliminar' : (deleteReq ? 'Solicitud enviada' : 'Solicitar baja')}" aria-label="Eliminar antena" onclick="deleteAntenna('${eq.id}')"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6"/></svg></button></div></article>`;
+    const isBalancer = typeof isBalancerEquipment === 'function' ? isBalancerEquipment(eq) : /^B-/i.test(String(eq.name || '').trim());
+    const hasBalancerPhotos = isBalancer && Array.isArray(eq.balancerPorts) && eq.balancerPorts.some(p => p && (p.frontPhoto || p.backPhoto));
+    const towerSummary = typeof getTowerMaterialShortSummary === 'function' ? getTowerMaterialShortSummary(eq) : '';
+    const hasTowerData = !!(eq.towerSections || eq.towerRadios || eq.towerBatteries || eq.towerPanels || eq.towerExtraNotes || eq.towerMaterialNotes || (Array.isArray(eq.towerMaterialPhotos) && eq.towerMaterialPhotos.length) || hasBalancerPhotos);
+    const balancerBadge = isBalancer ? `<span class="badge balancer-badge" style="background:#ede9fe;color:#6d28d9;border:1px solid #c4b5fd;font-size:10px;padding:2px 7px;margin-left:6px;vertical-align:middle;">⚖️ Balanceador</span>` : '';
+    return `<article class="entity-card antenna-compact-card ${st.key}"><div class="entity-title"><div><h3 style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">${antennaEscape(eq.name || 'Antena')}${balancerBadge}</h3><div class="entity-sub">${antennaEscape(getZoneLabel(eq.region))}</div></div><span class="badge" style="background:${st.color}22;color:${st.color};border-color:${st.color}55">${st.label}</span></div><div class="meta-list antenna-compact-meta"><div class="meta-row"><span>Coordenadas</span><strong>${antennaEscape(`${Number(eq.lat).toFixed(6)}, ${Number(eq.lng).toFixed(6)}`)}</strong></div><div class="meta-row"><span>Detalles pendientes</span><strong>${details.length}</strong></div><div class="meta-row tower-summary-row" style="cursor:pointer;" onclick="openTowerMaterialModal('${eq.id}')" title="Clic para ver o registrar ${isBalancer ? 'inventario de torre y módems por puerto MikroTik' : 'material de torre'}"><span>${isBalancer ? 'Torre / MikroTik' : 'Torre'}</span><strong style="color:${(hasTowerData || isBalancer) ? '#0284c7' : '#94a3b8'};font-weight:600;font-size:12px;">${antennaEscape((hasTowerData || isBalancer) ? towerSummary : 'Sin registrar')} ✏️</strong></div></div><div class="antenna-icon-actions"><button class="ant-icon-btn tower" title="${isBalancer ? 'Inventario de torre y módems por puerto MikroTik' : 'Material e infraestructura de torre'}" aria-label="Material de torre" onclick="openTowerMaterialModal('${eq.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M4 22h16M7 17h10M8 12h8M9 7h6M6 22l6-19 6 19"/></svg></button><button class="ant-icon-btn primary" title="Ver detalles" aria-label="Ver detalles" onclick="openAntennaDetails('${eq.id}')"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button><button class="ant-icon-btn add" title="Agregar detalle" aria-label="Agregar detalle" onclick="openAntennaDetails('${eq.id}', true)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></button><button class="ant-icon-btn link" title="Nodos vinculados" aria-label="Nodos vinculados" onclick="openAntennaNodeLinks('${eq.id}')"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg></button><button class="ant-icon-btn edit" title="Editar antena" aria-label="Editar antena" onclick="editAntenna('${eq.id}')"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="ant-icon-btn delete" title="${userHasRole('administrador','admin') ? 'Eliminar' : (deleteReq ? 'Solicitud enviada' : 'Solicitar baja')}" aria-label="Eliminar antena" onclick="deleteAntenna('${eq.id}')"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6"/></svg></button></div></article>`;
   }).join('')}</div>${renderAntennaPagination(total, rangeStart, rangeEnd, totalPages)}`;
   wrap.querySelectorAll('.ant-icon-btn.link').forEach(button => {
     button.title = 'Pueblos vinculados';
@@ -376,7 +384,8 @@ function openAntennaDetails(id, focusAdd = false) {
   const zone = document.getElementById('ant-detail-zone');
   if (zone) zone.innerHTML = REGS.map(r => `<option value="${r.id}">${r.n}</option>`).join('');
   const links = document.getElementById('ant-detail-links');
-  if (links) links.innerHTML = `<div>${antennaEscape(getEquipmentRelationLabel(id))}</div>`;
+  const isBalancer = typeof isBalancerEquipment === 'function' ? isBalancerEquipment(antenna) : /^B-/i.test(String(antenna.name || '').trim());
+  if (links) links.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div>${antennaEscape(getEquipmentRelationLabel(id))}</div><button type="button" class="btn bsm bg2 ant-tower-mat-pill" onclick="openTowerMaterialModal('${id}')" style="display:inline-flex;align-items:center;gap:4px;">🗼 ${isBalancer ? 'Inventario de torre y puertos MikroTik' : 'Material de torre'}</button></div>`;
   document.getElementById('ant-detail-title').textContent = `Detalles · ${antenna.name}`;
   document.getElementById('ant-detail-sub').textContent = `${getZoneLabel(antenna.region)} · Estado por prioridad: ${st.label}`;
   resetAntennaDetailForm();
@@ -881,13 +890,17 @@ async function addNodeToAntenna(nodeId) {
   const node = (state.nodes || []).find(n => n.id === nodeId && !n.deletedAt);
   if (!eq || !node) return;
 
-  if (!Array.isArray(eq.linkedNodeIds)) eq.linkedNodeIds = [];
+  if (!Array.isArray(eq.linkedNodeIds)) eq.linkedNodeIds = getEquipmentLinkedNodeIds(eq.id);
 
   // Regla estricta institucional: Un pueblo solo puede asignarse a una antena
   // Si ya estaba asignado a otra antena, desvincularlo de la antena previa
-  const otherAntenna = (state.equipment || []).find(item => item.id !== eq.id && Array.isArray(item.linkedNodeIds) && item.linkedNodeIds.includes(nodeId));
-  if (otherAntenna) {
-    otherAntenna.linkedNodeIds = otherAntenna.linkedNodeIds.filter(id => id !== nodeId);
+  const otherAntennas = (state.equipment || []).filter(item => item.id !== eq.id && !item.deletedAt && (
+    (Array.isArray(item.linkedNodeIds) && item.linkedNodeIds.includes(nodeId)) ||
+    getEquipmentLinkedNodeIds(item.id).includes(nodeId)
+  ));
+  for (const otherAntenna of otherAntennas) {
+    const prevOtherIds = getEquipmentLinkedNodeIds(otherAntenna.id);
+    otherAntenna.linkedNodeIds = prevOtherIds.filter(id => id !== nodeId);
     setUpdatedAudit(otherAntenna, `desvinculó nodo ${getNodeLabel(node)} (reasignado a ${eq.name})`);
     await saveRecord('equipment', otherAntenna).catch(() => {});
   }
@@ -906,6 +919,7 @@ async function addNodeToAntenna(nodeId) {
   node.equipmentId = eq.id;
   node.equipmentName = eq.name || '';
   await saveRecord('nodes', node).catch(() => {});
+  try { localStorage.removeItem('netops_last_good_state_v1:map'); } catch (e) {}
 
   document.getElementById('ant-node-link-search').value = '';
   const menu = document.getElementById('ant-node-link-suggestions');
@@ -918,10 +932,11 @@ async function addNodeToAntenna(nodeId) {
 
 async function removeNodeFromAntenna(nodeId) {
   const eq = (state.equipment || []).find(item => item.id === linkingAntennaId);
-  if (!eq || !Array.isArray(eq.linkedNodeIds)) return;
+  if (!eq) return;
+  const currentIds = getEquipmentLinkedNodeIds(eq.id);
   const node = (state.nodes || []).find(n => n.id === nodeId);
-  const prevIds = [...eq.linkedNodeIds];
-  eq.linkedNodeIds = eq.linkedNodeIds.filter(id => id !== nodeId);
+  const prevIds = Array.isArray(eq.linkedNodeIds) ? [...eq.linkedNodeIds] : [...currentIds];
+  eq.linkedNodeIds = currentIds.filter(id => id !== nodeId);
   setUpdatedAudit(eq, `quitó nodo ${node ? getNodeLabel(node) : nodeId}`);
   const saved = await saveRecord('equipment', eq);
   if (!saved) {
@@ -934,6 +949,7 @@ async function removeNodeFromAntenna(nodeId) {
     node.equipmentName = '';
     await saveRecord('nodes', node).catch(() => {});
   }
+  try { localStorage.removeItem('netops_last_good_state_v1:map'); } catch (e) {}
   renderAntennaNodeLinks();
   if (currentDetailAntennaId === eq.id) refreshAntennaDetailRelationsUI('equipment');
   renderAntenas();

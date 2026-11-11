@@ -209,7 +209,11 @@ function OM(id) {
 
 function CM(id) {
     const modal = document.getElementById(id);
-    if (modal) modal.classList.remove('open');
+    if (modal) {
+        modal.classList.remove('open');
+        modal.style.removeProperty('display');
+        modal.style.removeProperty('z-index');
+    }
 }
 
 let adminDetailCompletionContext = null;
@@ -812,6 +816,8 @@ function _injectActionConfirmStyles() {
                 max-height: none !important;
             }
         }
+        #action-confirm-mo:not(.open),
+        #action-prompt-mo:not(.open) { display:none !important; }
         #action-confirm-mo.open,
         #action-prompt-mo.open { display:flex !important; animation: acmo-fadein .18s ease; }
         @keyframes acmo-fadein { from { opacity:0; } to { opacity:1; } }
@@ -922,6 +928,26 @@ function _injectActionConfirmStyles() {
         .action-confirm-actions { grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr; gap:16px; width:100%; margin-top:2px; padding-top:18px; border-top:1px solid #e2eaf2; }
         .action-confirm-actions .btn { max-width:none; min-height:50px; border-radius:11px; }
         @media(max-width:560px){.action-confirm-card{grid-template-columns:58px minmax(0,1fr);padding:20px}.action-confirm-icon-wrap{width:56px;height:56px}.action-confirm-actions{grid-template-columns:1fr}}
+        #material-signature-mo {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100vw !important;
+            height: 100dvh !important;
+            z-index: 100005 !important;
+            display: none !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background: rgba(15, 23, 42, 0.65) !important;
+            backdrop-filter: blur(4px) !important;
+            padding: 16px !important;
+            box-sizing: border-box !important;
+        }
+        #material-signature-mo:not(.open) { display: none !important; }
+        #material-signature-mo.open { display: flex !important; }
+        .material-signature-dialog { width: min(520px, calc(100vw - 24px)) !important; max-width: 520px !important; background: #ffffff !important; border-radius: 18px !important; padding: 16px 18px !important; box-sizing: border-box !important; box-shadow: 0 20px 50px rgba(15, 23, 42, 0.35) !important; border: 1px solid #cbd5e1 !important; }
+        .signature-canvas-container { width: 100% !important; height: 190px !important; background: #ffffff !important; border: 2px dashed #94a3b8 !important; border-radius: 12px !important; position: relative !important; touch-action: none !important; user-select: none !important; -webkit-user-select: none !important; margin: 12px 0 !important; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02) !important; }
+        #material-signature-canvas { display: block !important; width: 100% !important; height: 100% !important; cursor: crosshair !important; touch-action: none !important; }
+        .nt { z-index: 200000 !important; }
     `;
     document.head.appendChild(style);
 }
@@ -1120,6 +1146,245 @@ function askReasonPrompt({
     });
 }
 
+/* ==========================================================================
+   MOTOR GLOBAL DE FIRMA DIGITAL (COMPATIBLE CON CELULAR / VISTA MÓVIL Y WEB)
+   ========================================================================== */
+var activeSignatureResolve = null;
+var signatureHasDrawn = false;
+var signatureCtx = null;
+var signatureCanvas = null;
+
+function ensureMaterialSignatureModal() {
+    _injectActionConfirmStyles();
+    let modal = document.getElementById('material-signature-mo');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'mo';
+    modal.id = 'material-signature-mo';
+    modal.innerHTML = `
+      <div class="md material-signature-dialog" style="max-width:520px;width:min(520px,calc(100vw - 24px));padding:16px;box-sizing:border-box;border-radius:18px;">
+        <div class="material-modal-head" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;">
+          <div>
+            <div class="mt2" id="signature-modal-title" style="font-size:17px;font-weight:800;color:#0f172a;line-height:1.2;">Firma Digital de Conformidad</div>
+            <small id="signature-modal-subtitle" style="font-size:12px;color:#64748b;display:block;margin-top:3px;">Dibuja tu firma en el recuadro para validar el oficio.</small>
+          </div>
+          <button type="button" class="btn bsm bgh" onclick="cancelSignaturePrompt()" style="min-width:32px;height:32px;padding:0;font-size:16px;">✕</button>
+        </div>
+        <div id="signature-signer-badge" style="margin:8px 0;padding:8px 12px;background:#f1f5f9;border-radius:8px;font-size:12px;color:#334155;">
+          Firmante: <strong id="signature-modal-signer-name">Usuario</strong> (<span id="signature-modal-signer-role">Responsable</span>)
+        </div>
+        <div class="signature-canvas-container">
+          <canvas id="material-signature-canvas" width="480" height="190"></canvas>
+          <div class="signature-guideline" style="position:absolute;bottom:35px;left:20px;right:20px;border-bottom:1.5px solid #cbd5e1;pointer-events:none;text-align:right;color:#94a3b8;font-size:11px;">
+            Línea de firma digital ✕
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button type="button" class="btn bsm bgh" onclick="clearSignatureCanvas()">🧹 Limpiar firma</button>
+          <div style="display:flex;gap:8px;">
+            <button type="button" class="btn bsm bgh" onclick="cancelSignaturePrompt()">Cancelar</button>
+            <button type="button" class="btn bsm bg2" id="signature-confirm-btn" onclick="confirmSignaturePrompt()" style="font-weight:700">✓ Confirmar y Firmar</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function initSignatureCanvas() {
+    signatureCanvas = document.getElementById('material-signature-canvas');
+    if (!signatureCanvas) return;
+    signatureCtx = signatureCanvas.getContext('2d');
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = signatureCanvas.getBoundingClientRect();
+    const width = rect.width > 0 ? rect.width : 480;
+    const height = rect.height > 0 ? rect.height : 190;
+    signatureCanvas.width = Math.round(width * dpr);
+    signatureCanvas.height = Math.round(height * dpr);
+    signatureCtx.setTransform(1, 0, 0, 1, 0, 0);
+    signatureCtx.scale(dpr, dpr);
+
+    signatureCtx.lineWidth = 2.5;
+    signatureCtx.lineCap = 'round';
+    signatureCtx.lineJoin = 'round';
+    signatureCtx.strokeStyle = '#0f172a';
+
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    function getCoords(e) {
+        const cRect = signatureCanvas.getBoundingClientRect();
+        const touch = (e.touches && e.touches[0]) ? e.touches[0] : ((e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : e);
+        const clientX = touch.clientX !== undefined ? touch.clientX : (touch.pageX - (window.scrollX || 0));
+        const clientY = touch.clientY !== undefined ? touch.clientY : (touch.pageY - (window.scrollY || 0));
+        const cssW = cRect.width || (signatureCanvas.width / dpr);
+        const cssH = cRect.height || (signatureCanvas.height / dpr);
+        const scaleX = ((signatureCanvas.width / dpr) / cssW) || 1;
+        const scaleY = ((signatureCanvas.height / dpr) / cssH) || 1;
+        return {
+            x: (clientX - cRect.left) * scaleX,
+            y: (clientY - cRect.top) * scaleY
+        };
+    }
+
+    function startDrawing(e) {
+        if (e.cancelable) e.preventDefault();
+        isDrawing = true;
+        const coords = getCoords(e);
+        lastX = coords.x;
+        lastY = coords.y;
+    }
+
+    function draw(e) {
+        if (!isDrawing) return;
+        if (e.cancelable) e.preventDefault();
+        const coords = getCoords(e);
+        signatureCtx.beginPath();
+        signatureCtx.moveTo(lastX, lastY);
+        signatureCtx.lineTo(coords.x, coords.y);
+        signatureCtx.stroke();
+        lastX = coords.x;
+        lastY = coords.y;
+        signatureHasDrawn = true;
+    }
+
+    function stopDrawing(e) {
+        if (isDrawing) {
+            isDrawing = false;
+        }
+    }
+
+    if (window.PointerEvent) {
+        signatureCanvas.onpointerdown = (e) => {
+            if (e.isPrimary === false) return;
+            try { signatureCanvas.setPointerCapture(e.pointerId); } catch(err) {}
+            startDrawing(e);
+        };
+        signatureCanvas.onpointermove = (e) => {
+            if (e.isPrimary === false) return;
+            draw(e);
+        };
+        signatureCanvas.onpointerup = (e) => {
+            try { signatureCanvas.releasePointerCapture(e.pointerId); } catch(err) {}
+            stopDrawing(e);
+        };
+        signatureCanvas.onpointercancel = (e) => {
+            try { signatureCanvas.releasePointerCapture(e.pointerId); } catch(err) {}
+            stopDrawing(e);
+        };
+    } else {
+        signatureCanvas.ontouchstart = startDrawing;
+        signatureCanvas.ontouchmove = draw;
+        signatureCanvas.ontouchend = stopDrawing;
+        signatureCanvas.ontouchcancel = stopDrawing;
+        signatureCanvas.onmousedown = startDrawing;
+        signatureCanvas.onmousemove = draw;
+        signatureCanvas.onmouseup = stopDrawing;
+    }
+
+    window.removeEventListener('pointerup', stopDrawing);
+    window.addEventListener('pointerup', stopDrawing);
+}
+
+function clearSignatureCanvas() {
+    if (!signatureCanvas) signatureCanvas = document.getElementById('material-signature-canvas');
+    if (!signatureCanvas) return;
+    const ctx = signatureCanvas.getContext('2d');
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+    ctx.restore();
+    signatureHasDrawn = false;
+}
+
+function promptDigitalSignature({ title, subtitle, signerName, role } = {}) {
+    return new Promise(resolve => {
+        const modal = ensureMaterialSignatureModal();
+        activeSignatureResolve = resolve;
+        signatureHasDrawn = false;
+
+        const titleEl = document.getElementById('signature-modal-title');
+        const subEl = document.getElementById('signature-modal-subtitle');
+        const signerEl = document.getElementById('signature-modal-signer-name');
+        const roleEl = document.getElementById('signature-modal-signer-role');
+
+        if (titleEl) titleEl.textContent = title || 'Firma Digital de Conformidad';
+        if (subEl) subEl.textContent = subtitle || 'Dibuja tu firma en el recuadro para validar.';
+        if (signerEl) signerEl.textContent = signerName || 'Usuario';
+        if (roleEl) roleEl.textContent = role || 'Responsable';
+
+        if (typeof OM === 'function') {
+            OM('material-signature-mo');
+        } else {
+            modal?.classList.add('open');
+        }
+
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                initSignatureCanvas();
+                clearSignatureCanvas();
+            }, 40);
+        });
+    });
+}
+
+function confirmSignaturePrompt() {
+    if (!signatureHasDrawn) {
+        if (typeof notify === 'function') {
+            notify('Por favor dibuja tu firma antes de confirmar.', 'warn');
+        } else {
+            alert('Por favor dibuja tu firma antes de confirmar.');
+        }
+        return;
+    }
+    const canvas = document.getElementById('material-signature-canvas');
+    const signatureData = canvas ? canvas.toDataURL('image/png') : '';
+    const signerName = document.getElementById('signature-modal-signer-name')?.textContent || 'Usuario';
+    const signerRole = document.getElementById('signature-modal-signer-role')?.textContent || 'Responsable';
+
+    if (typeof CM === 'function') {
+        CM('material-signature-mo');
+    } else {
+        document.getElementById('material-signature-mo')?.classList.remove('open');
+    }
+
+    if (typeof activeSignatureResolve === 'function') {
+        activeSignatureResolve({
+            signature: signatureData,
+            signerName,
+            role: signerRole,
+            timestamp: new Date().toISOString()
+        });
+        activeSignatureResolve = null;
+    }
+}
+
+function cancelSignaturePrompt() {
+    if (typeof CM === 'function') {
+        CM('material-signature-mo');
+    } else {
+        document.getElementById('material-signature-mo')?.classList.remove('open');
+    }
+    if (typeof activeSignatureResolve === 'function') {
+        activeSignatureResolve(null);
+        activeSignatureResolve = null;
+    }
+}
+
+window.ensureMaterialSignatureModal = ensureMaterialSignatureModal;
+window.initSignatureCanvas = initSignatureCanvas;
+window._systemInitSignatureCanvas = initSignatureCanvas;
+window.clearSignatureCanvas = clearSignatureCanvas;
+window._systemClearSignatureCanvas = clearSignatureCanvas;
+window.promptDigitalSignature = promptDigitalSignature;
+window._systemPromptDigitalSignature = promptDigitalSignature;
+window.confirmSignaturePrompt = confirmSignaturePrompt;
+window._systemConfirmSignaturePrompt = confirmSignaturePrompt;
+window.cancelSignaturePrompt = cancelSignaturePrompt;
+window._systemCancelSignaturePrompt = cancelSignaturePrompt;
+
 function closeTopModal() {
     const openModals = Array.from(document.querySelectorAll('.mo.open'));
     if (!openModals.length) return false;
@@ -1150,6 +1415,10 @@ function closeTopModal() {
         } else {
             modal.classList.remove('open');
         }
+        return true;
+    }
+    if (modal.id === 'material-signature-mo') {
+        cancelSignaturePrompt();
         return true;
     }
     if (modal.id === 'plan-assignment-mo' && typeof resolvePlanAssignment === 'function') {
@@ -1397,13 +1666,13 @@ function setupResponsiveMenu() {
                 if (linkHref.includes('detailKind=network')) {
                     e.preventDefault();
                     if (typeof selectOrderDetailKind === 'function') {
-                        selectOrderDetailKind('network');
+                        selectOrderDetailKind('network', true);
                     }
                     updateActiveNavLink();
                 } else if (linkHref.includes('detailKind=physical')) {
                     e.preventDefault();
                     if (typeof selectOrderDetailKind === 'function') {
-                        selectOrderDetailKind('physical');
+                        selectOrderDetailKind('physical', true);
                     }
                     updateActiveNavLink();
                 }
@@ -1508,6 +1777,21 @@ function applyPagePermissions() {
    ========================================================================== */
 
 const NETOPS_INBOX_STORAGE_KEY = 'netops_network_notifications_inbox_v1';
+const NETOPS_ACK_DELETIONS_KEY = 'netops_acknowledged_deletion_reqs_v1';
+
+function getAcknowledgedDeletionIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(NETOPS_ACK_DELETIONS_KEY) || '[]'));
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function setAcknowledgedDeletionIds(ids) {
+  try {
+    localStorage.setItem(NETOPS_ACK_DELETIONS_KEY, JSON.stringify([...ids]));
+  } catch (e) {}
+}
 
 function getStoredNotificationsInbox() {
   try {
@@ -1525,12 +1809,27 @@ function setStoredNotificationsInbox(items) {
 
 function addNotificationToInbox({ id, title, message, type, orderId = '', eventId = '', url = '', createdAt = new Date().toISOString() }) {
   const inbox = getStoredNotificationsInbox();
+  const isPhysical = type === 'physical' || type === 'sent_to_physical';
+  const computedUrl = url || (orderId ? `/ordenes.html?detailKind=${isPhysical ? 'physical' : 'network'}&orderId=${encodeURIComponent(orderId)}` : '');
   // Evitar duplicados idénticos; en mensajes de chat permitir múltiples notificaciones usando eventId único por mensaje
   const existingIdx = inbox.findIndex(x =>
     (id && x.id === id) ||
     (eventId ? x.eventId === eventId : (x.orderId === orderId && x.type === type))
   );
   if (existingIdx >= 0) {
+    inbox[existingIdx] = {
+      ...inbox[existingIdx],
+      title,
+      message,
+      type,
+      orderId,
+      eventId,
+      url: computedUrl || inbox[existingIdx].url || '',
+      unread: true,
+      createdAt
+    };
+    setStoredNotificationsInbox(inbox);
+    renderNotificationCenter();
     return;
   }
   inbox.unshift({
@@ -1540,7 +1839,7 @@ function addNotificationToInbox({ id, title, message, type, orderId = '', eventI
     type,
     orderId,
     eventId,
-    url,
+    url: computedUrl,
     unread: true,
     createdAt
   });
@@ -1572,13 +1871,42 @@ function markNotificationAsRead(id, targetUrl = '') {
     setStoredNotificationsInbox(inbox);
     renderNotificationCenter();
   }
-  if (item?.orderId && window.location.pathname.includes('ordenes') && typeof openOrderTechnicianReport === 'function') {
-    CM('notification-panel-mo');
-    openOrderTechnicianReport(item.orderId);
-    return;
+  let orderId = item?.orderId || '';
+  const rawDest = targetUrl || item?.url || '';
+  if (!orderId && rawDest) {
+    try {
+      const u = new URL(rawDest, window.location.origin);
+      orderId = u.searchParams.get('orderId') || u.searchParams.get('id') || '';
+    } catch (e) {
+      const m = String(rawDest).match(/[?&](?:orderId|id)=([^&#]+)/i);
+      if (m) orderId = decodeURIComponent(m[1]);
+    }
   }
-  if (targetUrl) {
-    window.location.href = targetUrl;
+  const isPhysical = item?.type === 'physical' || item?.type === 'sent_to_physical' || item?.isPhysical;
+  const targetKind = isPhysical ? 'physical' : 'network';
+
+  if (window.location.pathname.includes('ordenes')) {
+    CM('notification-panel-mo');
+    if (orderId && typeof openOrderTechnicianReport === 'function') {
+      try {
+        const curUrl = new URL(window.location.href);
+        curUrl.searchParams.set('detailKind', targetKind);
+        curUrl.searchParams.delete('orderId');
+        curUrl.searchParams.delete('id');
+        window.history.replaceState({}, '', curUrl);
+      } catch (e) {}
+      openOrderTechnicianReport(orderId);
+      return;
+    }
+  }
+
+  let dest = rawDest;
+  if (!dest && orderId) {
+    dest = `/ordenes.html?detailKind=${isPhysical ? 'physical' : 'network'}&orderId=${encodeURIComponent(orderId)}`;
+  }
+  if (dest) {
+    CM('notification-panel-mo');
+    window.location.href = dest;
   }
 }
 
@@ -1586,7 +1914,25 @@ function markAllNotificationsAsRead() {
   const inbox = getStoredNotificationsInbox();
   inbox.forEach(x => { x.unread = false; });
   setStoredNotificationsInbox(inbox);
+
+  // Marcar como reconocidas las solicitudes de eliminación actuales para que el contador no se quede trabado
+  try {
+    const ackIds = getAcknowledgedDeletionIds();
+    const delReqs = (typeof getPendingDeletionRequests === 'function') ? getPendingDeletionRequests() : [];
+    delReqs.forEach(r => { if (r?.id) ackIds.add(r.id); });
+    setAcknowledgedDeletionIds(ackIds);
+  } catch (e) {}
+
+  // Quitar puntos rojos de chats no leídos en la tabla si existen
+  try {
+    document.querySelectorAll('.net-unread-chat-dot').forEach(el => el.remove());
+  } catch (e) {}
+
   renderNotificationCenter();
+
+  if (typeof notify === 'function') {
+    notify('Todas las notificaciones han sido marcadas como leídas.', 'ok');
+  }
 }
 
 function ensureNotificationCenter() {
@@ -1605,7 +1951,11 @@ function ensureNotificationCenter() {
     } else {
         btn.classList.toggle('technician-bell', isTecnico);
     }
-    if (document.querySelector('.tech-bottom-nav') || document.body.classList.contains('plan-technician-view') || (document.documentElement.dataset.role === 'tecnico') || (document.body.classList.contains('planificar-page') && isTecnico)) {
+    btn.onclick = openNotificationPanel;
+    btn.style.setProperty('pointer-events', 'auto', 'important');
+    btn.style.setProperty('cursor', 'pointer', 'important');
+
+    if (document.querySelector('.tech-bottom-nav') || document.body.classList.contains('plan-technician-view') || (document.body.classList.contains('planificar-page') && isTecnico && window.matchMedia && window.matchMedia('(max-width: 760px)').matches)) {
         btn.style.setProperty('display', 'none', 'important');
         btn.style.setProperty('visibility', 'hidden', 'important');
         btn.style.setProperty('pointer-events', 'none', 'important');
@@ -1615,6 +1965,7 @@ function ensureNotificationCenter() {
         const modal = document.createElement('div');
         modal.id = 'notification-panel-mo';
         modal.className = 'mo';
+        const initVolPct = Math.round((typeof getNotificationVolume === 'function' ? getNotificationVolume() : 0.45) * 100);
         modal.innerHTML = `
             <div class="md notification-panel" role="dialog" aria-modal="true" style="max-width:620px;">
                 <div class="modal-head" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
@@ -1623,9 +1974,18 @@ function ensureNotificationCenter() {
                         <p id="notification-panel-sub" style="margin:0;color:#64748b;font-size:12px;">${isTecnico ? 'Avisos de material y resúmenes de tu jornada.' : 'Avisos de detalles de red y actividades en tiempo real.'}</p>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center;">
-                        <button class="btn bgh" type="button" style="font-size:11px;padding:4px 9px;" onclick="markAllNotificationsAsRead()">Marcar leídas</button>
+                        <button class="btn bgh" id="btn-mark-all-notifications-read" type="button" style="font-size:11px;padding:4px 9px;" onclick="markAllNotificationsAsRead()">Marcar leídas</button>
                         <button class="btn bgh" type="button" style="font-size:11px;padding:4px 9px;" onclick="CM('notification-panel-mo')">Cerrar</button>
                     </div>
+                </div>
+                <div class="notification-volume-bar" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;margin:10px 0 12px;">
+                    <span style="font-size:12px;display:inline-flex;align-items:center;gap:5px;color:#334155;font-weight:700;white-space:nowrap;">
+                        <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+                        Volumen de alertas:
+                    </span>
+                    <input type="range" id="netops-notif-volume-slider" min="10" max="100" step="5" value="${initVolPct}" style="flex:1;min-width:100px;accent-color:#0874e8;cursor:pointer;" oninput="updateNotificationVolume(this.value)">
+                    <span id="netops-notif-volume-label" style="font-size:12px;font-weight:800;color:#0874e8;min-width:34px;text-align:right;">${initVolPct}%</span>
+                    <button type="button" class="btn bsm" style="font-size:11px;padding:3px 9px;min-height:26px;border-radius:6px;" onclick="testNotificationVolume()" title="Probar sonido actual">Probar</button>
                 </div>
                 <div id="notification-list" class="notification-list" style="max-height:60vh;overflow-y:auto;padding-right:4px;"></div>
             </div>`;
@@ -1650,8 +2010,11 @@ function renderNotificationCenter() {
     const isTecnico = typeof userHasRole === 'function' && userHasRole('tecnico');
     if (bell) {
         bell.classList.toggle('technician-bell', isTecnico);
+        bell.onclick = openNotificationPanel;
+        bell.style.setProperty('pointer-events', 'auto', 'important');
+        bell.style.setProperty('cursor', 'pointer', 'important');
     }
-    if (document.querySelector('.tech-bottom-nav') || document.body.classList.contains('plan-technician-view') || (document.documentElement.dataset.role === 'tecnico') || (document.body.classList.contains('planificar-page') && isTecnico)) {
+    if (document.querySelector('.tech-bottom-nav') || document.body.classList.contains('plan-technician-view') || (document.body.classList.contains('planificar-page') && isTecnico && window.matchMedia && window.matchMedia('(max-width: 760px)').matches)) {
         if (bell) {
             bell.style.setProperty('display', 'none', 'important');
             bell.style.setProperty('visibility', 'hidden', 'important');
@@ -1662,14 +2025,23 @@ function renderNotificationCenter() {
 
     const isAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
     const delReqs = (!isTecnico && isAdmin && typeof getPendingDeletionRequests === 'function') ? getPendingDeletionRequests() : [];
+    const ackDeletionIds = getAcknowledgedDeletionIds();
+    const unreadDelReqs = delReqs.filter(r => !ackDeletionIds.has(r.id));
     const rawInbox = getStoredNotificationsInbox();
     // Para técnicos: filtrar estrictamente notificaciones de material y productividad; NO mostrar reportes de red
     const inbox = isTecnico
         ? rawInbox.filter(x => x.isMaterial || x.category === 'material' || x.type === 'material' || x.isProductivity || x.type === 'productivity')
         : rawInbox;
     const unreadInbox = inbox.filter(x => x.unread);
+    const volSlider = document.getElementById('netops-notif-volume-slider');
+    const volLabel = document.getElementById('netops-notif-volume-label');
+    if (volSlider && volLabel && typeof getNotificationVolume === 'function') {
+        const curPct = Math.round(getNotificationVolume() * 100);
+        volSlider.value = curPct;
+        volLabel.textContent = `${curPct}%`;
+    }
 
-    const totalUnread = delReqs.length + unreadInbox.length;
+    const totalUnread = unreadDelReqs.length + unreadInbox.length;
 
     if (count) {
         count.textContent = totalUnread > 9 ? '+9' : String(totalUnread);
@@ -1926,6 +2298,7 @@ const DETAIL_CATEGORIES_BY_KIND = {
     ['otro', 'Otro']
   ],
   network: [
+    ['sin_internet', 'Sin servicio de internet'],
     ['bajo_rendimiento', 'Lentitud de la red'],
     ['intermitencia', 'Intermitencia'],
     ['fallo_fichas', 'Aislado'],
@@ -2165,32 +2538,33 @@ function _injectNetworkNotificationStyles() {
   style.textContent = `
     .netops-right-toasts {
       position: fixed;
-      top: 24px;
-      right: 24px;
+      top: 18px;
+      right: 20px;
       z-index: 2147483640;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      width: min(390px, calc(100vw - 32px));
+      gap: 8px;
+      width: min(340px, calc(100vw - 32px));
       pointer-events: none;
     }
     .netops-right-toast {
       pointer-events: auto;
       position: relative;
-      background: #ffffff;
-      border-radius: 14px;
-      padding: 14px 16px;
-      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16), 0 2px 8px rgba(15, 23, 42, 0.08);
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(8px);
+      border-radius: 11px;
+      padding: 10px 14px;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.10), 0 1px 3px rgba(15, 23, 42, 0.05);
       border: 1px solid #e2e8f0;
-      border-left: 5px solid #2563eb;
+      border-left: 4px solid #2563eb;
       display: grid;
       grid-template-columns: auto 1fr auto;
-      gap: 12px;
+      gap: 10px;
       align-items: start;
       cursor: pointer;
       transform: translateX(125%);
       opacity: 0;
-      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
       font-family: Inter, system-ui, -apple-system, sans-serif;
     }
     .netops-right-toast.is-visible {
@@ -2202,20 +2576,20 @@ function _injectNetworkNotificationStyles() {
       opacity: 0;
     }
     .netops-right-toast:hover {
-      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.22);
-      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
+      transform: translateY(-1px);
     }
     .netops-toast-icon {
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
       display: grid;
       place-items: center;
       flex-shrink: 0;
     }
     .netops-toast-icon svg {
-      width: 20px;
-      height: 20px;
+      width: 17px;
+      height: 17px;
       stroke: currentColor;
       stroke-width: 2.1;
       fill: none;
@@ -2324,6 +2698,42 @@ function _injectNetworkNotificationStyles() {
   document.head.appendChild(style);
 }
 
+function getNotificationVolume() {
+  if (typeof window === 'undefined') return 0.45;
+  try {
+    const raw = localStorage.getItem('netops_notification_volume');
+    if (raw !== null) {
+      const parsed = parseFloat(raw);
+      if (Number.isFinite(parsed)) {
+        return Math.min(1, Math.max(0.1, parsed)); // Mínimo 10% (no se pueden desactivar)
+      }
+    }
+  } catch (e) {}
+  return 0.45; // Nivel suave y discreto predeterminado (45%)
+}
+
+function setNotificationVolume(val) {
+  const num = typeof val === 'number' ? (val > 1 ? val / 100 : val) : (parseFloat(val) / 100);
+  const clamped = Math.min(1, Math.max(0.1, Number.isFinite(num) ? num : 0.45));
+  try {
+    localStorage.setItem('netops_notification_volume', String(clamped));
+  } catch (e) {}
+  const slider = document.getElementById('netops-notif-volume-slider');
+  const label = document.getElementById('netops-notif-volume-label');
+  const pct = Math.round(clamped * 100);
+  if (slider && Number(slider.value) !== pct) slider.value = pct;
+  if (label) label.textContent = `${pct}%`;
+  return clamped;
+}
+
+function updateNotificationVolume(sliderVal) {
+  setNotificationVolume(sliderVal);
+}
+
+function testNotificationVolume() {
+  playSubtleNotificationTone();
+}
+
 function getNetopsAudioContext() {
   if (!_netopsAudioCtx && (typeof window !== 'undefined') && (window.AudioContext || window.webkitAudioContext)) {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -2355,24 +2765,26 @@ if (typeof window !== 'undefined') {
 
 /**
  * Tono sutil armónico generado mediante Web Audio API (dos notas suaves y cálidas).
+ * Respeta el volumen configurable sin permitir desactivación.
  */
 function playSubtleNotificationTone() {
   try {
     const ctx = getNetopsAudioContext();
     if (!ctx) return;
+    const vol = typeof getNotificationVolume === 'function' ? getNotificationVolume() : 0.45;
 
     const play = () => {
       try {
         const now = ctx.currentTime;
 
         // Tono formal WifiMex: E5 (659.25Hz) -> G#5 (830.61Hz) -> B5 (987.77Hz) con overtone cristalino E6 (1318.51Hz)
-        // Duración ~0.68s, volumen audible (~0.24) limpio, distinguible y formal
+        // Duración ~0.68s, volumen proporcional al ajuste de usuario (mínimo 10%, no desactivable)
         const osc1 = ctx.createOscillator();
         const gain1 = ctx.createGain();
         osc1.type = 'sine';
         osc1.frequency.setValueAtTime(659.25, now);
         gain1.gain.setValueAtTime(0.0001, now);
-        gain1.gain.linearRampToValueAtTime(0.18, now + 0.015);
+        gain1.gain.linearRampToValueAtTime(0.18 * vol, now + 0.015);
         gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
         osc1.connect(gain1);
         gain1.connect(ctx.destination);
@@ -2384,7 +2796,7 @@ function playSubtleNotificationTone() {
         osc2.type = 'sine';
         osc2.frequency.setValueAtTime(830.61, now + 0.10);
         gain2.gain.setValueAtTime(0.0001, now + 0.10);
-        gain2.gain.linearRampToValueAtTime(0.22, now + 0.12);
+        gain2.gain.linearRampToValueAtTime(0.22 * vol, now + 0.12);
         gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.54);
         osc2.connect(gain2);
         gain2.connect(ctx.destination);
@@ -2396,7 +2808,7 @@ function playSubtleNotificationTone() {
         osc3.type = 'sine';
         osc3.frequency.setValueAtTime(987.77, now + 0.20);
         gain3.gain.setValueAtTime(0.0001, now + 0.20);
-        gain3.gain.linearRampToValueAtTime(0.24, now + 0.22);
+        gain3.gain.linearRampToValueAtTime(0.24 * vol, now + 0.22);
         gain3.gain.exponentialRampToValueAtTime(0.0001, now + 0.68);
         osc3.connect(gain3);
         gain3.connect(ctx.destination);
@@ -2408,7 +2820,7 @@ function playSubtleNotificationTone() {
         osc4.type = 'sine';
         osc4.frequency.setValueAtTime(1318.51, now + 0.22);
         gain4.gain.setValueAtTime(0.0001, now + 0.22);
-        gain4.gain.linearRampToValueAtTime(0.11, now + 0.24);
+        gain4.gain.linearRampToValueAtTime(0.11 * vol, now + 0.24);
         gain4.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
         osc4.connect(gain4);
         gain4.connect(ctx.destination);
@@ -2447,9 +2859,24 @@ function showRightScreenNotification({
   type = 'info',
   url = '',
   orderId = '',
-  duration = 8500
+  duration = 5000
 } = {}) {
   const container = ensureRightNotificationContainer();
+
+  // Limitar a máximo 3 tarjetas visibles simultáneas para evitar apilamientos excesivos en pantalla
+  const existingToasts = container.querySelectorAll('.netops-right-toast:not([data-dismissing])');
+  if (existingToasts.length >= 3) {
+    for (let i = 0; i <= existingToasts.length - 3; i++) {
+      const oldest = existingToasts[i];
+      if (oldest) {
+        oldest.dataset.dismissing = '1';
+        oldest.classList.remove('is-visible');
+        oldest.classList.add('is-hiding');
+        setTimeout(() => oldest.remove(), 250);
+      }
+    }
+  }
+
   const toast = document.createElement('div');
   toast.className = `netops-right-toast netops-toast-${type}`;
   toast.setAttribute('role', 'alert');
@@ -2497,8 +2924,13 @@ function showRightScreenNotification({
       dismiss();
       return;
     }
-    if (url) {
-      window.location.href = url;
+    let targetUrl = url;
+    if (!targetUrl && orderId) {
+      const isPhysicalKind = type === 'sent_to_physical' || type === 'physical';
+      targetUrl = `/ordenes.html?detailKind=${isPhysicalKind ? 'physical' : 'network'}&orderId=${encodeURIComponent(orderId)}`;
+    }
+    if (targetUrl) {
+      window.location.href = targetUrl;
     }
   });
 
@@ -2545,7 +2977,7 @@ function requestNotificationPermissionOnce() {
 function initServiceWorker() {
   try {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
-    navigator.serviceWorker.register('/sw.js').then(() => {
+    navigator.serviceWorker.register('/sw.js', {updateViaCache:'none'}).then(() => {
       navigator.serviceWorker.addEventListener('message', (event) => {
         const data = event?.data;
         if (data && data.type === 'NETOPS_OPEN_NOTIFICATION_TARGET') {
@@ -2574,7 +3006,7 @@ function triggerDesktopNotification({ title, message, url = '', orderId = '', ev
         icon: logoUrl,
         badge: logoUrl,
         tag,
-        renotify: true,
+        renotify: false,
         requireInteraction: false,
         data: { url, orderId }
       };
@@ -2710,6 +3142,54 @@ function renderUserColorChip(name, userId = '') {
   return `<span class="user-color-chip" style="background-color:${color};"><span class="chip-dot"></span>${escapeHtml(name)}</span>`;
 }
 
+const NETWORK_SUMMARY_INTERVAL_MS = 30 * 60 * 1000;
+
+function publishNetworkSummary({eventKey = '', reminder = false, sound = true, desktop = true, force = false} = {}) {
+  const user = getCurrentUser();
+  const userKey = String(user?.id || user?.username || '');
+  if (!userKey) return;
+  const storageKey = 'netops_network_summary_v1:' + userKey;
+  const deliver = () => {
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}') || {}; } catch (e) {}
+    const now = Date.now();
+    const events = Object.fromEntries(Object.entries(saved.events || {}).filter(([,at]) => now - Number(at) < 86400000).slice(-199));
+    if (eventKey && events[eventKey]) return;
+    if (eventKey) events[eventKey] = now;
+    const persist = () => { try { localStorage.setItem(storageKey,JSON.stringify({...saved,events})); } catch (e) {} };
+    if (!saved.lastShownAt && reminder) {
+      // La primera consulta inicializa el reloj sin emitir avisos al recargar.
+      saved.lastShownAt = now;
+      persist();
+      return;
+    }
+    if ((saved.lastShownAt && now - saved.lastShownAt < NETWORK_SUMMARY_INTERVAL_MS) ||
+        (!force && now - _netopsSessionStartedAt < 8000)) {
+      persist();
+      return;
+    }
+    saved.lastShownAt = now;
+    persist();
+    const title = 'Revisa los detalles de redes';
+    const message = 'Tienes casos o mensajes pendientes. Abre Detalles de red para revisarlos.';
+    const url = '/ordenes.html?detailKind=network';
+    addNotificationToInbox({id:'network-summary-' + userKey,title,message,type:'network_summary',url});
+    const useDesktop = desktop && typeof Notification !== 'undefined' && Notification.permission === 'granted' &&
+      (document.hidden || !document.hasFocus() || !window.location.pathname.includes('ordenes'));
+    if (useDesktop) {
+      triggerDesktopNotification({title,message,url,eventId:'network-summary'});
+    } else {
+      if (sound) playSubtleNotificationTone();
+      showRightScreenNotification({title,message,type:'network_summary',url});
+    }
+  };
+  // Todas las pestañas comparten el mismo reloj y un solo turno de emisión.
+  if (typeof navigator !== 'undefined' && navigator.locks?.request) {
+    return navigator.locks.request(storageKey,deliver).catch(() => {});
+  }
+  return deliver();
+}
+
 function notifyNetworkDetailEvent({
   title,
   message,
@@ -2727,29 +3207,47 @@ function notifyNetworkDetailEvent({
   if (eventId ? lastTime > 0 : (!force && (now - lastTime < 60000))) {
     return;
   }
+
+  // Verificar persistencia entre pestañas y recargas
+  const user = (typeof getCurrentUser === 'function') ? getCurrentUser() : null;
+  const userKey = String(user?.id || user?.username || '');
+  const summaryStorageKey = 'netops_network_summary_v1:' + (userKey || 'global');
+  let savedSummary = {};
+  try { savedSummary = JSON.parse(localStorage.getItem(summaryStorageKey) || '{}') || {}; } catch (e) {}
+  const savedEvents = savedSummary.events || {};
+  if (eventId && (savedEvents[notifKey] || savedEvents[eventId])) {
+    return;
+  }
   _netopsRecentlyNotified.set(notifKey, now);
+  if (eventId) {
+    savedEvents[notifKey] = now;
+    savedEvents[eventId] = now;
+    try {
+      localStorage.setItem(summaryStorageKey, JSON.stringify({ ...savedSummary, events: savedEvents }));
+    } catch (e) {}
+  }
+
+  if (type === 'network_summary' || type === 'network_reminder') {
+    if (type !== 'network_reminder') {
+      addNotificationToInbox({
+        title,
+        message,
+        type,
+        orderId,
+        eventId,
+        url: orderId ? '/ordenes.html?detailKind=network&orderId=' + encodeURIComponent(orderId) : '/ordenes.html?detailKind=network'
+      });
+    }
+    publishNetworkSummary({ eventKey: eventId ? notifKey : '', sound, desktop, force });
+    return;
+  }
 
   const isPhysicalKind = type === 'sent_to_physical' || type === 'physical';
   const url = orderId
-    ? `ordenes.html?detailKind=${isPhysicalKind ? 'physical' : 'network'}&orderId=${encodeURIComponent(orderId)}`
-    : `ordenes.html?detailKind=${isPhysicalKind ? 'physical' : 'network'}`;
+    ? `/ordenes.html?detailKind=${isPhysicalKind ? 'physical' : 'network'}&orderId=${encodeURIComponent(orderId)}`
+    : `/ordenes.html?detailKind=${isPhysicalKind ? 'physical' : 'network'}`;
 
-  // 1. Sonido y tarjeta: suprimir en los primeros 6 segundos tras abrir o recargar la página a menos que sea forzado (evento en vivo)
-  const isSessionWarmingUp = (now - _netopsSessionStartedAt) < 6000;
-  if (!isSessionWarmingUp || force) {
-    if (sound) {
-      playSubtleNotificationTone();
-    }
-    showRightScreenNotification({
-      title,
-      message,
-      type,
-      url,
-      orderId
-    });
-  }
-
-  // 2. Guardar en el buzón persistente de la campana
+  // 1. Guardar en el buzón persistente de la campana
   addNotificationToInbox({
     title,
     message,
@@ -2760,16 +3258,38 @@ function notifyNetworkDetailEvent({
     createdAt: new Date().toISOString()
   });
 
-  // 3. Notificación nativa en tarjetas a la derecha de la pantalla del sistema operativo (aun fuera de la página o con navegador en segundo plano/minimizado)
-  const isOnOrdersPage = window.location.pathname.includes('ordenes');
-  if (desktop && (!isSessionWarmingUp || force) && (document.hidden || !document.hasFocus() || !isOnOrdersPage)) {
-    triggerDesktopNotification({
-      title,
-      message,
-      url,
-      orderId,
-      eventId
-    });
+  const isSessionWarmingUp = (now - _netopsSessionStartedAt) < 6000;
+  const isOnOrdersPage = (typeof window !== 'undefined' && window.location?.pathname?.includes('ordenes'));
+  const useDesktop = desktop && typeof Notification !== 'undefined' && Notification.permission === 'granted' &&
+    (document.hidden || !document.hasFocus() || !isOnOrdersPage);
+
+  // 2. Alerta al instante (tarjeta en la página o tarjeta de escritorio en la pantalla)
+  if (!isSessionWarmingUp || force) {
+    if (sound) {
+      playSubtleNotificationTone();
+    }
+    if (useDesktop) {
+      if (typeof triggerDesktopNotification === 'function') {
+        triggerDesktopNotification({
+          title,
+          message,
+          url,
+          orderId,
+          eventId: notifKey
+        });
+      }
+    } else {
+      if (typeof showRightScreenNotification === 'function') {
+        showRightScreenNotification({
+          title,
+          message,
+          type,
+          url,
+          orderId,
+          duration: 5000
+        });
+      }
+    }
   }
 }
 
@@ -2823,132 +3343,28 @@ function setPriorityReminderMinutes(newIntervals) {
 }
 
 function getPriorityReminderLabel(priority) {
-  const intervals = getPriorityReminderMinutes();
-  const mins = intervals[priority] || DEFAULT_PRIORITY_MINUTES[priority] || 30;
-  return `Recordatorio cada ${mins} min`;
+  return 'Recordatorio agrupado cada 30 min';
 }
 
 function checkPriorityUnresolvedReminders(orders = []) {
   if (!Array.isArray(orders) || !orders.length) return;
   const user = getCurrentUser();
-  if (!user || !user.role) return;
-
-  const intervals = getPriorityReminderMinutes();
-  let lastReminders = {};
-  try {
-    lastReminders = JSON.parse(localStorage.getItem(NETOPS_LAST_REMINDER_KEY) || '{}') || {};
-  } catch (e) {}
-
-  const now = Date.now();
-  let touched = false;
-
-  for (const order of orders) {
-    if (order.detailKind !== 'network' || order.deletedAt) continue;
-    const isUnresolved = order.status !== 'completada' && order.status !== 'no_realizado';
-    if (!isUnresolved) continue;
-
-    // Solo recordar a quienes están dentro del caso
-    if (typeof isUserInCase === 'function' && !isUserInCase(order, user)) continue;
-
-    const followUps = Array.isArray(order.followUps) ? order.followUps : [];
-    const chatMessages = followUps.filter(f => f.action === 'chat_message');
-    const uId = String(user.id || '').toLowerCase();
-    const uName = normalizeName(user.name || user.username || '');
-
-    let shouldRemindMe = false;
-    let reminderTitle = '';
-    let reminderMsg = '';
-    let reminderType = 'info';
-
-    if (!chatMessages.length) {
-      // No hay mensajes en el chat todavía
-      const hasOpened = !!order.reviewOpenedAt && (
-        (order.reviewOpenedById && String(order.reviewOpenedById).toLowerCase() === uId) ||
-        isOrderAssignedToUser(order, user)
-      );
-
-      const isSupportToAttention = isNetworkSupportToAttention(order);
-      const isCreator = isOrderCreatorOrAssigner(order, user);
-
-      // Si el usuario es quien debe atender/abrir el detalle (contraparte del creador o asignado)
-      if (!isCreator || isOrderAssignedToUser(order, user)) {
-        if (!hasOpened) {
-          shouldRemindMe = true;
-          reminderTitle = 'Chat pendiente de abrir';
-          reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Aún no has abierto el chat de este caso.`;
-          reminderType = 'unopened_chat';
-        } else {
-          // Ya lo abrió pero no ha contestado
-          shouldRemindMe = true;
-          reminderTitle = 'Mensaje pendiente de responder';
-          reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Chat abierto sin respuesta registrada.`;
-          reminderType = 'unanswered_chat';
-        }
-      }
-    } else {
-      // Ya hay mensajes en el chat
-      const lastMsg = chatMessages[chatMessages.length - 1];
-      const isLastFromMe = (lastMsg.byId && String(lastMsg.byId).toLowerCase() === uId) ||
-        (lastMsg.byUserId && String(lastMsg.byUserId).toLowerCase() === uId) ||
-        (lastMsg.byName && normalizeName(lastMsg.byName) === uName);
-
-      // Si el último mensaje lo envió este mismo usuario (ej. Atención esperando respuesta del cliente o Soporte):
-      // NO ENVIAR RECORDATORIO. Ya respondió y está esperando.
-      if (!isLastFromMe) {
-        const lastMsgTime = new Date(lastMsg.at || now).getTime();
-        const openedAtTime = order.reviewOpenedAt ? new Date(order.reviewOpenedAt).getTime() : 0;
-        const hasOpenedSince = openedAtTime >= lastMsgTime;
-
-        if (!hasOpenedSince) {
-          shouldRemindMe = true;
-          reminderTitle = 'Chat pendiente de abrir';
-          reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Tienes un mensaje sin abrir en este caso.`;
-          reminderType = 'unopened_chat';
-        } else {
-          shouldRemindMe = true;
-          reminderTitle = 'Mensaje pendiente de responder';
-          reminderMsg = `${order.clientName || 'Cliente'} (${order.town || order.nodeName || 'Red'}) · Mensaje pendiente de contestar en este chat.`;
-          reminderType = 'unanswered_chat';
-        }
-      }
-    }
-
-    if (!shouldRemindMe) continue;
-
-    const prio = String(order.priority || 'media').toLowerCase();
-    const intervalMins = (Number(order.reminderIntervalMin) > 0)
-      ? Number(order.reminderIntervalMin)
-      : (Number(intervals[prio]) || DEFAULT_PRIORITY_MINUTES[prio] || 30);
-    const intervalMs = intervalMins * 60 * 1000;
-
-    const key = `${order.id}_${user.id || user.username}_${reminderType}`;
-    const lastTime = Number(lastReminders[key]) || 0;
-
-    if (!lastTime) {
-      // Al abrir o recargar la página, inicializar silenciosamente al tiempo actual para NUNCA disparar en reload
-      lastReminders[key] = now;
-      touched = true;
-    } else if ((now - lastTime) >= intervalMs) {
-      lastReminders[key] = now;
-      touched = true;
-      if (now - _netopsSessionStartedAt >= 8000) {
-        notifyNetworkDetailEvent({
-          title: reminderTitle,
-          message: reminderMsg,
-          type: reminderType,
-          orderId: order.id,
-          force: true
-        });
-      }
-    }
-  }
-
-  if (touched) {
-    try {
-      localStorage.setItem(NETOPS_LAST_REMINDER_KEY, JSON.stringify(lastReminders));
-    } catch (e) {}
-  }
+  if (!user?.role) return;
+  const userId = String(user.id || '').toLowerCase();
+  const userName = normalizeName(user.name || user.username || '');
+  const hasPending = orders.some(order => {
+    if (order.detailKind !== 'network' || order.deletedAt || ['completada','no_realizado'].includes(order.status)) return false;
+    if (typeof isUserInCase === 'function' && !isUserInCase(order,user)) return false;
+    const messages = (Array.isArray(order.followUps) ? order.followUps : []).filter(item => item.action === 'chat_message');
+    if (!messages.length) return !isOrderCreatorOrAssigner(order,user) || isOrderAssignedToUser(order,user);
+    const last = messages[messages.length - 1];
+    return !((last.byId && String(last.byId).toLowerCase() === userId) ||
+      (last.byUserId && String(last.byUserId).toLowerCase() === userId) ||
+      (last.byName && normalizeName(last.byName) === userName));
+  });
+  if (hasPending) publishNetworkSummary({reminder:true,sound:false});
 }
+
 
 function isOrderAssignedToUser(order, user) {
   if (!order || !user) return false;
@@ -3039,19 +3455,20 @@ function resolveUserAreaRole(userId, userName, explicitRole = '') {
   if (normRole === 'atencion_clientes' || normRole === 'atencion') return 'atencion_clientes';
   if (normRole === 'soporte') return 'soporte';
 
+  const cleanText = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
   const idTokens = String(userId || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-  const nameTokens = String(userName || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const nameTokens = String(userName || '').split(',').map(cleanText).filter(Boolean);
   if (!idTokens.length && !nameTokens.length) return '';
 
   const { supportList, attentionList, stateUsers } = getKnownUsersByArea();
   const matchesEntry = (u) => {
     if (!u) return false;
     const uId = String(u.id || '').trim().toLowerCase();
-    const uName = String(u.name || '').trim().toLowerCase();
-    const uUser = String(u.username || '').trim().toLowerCase();
+    const uName = cleanText(u.name || '');
+    const uUser = cleanText(u.username || '');
     return (uId && idTokens.includes(uId)) ||
-      (uName && nameTokens.includes(uName)) ||
-      (uUser && (idTokens.includes(uUser) || nameTokens.includes(uUser)));
+      (uName && (nameTokens.includes(uName) || nameTokens.some(t => t.includes(uName) || uName.includes(t)))) ||
+      (uUser && (idTokens.includes(uUser) || nameTokens.includes(uUser) || nameTokens.some(t => t.includes(uUser) || uUser.includes(t))));
   };
 
   if (attentionList.some(matchesEntry)) return 'atencion_clientes';
@@ -3075,6 +3492,8 @@ function getOrderAssignedAreaRole(order) {
   if (byAssigned) return byAssigned;
   const byReviewer = resolveUserAreaRole(order.reviewOpenedById, order.reviewOpenedByName, order.reviewOpenedByRole);
   if (byReviewer) return byReviewer;
+  if (order.targetRole === 'atencion_clientes' || order.targetRole === 'atencion') return 'atencion_clientes';
+  if (order.targetRole === 'soporte') return 'soporte';
   return '';
 }
 
@@ -3086,6 +3505,31 @@ function isNetworkSupportToAttention(order) {
   if (assignedArea === 'soporte') return false;
   if (order.targetRole === 'atencion_clientes' || order.targetRole === 'atencion') return true;
   if (order.targetRole === 'soporte') return false;
+  // Si tiene usuario asignado y existe catálogo de usuarios de soporte, pero NO está en soporte, pertenece a Atención
+  const hasAssignee = Boolean(String(order.assignedUserId || '').trim() || String(order.assignedUserName || '').trim());
+  if (hasAssignee) {
+    const { supportList, attentionList } = getKnownUsersByArea();
+    const cleanText = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    const idTokens = String(order.assignedUserId || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const nameTokens = String(order.assignedUserName || '').split(',').map(cleanText).filter(Boolean);
+    const matchesUser = (u) => {
+      if (!u) return false;
+      const uId = String(u.id || '').trim().toLowerCase();
+      const uName = cleanText(u.name || '');
+      const uUser = cleanText(u.username || '');
+      return (uId && idTokens.includes(uId)) ||
+        (uName && (nameTokens.includes(uName) || nameTokens.some(t => t.includes(uName) || uName.includes(t)))) ||
+        (uUser && (idTokens.includes(uUser) || nameTokens.includes(uUser)));
+    };
+    const inSupport = supportList.some(u => {
+      const r = String(u?.role || '').trim().toLowerCase();
+      return (!r || r === 'soporte') && matchesUser(u);
+    });
+    const inAttention = attentionList.some(matchesUser);
+    if (inAttention && !inSupport) return true;
+    if (inSupport && !inAttention) return false;
+    if (supportList.length > 0 && !inSupport) return true;
+  }
   if (order.originRole === 'soporte') return true;
   if (order.originRole === 'atencion_clientes' || order.originRole === 'atencion') return false;
   const creatorRole = String(order.createdByRole || '').toLowerCase();
@@ -3095,38 +3539,286 @@ function isNetworkSupportToAttention(order) {
   return ['preguntar_luz', 'verificar_cliente', 'confirmar_servicio', 'reporte_zona', 'otro_soporte'].includes(order.category);
 }
 
+function getOrderClosureStatus(order) {
+  const followUps = Array.isArray(order?.followUps) ? order.followUps : [];
+  let lastResetIdx = -1;
+  for (let i = followUps.length - 1; i >= 0; i--) {
+    const act = String(followUps[i]?.action || '').toLowerCase();
+    if (act === 'reopened' || act === 'reabierto' || act === 'devuelto_soporte') {
+      lastResetIdx = i;
+      break;
+    }
+  }
+  const relevantFollowUps = lastResetIdx >= 0 ? followUps.slice(lastResetIdx + 1) : followUps;
+  const isSentToAttention = typeof isNetworkSupportToAttention === 'function' ? isNetworkSupportToAttention(order) : false;
+
+  const supportConfirmed = relevantFollowUps.find(f =>
+    f.action === 'closure_proposed_soporte' ||
+    f.action === 'closure_confirmed_soporte' ||
+    (!isSentToAttention && f.action === 'resuelto_soporte')
+  );
+
+  const attentionConfirmed = relevantFollowUps.find(f =>
+    f.action === 'closure_proposed_atencion' ||
+    f.action === 'closure_confirmed_atencion' ||
+    f.action === 'confirmed_atencion' ||
+    (isSentToAttention && f.action === 'resuelto_soporte')
+  );
+
+  return {
+    supportConfirmed: !!supportConfirmed,
+    supportBy: supportConfirmed?.byName || '',
+    supportAt: supportConfirmed?.at || '',
+    attentionConfirmed: !!attentionConfirmed,
+    attentionBy: attentionConfirmed?.byName || '',
+    attentionAt: attentionConfirmed?.at || '',
+    bothConfirmed: (!!supportConfirmed && !!attentionConfirmed) || order?.status === 'completada'
+  };
+}
+
+function getPhysicalDerivationStatus(order) {
+  const followUps = Array.isArray(order?.followUps) ? order.followUps : [];
+  let resetIdx = -1;
+  for (let i = followUps.length - 1; i >= 0; i--) {
+    const act = String(followUps[i]?.action || '').toLowerCase();
+    if (act === 'reopened' || act === 'reabierto' || act === 'physical_rejected' || act === 'physical') {
+      resetIdx = i;
+      break;
+    }
+  }
+  const rel = resetIdx >= 0 ? followUps.slice(resetIdx + 1) : followUps;
+  const prop = rel.find(f => f.action === 'physical_proposed' || f.action === 'physical_proposed_soporte' || f.action === 'physical_proposed_atencion');
+  if (!prop) return { pending: false };
+  return {
+    pending: true,
+    proposedBy: (prop.action === 'physical_proposed_atencion' || String(prop.byRole || '').toLowerCase().includes('atencion')) ? 'atencion' : 'soporte',
+    proposedByName: prop.byName || '',
+    note: prop.note || ''
+  };
+}
+
+function isOrderPendingForUser(order, user) {
+  if (!order || order.deletedAt) return false;
+
+  const st = String(order.status || 'pendiente').toLowerCase();
+  // Los ya concluidos/completados nunca aparecen en "Mis detalles"
+  if (st === 'completada' || st === 'concluido' || st === 'done') return false;
+
+  const currentActor = user || (typeof getCurrentUser === 'function' ? getCurrentUser() : {});
+  const actorId = String(currentActor.id || '').trim().toLowerCase();
+  const actorUname = String(currentActor.username || '').trim().toLowerCase();
+  const actorName = typeof normalizeName === 'function' ? normalizeName(currentActor.name || currentActor.username || '') : String(currentActor.name || '').toLowerCase();
+  const role = typeof normalizeRole === 'function' ? normalizeRole(currentActor.role) : String(currentActor.role || '').trim().toLowerCase();
+  const isAdmin = role === 'administrador' || role === 'admin';
+  const isSoporte = role === 'soporte';
+  const isAtencion = role === 'atencion_clientes' || role === 'atencion';
+
+  // Si no es un detalle de red (ej. orden física)
+  if (order.detailKind !== 'network') {
+    return typeof isOrderAssignedToUser === 'function'
+      ? isOrderAssignedToUser(order, currentActor)
+      : false;
+  }
+
+  // DETALLES DE RED
+  const isSentToAttention = typeof isNetworkSupportToAttention === 'function'
+    ? isNetworkSupportToAttention(order)
+    : false;
+
+  const closureStatus = typeof getOrderClosureStatus === 'function'
+    ? getOrderClosureStatus(order)
+    : { supportConfirmed: false, attentionConfirmed: false, bothConfirmed: false };
+
+  const physStatus = typeof getPhysicalDerivationStatus === 'function'
+    ? getPhysicalDerivationStatus(order)
+    : { pending: false };
+
+  // Identificar si ya se envió a confirmar o concluir
+  const isResolvedOrClosureProposed = st === 'resuelto_soporte' || st === 'por_confirmar' || st === 'resuelto' ||
+    (isSentToAttention ? !!closureStatus.attentionConfirmed : !!closureStatus.supportConfirmed);
+  const isUnresolvableProposed = st === 'no_realizado';
+  const isPhysicalProposed = !!physStatus.pending;
+
+  const hasAnyProposalSent = isResolvedOrClosureProposed || isUnresolvableProposed || isPhysicalProposed;
+
+  const isAssigned = Boolean((typeof isOrderAssignedToUser === 'function' && isOrderAssignedToUser(order, currentActor)) ||
+    (order.assignedUserId && String(order.assignedUserId).toLowerCase().includes(actorId)) ||
+    (order.assignedUserName && (typeof normalizeName === 'function' ? normalizeName(order.assignedUserName).includes(actorName) : String(order.assignedUserName).toLowerCase().includes(actorName))));
+
+  const isReviewing = Boolean((order.reviewOpenedById && String(order.reviewOpenedById).toLowerCase() === actorId) ||
+    (order.reviewOpenedByName && (typeof normalizeName === 'function' ? normalizeName(order.reviewOpenedByName) === actorName : String(order.reviewOpenedByName).toLowerCase() === actorName)));
+
+  const isCreator = Boolean((typeof isOrderCreatorOrAssigner === 'function' && isOrderCreatorOrAssigner(order, currentActor)) ||
+    (order.createdById && (String(order.createdById).toLowerCase() === actorId || String(order.createdById).toLowerCase() === actorUname)) ||
+    (order.createdByUsername && String(order.createdByUsername).toLowerCase() === actorUname) ||
+    (order.createdByName && (typeof normalizeName === 'function' ? normalizeName(order.createdByName) === actorName : String(order.createdByName).toLowerCase() === actorName)));
+
+  const rep = order.technicianReport || {};
+  const repId = String(rep.completedById || rep.completedBy || '').toLowerCase();
+  const repName = typeof normalizeName === 'function' ? normalizeName(rep.completedByName || order.completedByName || '') : '';
+  const wasResolvedByMe = Boolean((actorId && repId && repId === actorId) || (actorName && repName && repName === actorName));
+
+  const hasAssignee = Boolean(String(order.assignedUserId || '').trim() || String(order.assignedUserName || '').trim());
+
+  // 1. CASOS "POR CONFIRMAR" (propuestas o resoluciones enviadas):
+  // Aparecen en "Mis detalles" para quien debe validar, confirmar o devolver,
+  // y también para el usuario asignado, que lo atendió o lo resolvió (para no perderlo de vista)
+  if (hasAnyProposalSent) {
+    if (isAssigned || isReviewing || wasResolvedByMe) {
+      return true;
+    }
+    if (isResolvedOrClosureProposed || isUnresolvableProposed) {
+      if (!isSentToAttention && isAtencion) return true; // Reporte de red: Atención valida con cliente y confirma o devuelve
+      if (isSentToAttention && isSoporte) return true;   // Requerimiento: Soporte valida y confirma o devuelve
+    } else if (isPhysicalProposed) {
+      if (physStatus.proposedBy === 'soporte' && isAtencion) return true;
+      if (physStatus.proposedBy !== 'soporte' && isSoporte) return true;
+    }
+    return false;
+  }
+
+  // 2. CASOS DEVUELTOS (st === 'devuelto_soporte'):
+  // Se muestran a quien debe volver a atenderlo o a quien esté asignado
+  if (st === 'devuelto_soporte') {
+    if (isAssigned || isReviewing || wasResolvedByMe) return true;
+    if (isSentToAttention && isAtencion) return true;
+    if (!isSentToAttention && isSoporte) return true;
+    return false;
+  }
+
+  // 3. CASOS PENDIENTES / EN ATENCIÓN DIRECTA (sin propuestas enviadas):
+  if (isSentToAttention) {
+    // Requerimiento dirigido a Atención
+    if (isAtencion) {
+      return Boolean(isAssigned || isReviewing || !hasAssignee);
+    }
+    return Boolean(isAssigned || isReviewing);
+  } else {
+    // Reporte de red dirigido a Soporte
+    if (isSoporte) {
+      return Boolean(isAssigned || isReviewing || !hasAssignee);
+    }
+    return Boolean(isAssigned || isReviewing);
+  }
+
+  return false;
+}
+
+window.isOrderPendingForUser = isOrderPendingForUser;
+window.getOrderClosureStatus = getOrderClosureStatus;
+window.getPhysicalDerivationStatus = getPhysicalDerivationStatus;
+window.getNotificationVolume = getNotificationVolume;
+window.setNotificationVolume = setNotificationVolume;
+window.updateNotificationVolume = updateNotificationVolume;
+window.testNotificationVolume = testNotificationVolume;
+
 function canUserRetakeNetworkOrder(order, user = getCurrentUser()) {
   if (!order || order.detailKind !== 'network') return false;
   if (order.status === 'completada' || order.status === 'no_realizado') return false;
-  const isSoporte = userHasRole('soporte');
-  const isAtencion = userHasRole('atencion_clientes');
-  const isAdmin = userHasRole('administrador', 'admin');
-  if (isAdmin) return false;
+  const u = user || (typeof getCurrentUser === 'function' ? getCurrentUser() : null);
+  const uRole = (typeof normalizeRole === 'function' ? normalizeRole(u?.role) : String(u?.role || '')).trim().toLowerCase();
+  const isAdmin = uRole === 'administrador' || uRole === 'admin';
+  if (isAdmin) return true;
+
+  const isSoporte = uRole === 'soporte';
+  const isAtencion = uRole === 'atencion_clientes' || uRole === 'atencion';
   if (!isSoporte && !isAtencion) return false;
 
   const assignedArea = getOrderAssignedAreaRole(order);
   const isSentToAttention = isNetworkSupportToAttention(order);
+  const targetArea = assignedArea || (isSentToAttention ? 'atencion_clientes' : 'soporte');
 
-  // Regla estricta: Soporte NUNCA puede retomar casos asignados a Atención a clientes y viceversa
-  if (assignedArea === 'atencion_clientes' || isSentToAttention) {
+  // Regla estricta: Solo admin o usuarios de la MISMA ÁREA a la que fue asignado el caso pueden retomarlo
+  if (targetArea === 'atencion_clientes') {
     if (!isAtencion || isSoporte) return false;
   }
-  if (assignedArea === 'soporte' || !isSentToAttention) {
+  if (targetArea === 'soporte') {
     if (!isSoporte || isAtencion) return false;
   }
 
-  const u = user || getCurrentUser();
   const isAssignedToMe = isOrderAssignedToUser(order, u);
   const hasAssignee = Boolean(String(order.assignedUserId || '').trim() || String(order.assignedUserName || '').trim());
+
+  // Verificación adicional por catálogo de área cuando hay un asignado explícito
+  if (hasAssignee) {
+    const { supportList, attentionList } = getKnownUsersByArea();
+    const cleanText = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    const idTokens = String(order.assignedUserId || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    const nameTokens = String(order.assignedUserName || '').split(',').map(cleanText).filter(Boolean);
+    const matchesUser = (entry) => {
+      if (!entry) return false;
+      const eId = String(entry.id || '').trim().toLowerCase();
+      const eName = cleanText(entry.name || '');
+      const eUser = cleanText(entry.username || '');
+      return (eId && idTokens.includes(eId)) ||
+        (eName && (nameTokens.includes(eName) || nameTokens.some(t => t.includes(eName) || eName.includes(t)))) ||
+        (eUser && (idTokens.includes(eUser) || nameTokens.includes(eUser)));
+    };
+    const inSupport = supportList.some(entry => {
+      const r = String(entry?.role || '').trim().toLowerCase();
+      return (!r || r === 'soporte') && matchesUser(entry);
+    });
+    const inAttention = attentionList.some(matchesUser);
+    if (isSoporte && (inAttention || (supportList.length > 0 && !inSupport))) return false;
+    if (isAtencion && (inSupport || (attentionList.length > 0 && !inAttention))) return false;
+  }
+
   const isAssignedToOther = hasAssignee && !isAssignedToMe;
   const reviewerId = String(order.reviewOpenedById || '').trim().toLowerCase();
-  const reviewerName = String(order.reviewOpenedByName || '').trim().toLowerCase();
+  const cleanText = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  const reviewerName = cleanText(order.reviewOpenedByName || '');
   const myId = String(u?.id || '').trim().toLowerCase();
-  const myName = String(u?.name || u?.username || '').trim().toLowerCase();
+  const myName = cleanText(u?.name || u?.username || '');
   const isCheckingByOther = (reviewerId && reviewerId !== myId) || (!reviewerId && reviewerName && reviewerName !== myName);
 
   return isAssignedToOther || isCheckingByOther || !hasAssignee;
 }
+
+function isOrderWaitingCounterparty(order, user = (typeof getCurrentUser === 'function' ? getCurrentUser() : null)) {
+  if (!order || order.deletedAt || order.detailKind !== 'network') return false;
+  const st = String(order.status || 'pendiente').toLowerCase();
+  if (st === 'completada' || st === 'concluido' || st === 'done') return false;
+
+  const u = user || (typeof getCurrentUser === 'function' ? getCurrentUser() : null);
+  const uRole = (typeof normalizeRole === 'function' ? normalizeRole(u?.role) : String(u?.role || '')).trim().toLowerCase();
+  const isAdmin = uRole === 'administrador' || uRole === 'admin';
+  const isSoporte = uRole === 'soporte';
+  const isAtencion = uRole === 'atencion_clientes' || uRole === 'atencion';
+
+  const isSentToAttention = typeof isNetworkSupportToAttention === 'function' ? isNetworkSupportToAttention(order) : false;
+  const closureStatus = typeof getOrderClosureStatus === 'function' ? getOrderClosureStatus(order) : { supportConfirmed: false, attentionConfirmed: false };
+  const physStatus = typeof getPhysicalDerivationStatus === 'function' ? getPhysicalDerivationStatus(order) : { pending: false };
+
+  const isResolvedOrClosureProposed = st === 'resuelto_soporte' || st === 'por_confirmar' || st === 'resuelto' || (isSentToAttention ? !!closureStatus.attentionConfirmed : !!closureStatus.supportConfirmed);
+  const isUnresolvableProposed = st === 'no_realizado';
+  const isPhysicalProposed = !!physStatus.pending;
+
+  if (!isResolvedOrClosureProposed && !isUnresolvableProposed && !isPhysicalProposed) {
+    return false;
+  }
+
+  let sideThatSent = '';
+  if (isResolvedOrClosureProposed || isUnresolvableProposed) {
+    sideThatSent = isSentToAttention ? 'atencion' : 'soporte';
+  } else if (isPhysicalProposed) {
+    sideThatSent = physStatus.proposedBy === 'soporte' ? 'soporte' : 'atencion';
+  }
+
+  if (isAdmin) return true;
+  if (isSoporte && sideThatSent === 'soporte') return true;
+  if (isAtencion && sideThatSent === 'atencion') return true;
+
+  const actorId = String(u?.id || '').trim().toLowerCase();
+  if (actorId && ((order.updatedById && String(order.updatedById).toLowerCase() === actorId) ||
+      (order.technicianReport && String(order.technicianReport.completedBy || '').toLowerCase() === actorId))) {
+    return true;
+  }
+
+  return false;
+}
+
+window.canUserRetakeNetworkOrder = canUserRetakeNetworkOrder;
+window.isOrderWaitingCounterparty = isOrderWaitingCounterparty;
 
 function getLatestOrderChatMessage(order) {
   const followUps = Array.isArray(order?.followUps) ? order.followUps : [];
@@ -3229,7 +3921,7 @@ function handleNetworkOrderEvent(payload) {
   if (!payload || payload.type !== 'NETWORK_ORDER_EVENT') return;
   const user = getCurrentUser();
   if (!user || !user.role) return;
-  if (payload.timestamp && Math.abs(Date.now() - payload.timestamp) > 600000) return;
+  if (payload.timestamp && Math.abs(Date.now() - payload.timestamp) > 30000) return;
 
   const { transition, order } = payload;
 
@@ -3301,6 +3993,28 @@ function handleNetworkOrderEvent(payload) {
   const isUserInvolvedInReport = isCreatedByMe || isAssignedToMe || isPrevAssignee || isResolverMe || isReviewerMe;
 
   const actor = payload.byName || order.reviewOpenedByName || (isSupportToAttention ? 'Atención a clientes' : 'Soporte técnico');
+
+  // Regla institucional: Notificaciones únicamente para quien reciba y envíe (involucrados en el detalle).
+  // Administrador tiene acceso a todas en el buzón/centro pero NO recibe avisos activos emergentes a menos que esté involucrado.
+  const isAdmin = userHasRole('administrador', 'admin');
+  if (order.detailKind === 'network') {
+    if (isAdmin && !isUserInvolvedInReport) {
+      if (typeof addNotificationToInbox === 'function' && transition !== 'network_reminder') {
+        const folio = order.folio || (order.id ? (String(order.id).startsWith('RED-') ? order.id : `RED-${order.id}`) : 'Detalle');
+        addNotificationToInbox({
+          title: `Actualización en ${folio}`,
+          message: `${actor}: ${order.title || 'Actualización de orden'}`,
+          type: transition,
+          orderId: order.id,
+          createdAt: new Date().toISOString()
+        });
+      }
+      return;
+    }
+    if (!isAdmin && hasAssignment && !isUserInvolvedInReport) {
+      return;
+    }
+  }
 
   if (transition === 'new_order') {
     if (order.detailKind === 'physical') {
@@ -3620,6 +4334,10 @@ async function checkNetworkOrderNotifications() {
       window.netopsSupportUsers = res.supportUsers;
       try { localStorage.setItem('netops_cached_support_users', JSON.stringify(res.supportUsers)); } catch (e) {}
     }
+    if (Array.isArray(res?.attentionUsers) && res.attentionUsers.length) {
+      window.netopsAttentionUsers = res.attentionUsers;
+      try { localStorage.setItem('netops_cached_attention_users', JSON.stringify(res.attentionUsers)); } catch (e) {}
+    }
 
     const orders = Array.isArray(res?.workOrders) ? res.workOrders : [];
     if (!orders.length) return;
@@ -3654,7 +4372,7 @@ async function checkNetworkOrderNotifications() {
         };
       }
       setStoredNetworkStateCache(cache);
-      checkPriorityUnresolvedReminders(orders);
+      // Recordatorios periódicos deshabilitados: solo notificaciones en tiempo real al instante
       return;
     }
 
@@ -3700,7 +4418,7 @@ async function checkNetworkOrderNotifications() {
         updated = true;
 
         const orderTime = new Date(order.updatedAt || order.createdAt || now).getTime();
-        const isHappeningNow = Math.abs(now - orderTime) <= 600000;
+        const isHappeningNow = Math.abs(now - orderTime) <= 25000;
         if (isHappeningNow && currentStatus === 'pendiente') {
           const shouldNotifyNew = isSupportToAttention
             ? (hasAssignment ? isAssignedToMe : (userHasRole('atencion_clientes') && !isOwnCreator))
@@ -3758,12 +4476,12 @@ async function checkNetworkOrderNotifications() {
           const msgTime = new Date(latestChat.at || order.updatedAt || now).getTime();
           const isRecentChat = Math.abs(now - msgTime) <= 600000;
           const isTargetTeamPool = !hasAssignment && (isSupportToAttention ? userHasRole('atencion_clientes') : userHasRole('soporte'));
+          const isAdminUser = userHasRole('administrador', 'admin');
           const shouldNotifyChat = !isMyMsg && isRecentChat && (
             isAssignedToMe ||
             isCreatedByMe ||
             (typeof isUserInCase === 'function' && isUserInCase(order, user)) ||
-            isTargetTeamPool ||
-            userHasRole('administrador', 'admin')
+            (!isAdminUser && isTargetTeamPool)
           );
           if (shouldNotifyChat) {
             const folio = (typeof getWorkOrderFolio === 'function') ? getWorkOrderFolio(order) : (`RED-${order.id}`);
@@ -3785,7 +4503,7 @@ async function checkNetworkOrderNotifications() {
         const clientLabel = (client && client.trim().length > 1 && !['cliente', 'atención a clientes'].includes(client.trim().toLowerCase())) ? ` · ${client.trim()}` : '';
 
         const orderTime = new Date(order.updatedAt || order.createdAt || now).getTime();
-        const isHappeningNow = Math.abs(now - orderTime) <= 600000;
+        const isHappeningNow = Math.abs(now - orderTime) <= 25000;
         if (isHappeningNow && !isOwnUpdater && prev.assignedUserId === user.id && order.assignedUserId && order.assignedUserId !== user.id) {
           const actor = order.assignedUserName || order.reviewOpenedByName || 'Personal de soporte';
           notifyNetworkDetailEvent({
@@ -3895,10 +4613,7 @@ async function checkNetworkOrderNotifications() {
       }
     }
 
-    // Verificar recordatorios periódicos por prioridad de detalles no resueltos
-    if (orders.length) {
-      checkPriorityUnresolvedReminders(orders);
-    }
+    // Recordatorios periódicos deshabilitados: únicamente se emiten notificaciones instantáneas de eventos en vivo
   } catch (err) {
     // Silencioso para no saturar consola en reconexiones
   }
@@ -3990,3 +4705,844 @@ if (typeof window !== 'undefined') {
   }
 }
 
+
+/* ==========================================================================
+   MATERIAL E INFRAESTRUCTURA DE TORRE (ANTENAS)
+   Permite registrar en texto libre y con fotos el material existente en torres:
+   tramos de torre, pilas y tipo, paneles y tipo, y notas libres.
+   Accesible para técnicos tras completar un detalle y para soporte y admin.
+   ========================================================================== */
+
+let currentTowerMaterialAntennaId = '';
+let pendingTowerMaterialCompletionDetail = null;
+let pendingTowerMaterialPhotos = [];
+const DEFAULT_BALANCER_PORTS = 9;
+let pendingBalancerPortCount = DEFAULT_BALANCER_PORTS;
+let pendingBalancerPorts = [];
+
+function isBalancerEquipment(eq) {
+  if (!eq) return false;
+  const name = String(eq.name || '').trim();
+  if (/^B-/i.test(name)) return true;
+  const type = String(eq.type || '').trim().toLowerCase();
+  return type === 'balanceador' || type === 'balancer';
+}
+
+function getBalancerPortCount(eq) {
+  const raw = Number(eq?.balancerPortCount);
+  if (Number.isInteger(raw) && raw >= 1 && raw <= 48) return raw;
+  return DEFAULT_BALANCER_PORTS;
+}
+
+function canConfigureBalancerPortCount() {
+  return typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+}
+
+function normalizeBalancerPorts(eq, portCountOverride = null) {
+  const count = Number.isInteger(Number(portCountOverride)) && Number(portCountOverride) >= 1 && Number(portCountOverride) <= 48
+    ? Number(portCountOverride)
+    : getBalancerPortCount(eq);
+  const rawList = Array.isArray(eq?.balancerPorts) ? eq.balancerPorts : [];
+  const byPort = new Map();
+  rawList.forEach((item, idx) => {
+    if (!item || typeof item !== 'object') return;
+    const portNum = Number(item.port) || (idx + 1);
+    if (portNum >= 1 && portNum <= 48) {
+      byPort.set(portNum, {
+        port: portNum,
+        label: String(item.label || '').trim(),
+        frontPhoto: String(item.frontPhoto || '').trim(),
+        backPhoto: String(item.backPhoto || '').trim()
+      });
+    }
+  });
+  const result = [];
+  for (let p = 1; p <= count; p++) {
+    const existing = byPort.get(p);
+    result.push(existing ? { ...existing, port: p } : { port: p, label: '', frontPhoto: '', backPhoto: '' });
+  }
+  return result;
+}
+
+function getBalancerPortsStats(eq) {
+  const count = getBalancerPortCount(eq);
+  const ports = normalizeBalancerPorts(eq, count);
+  let withAnyPhoto = 0;
+  let withBothSides = 0;
+  ports.forEach(p => {
+    const hasFront = !!p.frontPhoto;
+    const hasBack = !!p.backPhoto;
+    if (hasFront || hasBack) withAnyPhoto++;
+    if (hasFront && hasBack) withBothSides++;
+  });
+  return { count, withAnyPhoto, withBothSides };
+}
+
+function findAntennaForDetail(detail, stop = null) {
+  if (!detail) return null;
+  // Si tiene nodo asignado explícitamente y no es antena, no es torre
+  if (detail.nodeId && !detail.equipmentId) return null;
+  if (detail.equipmentId) {
+    const eq = (state.equipment || []).find(e => e.id === detail.equipmentId && !e.deletedAt);
+    if (eq) return eq;
+  }
+  if (stop && stop.equipmentId && !stop.nodeId && !detail.nodeId) {
+    const eq = (state.equipment || []).find(e => e.id === stop.equipmentId && !e.deletedAt);
+    if (eq) return eq;
+  }
+  if (typeof getPlanMapStops === 'function') {
+    const matchedStop = getPlanMapStops().find(s =>
+      ((s.detailIds || []).includes(detail.id) || s.id === detail.stopId) &&
+      s.equipmentId && !s.nodeId && !detail.nodeId
+    );
+    if (matchedStop) {
+      const eq = (state.equipment || []).find(e => e.id === matchedStop.equipmentId && !e.deletedAt);
+      if (eq) return eq;
+    }
+  }
+  if (detail.equipmentName && !detail.nodeId) {
+    const targetName = String(detail.equipmentName).trim().toLowerCase();
+    const eq = (state.equipment || []).find(e => !e.deletedAt && String(e.name || '').trim().toLowerCase() === targetName);
+    if (eq) return eq;
+  }
+  return null;
+}
+
+var currentTowerMaterialIsMandatory = false;
+
+function hasTowerMaterial(eq) {
+  if (!eq) return false;
+  const hasSections = Boolean(eq.towerSections && String(eq.towerSections).trim());
+  const hasRadios = Boolean(eq.towerRadios && String(eq.towerRadios).trim());
+  const hasBatteries = Boolean(eq.towerBatteries && String(eq.towerBatteries).trim());
+  const hasPanels = Boolean(eq.towerPanels && String(eq.towerPanels).trim());
+  const hasExtra = Boolean(eq.towerExtraNotes && String(eq.towerExtraNotes).trim());
+  const hasNotes = Boolean(eq.towerMaterialNotes && String(eq.towerMaterialNotes).trim());
+  const hasPhotos = Array.isArray(eq.towerMaterialPhotos) && eq.towerMaterialPhotos.length > 0;
+  const hasBalancer = typeof isBalancerEquipment === 'function' && isBalancerEquipment(eq) && Array.isArray(eq.balancerPorts) && eq.balancerPorts.some(p => p.frontPhoto || p.backPhoto || p.label);
+  return Boolean(hasSections || hasRadios || hasBatteries || hasPanels || hasExtra || hasNotes || hasPhotos || hasBalancer);
+}
+
+function wasTowerMaterialPromptedRecently(antennaId) {
+  if (!antennaId) return false;
+  let last = null;
+  try {
+    last = localStorage.getItem(`tower_mat_prompt_${antennaId}`);
+  } catch (e) {}
+  if (!last) {
+    const antenna = (state.equipment || []).find(e => e.id === antennaId && !e.deletedAt);
+    last = antenna?.towerMaterialPromptedAt || null;
+  }
+  if (!last) return false;
+  const lastTime = new Date(last).getTime();
+  if (!Number.isFinite(lastTime)) return false;
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  return (Date.now() - lastTime) < oneDayMs;
+}
+
+function markTowerMaterialPrompted(antennaId) {
+  if (!antennaId) return;
+  const nowIso = new Date().toISOString();
+  try {
+    localStorage.setItem(`tower_mat_prompt_${antennaId}`, nowIso);
+  } catch (e) {}
+  const antenna = (state.equipment || []).find(e => e.id === antennaId && !e.deletedAt);
+  if (antenna) {
+    antenna.towerMaterialPromptedAt = nowIso;
+  }
+}
+
+function isTowerMaterialMandatory() {
+  if (!currentTowerMaterialIsMandatory) return false;
+  const antenna = (state.equipment || []).find(e => e.id === currentTowerMaterialAntennaId && !e.deletedAt);
+  return !hasTowerMaterial(antenna);
+}
+
+function continueTowerMaterialModal() {
+  if (currentTowerMaterialAntennaId) {
+    markTowerMaterialPrompted(currentTowerMaterialAntennaId);
+  }
+  currentTowerMaterialIsMandatory = false;
+  CM('tower-material-mo');
+  if (pendingTowerMaterialCompletionDetail) {
+    const comp = pendingTowerMaterialCompletionDetail;
+    pendingTowerMaterialCompletionDetail = null;
+    if (typeof openTechnicianCompletionSummary === 'function') {
+      openTechnicianCompletionSummary(comp);
+    }
+  }
+}
+
+function closeTowerMaterialModal() {
+  if (isTowerMaterialMandatory()) {
+    if (typeof notify === 'function') {
+      notify('⚠️ Esta torre no tiene material registrado. Es obligatorio ingresar los datos o fotos antes de continuar.', 'warn');
+    }
+    return;
+  }
+  currentTowerMaterialIsMandatory = false;
+  CM('tower-material-mo');
+  if (pendingTowerMaterialCompletionDetail) {
+    const comp = pendingTowerMaterialCompletionDetail;
+    pendingTowerMaterialCompletionDetail = null;
+    if (typeof openTechnicianCompletionSummary === 'function') {
+      openTechnicianCompletionSummary(comp);
+    }
+  }
+}
+
+function getTowerMaterialShortSummary(eq) {
+  if (!eq) return '';
+  const parts = [];
+  if (eq.towerSections) parts.push(String(eq.towerSections).trim());
+  if (eq.towerRadios) parts.push(String(eq.towerRadios).trim());
+  if (eq.towerBatteries) parts.push(String(eq.towerBatteries).trim());
+  if (eq.towerPanels) parts.push(String(eq.towerPanels).trim());
+  if (!parts.length && eq.towerExtraNotes) parts.push(String(eq.towerExtraNotes).trim().slice(0, 45));
+  if (!parts.length && eq.towerMaterialNotes) parts.push(String(eq.towerMaterialNotes).trim().slice(0, 45));
+  if (isBalancerEquipment(eq)) {
+    const bStats = getBalancerPortsStats(eq);
+    if (bStats.withAnyPhoto > 0) {
+      parts.push(`MikroTik: ${bStats.withAnyPhoto}/${bStats.count} puertos con módem`);
+    } else {
+      parts.push(`MikroTik: ${bStats.count} puertos`);
+    }
+  }
+  return parts.filter(Boolean).join(' · ') || 'Sin material registrado';
+}
+
+function ensureTowerMaterialModal() {
+  let modal = document.getElementById('tower-material-mo');
+  if (modal) return modal;
+
+  const html = `
+    <div class="mo" id="tower-material-mo" role="dialog" aria-modal="true" aria-labelledby="tower-mat-antenna-name">
+      <div class="md tower-material-card">
+        <div class="tower-mat-header">
+          <div class="tower-mat-icon-wrap" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20M4 22h16M7 17h10M8 12h8M9 7h6M6 22l6-19 6 19"/>
+            </svg>
+          </div>
+          <div class="tower-mat-title-box">
+            <span class="tower-mat-badge" id="tower-mat-badge-text">MATERIAL DE TORRE</span>
+            <h2 id="tower-mat-antenna-name">Antena</h2>
+            <p id="tower-mat-subtitle">Registro en texto libre del material instalado en esta torre.</p>
+            <div id="tower-mat-last-updated" class="tower-mat-updated-info"></div>
+          </div>
+          <button type="button" class="tower-mat-close-btn" id="tower-mat-header-close-btn" onclick="closeTowerMaterialModal()" aria-label="Cerrar modal">✕</button>
+        </div>
+
+        <div class="tower-mat-body">
+          <div class="tower-mat-completion-banner" id="tower-mat-completion-notice" style="display:none;">
+            <span class="tower-mat-banner-icon" id="tower-mat-banner-icon">✓</span>
+            <div>
+              <strong id="tower-mat-completion-title">Detalle terminado</strong>
+              <span id="tower-mat-completion-desc">A continuación, puedes actualizar o confirmar en texto libre el material que hay en esta torre:</span>
+            </div>
+          </div>
+
+          <div class="tower-mat-field">
+            <label for="tower-mat-sections">
+              <span class="tower-mat-field-title">Número de tramos de torre</span>
+              <span class="tower-mat-field-help">Texto libre (ej. 4 tramos de 3m, 12 metros arriostrada, etc.)</span>
+            </label>
+            <input type="text" id="tower-mat-sections" placeholder="Ej. 4 tramos de 3m, torre arriostrada...">
+          </div>
+
+          <div class="tower-mat-field">
+            <label for="tower-mat-radios">
+              <span class="tower-mat-field-title">Radios instalados</span>
+              <span class="tower-mat-field-help">Texto libre: qué radios hay en la torre (ej. 2 Rocket Prism 5AC, 1 LiteBeam AC, 1 PowerBeam...)</span>
+            </label>
+            <input type="text" id="tower-mat-radios" placeholder="Ej. 2 Rocket Prism 5AC, 1 LiteBeam AC, 1 PowerBeam...">
+          </div>
+
+          <div class="tower-mat-field">
+            <label for="tower-mat-batteries">
+              <span class="tower-mat-field-title">Pilas / Baterías y tipo</span>
+              <span class="tower-mat-field-help">Texto libre: cuántas pilas hay y de qué tipo (ej. 2 pilas de gel 100Ah, 4 LTH 12V...)</span>
+            </label>
+            <input type="text" id="tower-mat-batteries" placeholder="Ej. 2 pilas de gel 100Ah, 4 pilas LTH 12V...">
+          </div>
+
+          <div class="tower-mat-field">
+            <label for="tower-mat-panels">
+              <span class="tower-mat-field-title">Paneles y tipo de panel</span>
+              <span class="tower-mat-field-help">Texto libre: cuántos paneles y de qué tipo (ej. 2 paneles monocristalinos 450W...)</span>
+            </label>
+            <input type="text" id="tower-mat-panels" placeholder="Ej. 2 paneles 450W monocristalino, 1 chico...">
+          </div>
+
+          <div class="tower-mat-field">
+            <label for="tower-mat-extra">
+              <span class="tower-mat-field-title">Otros materiales u observaciones libres</span>
+              <span class="tower-mat-field-help">Escribe lo que quieras: otros equipos, reguladores, cableado, notas adicionales</span>
+            </label>
+            <textarea id="tower-mat-extra" rows="3" placeholder="Ej. Regulador MPPT 40A, gabinete intemperie, cableado duplex en buen estado..."></textarea>
+          </div>
+
+          <div class="tower-mat-photos-section">
+            <div class="tower-mat-photos-head">
+              <div>
+                <span class="tower-mat-field-title">Fotografías de la torre y equipo</span>
+                <span class="tower-mat-field-help">Fotos de constancia para verificar lo que hay en la torre</span>
+              </div>
+              <div class="tower-mat-photo-buttons">
+                <label class="btn bc bsm">
+                  📷 Tomar foto
+                  <input type="file" accept="image/*" capture="environment" onchange="handleTowerMaterialPhotoUpload(this.files);this.value=''" hidden>
+                </label>
+                <label class="btn bgh bsm">
+                  🖼️ Galería
+                  <input type="file" accept="image/*" multiple onchange="handleTowerMaterialPhotoUpload(this.files);this.value=''" hidden>
+                </label>
+              </div>
+            </div>
+            <div id="tower-mat-photo-gallery" class="tower-mat-gallery"></div>
+          </div>
+
+          <div class="tower-mat-balancer-section" id="tower-mat-balancer-section" style="display:none;"></div>
+
+          <div class="tower-mat-actions">
+            <button type="button" class="btn bc bfu" id="tower-mat-save-btn" onclick="submitTowerMaterial()">Guardar material de torre</button>
+            <button type="button" class="btn bg2" id="tower-mat-continue-btn" style="display:none;" onclick="continueTowerMaterialModal()">Continuar</button>
+            <button type="button" class="btn bgh" id="tower-mat-cancel-btn" onclick="closeTowerMaterialModal()">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', html);
+  modal = document.getElementById('tower-material-mo');
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      if (isTowerMaterialMandatory()) {
+        if (typeof notify === 'function') notify('⚠️ Esta torre no tiene material registrado. Es obligatorio ingresar los datos o fotos antes de continuar.', 'warn');
+        return;
+      }
+      closeTowerMaterialModal();
+    }
+  });
+  return modal;
+}
+
+function openTowerMaterialModal(antennaId, options = {}) {
+  ensureTowerMaterialModal();
+  const antenna = (state.equipment || []).find(e => e.id === antennaId && !e.deletedAt);
+  if (!antenna) {
+    if (typeof notify === 'function') notify('No se encontró la antena solicitada.', 'err');
+    return;
+  }
+  currentTowerMaterialAntennaId = antennaId;
+  pendingTowerMaterialCompletionDetail = options.completionDetail || null;
+  const isBalancer = isBalancerEquipment(antenna);
+  const hasMat = hasTowerMaterial(antenna);
+  const isMandatory = Boolean(options.mandatory && !hasMat);
+  currentTowerMaterialIsMandatory = isMandatory;
+
+  const badgeEl = document.getElementById('tower-mat-badge-text');
+  if (badgeEl) {
+    badgeEl.textContent = isBalancer
+      ? '⚖️ BALANCEADOR · INVENTARIO DE TORRE Y PUERTOS MIKROTIK'
+      : 'MATERIAL DE TORRE';
+  }
+
+  const nameEl = document.getElementById('tower-mat-antenna-name');
+  if (nameEl) nameEl.textContent = antenna.name || 'Antena';
+
+  const subEl = document.getElementById('tower-mat-subtitle');
+  if (subEl) {
+    const zoneStr = typeof getZoneLabel === 'function' ? getZoneLabel(antenna.region) : (antenna.region || '');
+    subEl.textContent = isBalancer
+      ? `Balanceador ${antenna.name || ''}${zoneStr ? ` · Zona: ${zoneStr}` : ''} · Inventario de torre y módems por puerto MikroTik.`
+      : `Torre de ${antenna.name || 'antena'}${zoneStr ? ` · Zona: ${zoneStr}` : ''}`;
+  }
+
+  const notice = document.getElementById('tower-mat-completion-notice');
+  const noticeTitle = document.getElementById('tower-mat-completion-title');
+  const noticeDesc = document.getElementById('tower-mat-completion-desc');
+  const noticeIcon = document.getElementById('tower-mat-banner-icon');
+  if (notice) {
+    if (options.fromCompletion) {
+      notice.style.display = 'flex';
+      if (isMandatory) {
+        notice.classList.add('is-mandatory');
+        if (noticeIcon) noticeIcon.textContent = '⚠️';
+        if (noticeTitle) noticeTitle.textContent = 'Registro obligatorio de material de torre';
+        if (noticeDesc) noticeDesc.textContent = 'Esta torre aún no tiene material registrado. Es obligatorio ingresar los datos o fotos antes de continuar.';
+      } else {
+        notice.classList.remove('is-mandatory');
+        if (noticeIcon) noticeIcon.textContent = '✓';
+        if (noticeTitle) noticeTitle.textContent = options.detailTitle ? `Detalle terminado: "${options.detailTitle}"` : 'Detalle terminado';
+        if (noticeDesc) noticeDesc.textContent = 'Verifica o actualiza el material instalado en esta torre. Puedes editar los campos o pulsar "Continuar" para mantener los datos actuales.';
+      }
+    } else {
+      notice.style.display = 'none';
+      notice.classList.remove('is-mandatory');
+    }
+  }
+
+  const continueBtn = document.getElementById('tower-mat-continue-btn');
+  if (continueBtn) {
+    if (options.fromCompletion && hasMat) {
+      continueBtn.style.display = 'inline-flex';
+      continueBtn.textContent = 'Continuar';
+      continueBtn.title = 'Mantener el material actual y continuar al resumen';
+    } else {
+      continueBtn.style.display = 'none';
+    }
+  }
+
+  const saveBtn = document.getElementById('tower-mat-save-btn');
+  if (saveBtn) {
+    saveBtn.textContent = hasMat ? 'Guardar cambios de torre' : 'Guardar material de torre';
+  }
+
+  const cancelBtn = document.getElementById('tower-mat-cancel-btn');
+  if (cancelBtn) {
+    cancelBtn.style.display = isMandatory ? 'none' : 'inline-flex';
+    cancelBtn.textContent = 'Cerrar';
+  }
+
+  const closeBtn = document.getElementById('tower-mat-header-close-btn');
+  if (closeBtn) {
+    closeBtn.style.display = isMandatory ? 'none' : 'grid';
+  }
+
+  const updatedEl = document.getElementById('tower-mat-last-updated');
+  if (updatedEl) {
+    if (antenna.towerMaterialUpdatedAt) {
+      const d = new Date(antenna.towerMaterialUpdatedAt);
+      const dStr = !isNaN(d.getTime()) ? d.toLocaleString('es-MX', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : antenna.towerMaterialUpdatedAt;
+      const by = antenna.towerMaterialUpdatedByName ? ` por ${antenna.towerMaterialUpdatedByName}` : '';
+      updatedEl.innerHTML = `<span>🕒 Registro actual: <strong>${escapeHtml(dStr)}${escapeHtml(by)}</strong></span>`;
+    } else {
+      updatedEl.innerHTML = `<span>ℹ️ Esta torre aún no tiene material registrado previamente.</span>`;
+    }
+  }
+
+  const secInput = document.getElementById('tower-mat-sections');
+  if (secInput) secInput.value = antenna.towerSections || '';
+
+  const radInput = document.getElementById('tower-mat-radios');
+  if (radInput) radInput.value = antenna.towerRadios || '';
+
+  const batInput = document.getElementById('tower-mat-batteries');
+  if (batInput) batInput.value = antenna.towerBatteries || '';
+
+  const panInput = document.getElementById('tower-mat-panels');
+  if (panInput) panInput.value = antenna.towerPanels || '';
+
+  const extraInput = document.getElementById('tower-mat-extra');
+  if (extraInput) {
+    extraInput.value = antenna.towerExtraNotes || (
+      (!antenna.towerSections && !antenna.towerBatteries && !antenna.towerPanels && antenna.towerMaterialNotes)
+        ? antenna.towerMaterialNotes
+        : ''
+    );
+  }
+
+  pendingTowerMaterialPhotos = Array.isArray(antenna.towerMaterialPhotos) ? antenna.towerMaterialPhotos.slice() : [];
+  renderTowerMaterialPhotos();
+
+  pendingBalancerPortCount = getBalancerPortCount(antenna);
+  pendingBalancerPorts = normalizeBalancerPorts(antenna, pendingBalancerPortCount);
+  const balancerSec = document.getElementById('tower-mat-balancer-section');
+  if (balancerSec) {
+    balancerSec.style.display = isBalancer ? 'block' : 'none';
+    if (isBalancer) renderBalancerPortsSection();
+    else balancerSec.innerHTML = '';
+  }
+
+  OM('tower-material-mo');
+}
+
+function syncBalancerPortLabelsFromDom() {
+  pendingBalancerPorts.forEach(item => {
+    const input = document.getElementById(`balancer-port-label-${item.port}`);
+    if (input) item.label = String(input.value || '').trim();
+  });
+}
+
+function updateBalancerPortLabel(portNum, value) {
+  const target = pendingBalancerPorts.find(p => Number(p.port) === Number(portNum));
+  if (target) target.label = String(value || '').trim();
+}
+
+function changeBalancerPortCount(delta) {
+  if (!canConfigureBalancerPortCount()) {
+    if (typeof notify === 'function') notify('Solo el administrador puede cambiar el número de puertos del balanceador.', 'err');
+    return;
+  }
+  syncBalancerPortLabelsFromDom();
+  const nextCount = Math.max(1, Math.min(48, (Number(pendingBalancerPortCount) || DEFAULT_BALANCER_PORTS) + Number(delta)));
+  if (nextCount === pendingBalancerPortCount) return;
+  pendingBalancerPortCount = nextCount;
+  pendingBalancerPorts = normalizeBalancerPorts({ balancerPorts: pendingBalancerPorts, balancerPortCount: pendingBalancerPortCount }, pendingBalancerPortCount);
+  renderBalancerPortsSection();
+}
+
+function setBalancerPortCount(value) {
+  if (!canConfigureBalancerPortCount()) {
+    if (typeof notify === 'function') notify('Solo el administrador puede cambiar el número de puertos del balanceador.', 'err');
+    return;
+  }
+  syncBalancerPortLabelsFromDom();
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return;
+  const nextCount = Math.max(1, Math.min(48, parsed));
+  pendingBalancerPortCount = nextCount;
+  pendingBalancerPorts = normalizeBalancerPorts({ balancerPorts: pendingBalancerPorts, balancerPortCount: pendingBalancerPortCount }, pendingBalancerPortCount);
+  renderBalancerPortsSection();
+}
+
+async function handleBalancerPortPhotoUpload(portNum, side, files) {
+  const file = (files && files[0]) ? files[0] : null;
+  if (!file) return;
+  syncBalancerPortLabelsFromDom();
+  if (typeof notify === 'function') notify(`Optimizando foto del Puerto ${portNum} (${side === 'front' ? 'Lado A · Frente' : 'Lado B · Reverso'})...`);
+  try {
+    let dataUrl = '';
+    if (typeof optimizeImageForUpload === 'function') {
+      dataUrl = await optimizeImageForUpload(file);
+    } else if (typeof compressWOEvidenceImage === 'function') {
+      dataUrl = await compressWOEvidenceImage(file);
+    } else {
+      dataUrl = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = ev => res(ev.target.result);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+    }
+    if (dataUrl) {
+      let portObj = pendingBalancerPorts.find(p => Number(p.port) === Number(portNum));
+      if (!portObj) {
+        portObj = { port: Number(portNum), label: '', frontPhoto: '', backPhoto: '' };
+        pendingBalancerPorts.push(portObj);
+      }
+      if (side === 'front') portObj.frontPhoto = dataUrl;
+      else portObj.backPhoto = dataUrl;
+      renderBalancerPortsSection();
+    }
+  } catch (err) {
+    console.warn('Error al procesar foto de módem en puerto:', err);
+    if (typeof notify === 'function') notify('No se pudo procesar la imagen del módem.', 'err');
+  }
+}
+
+function removeBalancerPortPhoto(portNum, side) {
+  syncBalancerPortLabelsFromDom();
+  const portObj = pendingBalancerPorts.find(p => Number(p.port) === Number(portNum));
+  if (!portObj) return;
+  if (side === 'front') portObj.frontPhoto = '';
+  else portObj.backPhoto = '';
+  renderBalancerPortsSection();
+}
+
+function previewBalancerPortPhoto(portNum, side) {
+  const portObj = pendingBalancerPorts.find(p => Number(p.port) === Number(portNum));
+  if (!portObj) return;
+  const photos = [];
+  let startIndex = 0;
+  if (portObj.frontPhoto) {
+    if (side === 'front') startIndex = photos.length;
+    photos.push(portObj.frontPhoto);
+  }
+  if (portObj.backPhoto) {
+    if (side === 'back') startIndex = photos.length;
+    photos.push(portObj.backPhoto);
+  }
+  if (photos.length && typeof openEvidenceGallery === 'function') {
+    openEvidenceGallery(photos, startIndex);
+  }
+}
+
+function renderBalancerPortsSection() {
+  const container = document.getElementById('tower-mat-balancer-section');
+  if (!container) return;
+  const isAdmin = canConfigureBalancerPortCount();
+  const ports = normalizeBalancerPorts({ balancerPorts: pendingBalancerPorts, balancerPortCount: pendingBalancerPortCount }, pendingBalancerPortCount);
+  pendingBalancerPorts = ports;
+
+  let withPhotos = 0;
+  let completeCount = 0;
+  ports.forEach(p => {
+    if (p.frontPhoto || p.backPhoto) withPhotos++;
+    if (p.frontPhoto && p.backPhoto) completeCount++;
+  });
+
+  const adminPortControls = isAdmin ? `
+    <div class="balancer-port-admin-controls" title="Solo los administradores pueden definir cuántos puertos tiene este balanceador">
+      <span class="balancer-admin-label">⚙️ Puertos (Admin):</span>
+      <button type="button" class="balancer-port-step-btn" onclick="changeBalancerPortCount(-1)" ${pendingBalancerPortCount <= 1 ? 'disabled' : ''} aria-label="Quitar puerto">−</button>
+      <input type="number" id="tower-mat-balancer-port-count" class="balancer-port-count-input" min="1" max="48" value="${pendingBalancerPortCount}" onchange="setBalancerPortCount(this.value)">
+      <button type="button" class="balancer-port-step-btn" onclick="changeBalancerPortCount(1)" ${pendingBalancerPortCount >= 48 ? 'disabled' : ''} aria-label="Agregar puerto">+</button>
+    </div>
+  ` : `
+    <div class="balancer-port-readonly-pill" title="Solo el administrador puede aumentar o reducir la cantidad de puertos">
+      🔒 ${pendingBalancerPortCount} puertos habilitados (configurable por Admin)
+    </div>
+  `;
+
+  const portsHtml = ports.map(p => {
+    const hasFront = !!p.frontPhoto;
+    const hasBack = !!p.backPhoto;
+    const statusClass = (hasFront && hasBack) ? 'is-complete' : ((hasFront || hasBack) ? 'is-partial' : 'is-empty');
+    const statusText = (hasFront && hasBack)
+      ? '✓ Ambos lados (2/2)'
+      : ((hasFront || hasBack) ? '1/2 lados' : 'Opcional · Sin fotos');
+
+    const renderSlot = (side, sideTitle, sideHint, photoUrl) => {
+      if (photoUrl) {
+        return `
+          <div class="balancer-modem-slot has-photo">
+            <div class="balancer-slot-top">
+              <span class="balancer-slot-title">${sideTitle}</span>
+              <button type="button" class="balancer-slot-remove" onclick="removeBalancerPortPhoto(${p.port}, '${side}')" title="Quitar imagen">✕</button>
+            </div>
+            <div class="balancer-slot-preview" onclick="previewBalancerPortPhoto(${p.port}, '${side}')" title="Clic para ampliar imagen">
+              <img src="${escapeHtml(photoUrl)}" alt="Puerto ${p.port} - ${sideTitle}">
+            </div>
+            <div class="balancer-slot-replace-bar">
+              <label class="balancer-mini-upload">
+                📷 Cambiar
+                <input type="file" accept="image/*" capture="environment" onchange="handleBalancerPortPhotoUpload(${p.port}, '${side}', this.files);this.value=''" hidden>
+              </label>
+              <label class="balancer-mini-upload">
+                🖼️ Galería
+                <input type="file" accept="image/*" onchange="handleBalancerPortPhotoUpload(${p.port}, '${side}', this.files);this.value=''" hidden>
+              </label>
+            </div>
+          </div>
+        `;
+      }
+      return `
+        <div class="balancer-modem-slot is-empty">
+          <div class="balancer-slot-top">
+            <span class="balancer-slot-title">${sideTitle}</span>
+            <span class="balancer-slot-optional">Opcional</span>
+          </div>
+          <div class="balancer-slot-drop">
+            <span class="balancer-slot-hint">${sideHint}</span>
+            <div class="balancer-slot-actions">
+              <label class="balancer-upload-btn primary">
+                📷 Cámara
+                <input type="file" accept="image/*" capture="environment" onchange="handleBalancerPortPhotoUpload(${p.port}, '${side}', this.files);this.value=''" hidden>
+              </label>
+              <label class="balancer-upload-btn secondary">
+                🖼️ Galería
+                <input type="file" accept="image/*" onchange="handleBalancerPortPhotoUpload(${p.port}, '${side}', this.files);this.value=''" hidden>
+              </label>
+            </div>
+          </div>
+        </div>
+      `;
+    };
+
+    return `
+      <div class="balancer-port-card ${statusClass}" data-port="${p.port}">
+        <div class="balancer-port-card-head">
+          <div class="balancer-port-title-group">
+            <span class="balancer-port-badge">Puerto ${p.port} <small>(ether${p.port})</small></span>
+            <span class="balancer-port-status ${statusClass}">${statusText}</span>
+          </div>
+          <input
+            type="text"
+            id="balancer-port-label-${p.port}"
+            class="balancer-port-note-input"
+            placeholder="Nota opcional (ej. Telmex #1, Starlink, línea o serie)..."
+            value="${escapeHtml(p.label || '')}"
+            oninput="updateBalancerPortLabel(${p.port}, this.value)"
+          >
+        </div>
+        <div class="balancer-port-sides-grid">
+          ${renderSlot('front', 'Lado A · Frente del módem', 'Frente / LEDs del módem', p.frontPhoto)}
+          ${renderSlot('back', 'Lado B · Reverso / Etiqueta', 'Etiqueta / Serie / Puertos', p.backPhoto)}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="balancer-section-header">
+      <div class="balancer-section-title-wrap">
+        <div class="balancer-section-kicker">⚖️ APARTADO EXCLUSIVO DE BALANCEADOR (B-)</div>
+        <h4>Puertos MikroTik · Imágenes de Módems por Ambos Lados</h4>
+        <p>Registra las fotos de cada módem (Lado A: Frente y Lado B: Reverso/Etiqueta) para cada puerto del MikroTik. <strong>Ningún puerto es obligatorio</strong>; puedes dejar vacíos los puertos sin módem.</p>
+      </div>
+      <div class="balancer-section-meta">
+        <div class="balancer-ports-counter-pill">
+          <span>Módems registrados: <strong>${withPhotos} / ${pendingBalancerPortCount}</strong></span>
+          <small>(${completeCount} con ambos lados)</small>
+        </div>
+        ${adminPortControls}
+      </div>
+    </div>
+    <div class="balancer-ports-grid">
+      ${portsHtml}
+    </div>
+  `;
+}
+
+async function handleTowerMaterialPhotoUpload(files) {
+  const list = Array.from(files || []);
+  if (!list.length) return;
+  if (typeof notify === 'function') notify('Optimizando foto(s)...');
+  for (const file of list) {
+    try {
+      let dataUrl = '';
+      if (typeof optimizeImageForUpload === 'function') {
+        dataUrl = await optimizeImageForUpload(file);
+      } else if (typeof compressWOEvidenceImage === 'function') {
+        dataUrl = await compressWOEvidenceImage(file);
+      } else {
+        dataUrl = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = ev => res(ev.target.result);
+          r.onerror = rej;
+          r.readAsDataURL(file);
+        });
+      }
+      if (dataUrl) {
+        pendingTowerMaterialPhotos.push(dataUrl);
+      }
+    } catch (err) {
+      console.warn('Error al procesar foto de torre:', err);
+      if (typeof notify === 'function') notify('No se pudo procesar una imagen.', 'err');
+    }
+  }
+  renderTowerMaterialPhotos();
+}
+
+function removeTowerMaterialPhoto(index) {
+  pendingTowerMaterialPhotos.splice(index, 1);
+  renderTowerMaterialPhotos();
+}
+
+function renderTowerMaterialPhotos() {
+  const gallery = document.getElementById('tower-mat-photo-gallery');
+  if (!gallery) return;
+  if (!pendingTowerMaterialPhotos.length) {
+    gallery.innerHTML = '<div class="tower-mat-no-photos">No hay fotografías registradas aún. Toca "Tomar foto" o "Galería" para agregar constancia visual.</div>';
+    return;
+  }
+  gallery.innerHTML = pendingTowerMaterialPhotos.map((photo, idx) => `
+    <div class="tower-mat-thumb-wrap">
+      <img src="${escapeHtml(photo)}" alt="Foto torre ${idx + 1}" onclick="openEvidenceGallery(pendingTowerMaterialPhotos, ${idx})" title="Clic para ampliar y hacer zoom">
+      <button type="button" class="tower-mat-thumb-del" onclick="removeTowerMaterialPhoto(${idx})" title="Eliminar foto">✕</button>
+    </div>
+  `).join('');
+}
+
+async function submitTowerMaterial() {
+  if (!currentTowerMaterialAntennaId) return;
+  return saveTowerMaterial(currentTowerMaterialAntennaId);
+}
+
+async function saveTowerMaterial(antennaId) {
+  const antenna = (state.equipment || []).find(e => e.id === antennaId && !e.deletedAt);
+  if (!antenna) {
+    if (typeof notify === 'function') notify('No se encontró la antena.', 'err');
+    return false;
+  }
+
+  const sections = (document.getElementById('tower-mat-sections')?.value || '').trim();
+  const radios = (document.getElementById('tower-mat-radios')?.value || '').trim();
+  const batteries = (document.getElementById('tower-mat-batteries')?.value || '').trim();
+  const panels = (document.getElementById('tower-mat-panels')?.value || '').trim();
+  const extra = (document.getElementById('tower-mat-extra')?.value || '').trim();
+  const hasPhotos = Array.isArray(pendingTowerMaterialPhotos) && pendingTowerMaterialPhotos.length > 0;
+  const hasBalancerPorts = typeof isBalancerEquipment === 'function' && isBalancerEquipment(antenna) && Array.isArray(pendingBalancerPorts) && pendingBalancerPorts.some(p => p.frontPhoto || p.backPhoto || p.label);
+
+  const hasAnyInput = Boolean(sections || radios || batteries || panels || extra || hasPhotos || hasBalancerPorts);
+  if (isTowerMaterialMandatory() && !hasAnyInput) {
+    if (typeof notify === 'function') {
+      notify('Esta torre aún no tiene material registrado. Debes ingresar al menos los tramos, radios, pilas, paneles, notas o fotos.', 'err');
+    }
+    return false;
+  }
+
+  const parts = [];
+  if (sections) parts.push(`Tramos: ${sections}`);
+  if (radios) parts.push(`Radios: ${radios}`);
+  if (batteries) parts.push(`Pilas: ${batteries}`);
+  if (panels) parts.push(`Paneles: ${panels}`);
+  if (extra) parts.push(extra);
+  const combinedNotes = parts.join('\n');
+
+  const currentUser = (typeof getCurrentUser === 'function' ? getCurrentUser() : null) || {};
+  const userName = currentUser.name || currentUser.username || (typeof userHasRole === 'function' && userHasRole('tecnico') ? 'Técnico' : 'Usuario');
+  const now = new Date().toISOString();
+
+  antenna.towerSections = sections;
+  antenna.towerRadios = radios;
+  antenna.towerBatteries = batteries;
+  antenna.towerPanels = panels;
+  antenna.towerExtraNotes = extra;
+  antenna.towerMaterialNotes = combinedNotes;
+  antenna.towerMaterialPhotos = pendingTowerMaterialPhotos.slice();
+  if (isBalancerEquipment(antenna)) {
+    syncBalancerPortLabelsFromDom();
+    const finalPortCount = canConfigureBalancerPortCount()
+      ? Math.max(1, Math.min(48, Number(pendingBalancerPortCount) || DEFAULT_BALANCER_PORTS))
+      : getBalancerPortCount(antenna);
+    antenna.balancerPortCount = finalPortCount;
+    antenna.balancerPorts = normalizeBalancerPorts(
+      { balancerPorts: pendingBalancerPorts, balancerPortCount: finalPortCount },
+      finalPortCount
+    ).map((p, idx) => ({
+      port: idx + 1,
+      label: String(p.label || '').trim(),
+      frontPhoto: String(p.frontPhoto || '').trim(),
+      backPhoto: String(p.backPhoto || '').trim()
+    }));
+  }
+  antenna.towerMaterialUpdatedAt = now;
+  antenna.towerMaterialUpdatedByName = userName;
+  antenna.towerMaterialUpdatedById = currentUser.id || '';
+  antenna.updatedAt = now;
+
+  if (typeof setUpdatedAudit === 'function') {
+    setUpdatedAudit(antenna, 'actualizó material de torre');
+  }
+
+  if (typeof notify === 'function') notify('Guardando material de torre...');
+  const ok = typeof saveRecord === 'function' ? await saveRecord('equipment', antenna) : (typeof saveDB === 'function' ? await saveDB() : true);
+  if (!ok) {
+    if (typeof notify === 'function') notify('No se pudo guardar el material en la nube. Intenta nuevamente.', 'err');
+    return false;
+  }
+
+  markTowerMaterialPrompted(antennaId);
+  currentTowerMaterialIsMandatory = false;
+  CM('tower-material-mo');
+  if (typeof notify === 'function') notify('Material de torre guardado correctamente.', 'ok');
+  if (pendingTowerMaterialCompletionDetail) {
+    const comp = pendingTowerMaterialCompletionDetail;
+    pendingTowerMaterialCompletionDetail = null;
+    if (typeof openTechnicianCompletionSummary === 'function') openTechnicianCompletionSummary(comp);
+  }
+
+  if (typeof renderAntenas === 'function') {
+    renderAntenas();
+  }
+  return true;
+}
+
+if (typeof window !== 'undefined') {
+  window.markAllNotificationsAsRead = markAllNotificationsAsRead;
+  window.markNotificationAsRead = markNotificationAsRead;
+  window.markNotificationReadByOrderId = markNotificationReadByOrderId;
+  if (typeof getNotificationVolume === 'function') window.getNotificationVolume = getNotificationVolume;
+  if (typeof setNotificationVolume === 'function') window.setNotificationVolume = setNotificationVolume;
+  if (typeof updateNotificationVolume === 'function') window.updateNotificationVolume = updateNotificationVolume;
+  if (typeof testNotificationVolume === 'function') window.testNotificationVolume = testNotificationVolume;
+  if (typeof hasTowerMaterial === 'function') window.hasTowerMaterial = hasTowerMaterial;
+  if (typeof wasTowerMaterialPromptedRecently === 'function') window.wasTowerMaterialPromptedRecently = wasTowerMaterialPromptedRecently;
+  if (typeof markTowerMaterialPrompted === 'function') window.markTowerMaterialPrompted = markTowerMaterialPrompted;
+  if (typeof openTowerMaterialModal === 'function') window.openTowerMaterialModal = openTowerMaterialModal;
+  if (typeof continueTowerMaterialModal === 'function') window.continueTowerMaterialModal = continueTowerMaterialModal;
+  if (typeof closeTowerMaterialModal === 'function') window.closeTowerMaterialModal = closeTowerMaterialModal;
+}

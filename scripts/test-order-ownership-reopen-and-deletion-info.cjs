@@ -74,11 +74,11 @@ assert.strictEqual(mockContext.canEditOrder(orderCreatedByJuan), true, 'Creator 
 assert.strictEqual(mockContext.canEditOrder(orderCreatedByAna), false, 'User CANNOT edit detail created by Ana');
 assert.strictEqual(mockContext.canEditOrder(legacyOrderWithoutAudit), true, 'Legacy detail allows edit');
 
-// When current user is Admin Carlos: Admin also CANNOT edit Ana's detail ("independientemente del rol, no debo poder editar los detalles de alguien más")
+// When current user is Admin Carlos: As admin, has all actions available regardless of creator
 currentUser = { id: 'u_admin_1', username: 'admin_user', name: 'Admin Carlos', role: 'administrador' };
 currentRoles = ['administrador', 'admin'];
-assert.strictEqual(mockContext.canEditOrder(orderCreatedByAna), false, 'Admin CANNOT edit detail created by someone else');
-assert.strictEqual(mockContext.canEditOrder(orderCreatedByJuan), false, 'Admin CANNOT edit detail created by Juan');
+assert.strictEqual(mockContext.canEditOrder(orderCreatedByAna), true, 'Admin CAN edit detail created by someone else');
+assert.strictEqual(mockContext.canEditOrder(orderCreatedByJuan), true, 'Admin CAN edit detail created by Juan');
 
 // When current user is Ana:
 currentUser = { id: 'u_atencion_1', username: 'atencion_ana', name: 'Atención Ana', role: 'atencion_clientes' };

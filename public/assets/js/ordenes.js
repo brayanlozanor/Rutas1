@@ -1,6 +1,6 @@
 
-function initOrderFontScale() {}
-function setOrderFontScale() {}
+function initOrderFontScale() { }
+function setOrderFontScale() { }
 
 function getTimelineStepClass(action = '', label = '') {
   const text = (action + ' ' + label).toLowerCase();
@@ -23,10 +23,10 @@ function renderOrderFollowUpTimeline(followUps = []) {
       </div>
       <div class="order-follow-up-timeline">
         ${followUps.slice().reverse().map(step => {
-          const stepClass = getTimelineStepClass(step.action || '', step.label || '');
-          const stepTime = step.at ? new Date(step.at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : 'Fecha no registrada';
-          const actorChip = step.byName ? renderUserColorChip(step.byName, step.byId || step.byUserId) : '';
-          return `
+    const stepClass = getTimelineStepClass(step.action || '', step.label || '');
+    const stepTime = step.at ? new Date(step.at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : 'Fecha no registrada';
+    const actorChip = step.byName ? renderUserColorChip(step.byName, step.byId || step.byUserId) : '';
+    return `
             <div class="timeline-step-card ${stepClass}">
               <div class="timeline-step-head">
                 <div class="timeline-step-left">
@@ -38,7 +38,7 @@ function renderOrderFollowUpTimeline(followUps = []) {
               ${step.note ? `<div class="timeline-step-note">${orderEscape(step.note)}</div>` : ''}
             </div>
           `;
-        }).join('')}
+  }).join('')}
       </div>
     </section>
   `;
@@ -91,6 +91,7 @@ function orderReportField(icon, label, value, options = {}) {
 
 function canEditOrder(order) {
   if (!order) return false;
+  if (typeof userHasRole === 'function' && userHasRole('administrador', 'admin')) return true;
   const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
   if (!user) return false;
   const uid = String(user.id || '').trim();
@@ -139,6 +140,7 @@ const ORDER_CATEGORIES_BY_KIND = {
     ['otro', 'Otro']
   ],
   network: [
+    ['sin_internet', 'Sin servicio de internet'],
     ['bajo_rendimiento', 'Lentitud de la red'],
     ['intermitencia', 'Intermitencia'],
     ['fallo_fichas', 'Aislado'],
@@ -154,18 +156,22 @@ const ORDER_CATEGORIES_BY_KIND = {
     ['otro_soporte', 'Otro requerimiento para Atención']
   ]
 };
-const ORDER_CATEGORIES = [...ORDER_CATEGORIES_BY_KIND.physical,...ORDER_CATEGORIES_BY_KIND.network,...ORDER_CATEGORIES_BY_KIND.support_to_attention];
-const PHYSICAL_STATS_EXCLUDED_CATEGORIES = new Set(['instalacion','nueva_instalacion','instalacion_nueva','reubicacion_antena','reubicacion','resurtir_antena','surtir_antena','solicitud_respaldo','solicitud_de_respaldo']);
+const ORDER_CATEGORIES = [...ORDER_CATEGORIES_BY_KIND.physical, ...ORDER_CATEGORIES_BY_KIND.network, ...ORDER_CATEGORIES_BY_KIND.support_to_attention];
+const PHYSICAL_STATS_EXCLUDED_CATEGORIES = new Set(['instalacion', 'nueva_instalacion', 'instalacion_nueva', 'reubicacion_antena', 'reubicacion', 'resurtir_antena', 'surtir_antena', 'solicitud_respaldo', 'solicitud_de_respaldo']);
 let woEvidencePhotos = [];
 
 const activeOrderFilters = {
   status: new Set(),
   type: new Set(),
+  date: new Set(),
+  assignee: new Set(),
   zone: new Set(),
   priority: new Set(),
   category: new Set(),
   creator: new Set()
 };
+let filterOnlyMyAssignments = false;
+let filterOnlyPendingCounterparty = false;
 let orderCurrentPage = 1;
 let orderRowsPerPage = 15;
 let orderLoadSequence = 0;
@@ -177,22 +183,28 @@ let currentOrderReportId = '';
 let pendingOrderReviewReload = false;
 let pendingOrderReviewDestination = '';
 let requestedOrderCopyId = new URLSearchParams(window.location.search).get('copyOrderId') || '';
+let _currentlyLoadedNotificationOrder = null;
 
 function orderRemoteParams(page = orderCurrentPage) {
   const filters = orderFilters();
+  const useWideRoleWindow = Boolean(filterOnlyMyAssignments);
   const params = {
-    windowed:'1',
-    offset:Math.max(0,(page - 1) * orderRowsPerPage),
-    limit:orderRowsPerPage,
-    q:document.getElementById('wo-search')?.value.trim() || '',
-    sort:filters.sort,
-    detailKind:activeOrderDetailKind,
+    windowed: '1',
+    offset: useWideRoleWindow ? 0 : Math.max(0, (page - 1) * orderRowsPerPage),
+    limit: useWideRoleWindow ? 100 : orderRowsPerPage,
+    q: document.getElementById('wo-search')?.value.trim() || '',
+    sort: filters.sort,
+    detailKind: activeOrderDetailKind,
     includeMapCatalog:(state.nodes || []).length ? '' : '1'
   };
   if (requestedOrderCopyId) params.id = requestedOrderCopyId;
-  ['status','type','zone','priority','category','creator'].forEach(key => {
+  ['status', 'type', 'zone', 'priority', 'category', 'creator', 'date', 'assignee'].forEach(key => {
     if (filters[key]?.size) params[key] = [...filters[key]].join(',');
   });
+  if (filterOnlyMyAssignments) {
+    const actor = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+    params.onlyMyAssignments = actor.id || actor.username || '1';
+  }
   return params;
 }
 
@@ -201,55 +213,94 @@ window.netopsGetDataPartParams = part => part === 'operations' ? orderRemotePara
 async function loadOrderPage({ scroll = false } = {}) {
   const sequence = ++orderLoadSequence;
   const previousTableScrollLeft = document.querySelector('.orders-table-card .table-wrap')?.scrollLeft || 0;
-  const loadingOperation = beginLoadingOperation('Cargando ordenes','Consultando solo los registros visibles.',180);
+  const loadingOperation = beginLoadingOperation('Cargando ordenes','Consultando solo los registros visibles.', 500);
   try {
     const params = orderRemoteParams();
-    const data = await fetchDataPage('operations',params);
+    const data = await fetchDataPage('operations', params);
     if (sequence !== orderLoadSequence) return false;
     const remoteTotal = Number(data.total) || 0;
     if (remoteTotal > 0 && Number(params.offset) >= remoteTotal) {
-      orderCurrentPage = Math.max(1,Math.ceil(remoteTotal / orderRowsPerPage));
-      return loadOrderPage({scroll});
+      orderCurrentPage = Math.max(1, Math.ceil(remoteTotal / orderRowsPerPage));
+      return loadOrderPage({ scroll });
     }
     state.workOrders = Array.isArray(data.workOrders) ? data.workOrders : [];
+    if (_currentlyLoadedNotificationOrder && !state.workOrders.some(w => w.id === _currentlyLoadedNotificationOrder.id)) {
+      state.workOrders.unshift(_currentlyLoadedNotificationOrder);
+    }
     if (Array.isArray(data.nodes)) state.nodes = data.nodes;
     if (Array.isArray(data.supportUsers)) {
       window.netopsSupportUsers = data.supportUsers;
-      try { localStorage.setItem('netops_cached_support_users', JSON.stringify(data.supportUsers)); } catch (e) {}
+      try { localStorage.setItem('netops_cached_support_users', JSON.stringify(data.supportUsers)); } catch (e) { }
     }
     if (Array.isArray(data.attentionUsers)) {
       window.netopsAttentionUsers = data.attentionUsers;
-      try { localStorage.setItem('netops_cached_attention_users', JSON.stringify(data.attentionUsers)); } catch (e) {}
+      try { localStorage.setItem('netops_cached_attention_users', JSON.stringify(data.attentionUsers)); } catch (e) { }
     }
     if (typeof _previousStateSaved !== 'undefined' && _previousStateSaved) {
       _previousStateSaved.workOrders = cloneData(state.workOrders);
     }
     window.netopsPageMeta = window.netopsPageMeta || {};
     window.netopsPageMeta.operations = {
-      total:Number(data.total)||0,
-      offset:Number(params.offset)||0,
-      limit:Number(params.limit)||orderRowsPerPage,
-      stats:data.stats||{},
-      creators:Array.isArray(data.creators)?data.creators:[]
+      total: Number(data.total) || 0,
+      offset: Number(params.offset) || 0,
+      limit: Number(params.limit) || orderRowsPerPage,
+      stats: data.stats || {},
+      creators: Array.isArray(data.creators) ? data.creators : []
     };
+    try {
+      localStorage.setItem('netops_cached_work_orders_' + activeOrderDetailKind, JSON.stringify({
+        workOrders: state.workOrders,
+        nodes: state.nodes,
+        pageMeta: window.netopsPageMeta.operations,
+        savedAt: new Date().toISOString()
+      }));
+    } catch (e) { }
     renderOrderFilterMenus();
     renderWOs();
     const currentTableWrap = document.querySelector('.orders-table-card .table-wrap');
     if (currentTableWrap && previousTableScrollLeft > 0) currentTableWrap.scrollLeft = previousTableScrollLeft;
-    if (scroll) document.querySelector('.orders-table-card')?.scrollIntoView({behavior:'smooth',block:'start'});
+    if (scroll && currentTableWrap) currentTableWrap.scrollTop = 0;
     return true;
   } catch (error) {
-    if (sequence === orderLoadSequence) notify(describeSyncError(error),'err');
-    return false;
+    let restoredFromCache = false;
+    try {
+      const rawCached = localStorage.getItem('netops_cached_work_orders_' + activeOrderDetailKind);
+      if (rawCached) {
+        const cached = JSON.parse(rawCached);
+        if (cached && Array.isArray(cached.workOrders) && cached.workOrders.length > 0) {
+          state.workOrders = cached.workOrders;
+          if (Array.isArray(cached.nodes) && cached.nodes.length) state.nodes = cached.nodes;
+          if (cached.pageMeta) {
+            window.netopsPageMeta = window.netopsPageMeta || {};
+            window.netopsPageMeta.operations = cached.pageMeta;
+          }
+          if (typeof _previousStateSaved !== 'undefined' && _previousStateSaved) {
+            _previousStateSaved.workOrders = cloneData(state.workOrders);
+          }
+          renderOrderFilterMenus();
+          renderWOs();
+          restoredFromCache = true;
+        }
+      }
+    } catch (e) { }
+
+    if (sequence === orderLoadSequence) {
+      if (restoredFromCache) {
+        notify('Sin conexión a internet. Mostrando los últimos datos confirmados.', 'warn');
+      } else {
+        notify(describeSyncError(error), 'err');
+      }
+    }
+    return restoredFromCache;
   } finally {
     endLoadingOperation(loadingOperation);
   }
 }
 
-function mergeOrderLookupRecords(key,records) {
+function mergeOrderLookupRecords(key, records) {
   const current = Array.isArray(state[key]) ? state[key] : [];
-  const merged = new Map(current.filter(item => item?.id).map(item => [item.id,item]));
-  (Array.isArray(records) ? records : []).forEach(item => { if (item?.id) merged.set(item.id,item); });
+  const merged = new Map(current.filter(item => item?.id).map(item => [item.id, item]));
+  (Array.isArray(records) ? records : []).forEach(item => { if (item?.id) merged.set(item.id, item); });
   state[key] = [...merged.values()];
   if (typeof _previousStateSaved !== 'undefined' && _previousStateSaved) {
     _previousStateSaved[key] = cloneData(state[key]);
@@ -259,6 +310,8 @@ function mergeOrderLookupRecords(key,records) {
 const ORDER_FILTER_META = {
   status: { label: 'Estado', options: [['pendiente', 'Pendiente'], ['en_revision', 'En atención'], ['resuelto_soporte', 'Resuelto'], ['devuelto_soporte', 'Devuelto'], ['no_realizado', 'No realizado'], ['completada', 'Concluido']] },
   type: { label: 'Tipo', options: [['comunidad', 'Comunidad'], ['torre', 'Torre'], ['troncal', 'Troncal'], ['punto_venta', 'Punto de venta']] },
+  date: { label: 'Fecha', options: [['today', 'Hoy'], ['yesterday', 'Ayer'], ['last7', 'Últimos 7 días'], ['last30', 'Últimos 30 días'], ['this_month', 'Este mes']] },
+  assignee: { label: 'Asignación', options: [] },
   priority: { label: 'Prioridad', options: [['muy_alta', 'Muy alta'], ['alta', 'Alta'], ['media', 'Media'], ['baja', 'Baja']] },
   category: { label: 'Categoría', options: ORDER_CATEGORIES }
 };
@@ -279,7 +332,7 @@ function renderWOCategoryOptions(kind, selected = '') {
   const select = document.getElementById('wo-category');
   if (!select) return;
   const options = orderCategoriesForKind(kind);
-  select.innerHTML = `<option value="">-- Selecciona una categoría --</option>${options.map(([id,label]) => `<option value="${id}">${orderEscape(label)}</option>`).join('')}`;
+  select.innerHTML = `<option value="">-- Selecciona una categoría --</option>${options.map(([id, label]) => `<option value="${id}">${orderEscape(label)}</option>`).join('')}`;
   select.value = options.some(([id]) => id === selected) ? selected : '';
 }
 
@@ -293,7 +346,7 @@ function syncWODetailKindField(kind) {
   if (assignField) {
     assignField.style.display = resolved === 'network' ? '' : 'none';
   }
-  renderWOCategoryOptions(resolved,document.getElementById('wo-category')?.value || '');
+  renderWOCategoryOptions(resolved, document.getElementById('wo-category')?.value || '');
 }
 
 let currentWOCandidates = [];
@@ -329,7 +382,7 @@ function getAvailableSupportUsers() {
       window.netopsSupportUsers = cached;
       return cached;
     }
-  } catch (e) {}
+  } catch (e) { }
   if (Array.isArray(state.users)) {
     const fromState = state.users.filter(u => ['administrador', 'admin', 'soporte'].includes(String(u.role).toLowerCase()) && u.active !== false);
     if (fromState.length) return fromState;
@@ -351,7 +404,7 @@ function getAvailableAttentionUsers() {
       window.netopsAttentionUsers = cached;
       return cached;
     }
-  } catch (e) {}
+  } catch (e) { }
   if (Array.isArray(state.users)) {
     const fromState = state.users.filter(u => ['atencion_clientes', 'atencion'].includes(String(u.role).toLowerCase()) && u.active !== false);
     if (fromState.length) return fromState;
@@ -377,14 +430,14 @@ async function renderWOAssignedUserOptions(selectedIds = '') {
       const res = await fetchDataPage('operations', { windowed: '1', limit: 1 });
       if (Array.isArray(res?.supportUsers)) {
         window.netopsSupportUsers = res.supportUsers;
-        try { localStorage.setItem('netops_cached_support_users', JSON.stringify(res.supportUsers)); } catch (e) {}
+        try { localStorage.setItem('netops_cached_support_users', JSON.stringify(res.supportUsers)); } catch (e) { }
       }
       if (Array.isArray(res?.attentionUsers)) {
         window.netopsAttentionUsers = res.attentionUsers;
-        try { localStorage.setItem('netops_cached_attention_users', JSON.stringify(res.attentionUsers)); } catch (e) {}
+        try { localStorage.setItem('netops_cached_attention_users', JSON.stringify(res.attentionUsers)); } catch (e) { }
       }
       candidates = targetIsAttention ? getAvailableAttentionUsers() : getAvailableSupportUsers();
-    } catch (e) {}
+    } catch (e) { }
   }
 
   currentWOCandidates = candidates;
@@ -489,8 +542,8 @@ function initOrdenesPage() {
   clearPendingOrderReviewDecision();
   if (!document.body.dataset.orderReviewUnloadBound) {
     document.body.dataset.orderReviewUnloadBound = '1';
-    window.addEventListener('pagehide',recordUnconfirmedOrderReviewExit);
-    document.addEventListener('keydown',event => {
+    window.addEventListener('pagehide', recordUnconfirmedOrderReviewExit);
+    document.addEventListener('keydown', event => {
       const reloadShortcut = event.key === 'F5' || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'r');
       if (reloadShortcut && pendingOrderReviewDecisionId) {
         event.preventDefault();
@@ -507,7 +560,7 @@ function initOrdenesPage() {
       event.stopImmediatePropagation();
       requestCloseOrderReport();
     });
-    document.addEventListener('click',interceptOrderReviewNavigation,true);
+    document.addEventListener('click', interceptOrderReviewNavigation, true);
   }
   const puebloField = document.getElementById('wo-node');
   const puebloLabel = puebloField?.closest('.fi')?.querySelector('label');
@@ -517,17 +570,64 @@ function initOrdenesPage() {
   setupOrderControls();
   updateOrderDetailTabs();
   initOrderFontScale();
+  bindOrderConnectivityEvents();
   loadDB({ showOverlay: false, preferCache: !requestedOrderCopyId }).then(() => {
     fillOrderSelects();
-    renderWOs();
+    return loadOrderPage();
+  }).catch(() => {
+    return loadOrderPage();
+  }).then(() => {
+    const isReload = (() => {
+      try {
+        const navEntries = typeof performance !== 'undefined' && performance.getEntriesByType && performance.getEntriesByType('navigation');
+        if (navEntries && navEntries[0]) return navEntries[0].type === 'reload';
+        if (typeof performance !== 'undefined' && performance.navigation) return performance.navigation.type === 1;
+      } catch (e) {}
+      return false;
+    })();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const notificationOrderId = urlParams.get('orderId') || urlParams.get('id');
+    if (notificationOrderId) {
+      try {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete('orderId');
+        cleanUrl.searchParams.delete('id');
+        window.history.replaceState({}, '', cleanUrl);
+      } catch (e) {}
+      if (!isReload) {
+        void openOrderTechnicianReport(notificationOrderId);
+      }
+    }
     if (requestedOrderCopyId) {
       const copyId = requestedOrderCopyId;
       requestedOrderCopyId = '';
       const url = new URL(window.location.href);
       url.searchParams.delete('copyOrderId');
-      window.history.replaceState({},'',url);
+      window.history.replaceState({}, '', url);
       void openWOCopy(copyId);
     }
+  });
+}
+
+function bindOrderConnectivityEvents() {
+  if (document.body.dataset.orderConnectivityBound) return;
+  document.body.dataset.orderConnectivityBound = '1';
+
+  window.addEventListener('online', () => {
+    notify('Conexión a internet restablecida. Actualizando detalles...', 'ok');
+    loadOrderPage();
+  });
+
+  const handleOrderWakeRefresh = () => {
+    if (navigator.onLine && ((state.workOrders || []).length === 0 || !window.netopsCloudLoadOk)) {
+      loadOrderPage();
+    }
+  };
+
+  window.addEventListener('focus', handleOrderWakeRefresh);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) handleOrderWakeRefresh();
   });
 }
 
@@ -586,7 +686,7 @@ function bindWOEvidenceEvents() {
 
 function compressWOEvidenceImage(file) {
   if (typeof optimizeImageForUpload === 'function') return optimizeImageForUpload(file);
-  return new Promise((resolve,reject) => {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = reject;
     reader.onload = () => {
@@ -594,12 +694,12 @@ function compressWOEvidenceImage(file) {
       image.onerror = reject;
       image.onload = () => {
         const maxSize = 1600;
-        const scale = Math.min(1,maxSize / Math.max(image.width,image.height));
+        const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
         const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1,Math.round(image.width * scale));
-        canvas.height = Math.max(1,Math.round(image.height * scale));
-        canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
-        resolve(canvas.toDataURL('image/jpeg',.78));
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', .78));
       };
       image.src = reader.result;
     };
@@ -609,13 +709,13 @@ function compressWOEvidenceImage(file) {
 
 async function addWOEvidenceFiles(fileList) {
   const files = Array.from(fileList || []).filter(file => /^image\//i.test(file.type));
-  const available = Math.max(0,6 - woEvidencePhotos.length);
-  if (!available) return notify('Puedes agregar máximo 6 evidencias.','err');
-  for (const file of files.slice(0,available)) {
+  const available = Math.max(0, 6 - woEvidencePhotos.length);
+  if (!available) return notify('Puedes agregar máximo 6 evidencias.', 'err');
+  for (const file of files.slice(0, available)) {
     try { woEvidencePhotos.push(await compressWOEvidenceImage(file)); }
-    catch { notify('No se pudo leer una de las evidencias.','err'); }
+    catch { notify('No se pudo leer una de las evidencias.', 'err'); }
   }
-  if (files.length > available) notify('Sólo se conservaron las primeras 6 evidencias.','warn');
+  if (files.length > available) notify('Sólo se conservaron las primeras 6 evidencias.', 'warn');
   renderWOEvidencePhotos();
 }
 
@@ -623,22 +723,25 @@ function renderWOEvidencePhotos() {
   const preview = document.getElementById('wo-evidence-preview');
   if (!preview) return;
   preview.innerHTML = woEvidencePhotos.length
-    ? woEvidencePhotos.map((photo,index) => `<div><img src="${orderEscape(photo)}" alt="Evidencia ${index + 1}"><button type="button" onclick="removeWOEvidencePhoto(${index})" aria-label="Quitar evidencia">×</button></div>`).join('')
+    ? woEvidencePhotos.map((photo, index) => `<div><img src="${orderEscape(photo)}" alt="Evidencia ${index + 1}"><button type="button" onclick="removeWOEvidencePhoto(${index})" aria-label="Quitar evidencia">×</button></div>`).join('')
     : '<p>Sin evidencias adjuntas.</p>';
 }
 
 function removeWOEvidencePhoto(index) {
-  woEvidencePhotos.splice(index,1);
+  woEvidencePhotos.splice(index, 1);
   renderWOEvidencePhotos();
 }
 
 function updateOrderDetailTabs() {
-  const labels = {network:'Detalles de red',physical:'Detalles físicos'};
-  ['network','physical'].forEach(kind => {
+  if (document.body) {
+    document.body.dataset.detailKind = activeOrderDetailKind;
+  }
+  const labels = { network: 'Detalles de red', physical: 'Detalles físicos' };
+  ['network', 'physical'].forEach(kind => {
     const tab = document.getElementById(`order-tab-${kind}`);
     const active = kind === activeOrderDetailKind;
-    tab?.classList.toggle('is-active',active);
-    tab?.setAttribute('aria-selected',String(active));
+    tab?.classList.toggle('is-active', active);
+    tab?.setAttribute('aria-selected', String(active));
   });
   const heroTitle = document.getElementById('orders-hero-title');
   const heroSub = document.getElementById('orders-hero-subtitle');
@@ -650,22 +753,25 @@ function updateOrderDetailTabs() {
     if (heroSub) heroSub.textContent = 'Administra, prioriza y atiende los reportes y requerimientos de red.';
   }
   const newButton = document.querySelector('.order-new-button');
-  if (newButton) newButton.setAttribute('aria-label',`Nuevo ${labels[activeOrderDetailKind].toLowerCase().replace(/s$/,'')}`);
+  if (newButton) newButton.setAttribute('aria-label', `Nuevo ${labels[activeOrderDetailKind].toLowerCase().replace(/s$/, '')}`);
+  if (typeof updateOrderFiltersForDetailKind === 'function') updateOrderFiltersForDetailKind();
   if (typeof updateActiveNavLink === 'function') updateActiveNavLink();
 }
 
-function selectOrderDetailKind(kind) {
+function selectOrderDetailKind(kind, force = false) {
   const next = kind === 'physical' ? 'physical' : 'network';
-  if (next === activeOrderDetailKind) return;
+  const hasOrders = Array.isArray(state.workOrders) && state.workOrders.length > 0;
+  if (!force && hasOrders && next === activeOrderDetailKind) return;
   activeOrderDetailKind = next;
   orderCurrentPage = 1;
   activeOrderFilters.category.clear();
   updateOrderDetailTabs();
+  updateOrderFiltersForDetailKind();
   renderActiveOrderFilters();
   renderOrderFilterMenus();
   const url = new URL(window.location.href);
-  url.searchParams.set('detailKind',next);
-  window.history.replaceState({},'',url);
+  url.searchParams.set('detailKind', next);
+  window.history.replaceState({}, '', url);
   void loadOrderPage();
 }
 
@@ -673,6 +779,10 @@ function clearOrderFilters() {
   const search = document.getElementById('wo-search');
   if (search) search.value = '';
   Object.values(activeOrderFilters).forEach(values => values.clear());
+  filterOnlyMyAssignments = false;
+  filterOnlyPendingCounterparty = false;
+  const btnMy = document.getElementById('wo-filter-my-assignments');
+  if (btnMy) btnMy.classList.remove('is-active');
   const sort = document.getElementById('wo-sort');
   if (sort) sort.value = 'priority';
   orderCurrentPage = 1;
@@ -681,8 +791,78 @@ function clearOrderFilters() {
   void loadOrderPage();
 }
 
+function toggleOnlyMyAssignments(forceVal) {
+  filterOnlyMyAssignments = typeof forceVal === 'boolean' ? forceVal : !filterOnlyMyAssignments;
+  const btn = document.getElementById('wo-filter-my-assignments');
+  if (btn) btn.classList.toggle('is-active', filterOnlyMyAssignments);
+  orderCurrentPage = 1;
+  renderActiveOrderFilters();
+  void loadOrderPage();
+}
+
+function toggleOnlyPendingCounterparty(forceVal) {
+  filterOnlyPendingCounterparty = false;
+}
+
+function updateOrderFiltersForDetailKind() {
+  const isNetwork = activeOrderDetailKind === 'network';
+  const wrapStatus = document.getElementById('order-filter-wrap-status');
+  const wrapType = document.getElementById('order-filter-wrap-type');
+  const wrapDate = document.getElementById('order-filter-wrap-date');
+  const wrapAssignee = document.getElementById('order-filter-wrap-assignee');
+  const btnMyAssignments = document.getElementById('wo-filter-my-assignments');
+  const btnAdminStats = document.getElementById('wo-admin-stats-btn');
+  const isAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+  const isSupportOrAttention = typeof userHasRole === 'function' && (userHasRole('soporte') || userHasRole('atencion_clientes') || isAdmin);
+
+  if (wrapStatus) wrapStatus.style.display = '';
+  if (wrapType) wrapType.style.display = isNetwork ? 'none' : '';
+  if (wrapDate) wrapDate.style.display = isNetwork ? '' : 'none';
+  if (wrapAssignee) wrapAssignee.style.display = isNetwork ? '' : 'none';
+  if (btnMyAssignments) btnMyAssignments.style.display = isNetwork ? '' : 'none';
+  if (btnAdminStats) btnAdminStats.style.display = (isAdmin && isNetwork) ? 'inline-flex' : 'none';
+
+  const myPendingCard = document.getElementById('wo-stat-my-pending-card');
+  const myDoneCard = document.getElementById('wo-stat-my-done-card');
+  if (myPendingCard) myPendingCard.style.display = (isNetwork && isSupportOrAttention) ? '' : 'none';
+  if (myDoneCard) myDoneCard.style.display = (isNetwork && isSupportOrAttention) ? '' : 'none';
+}
+
 function getOrderFilterOptions(kind) {
   if (kind === 'category') return orderCategoriesForKind(activeOrderDetailKind);
+  if (kind === 'date') {
+    return [
+      ['today', 'Hoy'],
+      ['yesterday', 'Ayer'],
+      ['last7', 'Últimos 7 días'],
+      ['last30', 'Últimos 30 días'],
+      ['this_month', 'Este mes']
+    ];
+  }
+  if (kind === 'assignee') {
+    const opts = [['unassigned', 'Sin asignar (Todo el equipo)']];
+    const allowedRoles = new Set(['administrador', 'admin', 'soporte', 'atencion_clientes', 'atencion']);
+    const isAllowedUserRole = r => allowedRoles.has(typeof normalizeRole === 'function' ? normalizeRole(r) : String(r || '').toLowerCase());
+    const pool = [...getAvailableSupportUsers(), ...getAvailableAttentionUsers()];
+    const seen = new Set(['unassigned']);
+    pool.forEach(user => {
+      const id = String(user.id || '').trim();
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        opts.push([id, user.name || user.username || 'Usuario']);
+      }
+    });
+    (state.workOrders || []).forEach(order => {
+      if (order.assignedUserId && !seen.has(order.assignedUserId)) {
+        const matchingUser = (state.users || []).find(u => String(u.id || '').trim() === String(order.assignedUserId).trim());
+        if (!matchingUser || isAllowedUserRole(matchingUser.role)) {
+          seen.add(order.assignedUserId);
+          opts.push([order.assignedUserId, order.assignedUserName || order.assignedUserId]);
+        }
+      }
+    });
+    return opts;
+  }
   if (kind === 'status') {
     if (activeOrderDetailKind === 'network') {
       return [
@@ -698,10 +878,29 @@ function getOrderFilterOptions(kind) {
   }
   if (kind === 'zone') return (REGS || []).map(region => [region.id, region.n]);
   if (kind === 'creator') {
+    const allowedRoles = new Set(['administrador', 'admin', 'soporte', 'atencion_clientes', 'atencion']);
+    const isAllowedUserRole = r => allowedRoles.has(typeof normalizeRole === 'function' ? normalizeRole(r) : String(r || '').toLowerCase());
     const remoteCreators = window.netopsPageMeta?.operations?.creators;
-    if (Array.isArray(remoteCreators) && remoteCreators.length) return remoteCreators.map(user => [user.id,user.name]);
+    if (Array.isArray(remoteCreators) && remoteCreators.length) {
+      return remoteCreators
+        .filter(user => {
+          if (!user) return false;
+          const matchingUser = (state.users || []).find(u => String(u.id || '').trim() === String(user.id || '').trim() || String(u.username || '').trim().toLowerCase() === String(user.username || '').trim().toLowerCase());
+          return !matchingUser || isAllowedUserRole(matchingUser.role);
+        })
+        .map(user => [user.id, user.name]);
+    }
     return [...new Map((state.workOrders || [])
-      .filter(order => order.createdById || order.createdByName)
+      .filter(order => {
+        const creatorId = order.createdById || order.createdBy;
+        const creatorName = order.createdByName || order.createdByUsername;
+        if (!creatorId && !creatorName) return false;
+        const matchingUser = (state.users || []).find(u =>
+          (creatorId && String(u.id || '').trim() === String(creatorId).trim()) ||
+          (creatorName && (String(u.name || '').trim().toLowerCase() === String(creatorName).trim().toLowerCase() || String(u.username || '').trim().toLowerCase() === String(creatorName).trim().toLowerCase()))
+        );
+        return !matchingUser || isAllowedUserRole(matchingUser.role);
+      })
       .map(order => [order.createdById || order.createdByName, order.createdByName || order.createdByUsername || 'Usuario']))
       .entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'));
   }
@@ -738,6 +937,37 @@ function renderOrderFilterMenus() {
     const statusSortHeader = kind === 'status'
       ? `<button type="button" class="order-filter-option order-filter-sort-shortcut ${currentSort === 'status' ? 'is-selected' : ''}" onclick="sortOrdersByStatusFromFilter(event)"><span class="order-filter-check">${currentSort === 'status' ? '✓' : '⇅'}</span><span>Ordenar tabla por estado</span></button><div class="order-filter-menu-divider"></div>`
       : '';
+    let customDateFooter = '';
+    if (kind === 'date') {
+      let currentFrom = '';
+      let currentTo = '';
+      const rangeEntry = [...(activeOrderFilters.date || [])].find(v => v.startsWith('range:') || v.includes('_'));
+      if (rangeEntry) {
+        const parts = rangeEntry.replace('range:', '').split('_');
+        currentFrom = parts[0] || '';
+        currentTo = parts[1] || '';
+      }
+      customDateFooter = `
+        <div class="order-filter-menu-divider"></div>
+        <div class="order-date-picker-box" onclick="event.stopPropagation()">
+          <span class="order-date-picker-title"><svg style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;vertical-align:-1px;margin-right:4px;" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Rango con calendario</span>
+          <div class="order-date-picker-fields">
+            <label class="order-date-picker-label">
+              <span>Desde:</span>
+              <input type="date" id="wo-date-from" class="order-date-picker-input" value="${orderEscape(currentFrom)}">
+            </label>
+            <label class="order-date-picker-label">
+              <span>Hasta:</span>
+              <input type="date" id="wo-date-to" class="order-date-picker-input" value="${orderEscape(currentTo)}">
+            </label>
+          </div>
+          <div class="order-date-picker-actions">
+            <button type="button" class="btn bc order-date-picker-apply" onclick="applyCustomDateRange(event)">Aplicar rango</button>
+            ${rangeEntry ? `<button type="button" class="btn bgh order-date-picker-clear" onclick="clearCustomDateRange(event)">Limpiar</button>` : ''}
+          </div>
+        </div>
+      `;
+    }
     menu.innerHTML = options.length ? statusSortHeader + options.map(([value, label]) => {
       const selected = activeOrderFilters[kind]?.has(String(value));
       const safeValue = encodeURIComponent(value).replace(/'/g, '%27');
@@ -745,9 +975,45 @@ function renderOrderFilterMenus() {
         ? `<span class="order-filter-status-dot ${getStatusFilterDotClass(value)}" aria-hidden="true"></span>`
         : '';
       return `<button type="button" class="order-filter-option ${selected ? 'is-selected' : ''}" onclick="toggleOrderFilterOption('${kind}','${safeValue}',event)"><span class="order-filter-check">${selected ? '✓' : ''}</span>${dotHtml}<span>${orderEscape(label)}</span></button>`;
-    }).join('') : '<span class="order-filter-menu-empty">Sin opciones disponibles</span>';
+    }).join('') + customDateFooter : '<span class="order-filter-menu-empty">Sin opciones disponibles</span>' + customDateFooter;
   });
   updateOrderFilterButtons();
+}
+
+function applyCustomDateRange(event) {
+  event?.stopPropagation();
+  const fromEl = document.getElementById('wo-date-from');
+  const toEl = document.getElementById('wo-date-to');
+  const fromVal = fromEl?.value || '';
+  const toVal = toEl?.value || '';
+  if (!fromVal && !toVal) {
+    if (typeof notify === 'function') notify('Selecciona al menos una fecha para el rango.', 'warn');
+    return;
+  }
+  if (!activeOrderFilters.date) activeOrderFilters.date = new Set();
+  activeOrderFilters.date.clear();
+  activeOrderFilters.date.add(`range:${fromVal}_${toVal}`);
+  orderCurrentPage = 1;
+  renderActiveOrderFilters();
+  renderOrderFilterMenus();
+  closeOrderFilterMenus();
+  void loadOrderPage();
+}
+
+function clearCustomDateRange(event) {
+  event?.stopPropagation();
+  if (activeOrderFilters.date) {
+    [...activeOrderFilters.date].forEach(val => {
+      if (val.startsWith('range:') || val.includes('_')) {
+        activeOrderFilters.date.delete(val);
+      }
+    });
+  }
+  orderCurrentPage = 1;
+  renderActiveOrderFilters();
+  renderOrderFilterMenus();
+  closeOrderFilterMenus();
+  void loadOrderPage();
 }
 
 function toggleOrderFilterMenu(kind, button, event) {
@@ -786,7 +1052,7 @@ function updateOrderFilterButtons() {
   document.querySelectorAll('[data-order-filter-kind]').forEach(button => {
     const kind = button.dataset.orderFilterKind;
     const count = activeOrderFilters[kind]?.size || 0;
-    const baseLabel = ORDER_FILTER_META[kind]?.label || (kind === 'zone' ? 'Zona' : 'Creado por');
+    const baseLabel = ORDER_FILTER_META[kind]?.label || (kind === 'zone' ? 'Zona' : (kind === 'assignee' ? 'Asignación' : (kind === 'date' ? 'Fecha' : 'Creado por')));
     const label = button.querySelector('span');
     if (label) label.textContent = count ? `${baseLabel} · ${count}` : baseLabel;
     button.classList.toggle('is-active', count > 0);
@@ -803,6 +1069,14 @@ function removeOrderFilter(kind, encodedValue) {
 }
 
 function getOrderFilterOptionLabel(kind, value) {
+  if (kind === 'date') {
+    if (value.startsWith('range:') || value.includes('_')) {
+      const parts = value.replace('range:', '').split('_');
+      if (parts[0] && parts[1]) return `${parts[0]} al ${parts[1]}`;
+      if (parts[0]) return `Desde ${parts[0]}`;
+      if (parts[1]) return `Hasta ${parts[1]}`;
+    }
+  }
   return getOrderFilterOptions(kind).find(([id]) => String(id) === String(value))?.[1] || value;
 }
 
@@ -815,23 +1089,20 @@ function changeOrderPage(nextPage) {
   const page = Number(nextPage);
   if (!Number.isFinite(page) || page < 1) return;
   orderCurrentPage = page;
-  const pageMeta = window.netopsPageMeta?.operations || {};
-  const isServerWindowed = Number.isFinite(Number(pageMeta.total)) && Number(pageMeta.total) > 0 && (state.workOrders || []).length <= orderRowsPerPage;
-  if (isServerWindowed && typeof loadOrderPage === 'function') {
-    void loadOrderPage({scroll:true});
+  if (typeof loadOrderPage === 'function' && !filterOnlyMyAssignments) {
+    void loadOrderPage({ scroll: true });
   } else {
     renderWOs();
-    document.querySelector('.orders-table-card')?.scrollIntoView({behavior:'smooth',block:'start'});
+    const currentTableWrap = document.querySelector('.orders-table-card .table-wrap');
+    if (currentTableWrap) currentTableWrap.scrollTop = 0;
   }
 }
 
 function changeOrderPageSize(value) {
   const size = Number(value);
-  orderRowsPerPage = [10, 15, 20, 50, 100].includes(size) ? size : 15;
+  orderRowsPerPage = [5, 10, 15, 20, 25, 50, 100].includes(size) ? size : 15;
   orderCurrentPage = 1;
-  const pageMeta = window.netopsPageMeta?.operations || {};
-  const isServerWindowed = Number.isFinite(Number(pageMeta.total)) && Number(pageMeta.total) > 0 && (state.workOrders || []).length <= orderRowsPerPage;
-  if (isServerWindowed && typeof loadOrderPage === 'function') {
+  if (typeof loadOrderPage === 'function') {
     void loadOrderPage();
   } else {
     renderWOs();
@@ -843,11 +1114,14 @@ function renderActiveOrderFilters() {
   if (!wrap) return;
   const row = document.getElementById('wo-active-filter-row');
   const chips = Object.entries(activeOrderFilters).flatMap(([kind, values]) => [...values].map(value => {
-    const groupLabel = ORDER_FILTER_META[kind]?.label || (kind === 'zone' ? 'Zona' : 'Creado por');
+    const groupLabel = ORDER_FILTER_META[kind]?.label || (kind === 'zone' ? 'Zona' : (kind === 'assignee' ? 'Asignación' : (kind === 'date' ? 'Fecha' : 'Creado por')));
     const valueLabel = getOrderFilterOptionLabel(kind, value);
     const safeValue = encodeURIComponent(value).replace(/'/g, '%27');
     return `<button type="button" class="order-filter-chip" onclick="removeOrderFilter('${kind}','${safeValue}')"><span>${orderEscape(groupLabel)}: <strong>${orderEscape(valueLabel)}</strong></span><b aria-hidden="true">×</b></button>`;
   }));
+  if (filterOnlyMyAssignments) {
+    chips.unshift(`<button type="button" class="order-filter-chip is-my-assignment-chip" onclick="toggleOnlyMyAssignments(false)"><span><strong>★ Mis detalles</strong></span><b aria-hidden="true">×</b></button>`);
+  }
   wrap.innerHTML = chips.join('');
   row?.classList.toggle('is-empty', !chips.length);
   updateOrderFilterButtons();
@@ -923,17 +1197,17 @@ async function renderWONodeSuggestions() {
   }
 
   const sequence = ++orderNodeLookupSequence;
-  await new Promise(resolve => setTimeout(resolve,150));
+  await new Promise(resolve => setTimeout(resolve, 150));
   if (sequence !== orderNodeLookupSequence) return;
   try {
-    const data = await fetchDataPage('nodes',{q:rawQuery,limit:8,offset:0});
+    const data = await fetchDataPage('nodes', { q: rawQuery, limit: 8, offset: 0 });
     if (sequence !== orderNodeLookupSequence) return;
-    mergeOrderLookupRecords('nodes',data.nodes);
+    mergeOrderLookupRecords('nodes', data.nodes);
   } catch (error) {
-    if (sequence === orderNodeLookupSequence) console.warn('No se pudo buscar pueblos',error);
+    if (sequence === orderNodeLookupSequence) console.warn('No se pudo buscar pueblos', error);
   }
   const matches = getMatchingNodesForInput();
-  const exactMatch = matches.some(node => [getNodeLabel(node),node.nodeCode,node.town].some(value => normalizeName(value) === normalizeName(rawQuery)));
+  const exactMatch = matches.some(node => [getNodeLabel(node), node.nodeCode, node.town].some(value => normalizeName(value) === normalizeName(rawQuery)));
   menu.innerHTML = matches.map(n => `
     <button type="button" onmousedown="chooseWONode('${n.id}')">
       <strong>${orderEscape(getNodeLabel(n))}</strong>
@@ -968,10 +1242,10 @@ async function chooseWONode(id) {
     if (document.getElementById('wo-equipment-id')) document.getElementById('wo-equipment-id').value = '';
     if (document.getElementById('wo-equipment')) document.getElementById('wo-equipment').value = 'Consultando antenas vinculadas...';
     try {
-      const data = await fetchDataPage('equipment',{nodeIds:n.id,paged:'1',windowed:'1',limit:100,offset:0});
-      mergeOrderLookupRecords('equipment',data.equipment);
+      const data = await fetchDataPage('equipment', { nodeIds: n.id, paged: '1', windowed: '1', limit: 100, offset: 0 });
+      mergeOrderLookupRecords('equipment', data.equipment);
     } catch (error) {
-      console.warn('No se pudieron consultar las antenas del pueblo',error);
+      console.warn('No se pudieron consultar las antenas del pueblo', error);
     }
     const linked = getNodeLinkedEquipment(n.id);
     if (document.getElementById('wo-equipment')) {
@@ -1029,7 +1303,7 @@ function openWOQuickNodeModal(name = '') {
   document.getElementById('wo-qnode-notes').value = '';
   renderWOQuickNodeWarnings();
   OM('wo-quick-node-mo');
-  setTimeout(() => document.getElementById('wo-qnode-code')?.focus(),0);
+  setTimeout(() => document.getElementById('wo-qnode-code')?.focus(), 0);
 }
 
 function renderWOQuickNodeWarnings() {
@@ -1041,11 +1315,11 @@ function renderWOQuickNodeWarnings() {
   const warnings = [];
   if (code) {
     const matches = nodes.filter(node => normalizeName(node.nodeCode) === code);
-    if (matches.length) warnings.push(`<div class="node-warning"><strong>Esta clave ya existe.</strong><span class="muted">Pueblos registrados: ${orderEscape(matches.map(node => node.town).filter(Boolean).slice(0,6).join(', ') || 'sin nombre')}</span></div>`);
+    if (matches.length) warnings.push(`<div class="node-warning"><strong>Esta clave ya existe.</strong><span class="muted">Pueblos registrados: ${orderEscape(matches.map(node => node.town).filter(Boolean).slice(0, 6).join(', ') || 'sin nombre')}</span></div>`);
   }
   if (town) {
     const matches = nodes.filter(node => normalizeName(node.town) === town);
-    if (matches.length) warnings.push(`<div class="node-warning"><strong>Ese pueblo/colonia ya está registrado.</strong><span class="muted">Clave(s): ${orderEscape(matches.map(node => node.nodeCode).filter(Boolean).slice(0,6).join(', ') || 'sin clave')}</span></div>`);
+    if (matches.length) warnings.push(`<div class="node-warning"><strong>Ese pueblo/colonia ya está registrado.</strong><span class="muted">Clave(s): ${orderEscape(matches.map(node => node.nodeCode).filter(Boolean).slice(0, 6).join(', ') || 'sin clave')}</span></div>`);
   }
   box.innerHTML = warnings.join('');
 }
@@ -1053,39 +1327,39 @@ function renderWOQuickNodeWarnings() {
 async function saveWOQuickNode() {
   const location = parseLocationCoordinates(document.getElementById('wo-qnode-location').value);
   const payload = {
-    nodeCode:document.getElementById('wo-qnode-code').value.trim(),
-    town:document.getElementById('wo-qnode-town').value.trim(),
-    zone:document.getElementById('wo-qnode-zone').value,
-    lat:location?.lat ?? NaN,
-    lng:location?.lng ?? NaN,
-    status:document.getElementById('wo-qnode-status').value,
-    notes:document.getElementById('wo-qnode-notes').value.trim()
+    nodeCode: document.getElementById('wo-qnode-code').value.trim(),
+    town: document.getElementById('wo-qnode-town').value.trim(),
+    zone: document.getElementById('wo-qnode-zone').value,
+    lat: location?.lat ?? NaN,
+    lng: location?.lng ?? NaN,
+    status: document.getElementById('wo-qnode-status').value,
+    notes: document.getElementById('wo-qnode-notes').value.trim()
   };
-  if (!payload.nodeCode) return showWOQuickNodeError('wo-qnode-code','Escribe la clave del pueblo.');
-  if (!payload.town) return showWOQuickNodeError('wo-qnode-town','Escribe el pueblo o colonia.');
-  if (!payload.zone) return showWOQuickNodeError('wo-qnode-zone','Selecciona la zona.');
-  if (isNaN(payload.lat) || isNaN(payload.lng)) return showWOQuickNodeError('wo-qnode-location','Escribe coordenadas válidas o pega un enlace de Google Maps.');
+  if (!payload.nodeCode) return showWOQuickNodeError('wo-qnode-code', 'Escribe la clave del pueblo.');
+  if (!payload.town) return showWOQuickNodeError('wo-qnode-town', 'Escribe el pueblo o colonia.');
+  if (!payload.zone) return showWOQuickNodeError('wo-qnode-zone', 'Selecciona la zona.');
+  if (isNaN(payload.lat) || isNaN(payload.lng)) return showWOQuickNodeError('wo-qnode-location', 'Escribe coordenadas válidas o pega un enlace de Google Maps.');
   const duplicate = (state.nodes || []).find(node => !node.deletedAt && normalizeName(node.nodeCode) === normalizeName(payload.nodeCode) && normalizeName(node.town) === normalizeName(payload.town));
-  if (duplicate) return showWOQuickNodeError('wo-qnode-town','Ya existe esa misma clave con ese mismo pueblo/colonia.');
+  if (duplicate) return showWOQuickNodeError('wo-qnode-town', 'Ya existe esa misma clave con ese mismo pueblo/colonia.');
   const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
-  const node = {id:gid('nd'),createdAt:new Date().toISOString(),...payload};
-  setCreatedAudit(node,'agregó pueblo desde orden');
+  const node = { id: gid('nd'), createdAt: new Date().toISOString(), ...payload };
+  setCreatedAudit(node, 'agregó pueblo desde orden');
   state.nodes.push(node);
-  const saved = await saveRecord('nodes',node);
+  const saved = await saveRecord('nodes', node);
   if (!saved) return;
-  for (const audit of (state.auditLog || []).slice(auditStart)) await saveRecord('auditLog',audit);
+  for (const audit of (state.auditLog || []).slice(auditStart)) await saveRecord('auditLog', audit);
   CM('wo-quick-node-mo');
   await chooseWONode(node.id);
   notify('Pueblo registrado y seleccionado.');
 }
 
-function showWOQuickNodeError(fieldId,message) {
+function showWOQuickNodeError(fieldId, message) {
   const field = document.getElementById(fieldId);
-  notify(message,'err');
+  notify(message, 'err');
   field?.classList.add('wo-field-invalid');
-  field?.focus({preventScroll:true});
-  field?.scrollIntoView({behavior:'smooth',block:'center'});
-  setTimeout(() => field?.classList.remove('wo-field-invalid'),2400);
+  field?.focus({ preventScroll: true });
+  field?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => field?.classList.remove('wo-field-invalid'), 2400);
 }
 
 function getSelectedEquipmentByHiddenId() {
@@ -1118,14 +1392,14 @@ async function renderWOEquipmentSuggestions() {
     return;
   }
   const sequence = ++orderEquipmentLookupSequence;
-  await new Promise(resolve => setTimeout(resolve,150));
+  await new Promise(resolve => setTimeout(resolve, 150));
   if (sequence !== orderEquipmentLookupSequence) return;
   try {
-    const data = await fetchDataPage('equipment',{q:rawQuery,limit:8,offset:0});
+    const data = await fetchDataPage('equipment', { q: rawQuery, limit: 8, offset: 0 });
     if (sequence !== orderEquipmentLookupSequence) return;
-    mergeOrderLookupRecords('equipment',data.equipment);
+    mergeOrderLookupRecords('equipment', data.equipment);
   } catch (error) {
-    if (sequence === orderEquipmentLookupSequence) console.warn('No se pudo buscar antenas',error);
+    if (sequence === orderEquipmentLookupSequence) console.warn('No se pudo buscar antenas', error);
   }
   const matches = getMatchingEquipmentForInput();
   if (!matches.length) {
@@ -1330,10 +1604,10 @@ function getOrderDisplayType(order) {
 async function ensureOrderRelationRecords(order) {
   const tasks = [];
   if (order?.nodeId && !(state.nodes || []).some(item => item.id === order.nodeId)) {
-    tasks.push(fetchDataPage('nodes',{id:order.nodeId,limit:1}).then(data => mergeOrderLookupRecords('nodes',data.nodes)));
+    tasks.push(fetchDataPage('nodes', { id: order.nodeId, limit: 1 }).then(data => mergeOrderLookupRecords('nodes', data.nodes)));
   }
   if (order?.equipmentId && !(state.equipment || []).some(item => item.id === order.equipmentId)) {
-    tasks.push(fetchDataPage('equipment',{id:order.equipmentId,limit:1}).then(data => mergeOrderLookupRecords('equipment',data.equipment)));
+    tasks.push(fetchDataPage('equipment', { id: order.equipmentId, limit: 1 }).then(data => mergeOrderLookupRecords('equipment', data.equipment)));
   }
   if (tasks.length) await Promise.all(tasks);
 }
@@ -1491,7 +1765,7 @@ function applyRoleFormVisibility() {
   if (equipmentFi) equipmentFi.style.display = 'none';
   if (relationInfo) relationInfo.style.display = 'none';
   if (zoneFi) zoneFi.style.display = 'none';
-  if (priorityIntervalBox) priorityIntervalBox.style.display = 'inline-flex';
+  if (priorityIntervalBox) priorityIntervalBox.style.display = 'none';
 
   const targetRole = getActiveNetworkTargetRole();
   const targetIsAttention = targetRole === 'atencion_clientes';
@@ -1557,7 +1831,7 @@ function applyRoleFormVisibility() {
     if (categoryLabel) categoryLabel.textContent = 'Categoría del requerimiento';
     if (detailLabel) detailLabel.textContent = 'Mensaje / Requerimiento para Atención a clientes';
     if (detailTextarea) detailTextarea.placeholder = 'Describe lo que necesitas consultar o solicitar a Atención a clientes...';
-    if (priorityLabel) priorityLabel.textContent = 'Prioridad y frecuencia de recordatorio';
+    if (priorityLabel) priorityLabel.textContent = 'Prioridad';
 
     if (modalTitle) modalTitle.textContent = editingWOId ? 'Editar requerimiento para Atención a clientes' : 'Nuevo requerimiento para Atención a clientes';
     if (modalSub) modalSub.textContent = 'Envía un requerimiento a Atención a clientes (el nombre del cliente es opcional).';
@@ -1619,7 +1893,7 @@ function applyRoleFormVisibility() {
       const tLabel = typeFi.querySelector('label');
       if (tLabel) tLabel.textContent = 'Tipo de trabajo';
     }
-    if (priorityLabel) priorityLabel.textContent = 'Prioridad y frecuencia de recordatorio';
+    if (priorityLabel) priorityLabel.textContent = 'Prioridad';
 
     if (evidenceZone) {
       evidenceZone.style.display = '';
@@ -1662,7 +1936,7 @@ async function openWO(id = '') {
   if (id) {
     const w = (state.workOrders || []).find(x => x.id === id);
     if (w) {
-      try { await ensureOrderRelationRecords(w); } catch (error) { console.warn('No se pudieron cargar las relaciones de la orden',error); }
+      try { await ensureOrderRelationRecords(w); } catch (error) { console.warn('No se pudieron cargar las relaciones de la orden', error); }
       const target = getOrderTarget(w);
       if (w.detailKind === 'network') {
         adminNetworkTargetRole = isNetworkSupportToAttention(w) ? 'atencion_clientes' : 'soporte';
@@ -1686,14 +1960,14 @@ async function openWO(id = '') {
       document.getElementById('wo-priority').value = w.priority || 'media';
       updateWOPriorityReminderHint(w.reminderIntervalMin);
       const report = w.technicianReport || {};
-      woEvidencePhotos = [...new Set([...(Array.isArray(w.evidencePhotos) ? w.evidencePhotos : []),(Array.isArray(report.evidencePhotos) ? report.evidencePhotos : []),report.evidencePhoto].flat().filter(Boolean))].slice(0,6);
+      woEvidencePhotos = [...new Set([...(Array.isArray(w.evidencePhotos) ? w.evidencePhotos : []), (Array.isArray(report.evidencePhotos) ? report.evidencePhotos : []), report.evidencePhoto].flat().filter(Boolean))].slice(0, 6);
     }
   }
   renderWOAssignedUserOptions(selectedAssignee);
   updateWORelationInfo();
   setupOrderControls();
   renderWOEvidencePhotos();
-    const reqLabel = document.getElementById('wo-evidence-req-label');
+  const reqLabel = document.getElementById('wo-evidence-req-label');
   const isAdminUser = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
   const isAttentionUser = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
   const isNetworkKind = (document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind) === 'network';
@@ -1780,15 +2054,15 @@ function clearWOForm() {
   applyRoleFormVisibility();
 }
 
-function showWOFieldError(fieldId,message) {
+function showWOFieldError(fieldId, message) {
   const field = document.getElementById(fieldId);
-  notify(message,'err');
+  notify(message, 'err');
   if (!field) return;
   document.querySelectorAll('#wo-mo .wo-field-invalid').forEach(item => item.classList.remove('wo-field-invalid'));
   field.classList.add('wo-field-invalid');
-  field.focus({preventScroll:true});
-  field.scrollIntoView({behavior:'smooth',block:'center'});
-  setTimeout(() => field.classList.remove('wo-field-invalid'),2400);
+  field.focus({ preventScroll: true });
+  field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => field.classList.remove('wo-field-invalid'), 2400);
 }
 
 
@@ -1888,6 +2162,7 @@ async function saveWO() {
     originRole,
     assignedUserId,
     assignedUserName,
+    assignedUserRole: isNetwork ? (targetIsAttention ? 'atencion_clientes' : 'soporte') : '',
     title: effectiveDetail,
     description: specificDetail,
     nodeId: node?.id || '',
@@ -1911,9 +2186,9 @@ async function saveWO() {
     payload.evidencePhotos = woEvidencePhotos.slice();
     payload.technicianReport = {
       ...(existingReport || {}),
-      result:existingReport?.result || 'pendiente',
-      evidencePhotos:woEvidencePhotos.slice(),
-      evidencePhoto:woEvidencePhotos[0] || ''
+      result: existingReport?.result || 'pendiente',
+      evidencePhotos: woEvidencePhotos.slice(),
+      evidencePhoto: woEvidencePhotos[0] || ''
     };
   }
 
@@ -1925,6 +2200,21 @@ async function saveWO() {
       notify('Acción no permitida: Solo el usuario que creó este detalle puede editarlo.', 'err');
       return;
     }
+    const oldAssigneeId = w.assignedUserId || '';
+    const oldAssigneeName = w.assignedUserName || '';
+    const newAssigneeId = payload.assignedUserId || '';
+    const newAssigneeName = payload.assignedUserName || '';
+
+    // Reasignación de quién contestará/atenderá el detalle
+    if (isNetwork && (oldAssigneeId !== newAssigneeId || oldAssigneeName !== newAssigneeName)) {
+      w.reviewOpenedById = '';
+      w.reviewOpenedByName = '';
+      w.reviewOpenedByUsername = '';
+      w.reviewOpenedAt = '';
+      const reassignLabel = newAssigneeName ? `Reasignado a ${newAssigneeName}` : 'Reasignado al equipo general';
+      appendSharedNetworkFollowUp(w, 'reasignado', 'Reasignación de atención', reassignLabel);
+    }
+
     Object.assign(w, payload, { updatedAt: new Date().toISOString() });
     savedOrder = w;
     setUpdatedAudit(w, 'modificó orden');
@@ -1961,7 +2251,7 @@ async function saveWO() {
     renderOrderFilterMenus();
   }
   notify(editingWOId ? 'Detalle actualizado y sincronizado.' : 'Detalle creado y visible en la lista.');
-  await loadOrderPage({scroll:!editingWOId});
+  await loadOrderPage({ scroll: !editingWOId });
 }
 
 function orderFilters() {
@@ -1969,54 +2259,51 @@ function orderFilters() {
     q: normalizeName(document.getElementById('wo-search')?.value || ''),
     status: activeOrderFilters.status,
     type: activeOrderFilters.type,
+    date: activeOrderFilters.date,
+    assignee: activeOrderFilters.assignee,
     zone: activeOrderFilters.zone,
     priority: activeOrderFilters.priority,
     category: activeOrderFilters.category,
     creator: activeOrderFilters.creator,
+    onlyMyAssignments: filterOnlyMyAssignments,
     sort: document.getElementById('wo-sort')?.value || 'priority'
   };
 }
 
 function getOrderLifecycleRank(order) {
   const status = String(order?.status || 'pendiente').toLowerCase();
-  // Hasta abajo siempre los ya concluidos
-  if (status === 'completada') return 5;
+  // 3° Al final de todo: Concluidos
+  if (status === 'completada' || status === 'concluido' || status === 'done') return 3;
 
-  const pendingAction = typeof getNetworkPendingActionMeta === 'function'
-    ? getNetworkPendingActionMeta(order)
-    : null;
+  const pendingAction = typeof getOrderPendingUserAction === 'function'
+    ? getOrderPendingUserAction(order)
+    : (typeof getNetworkPendingActionMeta === 'function' ? getNetworkPendingActionMeta(order) : null);
 
-  // 1° Al principio: detalles en los que el usuario actual debe realizar una acción inmediata
-  // (confirmar cierre, confirmar no realizable o confirmar envío a físicos)
+  // 2° En medio: los que faltan por responder/confirmar de la otra parte
+  if (pendingAction?.waitingOther || status === 'resuelto_soporte' || status === 'no_realizado' || status === 'revisado') {
+    return 2;
+  }
+
+  // 1° Al inicio: los que faltan por resolver (acción requerida por mí, pendientes, en revisión o devueltos)
+  // Subordenamos internamente: acción requerida (0) vs en atención / pendiente (1)
   if (pendingAction?.requiresMyAction) return 0;
-
-  // 2° Detalles que requieren atención directa (devueltos o pendientes de iniciar)
-  if (status === 'devuelto_soporte') return 1;
-  if (status === 'pendiente') return 2;
-
-  // 3° Detalles actualmente en atención / conversación activa
-  if (status === 'en_revision') return 3;
-
-  // 4° Detalles esperando confirmación de la otra parte (resuelto_soporte, no_realizado en espera, revisado)
-  if (status === 'resuelto_soporte' || status === 'no_realizado' || status === 'revisado') return 4;
-
-  return 3;
+  return 1;
 }
 
 function getOrderStatusSortRank(order) {
   const status = String(order?.status || 'pendiente').toLowerCase();
-  if (status === 'completada') return 7;
-  const pendingAction = typeof getNetworkPendingActionMeta === 'function'
-    ? getNetworkPendingActionMeta(order)
-    : null;
+  if (status === 'completada' || status === 'concluido' || status === 'done') return 5;
+
+  const pendingAction = typeof getOrderPendingUserAction === 'function'
+    ? getOrderPendingUserAction(order)
+    : (typeof getNetworkPendingActionMeta === 'function' ? getNetworkPendingActionMeta(order) : null);
+
+  if (pendingAction?.waitingOther || status === 'resuelto_soporte' || status === 'no_realizado' || status === 'revisado') {
+    return 3;
+  }
   if (pendingAction?.requiresMyAction) return 0;
   if (status === 'devuelto_soporte') return 1;
-  if (status === 'pendiente') return 2;
-  if (status === 'en_revision') return 3;
-  if (status === 'resuelto_soporte') return 4;
-  if (status === 'no_realizado') return 5;
-  if (status === 'revisado') return 6;
-  return 6;
+  return 2;
 }
 
 function getOrderPriorityRank(order) {
@@ -2032,7 +2319,100 @@ function getOrderConcludedTimestamp(order) {
 }
 
 function filteredOrders() {
-  const rawList = (state.workOrders || []).filter(w => !w.deletedAt);
+  const currentActor = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  const actorId = String(currentActor?.id || '').toLowerCase();
+  const actorName = normalizeName(currentActor?.name || currentActor?.username || '');
+
+  const rawList = (state.workOrders || []).filter(w => {
+    if (w.deletedAt) return false;
+
+    // Filtro "Mis detalles"
+    // Solo los que faltan por resolver (sin envíos) o los que faltan por confirmar de este lado
+    if (filterOnlyMyAssignments) {
+      const st = String(w.status || 'pendiente').toLowerCase();
+      const isCompleted = st === 'completada' || st === 'concluido' || st === 'done';
+      if (isCompleted) return false;
+
+      if (typeof isOrderPendingForUser === 'function') {
+        if (!isOrderPendingForUser(w, currentActor)) return false;
+      } else {
+        const isMine = (typeof isOrderAssignedToUser === 'function' && isOrderAssignedToUser(w, currentActor)) ||
+          (w.assignedUserId && String(w.assignedUserId).toLowerCase().includes(actorId)) ||
+          (w.assignedUserName && normalizeName(w.assignedUserName).includes(actorName)) ||
+          (w.reviewOpenedById && String(w.reviewOpenedById).toLowerCase() === actorId);
+        if (!isMine) return false;
+      }
+    }
+
+    // Filtro por estado
+    if (activeOrderFilters.status && activeOrderFilters.status.size > 0) {
+      const st = String(w.status || 'pendiente').toLowerCase();
+      const matchesStatus = [...activeOrderFilters.status].some(s => {
+        const sel = String(s).toLowerCase();
+        if (sel === st) return true;
+        if (sel === 'resuelto_soporte' && (st === 'resuelto' || st === 'por_confirmar')) return true;
+        if (sel === 'completada' && (st === 'concluido' || st === 'done')) return true;
+        return false;
+      });
+      if (!matchesStatus) return false;
+    }
+
+    // Filtro por asignación
+    if (activeOrderFilters.assignee && activeOrderFilters.assignee.size > 0) {
+      const hasAssigneeMatch = [...activeOrderFilters.assignee].some(selId => {
+        if (selId === 'unassigned') {
+          return !w.assignedUserId && !w.assignedUserName;
+        }
+        return (w.assignedUserId && String(w.assignedUserId).includes(selId)) ||
+          (w.assignedUserName && normalizeName(w.assignedUserName).includes(normalizeName(selId)));
+      });
+      if (!hasAssigneeMatch) return false;
+    }
+
+    // Filtro por fecha
+    if (activeOrderFilters.date && activeOrderFilters.date.size > 0) {
+      const orderDate = new Date(w.createdAt || w.updatedAt || 0);
+      const matchesDate = [...activeOrderFilters.date].some(dOpt => {
+        const now = new Date();
+        if (dOpt === 'today') {
+          return orderDate.toDateString() === now.toDateString();
+        }
+        if (dOpt === 'yesterday') {
+          const y = new Date();
+          y.setDate(y.getDate() - 1);
+          return orderDate.toDateString() === y.toDateString();
+        }
+        if (dOpt === 'last7') {
+          return (now.getTime() - orderDate.getTime()) <= 7 * 86400000;
+        }
+        if (dOpt === 'last30') {
+          return (now.getTime() - orderDate.getTime()) <= 30 * 86400000;
+        }
+        if (dOpt === 'this_month') {
+          return orderDate.getFullYear() === now.getFullYear() && orderDate.getMonth() === now.getMonth();
+        }
+        if (dOpt.startsWith('range:') || dOpt.includes('_')) {
+          const parts = dOpt.replace('range:', '').split('_');
+          const dFrom = parts[0] ? new Date(parts[0] + 'T00:00:00') : null;
+          const dTo = parts[1] ? new Date(parts[1] + 'T23:59:59.999') : null;
+          const t = orderDate.getTime();
+          if (dFrom && dTo) return t >= dFrom.getTime() && t <= dTo.getTime();
+          if (dFrom) return t >= dFrom.getTime();
+          if (dTo) return t <= dTo.getTime();
+          return false;
+        }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dOpt)) {
+          const dt = new Date(dOpt + 'T00:00:00');
+          return orderDate.toDateString() === dt.toDateString();
+        }
+        return false;
+      });
+      if (!matchesDate) return false;
+    }
+
+    return true;
+  });
+
   const activeSort = document.getElementById('wo-sort')?.value || 'priority';
 
   return rawList.slice().sort((a, b) => {
@@ -2097,6 +2477,11 @@ function formatOrderDate(value) {
   return isNaN(date.getTime()) ? '--' : date.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+function formatOrderTime(value) {
+  const date = new Date(value || 0);
+  return isNaN(date.getTime()) ? '--' : date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
 function renderOrderStats() {
   const all = (state.workOrders || []).filter(w => !w.deletedAt);
   const counted = activeOrderDetailKind === 'physical'
@@ -2111,12 +2496,55 @@ function renderOrderStats() {
   set('wo-pending', Number.isFinite(Number(remote.pending)) ? Number(remote.pending) : counted.filter(w => isOpenOrder(w)).length);
   set('wo-critical', Number.isFinite(Number(remote.critical)) ? Number(remote.critical) : counted.filter(w => isOpenOrder(w) && (w.priority === 'muy_alta' || w.priority === 'alta')).length);
   set('wo-done', Number.isFinite(Number(remote.done)) ? Number(remote.done) : counted.filter(w => w.status === 'completada').length);
+
+  // Contadores personales para Soporte y Atención
+  const currentActor = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  const actorId = String(currentActor.id || '').toLowerCase();
+  const actorName = normalizeName(currentActor.name || currentActor.username || '');
+
+  const networkOrders = all.filter(w => w.detailKind === 'network');
+  const myPending = all.filter(w => !w.deletedAt && (typeof isOrderPendingForUser === 'function' ? isOrderPendingForUser(w, currentActor) : false)).length;
+
+  const myDone = networkOrders.filter(w => {
+    if (w.status !== 'completada' && w.status !== 'resuelto_soporte') return false;
+    const rep = w.technicianReport || {};
+    const repId = String(rep.completedById || rep.completedBy || '').toLowerCase();
+    const repName = normalizeName(rep.completedByName || w.completedByName || '');
+    if (actorId && repId && repId === actorId) return true;
+    if (actorName && repName && repName === actorName) return true;
+    const followUps = Array.isArray(w.followUps) ? w.followUps : [];
+    return followUps.some(f => (f.action === 'solved' || f.action === 'concluded') && ((f.byId && String(f.byId).toLowerCase() === actorId) || (normalizeName(f.byName || '') === actorName)));
+  }).length;
+
+  set('wo-my-pending', myPending);
+  set('wo-my-done', myDone);
+  const myPendingCard = document.getElementById('wo-stat-my-pending-card');
+  const myDoneCard = document.getElementById('wo-stat-my-done-card');
+  const isNetwork = activeOrderDetailKind === 'network';
+  const isAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+  const isSupportOrAttention = typeof userHasRole === 'function' && (userHasRole('soporte') || userHasRole('atencion_clientes') || isAdmin);
+  if (myPendingCard) myPendingCard.style.display = (isNetwork && isSupportOrAttention) ? '' : 'none';
+  if (myDoneCard) myDoneCard.style.display = (isNetwork && isSupportOrAttention) ? '' : 'none';
+  const myDetailsBadge = document.getElementById('wo-my-details-count');
+  if (myDetailsBadge) {
+    myDetailsBadge.textContent = String(myPending);
+    myDetailsBadge.style.display = myPending > 0 ? 'inline-flex' : 'none';
+  }
+  const counterpartyPending = networkOrders.filter(w => !w.deletedAt && (typeof isOrderWaitingCounterparty === 'function' ? isOrderWaitingCounterparty(w, currentActor) : false)).length;
+  const counterpartyBadge = document.getElementById('wo-pending-counterparty-count');
+  if (counterpartyBadge) {
+    counterpartyBadge.textContent = String(counterpartyPending);
+    counterpartyBadge.style.display = counterpartyPending > 0 ? 'inline-flex' : 'none';
+  }
+  if (typeof updateOrderFiltersForDetailKind === 'function') {
+    updateOrderFiltersForDetailKind();
+  }
 }
 
 async function markWODone(id) {
   const w = (state.workOrders || []).find(x => x.id === id);
   if (!w) return;
-  const auditStart=Array.isArray(state.auditLog)?state.auditLog.length:0;
+  const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
   if (w.status !== 'completada' && (w.detailKind === 'network' || userHasRole('administrador', 'admin', 'atencion_clientes'))) {
     openAdminDetailCompletion(w, async completion => {
       if (completion.withInformation) {
@@ -2128,41 +2556,41 @@ async function markWODone(id) {
       w.status = 'completada';
       w.completedAt = new Date().toISOString();
       w.lastResentAt = '';
-      appendOrderFollowUp(w,'solved','Solucionado',completion.note || '');
+      appendOrderFollowUp(w, 'solved', 'Solucionado', completion.note || '');
       setUpdatedAudit(w, completion.withInformation ? 'completó orden con información' : 'marcó lista orden');
-      const saved = await saveRecordWithAudit('workOrders',w,auditStart);
+      const saved = await saveRecordWithAudit('workOrders', w, auditStart);
       if (!saved) { notify('No se pudo guardar en la nube. Intenta de nuevo.', 'err'); return false; }
       try {
         if (typeof broadcastNetworkOrderChange === 'function') {
           broadcastNetworkOrderChange(w, 'confirmed');
         }
-      } catch (e) {}
+      } catch (e) { }
       await loadOrderPage();
       notify(completion.withInformation ? 'Información guardada y orden completada' : 'Orden completada');
       return true;
     }, w.detailKind === 'network' ? {
-      forceInformation:true,
+      forceInformation: true,
       freshEvidence:true,
       requireEvidence:true,
-      hideSolution:true,
-      subtitle:'Adjunta una captura donde el cliente confirme que el servicio mejoró antes de solucionar.',
-      evidenceTitle:'Captura de confirmación del cliente <span>Obligatoria</span>',
-      evidenceHelp:'Sube o pega una captura del mensaje donde el cliente confirme que mejoró. Esta evidencia es obligatoria.',
-      evidenceError:'Adjunta la captura donde el cliente confirma que el servicio mejoró.'
+      hideSolution: true,
+      subtitle: 'Adjunta una captura donde el cliente confirme que el servicio mejoró antes de solucionar.',
+      evidenceTitle: 'Captura de confirmación del cliente <span>Obligatoria</span>',
+      evidenceHelp: 'Sube o pega una captura del mensaje donde el cliente confirme que mejoró. Esta evidencia es obligatoria.',
+      evidenceError: 'Adjunta la captura donde el cliente confirma que el servicio mejoró.'
     } : {});
     return;
   }
   w.status = 'completada';
   w.completedAt = new Date().toISOString();
   w.lastResentAt = '';
-  appendOrderFollowUp(w,'solved','Solucionado');
+  appendOrderFollowUp(w, 'solved', 'Solucionado');
   setUpdatedAudit(w, 'marcó lista orden');
-  await saveRecordWithAudit('workOrders',w,auditStart);
+  await saveRecordWithAudit('workOrders', w, auditStart);
   try {
     if (typeof broadcastNetworkOrderChange === 'function') {
       broadcastNetworkOrderChange(w, 'confirmed');
     }
-  } catch (e) {}
+  } catch (e) { }
   await loadOrderPage();
 }
 
@@ -2174,20 +2602,23 @@ async function reopenCompletedWO(id) {
   }
 
   const isSentToAttention = isNetworkSupportToAttention(w);
+  const isAdmin = userHasRole('administrador', 'admin');
   const isSoporte = userHasRole('administrador', 'admin', 'soporte');
   const isAtencion = userHasRole('atencion_clientes');
 
-  // Regla institucional estricta: solo el área solicitante puede reabrir lo que envió a la contraparte
-  if (w.detailKind === 'network') {
-    if (isSentToAttention && !isSoporte) {
-      return notify('Acción restringida: Únicamente el personal de Soporte técnico puede reabrir requerimientos dirigidos a Atención a clientes.', 'warn');
-    }
-    if (!isSentToAttention && !isAtencion) {
-      return notify('Acción restringida: Únicamente el personal de Atención a clientes puede reabrir reportes de red dirigidos a Soporte técnico.', 'warn');
-    }
-  } else {
-    if (!isSoporte && !(isAtencion && isCreatedByAttention(w))) {
-      return notify('Acción restringida: Como Atención a clientes solo puedes reabrir detalles que hayan sido creados desde tu área.', 'warn');
+  // Regla institucional estricta: solo el área solicitante puede reabrir lo que envió a la contraparte (Admin puede reabrir todo)
+  if (!isAdmin) {
+    if (w.detailKind === 'network') {
+      if (isSentToAttention && !isSoporte) {
+        return notify('Acción restringida: Únicamente el personal de Soporte técnico puede reabrir requerimientos dirigidos a Atención a clientes.', 'warn');
+      }
+      if (!isSentToAttention && !isAtencion) {
+        return notify('Acción restringida: Únicamente el personal de Atención a clientes puede reabrir reportes de red dirigidos a Soporte técnico.', 'warn');
+      }
+    } else {
+      if (!isSoporte && !(isAtencion && isCreatedByAttention(w))) {
+        return notify('Acción restringida: Como Atención a clientes solo puedes reabrir detalles que hayan sido creados desde tu área.', 'warn');
+      }
     }
   }
 
@@ -2209,13 +2640,17 @@ async function reopenCompletedWO(id) {
   w.completedAt = '';
   w.updatedAt = now;
   w.updatedById = currentUser.id || '';
+  w.isReopened = true;
+  w.reopenedAt = now;
+  const currentReopenCount = (typeof getOrderReopenCount === 'function' ? getOrderReopenCount(w) : (Number(w.reopenCount) || 0)) + 1;
+  w.reopenCount = currentReopenCount;
   w.reviewOpenedById = '';
   w.reviewOpenedByName = '';
   w.reviewOpenedByUsername = '';
   w.reviewOpenedAt = '';
 
   const reOpenLabel = isSentToAttention ? 'Requerimiento reabierto por Soporte técnico' : 'Reporte reabierto por Atención a clientes';
-  appendSharedNetworkFollowUp(w, 'reabierto', reOpenLabel, `Reabierto formalmente por ${userName} para nueva revisión y atención.`);
+  appendSharedNetworkFollowUp(w, 'reabierto', reOpenLabel, `Reabierto formalmente por ${userName} para nueva revisión y atención (reapertura #${currentReopenCount}).`);
   setUpdatedAudit(w, isSentToAttention ? 'reabrió requerimiento a Atención a clientes' : 'reabrió reporte de red a Soporte técnico');
 
   const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
@@ -2234,7 +2669,7 @@ async function reopenCompletedWO(id) {
 }
 
 function getOrderStatusMeta(order) {
-  if (order?.status === 'completada') return {label:getOrderCategory(order) === 'instalacion' ? 'Completado' : 'Concluido',className:'is-done',title:'Detalle concluido satisfactoriamente'};
+  if (order?.status === 'completada') return { label: getOrderCategory(order) === 'instalacion' ? 'Completado' : 'Concluido', className: 'is-done', title: 'Detalle concluido satisfactoriamente' };
   if (order?.status === 'resuelto_soporte') {
     return {
       label: 'Resuelto',
@@ -2256,7 +2691,7 @@ function getOrderStatusMeta(order) {
       title: 'No fue posible solucionar la incidencia'
     };
   }
-  if (order?.status === 'revisado') return {label:'Revisado',className:'is-reviewed',title:'Revisado'};
+  if (order?.status === 'revisado') return { label: 'Revisado', className: 'is-reviewed', title: 'Revisado' };
   if (order?.status === 'en_revision') {
     return {
       label: 'En atención',
@@ -2264,7 +2699,7 @@ function getOrderStatusMeta(order) {
       className: 'is-reviewing'
     };
   }
-  return {label:'Pendiente',className:'is-pending',title:'Pendiente de atención'};
+  return { label: 'Pendiente', className: 'is-pending', title: 'Pendiente de atención' };
 }
 
 function orderReviewOpenedSummary(order) {
@@ -2284,13 +2719,13 @@ function orderViewedSummary(order) {
 }
 
 function orderNeedsReviewDecision(order) {
-  return !!order && order.detailKind === 'network' && !order.deletedAt && !userHasRole('administrador','admin') && userHasRole('soporte') &&
-    !order.reviewOpenedAt && !['completada','no_realizado','revisado','en_revision'].includes(order.status);
+  // Desactivado: no se solicita confirmación de inicio de atención al abrir/cerrar detalles (userHasRole('administrador','admin'))
+  return false;
 }
 
 function rememberPendingOrderReviewDecision(orderId) {
   pendingOrderReviewDecisionId = String(orderId || '');
-  if (pendingOrderReviewDecisionId) sessionStorage.setItem(ORDER_REVIEW_DECISION_KEY,pendingOrderReviewDecisionId);
+  if (pendingOrderReviewDecisionId) sessionStorage.setItem(ORDER_REVIEW_DECISION_KEY, pendingOrderReviewDecisionId);
 }
 
 function clearPendingOrderReviewDecision() {
@@ -2309,17 +2744,17 @@ function interceptOrderReviewNavigation(event) {
   event.preventDefault();
   event.stopImmediatePropagation();
   pendingOrderReviewReload = false;
-  pendingOrderReviewDestination = new URL(link.href,window.location.href).href;
+  pendingOrderReviewDestination = new URL(link.href, window.location.href).href;
   showOrderReviewDecision(pendingOrderReviewDecisionId);
 }
 
 function recordUnconfirmedOrderReviewExit() {
-  if (!pendingOrderReviewDecisionId || !userHasRole('administrador','admin','soporte')) return;
+  if (!pendingOrderReviewDecisionId || !userHasRole('administrador', 'admin', 'soporte')) return;
   const endpoint = `${typeof API === 'string' ? API : ''}/api/work-orders/review-exit`;
-  const payload = new Blob([JSON.stringify({orderId:pendingOrderReviewDecisionId})],{type:'application/json'});
-  const sent = typeof navigator.sendBeacon === 'function' && navigator.sendBeacon(endpoint,payload);
+  const payload = new Blob([JSON.stringify({ orderId: pendingOrderReviewDecisionId })], { type: 'application/json' });
+  const sent = typeof navigator.sendBeacon === 'function' && navigator.sendBeacon(endpoint, payload);
   if (!sent) {
-    void fetch(endpoint,{method:'POST',body:payload,credentials:'include',keepalive:true}).catch(() => {});
+    void fetch(endpoint, { method: 'POST', body: payload, credentials: 'include', keepalive: true }).catch(() => { });
   }
 }
 
@@ -2343,7 +2778,7 @@ function hasUserViewedOrderInCurrentCycle(order, actor = getCurrentUser()) {
 }
 
 async function markWOViewedOnOpen(order) {
-  if (!order || order.deletedAt || !userHasRole('administrador','admin','soporte','atencion_clientes')) return false;
+  if (!order || order.deletedAt || !userHasRole('administrador', 'admin', 'soporte', 'atencion_clientes')) return false;
   if (order.detailKind !== 'network') return false;
   if (order.status === 'completada' || order.status === 'no_realizado') return false;
   const actor = getCurrentUser();
@@ -2353,79 +2788,153 @@ async function markWOViewedOnOpen(order) {
     return false;
   }
   const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
-  appendOrderFollowUp(order,'viewed','Visto');
-  setUpdatedAudit(order,'vio detalle de orden');
-  const saved = await saveRecordWithAudit('workOrders',order,auditStart);
+  appendOrderFollowUp(order, 'viewed', 'Visto');
+  setUpdatedAudit(order, 'vio detalle de orden');
+  const saved = await saveRecordWithAudit('workOrders', order, auditStart);
   if (saved && orderNeedsReviewDecision(order)) rememberPendingOrderReviewDecision(order.id);
   return saved;
 }
 
 function ensureOrderReviewDecisionModal() {
-  let modal = document.getElementById('order-review-decision-mo');
-  if (modal) return modal;
-  document.body.insertAdjacentHTML('beforeend', `<div class="mo order-review-decision-mo" id="order-review-decision-mo">
-    <div class="md order-review-decision-card" role="dialog" aria-modal="true" aria-labelledby="order-review-decision-title">
-      <div id="order-review-decision-choice">
-        <span class="order-review-decision-icon"><svg style="width:28px;height:28px;stroke:currentColor;fill:none;stroke-width:2;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-        <span id="order-review-decision-context" class="order-review-decision-context"></span>
-        <h2 id="order-review-decision-title">¿Desea iniciar la atención técnica del detalle?</h2>
-        <p>El detalle ha sido registrado como visto. Confirme si comenzará la atención técnica en este momento.</p>
-        <div class="order-review-decision-actions"><button type="button" class="btn bc" onclick="saveOrderReviewDecision(true)">Iniciar atención técnica</button><button type="button" class="btn bgh" onclick="showOrderReviewReason()">Posponer atención</button></div>
-      </div>
-      <div id="order-review-decision-reason" hidden>
-        <h2>Motivo por el cual se pospone la atención</h2>
-        <p>El motivo quedará registrado en el historial de seguimiento del reporte.</p>
-        <label class="fi"><span>Motivo de postergación <em>Obligatorio</em></span><textarea id="order-review-reason" rows="4" placeholder="Describa el motivo por el cual no se atiende en este momento..."></textarea></label>
-        <div class="order-review-decision-actions"><button type="button" class="btn bgh" onclick="showOrderReviewDecisionChoice()">Volver</button><button type="button" class="btn bc" onclick="saveOrderReviewDecision(false)">Guardar motivo</button></div>
-      </div>
-    </div>
-  </div>`);
-  modal = document.getElementById('order-review-decision-mo');
-  modal.addEventListener('netops:before-modal-close',event => event.preventDefault());
-  return modal;
+  return null;
 }
 
-function showOrderReviewDecisionChoice() {
-  const choice = document.getElementById('order-review-decision-choice');
-  const reason = document.getElementById('order-review-decision-reason');
-  if (choice) choice.hidden = false;
-  if (reason) reason.hidden = true;
-}
+function showOrderReviewDecisionChoice() { }
 
-function showOrderReviewReason() {
-  const choice = document.getElementById('order-review-decision-choice');
-  const reason = document.getElementById('order-review-decision-reason');
-  if (choice) choice.hidden = true;
-  if (reason) reason.hidden = false;
-  setTimeout(() => document.getElementById('order-review-reason')?.focus(),50);
-}
+function showOrderReviewReason() { }
 
 function showOrderReviewDecision(orderId) {
-  const order = (state.workOrders || []).find(item => item.id === orderId && !item.deletedAt);
-  if (!order || !orderNeedsReviewDecision(order)) {
-    clearPendingOrderReviewDecision();
-    CM('order-tech-report-mo');
-    return;
-  }
-  rememberPendingOrderReviewDecision(order.id);
-  const modal = ensureOrderReviewDecisionModal();
-  const context = document.getElementById('order-review-decision-context');
-  if (context) context.textContent = `${getOrderFolio(order)} · ${getOrderPlace(order)}`;
-  const reason = document.getElementById('order-review-reason');
-  if (reason) reason.value = '';
-  showOrderReviewDecisionChoice();
-  OM(modal.id);
+  clearPendingOrderReviewDecision();
+  CM('order-tech-report-mo');
 }
 
-function requestCloseOrderReport() {
-  if (pendingOrderReviewDecisionId && currentOrderReportId === pendingOrderReviewDecisionId) {
-    pendingOrderReviewReload = false;
-    pendingOrderReviewDestination = '';
-    showOrderReviewDecision(pendingOrderReviewDecisionId);
-    return;
-  }
+function closeOrderReportModalDirectly() {
+  clearPendingOrderReviewDecision();
   currentOrderReportId = '';
   CM('order-tech-report-mo');
+  CM('order-chat-close-decision-mo');
+  try {
+    const curUrl = new URL(window.location.href);
+    if (curUrl.searchParams.has('orderId') || curUrl.searchParams.has('id')) {
+      curUrl.searchParams.delete('orderId');
+      curUrl.searchParams.delete('id');
+      window.history.replaceState({}, '', curUrl);
+    }
+  } catch (e) {}
+}
+
+function getOrderCurrentUserClosureAction(order) {
+  if (!order || order.detailKind !== 'network') return null;
+  if (order.status === 'completada' || order.status === 'no_realizado') return null;
+  const currentUser = getCurrentUser();
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+  const isAdmin = userHasRole('administrador', 'admin');
+  const isSentToAttention = isNetworkSupportToAttention(order);
+  const closureStatus = typeof getOrderClosureStatus === 'function' ? getOrderClosureStatus(order) : {};
+
+  if (isSentToAttention) {
+    if (closureStatus.attentionConfirmed || order.status === 'resuelto_soporte') {
+      if (isSoporte || isAdmin) return 'confirm';
+      return null;
+    } else {
+      if (isAtencion || isAdmin) return 'propose';
+      return null;
+    }
+  } else {
+    if (closureStatus.supportConfirmed || order.status === 'resuelto_soporte') {
+      if (isAtencion || isAdmin) return 'confirm';
+      return null;
+    } else {
+      if (isSoporte || isAdmin) return 'propose';
+      return null;
+    }
+  }
+}
+
+function promptCloseOrderChatDecision(order, actionType) {
+  let modal = document.getElementById('order-chat-close-decision-mo');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'order-chat-close-decision-mo';
+    modal.className = 'mo';
+    modal.style.zIndex = '14000';
+    document.body.appendChild(modal);
+  }
+
+  const isPropose = actionType === 'propose';
+  const folio = getOrderFolio(order);
+  const title = isPropose ? '¿Mandar a concluir este caso?' : '¿Confirmar conclusión del caso?';
+  const message = isPropose
+    ? 'Puedes mandar a concluir este caso para su validación, o simplemente cerrar la conversación.'
+    : 'La contraparte ya envió a concluir este caso. Puedes confirmar la conformidad y cerrarlo definitivamente, o simplemente cerrar la ventana.';
+  const actionBtnText = isPropose ? 'Mandar a concluir' : 'Confirmar y cerrar';
+  const actionBtnIcon = isPropose
+    ? '<svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2;margin-right:6px;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
+    : '<svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.5;margin-right:6px;"><polyline points="20 6 9 17 4 12"/></svg>';
+
+  modal.innerHTML = `
+    <div class="md modal-modern" style="max-width:440px;padding:22px 24px;border-radius:18px;background:#ffffff;box-shadow:0 24px 50px rgba(15,23,42,0.24);text-align:left;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="width:38px;height:38px;border-radius:10px;background:#eff6ff;color:#0874e8;display:grid;place-items:center;flex-shrink:0;">
+            <svg style="width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </span>
+          <div>
+            <h3 style="margin:0;font-size:15.5px;font-weight:800;color:#0f172a;">${orderEscape(title)}</h3>
+            <p style="margin:2px 0 0;font-size:11.5px;color:#64748b;font-weight:700;">${orderEscape(folio)} · ${orderEscape(getOrderPlace(order))}</p>
+          </div>
+        </div>
+        <button type="button" class="btn bgh" style="width:28px;height:28px;padding:0;display:grid;place-items:center;border-radius:8px;color:#64748b;" onclick="dismissCloseOrderChatDecision()" title="Volver al chat">
+          <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;stroke-width:2.2;fill:none;"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <p style="margin:0 0 18px;font-size:13px;line-height:1.5;color:#334155;">${orderEscape(message)}</p>
+
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button type="button" class="btn ${isPropose ? 'bc' : 'btn-ok-success'}" style="width:100%;justify-content:center;min-height:38px;font-size:13px;font-weight:800;border-radius:10px;padding:8px 16px;" onclick="executeChatCloseAction('${order.id}', '${actionType}')">
+          ${actionBtnIcon}${orderEscape(actionBtnText)}
+        </button>
+        <button type="button" class="btn bgh" style="width:100%;justify-content:center;min-height:36px;font-size:12.5px;font-weight:700;border-radius:10px;color:#475569;" onclick="confirmJustCloseOrderReport()">
+          Simplemente cerrar chat
+        </button>
+      </div>
+    </div>
+  `;
+
+  OM('order-chat-close-decision-mo');
+}
+
+function dismissCloseOrderChatDecision() {
+  CM('order-chat-close-decision-mo');
+}
+
+function confirmJustCloseOrderReport() {
+  CM('order-chat-close-decision-mo');
+  closeOrderReportModalDirectly();
+}
+
+async function executeChatCloseAction(orderId, actionType) {
+  CM('order-chat-close-decision-mo');
+  if (actionType === 'propose') {
+    await proposeTwoPartyClosure(orderId);
+  } else if (actionType === 'confirm') {
+    await confirmTwoPartyClosure(orderId);
+  }
+}
+
+function requestCloseOrderReport(forceClose = false) {
+  if (!forceClose && currentOrderReportId) {
+    const order = (state.workOrders || []).find(x => x.id === currentOrderReportId && !x.deletedAt);
+    if (order && order.detailKind === 'network' && order.status !== 'completada' && order.status !== 'no_realizado') {
+      const actionType = getOrderCurrentUserClosureAction(order);
+      if (actionType) {
+        return promptCloseOrderChatDecision(order, actionType);
+      }
+    }
+  }
+  closeOrderReportModalDirectly();
 }
 
 async function saveOrderReviewDecision(attendNow) {
@@ -2434,11 +2943,11 @@ async function saveOrderReviewDecision(attendNow) {
     pendingOrderReviewDestination = '';
     clearPendingOrderReviewDecision();
     CM('order-review-decision-mo');
-    return notify('No se encontró el detalle solicitado.','err');
+    return notify('No se encontró el detalle solicitado.', 'err');
   }
   const reason = document.getElementById('order-review-reason')?.value.trim() || '';
   if (!attendNow && !reason) {
-    notify('Escribe el motivo por el que no se revisará en este momento.','err');
+    notify('Escribe el motivo por el que no se revisará en este momento.', 'err');
     document.getElementById('order-review-reason')?.focus();
     return;
   }
@@ -2453,15 +2962,15 @@ async function saveOrderReviewDecision(attendNow) {
     order.reviewOpenedByName = actor.name || actor.username || 'Administrador';
     order.reviewOpenedByUsername = actor.username || '';
     appendOrderFollowUp(order,'review_opened','En revisión');
-    setUpdatedAudit(order,'confirmó que atenderá el detalle');
+    setUpdatedAudit(order, 'confirmó que atenderá el detalle');
   } else {
-    setUpdatedAudit(order,'pospuso la revisión del detalle');
+    setUpdatedAudit(order, 'pospuso la revisión del detalle');
   }
-  const saved = await saveRecordWithAudit('workOrders',order,auditStart);
+  const saved = await saveRecordWithAudit('workOrders', order, auditStart);
   buttons.forEach(button => { button.disabled = false; });
   if (!saved) return;
   if (!attendNow && typeof broadcastNetworkOrderChange === 'function') {
-    try { broadcastNetworkOrderChange(order, 'review_deferred', { reason }); } catch (e) {}
+    try { broadcastNetworkOrderChange(order, 'review_deferred', { reason }); } catch (e) { }
   }
   const shouldReload = pendingOrderReviewReload;
   const destination = pendingOrderReviewDestination;
@@ -2487,18 +2996,18 @@ function getOrderActionNote() {
   return document.getElementById('order-action-note')?.value.trim() || '';
 }
 
-function appendOrderFollowUp(order,action,label,note = '') {
+function appendOrderFollowUp(order, action, label, note = '') {
   const actor = getCurrentUser();
   const event = {
-    id:gid('ofu'),
+    id: gid('ofu'),
     action,
     label,
-    note:String(note || '').trim(),
-    at:new Date().toISOString(),
-    byId:actor.id || '',
-    byName:actor.name || actor.username || 'Usuario'
+    note: String(note || '').trim(),
+    at: new Date().toISOString(),
+    byId: actor.id || '',
+    byName: actor.name || actor.username || 'Usuario'
   };
-  order.followUps = [...(Array.isArray(order.followUps) ? order.followUps : []),event].slice(-50);
+  order.followUps = [...(Array.isArray(order.followUps) ? order.followUps : []), event].slice(-50);
   return event;
 }
 
@@ -2507,13 +3016,13 @@ function resetOrderReportForResend(order) {
   if (!report || typeof report !== 'object') return;
   const hadResult = report.result && report.result !== 'pendiente';
   if (hadResult || report.completedAt) {
-    report.history = [...(Array.isArray(report.history) ? report.history : []),{
-      result:report.result || '',
-      solution:report.solution || '',
-      reason:report.reason || '',
-      observations:report.observations || '',
-      completedAt:report.completedAt || '',
-      completedByName:report.completedByName || ''
+    report.history = [...(Array.isArray(report.history) ? report.history : []), {
+      result: report.result || '',
+      solution: report.solution || '',
+      reason: report.reason || '',
+      observations: report.observations || '',
+      completedAt: report.completedAt || '',
+      completedByName: report.completedByName || ''
     }].slice(-20);
   }
   report.result = 'pendiente';
@@ -2524,18 +3033,18 @@ function resetOrderReportForResend(order) {
   report.reason = '';
 }
 
-async function saveOrderWorkflow(order,auditAction,message,{ firstPage = false } = {}) {
+async function saveOrderWorkflow(order, auditAction, message, { firstPage = false } = {}) {
   const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
   order.updatedAt = new Date().toISOString();
-  setUpdatedAudit(order,auditAction);
-  const saved = await saveRecordWithAudit('workOrders',order,auditStart);
+  setUpdatedAudit(order, auditAction);
+  const saved = await saveRecordWithAudit('workOrders', order, auditStart);
   if (!saved) return false;
   try {
     if (typeof broadcastNetworkOrderChange === 'function') {
       const trans = order.detailKind === 'physical' ? 'sent_to_physical' : (order.status === 'pendiente' ? 'resent' : 'updated');
       broadcastNetworkOrderChange(order, trans);
     }
-  } catch (e) {}
+  } catch (e) { }
   CM('order-actions-mo');
   if (firstPage) orderCurrentPage = 1;
   await loadOrderPage();
@@ -2548,15 +3057,15 @@ async function markWOReviewed(id) {
   if (!order || order.status === 'completada') return;
   const note = getOrderActionNote();
   if (!note) {
-    notify('Describe qué se hizo para intentar solucionarlo.','err');
+    notify('Describe qué se hizo para intentar solucionarlo.', 'err');
     document.getElementById('order-action-note')?.focus();
     return;
   }
   order.status = 'revisado';
   order.reviewedAt = new Date().toISOString();
   order.lastResentAt = '';
-  appendOrderFollowUp(order,'reviewed','Revisado',note);
-  await saveOrderWorkflow(order,'revisó detalle','Detalle marcado como revisado.');
+  appendOrderFollowUp(order, 'reviewed', 'Revisado', note);
+  await saveOrderWorkflow(order, 'revisó detalle', 'Detalle marcado como revisado.');
 }
 
 async function markWOSameIssue(id) {
@@ -2569,18 +3078,18 @@ async function markWOSameIssue(id) {
   order.lastResentAt = '';
   order.technicianReport = {
     ...(order.technicianReport || {}),
-    result:'no_realizado',
-    reason:note || 'El problema continúa sin solución.',
-    completedAt:now
+    result: 'no_realizado',
+    reason: note || 'El problema continúa sin solución.',
+    completedAt: now
   };
-  appendOrderFollowUp(order,'same_issue','Sigue el mismo tema',note);
-  await saveOrderWorkflow(order,'marcó que sigue el mismo tema','Detalle marcado como no solucionado.');
+  appendOrderFollowUp(order, 'same_issue', 'Sigue el mismo tema', note);
+  await saveOrderWorkflow(order, 'marcó que sigue el mismo tema', 'Detalle marcado como no solucionado.');
 }
 
 async function resendWO(id) {
   const order = (state.workOrders || []).find(item => item.id === id && !item.deletedAt);
   if (!order) return;
-  if (order.status === 'completada') return notify('Un detalle solucionado debe copiarse como uno nuevo.','warn');
+  if (order.status === 'completada') return notify('Un detalle solucionado debe copiarse como uno nuevo.', 'warn');
   const note = getOrderActionNote();
   order.status = 'pendiente';
   order.completedAt = '';
@@ -2591,8 +3100,8 @@ async function resendWO(id) {
   order.reviewedAt = '';
   order.lastResentAt = new Date().toISOString();
   resetOrderReportForResend(order);
-  appendOrderFollowUp(order,'resent','Volver a enviar',note);
-  await saveOrderWorkflow(order,'volvió a enviar detalle',note ? 'Detalle reenviado con información nueva.' : 'Detalle reenviado sin crear otro folio.',{ firstPage:true });
+  appendOrderFollowUp(order, 'resent', 'Volver a enviar', note);
+  await saveOrderWorkflow(order, 'volvió a enviar detalle', note ? 'Detalle reenviado con información nueva.' : 'Detalle reenviado sin crear otro folio.', { firstPage: true });
 }
 
 async function sendWOToPhysical(id) {
@@ -2600,7 +3109,7 @@ async function sendWOToPhysical(id) {
   if (!order || order.detailKind !== 'network') return;
   const note = getOrderActionNote();
   if (!note) {
-    notify('Describe el detalle físico que se presentó.','err');
+    notify('Describe el detalle físico que se presentó.', 'err');
     document.getElementById('order-action-note')?.focus();
     return;
   }
@@ -2619,8 +3128,8 @@ async function sendWOToPhysical(id) {
   order.reviewedAt = '';
   order.lastResentAt = new Date().toISOString();
   resetOrderReportForResend(order);
-  appendOrderFollowUp(order,'physical','Enviado a detalle físico',`${note} · Origen de red: ${previousCategory}${previousDetail ? ` · Reporte original: ${previousDetail}` : ''}`);
-  await saveOrderWorkflow(order,'envió detalle a físicos','El mismo folio fue enviado a Detalles físicos.');
+  appendOrderFollowUp(order, 'physical', 'Enviado a detalle físico', `${note} · Origen de red: ${previousCategory}${previousDetail ? ` · Reporte original: ${previousDetail}` : ''}`);
+  await saveOrderWorkflow(order, 'envió detalle a físicos', 'El mismo folio fue enviado a Detalles físicos.');
 }
 
 function getPhysicalDerivationStatus(order) {
@@ -2848,7 +3357,7 @@ async function rejectSendNetworkToPhysical(id) {
     if (typeof broadcastNetworkOrderChange === 'function') {
       broadcastNetworkOrderChange(order, 'updated');
     }
-  } catch (e) {}
+  } catch (e) { }
 
   updateOrderChatLive(order);
   renderWOs();
@@ -2858,7 +3367,7 @@ async function rejectSendNetworkToPhysical(id) {
 async function openWOCopy(id) {
   const source = (state.workOrders || []).find(item => item.id === id && !item.deletedAt);
   if (!source) return;
-  if (source.status !== 'completada') return notify('Solo puedes copiar un detalle que ya esté solucionado. Para uno abierto usa Volver a enviar.','warn');
+  if (source.status !== 'completada') return notify('Solo puedes copiar un detalle que ya esté solucionado. Para uno abierto usa Volver a enviar.', 'warn');
   CM('order-actions-mo');
   await openWO(id);
   editingWOId = '';
@@ -2881,11 +3390,11 @@ function hideOrderActionForm() {
   if (form) form.hidden = true;
 }
 
-function showOrderActionForm(id,mode) {
+function showOrderActionForm(id, mode) {
   const settings = {
-    reviewed:{label:'¿Qué se hizo para intentar solucionarlo?',hint:'Obligatorio',placeholder:'Describe la revisión, ajuste o prueba realizada...',button:'Guardar como revisado',handler:'markWOReviewed'},
-    physical:{label:'¿Qué detalle físico se presentó?',hint:'Obligatorio',placeholder:'Describe la falla física detectada y lo que debe atenderse...',button:'Enviar a detalles físicos',handler:'sendWOToPhysical'},
-    same:{label:'Información nueva',hint:'Opcional',placeholder:'Agrega únicamente lo nuevo que reportó el cliente, si existe...',button:'Guardar: sigue el mismo tema',handler:'markWOSameIssue'}
+    reviewed: { label: '¿Qué se hizo para intentar solucionarlo?', hint: 'Obligatorio', placeholder: 'Describe la revisión, ajuste o prueba realizada...', button: 'Guardar como revisado', handler: 'markWOReviewed' },
+    physical: { label: '¿Qué detalle físico se presentó?', hint: 'Obligatorio', placeholder: 'Describe la falla física detectada y lo que debe atenderse...', button: 'Enviar a detalles físicos', handler: 'sendWOToPhysical' },
+    same: { label: 'Información nueva', hint: 'Opcional', placeholder: 'Agrega únicamente lo nuevo que reportó el cliente, si existe...', button: 'Guardar: sigue el mismo tema', handler: 'markWOSameIssue' }
   };
   const setting = settings[mode];
   const form = document.getElementById('order-action-form');
@@ -2893,26 +3402,26 @@ function showOrderActionForm(id,mode) {
   document.getElementById('order-action-note-label').textContent = setting.label;
   const hint = document.getElementById('order-action-note-hint');
   hint.textContent = setting.hint;
-  hint.classList.toggle('is-required',mode !== 'same');
+  hint.classList.toggle('is-required', mode !== 'same');
   const textarea = document.getElementById('order-action-note');
   textarea.value = '';
   textarea.placeholder = setting.placeholder;
   const confirm = document.getElementById('order-action-confirm');
   confirm.textContent = setting.button;
-  confirm.setAttribute('onclick',`${setting.handler}('${id}')`);
+  confirm.setAttribute('onclick', `${setting.handler}('${id}')`);
   form.hidden = false;
-  setTimeout(() => textarea.focus(),50);
+  setTimeout(() => textarea.focus(), 50);
 }
 
 function openOrderActions(id) {
   const order = (state.workOrders || []).find(item => item.id === id && !item.deletedAt);
-  if (!order) return notify('No se encontró el detalle solicitado.','err');
-  if (order.detailKind !== 'network') return notify('Estas acciones solo están disponibles para detalles de red.','warn');
+  if (!order) return notify('No se encontró el detalle solicitado.', 'err');
+  if (order.detailKind !== 'network') return notify('Estas acciones solo están disponibles para detalles de red.', 'warn');
   const status = getOrderStatusMeta(order);
   const solved = order.status === 'completada';
   let modal = document.getElementById('order-actions-mo');
   if (!modal) {
-    document.body.insertAdjacentHTML('beforeend','<div class="mo order-actions-mo" id="order-actions-mo"><div class="md order-actions-card" id="order-actions-card"></div></div>');
+    document.body.insertAdjacentHTML('beforeend', '<div class="mo order-actions-mo" id="order-actions-mo"><div class="md order-actions-card" id="order-actions-card"></div></div>');
     modal = document.getElementById('order-actions-mo');
   }
   document.getElementById('order-actions-card').innerHTML = `
@@ -2937,18 +3446,18 @@ async function deleteWO(id) {
   const w = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!w) return;
   await handleProtectedDelete({
-    targetType:'detail',
-    targetId:id,
-    targetName:w.clientName || w.title || w.description || 'detalle',
-    applyDelete:() => {
+    targetType: 'detail',
+    targetId: id,
+    targetName: w.clientName || w.title || w.description || 'detalle',
+    applyDelete: () => {
       setDeletedAudit(w, 'elimino orden');
       try {
         if (typeof broadcastNetworkOrderChange === 'function') {
           broadcastNetworkOrderChange(w, 'deleted');
         }
-      } catch (e) {}
+      } catch (e) { }
     },
-    refresh:() => { void loadOrderPage(); }
+    refresh: () => { void loadOrderPage(); }
   });
 }
 
@@ -3156,7 +3665,7 @@ function getOrderPendingUserAction(order) {
     return {
       requiresMyAction: false,
       waitingOther: true,
-      badge: isSentToAttention ? 'Por confirmar Soporte' : 'Por confirmar Atención',
+      badge: isSentToAttention ? 'Espera a Soporte' : 'Espera a Atención',
       kind: 'closure'
     };
   }
@@ -3222,7 +3731,7 @@ function renderOrderChatComposerInnerHtml(order) {
   }
   if (!isInCase) {
     const canRetake = typeof canUserRetakeNetworkOrder === 'function'
-      ? canUserRetakeNetworkOrder(order, user)
+      ? canUserRetakeNetworkOrder(order, currentUser)
       : (!isCompleted && order.status !== 'no_realizado' && (isSentToAttention ? userHasRole('atencion_clientes') : userHasRole('soporte')));
     return `
       <div class="order-chat-restricted-banner">
@@ -3297,6 +3806,7 @@ function renderOrderChatMessagesHtml(order) {
     const step = followUps[idx];
     const action = String(step.action || '').toLowerCase();
     const label = String(step.label || '').toLowerCase();
+    const normLabel = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
     // REGLA INSTITUCIONAL: Excluir estrictamente el "visto" y "atención no realizada" (solo notificación) del chat
     if (
@@ -3305,12 +3815,13 @@ function renderOrderChatMessagesHtml(order) {
       action === 'review_deferred' ||
       action === 'review_exit_unconfirmed' ||
       action === 'atencion_no_realizada' ||
-      label.includes('visto') ||
-      label.includes('abierta para revisión') ||
+      normLabel.includes('visto') ||
+      normLabel.includes('abierta para revision') ||
       label.includes('atención no realizada') ||
-      label.includes('atencion no realizada') ||
-      label.includes('no se atenderá') ||
-      label.includes('salió sin confirmar')
+      normLabel.includes('atencion no realizada') ||
+      normLabel.includes('no se atendera') ||
+      normLabel.includes('salio sin confirmar') ||
+      normLabel.includes('pospuso la revision')
     ) {
       continue;
     }
@@ -3452,9 +3963,11 @@ function renderOrderFooterActions(order) {
   const isAssignedToOther = (order.assignedUserId || order.assignedUserName) && !isOrderAssignedToUser(order, currentUser);
   const isCheckingByOther = order.reviewOpenedById && order.reviewOpenedById !== currentUser.id;
   const assignedArea = typeof getOrderAssignedAreaRole === 'function' ? getOrderAssignedAreaRole(order) : '';
-  const allowedRoleToRetake = (assignedArea === 'atencion_clientes' || isSentToAttention)
+  const targetArea = assignedArea || (isSentToAttention ? 'atencion_clientes' : 'soporte');
+  const belongsToAttention = targetArea === 'atencion_clientes';
+  const allowedRoleToRetake = isAdmin || (belongsToAttention
     ? (isAtencion && !isSoporte)
-    : (isSoporte && !isAtencion);
+    : (isSoporte && !isAtencion));
   const canRetake = typeof canUserRetakeNetworkOrder === 'function'
     ? canUserRetakeNetworkOrder(order, currentUser)
     : (!rowReported && allowedRoleToRetake && (isAssignedToOther || isCheckingByOther || !order.assignedUserId));
@@ -3809,7 +4322,7 @@ async function proposeTwoPartyClosure(orderId) {
       if (typeof broadcastNetworkOrderChange === 'function') {
         broadcastNetworkOrderChange(order, 'resolved');
       }
-    } catch (e) {}
+    } catch (e) { }
 
     notify('Caso enviado a concluir. En espera de confirmación de Soporte técnico.', 'ok');
     updateOrderChatLive(order);
@@ -3868,7 +4381,7 @@ async function confirmTwoPartyClosure(orderId) {
     if (typeof broadcastNetworkOrderChange === 'function') {
       broadcastNetworkOrderChange(order, 'confirmed');
     }
-  } catch (e) {}
+  } catch (e) { }
 
   notify('Detalle concluido satisfactoriamente por ambas partes.', 'ok');
   updateOrderChatLive(order);
@@ -3933,17 +4446,276 @@ function updateOrderChatLive(updatedOrder) {
   }
 }
 
+function formatOrderDate(dateVal) {
+  if (!dateVal) return '-';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch (e) {
+    return String(dateVal);
+  }
+}
+
+function formatOrderTime(dateVal) {
+  if (!dateVal) return '';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    return '';
+  }
+}
+
+function getOrderReopenCount(order) {
+  if (!order) return 0;
+  let count = Number(order.reopenCount) || 0;
+  if (Array.isArray(order.followUps)) {
+    const followUpsCount = order.followUps.filter(f => f && (f.action === 'reabierto' || f.action === 'reopened')).length;
+    count = Math.max(count, followUpsCount);
+  }
+  if (count === 0 && (order.isReopened || order.reopenedAt)) {
+    count = 1;
+  }
+  return count;
+}
+
+function isOrderReopened(order) {
+  return getOrderReopenCount(order) > 0;
+}
+
+function getOrderUnreadMessagesCount(order, actor = getCurrentUser()) {
+  if (!order || order.detailKind !== 'network' || !Array.isArray(order.followUps)) return 0;
+  const actorId = String(actor?.id || '').toLowerCase();
+  const actorName = normalizeName(actor?.name || actor?.username || '');
+  let lastReadStr = '';
+  try {
+    lastReadStr = localStorage.getItem('order_chat_read_' + (actor?.id || 'anon') + '_' + order.id) || '';
+  } catch (e) { }
+  const lastReadTime = lastReadStr ? new Date(lastReadStr).getTime() : 0;
+
+  return order.followUps.filter(f => {
+    if (f.action !== 'chat_message') return false;
+    const isMine = (f.byId && String(f.byId).toLowerCase() === actorId) || (normalizeName(f.byName || '') === actorName);
+    if (isMine) return false;
+    const msgTime = f.at ? new Date(f.at).getTime() : 0;
+    return msgTime > lastReadTime;
+  }).length;
+}
+
+function markOrderChatAsRead(orderId, actor = getCurrentUser()) {
+  if (!orderId) return;
+  try {
+    localStorage.setItem('order_chat_read_' + (actor?.id || 'anon') + '_' + orderId, new Date().toISOString());
+  } catch (e) { }
+}
+
+function ensureMatchingDetailKind(order) {
+  if (!order || !order.detailKind) return;
+  const targetKind = order.detailKind === 'network' ? 'network' : 'physical';
+  if (targetKind !== activeOrderDetailKind) {
+    if (typeof selectOrderDetailKind === 'function') {
+      selectOrderDetailKind(targetKind);
+    } else {
+      activeOrderDetailKind = targetKind;
+      if (typeof updateOrderDetailTabs === 'function') updateOrderDetailTabs();
+    }
+  }
+}
+
+function ensureOrderVisibleInTable(order) {
+  if (!order) return;
+  let filtersChanged = false;
+
+  // 1. Limpiar búsqueda de texto si el filtro oculta este detalle
+  const searchEl = document.getElementById('wo-search');
+  if (searchEl && searchEl.value.trim()) {
+    const q = (typeof normalizeName === 'function' ? normalizeName(searchEl.value.trim()) : searchEl.value.trim().toLowerCase());
+    const orderFolio = typeof getOrderFolio === 'function' ? getOrderFolio(order) : (order.folio || '');
+    const tokens = [
+      order.id,
+      orderFolio,
+      order.clientName,
+      order.title,
+      order.description,
+      order.desc,
+      order.town,
+      order.nodeName,
+      order.nodeCode
+    ].filter(Boolean).map(s => typeof normalizeName === 'function' ? normalizeName(String(s)) : String(s).toLowerCase());
+    const matchesSearch = tokens.some(t => t.includes(q));
+    if (!matchesSearch) {
+      searchEl.value = '';
+      filtersChanged = true;
+    }
+  }
+
+  // 2. Filtro de estado
+  if (activeOrderFilters.status && activeOrderFilters.status.size > 0) {
+    if (!activeOrderFilters.status.has(order.status)) {
+      activeOrderFilters.status.clear();
+      filtersChanged = true;
+    }
+  }
+
+  // 3. Filtro de fecha
+  if (activeOrderFilters.date && activeOrderFilters.date.size > 0) {
+    activeOrderFilters.date.clear();
+    filtersChanged = true;
+  }
+
+  // 4. Filtro "Mis detalles"
+  if (filterOnlyMyAssignments) {
+    const currentActor = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+    const isPendingForMe = typeof isOrderPendingForUser === 'function'
+      ? isOrderPendingForUser(order, currentActor)
+      : (typeof isOrderAssignedToUser === 'function' && isOrderAssignedToUser(order, currentActor));
+    if (!isPendingForMe) {
+      filterOnlyMyAssignments = false;
+      const myBtn = document.getElementById('wo-filter-my-assignments');
+      if (myBtn) myBtn.classList.remove('is-active');
+      filtersChanged = true;
+    }
+  }
+
+  // 5. Filtro de asignado
+  if (activeOrderFilters.assignee && activeOrderFilters.assignee.size > 0) {
+    const matchesAssignee = [...activeOrderFilters.assignee].some(selId => {
+      if (selId === 'unassigned') return !order.assignedUserId && !order.assignedUserName;
+      return (order.assignedUserId && String(order.assignedUserId).includes(selId)) ||
+        (order.assignedUserName && normalizeName(order.assignedUserName).includes(normalizeName(selId)));
+    });
+    if (!matchesAssignee) {
+      activeOrderFilters.assignee.clear();
+      filtersChanged = true;
+    }
+  }
+
+  // 6. Filtro de zona / pueblo
+  if (activeOrderFilters.zone && activeOrderFilters.zone.size > 0) {
+    const orderZone = order.zoneId || order.region || (typeof getOrderNode === 'function' ? getOrderNode(order)?.zoneCode : '');
+    if (!orderZone || !activeOrderFilters.zone.has(orderZone)) {
+      activeOrderFilters.zone.clear();
+      filtersChanged = true;
+    }
+  }
+
+  // 7. Filtro de prioridad
+  if (activeOrderFilters.priority && activeOrderFilters.priority.size > 0) {
+    if (!activeOrderFilters.priority.has(order.priority)) {
+      activeOrderFilters.priority.clear();
+      filtersChanged = true;
+    }
+  }
+
+  // 8. Filtro de categoría
+  if (activeOrderFilters.category && activeOrderFilters.category.size > 0) {
+    if (!activeOrderFilters.category.has(order.category)) {
+      activeOrderFilters.category.clear();
+      filtersChanged = true;
+    }
+  }
+
+  // 9. Filtro de creador
+  if (activeOrderFilters.creator && activeOrderFilters.creator.size > 0) {
+    const orderCreator = order.createdById || order.createdBy;
+    if (!orderCreator || !activeOrderFilters.creator.has(orderCreator)) {
+      activeOrderFilters.creator.clear();
+      filtersChanged = true;
+    }
+  }
+
+  // 10. Filtro de tipo de visita
+  if (activeOrderFilters.type && activeOrderFilters.type.size > 0) {
+    const orderType = order.visitType || order.type;
+    if (!orderType || !activeOrderFilters.type.has(orderType)) {
+      activeOrderFilters.type.clear();
+      filtersChanged = true;
+    }
+  }
+
+  // Garantizar que la orden esté en state.workOrders y sea visible
+  if (!Array.isArray(state.workOrders)) state.workOrders = [];
+  state.workOrders = [order, ...state.workOrders.filter(w => w.id !== order.id)];
+  _currentlyLoadedNotificationOrder = order;
+  orderCurrentPage = 1;
+
+  if (filtersChanged) {
+    if (typeof updateOrderFilterButtons === 'function') updateOrderFilterButtons();
+    if (typeof renderActiveOrderFilters === 'function') renderActiveOrderFilters();
+    if (typeof renderOrderFilterMenus === 'function') renderOrderFilterMenus();
+  }
+  if (typeof renderOrdersTable === 'function') renderOrdersTable();
+}
+
+async function loadNotificationOrder(orderId) {
+  if (!orderId) return null;
+  const cleanId = String(orderId).trim();
+  const cleanLower = cleanId.toLowerCase();
+  const stripPrefix = s => String(s || '').toLowerCase().replace(/^(red|det|new)-/i, '');
+  const cleanStripped = stripPrefix(cleanId);
+  const matchesTarget = item => {
+    if (!item || item.deletedAt) return false;
+    const iId = String(item.id || '').toLowerCase();
+    const iFolio = String(item.folio || (typeof getOrderFolio === 'function' ? getOrderFolio(item) : '')).toLowerCase();
+    return iId === cleanLower || iFolio === cleanLower ||
+      (cleanStripped && stripPrefix(iId) === cleanStripped) ||
+      (cleanStripped && stripPrefix(iFolio) === cleanStripped);
+  };
+
+  const existing = (state.workOrders || []).find(matchesTarget);
+  if (existing) {
+    _currentlyLoadedNotificationOrder = existing;
+    if (typeof ensureMatchingDetailKind === 'function') ensureMatchingDetailKind(existing);
+    if (typeof ensureOrderVisibleInTable === 'function') ensureOrderVisibleInTable(existing);
+    return existing;
+  }
+  try {
+    const data = await fetchDataPage('operations', { id: cleanId, limit: 1, offset: 0 });
+    let order = (data.workOrders || []).find(matchesTarget) || (data.workOrders || [])[0];
+    if ((!order || order.deletedAt) && cleanStripped && cleanStripped !== cleanLower) {
+      try {
+        const fallbackData = await fetchDataPage('operations', { id: cleanStripped, limit: 1, offset: 0 });
+        order = (fallbackData.workOrders || []).find(matchesTarget) || (fallbackData.workOrders || [])[0];
+      } catch (e) {}
+    }
+    if (!order || order.deletedAt) {
+      notify('Este detalle ya no está disponible. Puedes revisar los demás en la lista.', 'warn');
+      return null;
+    }
+    _currentlyLoadedNotificationOrder = order;
+    state.workOrders = [order, ...(state.workOrders || []).filter(item => item.id !== order.id)];
+    if (typeof ensureMatchingDetailKind === 'function') ensureMatchingDetailKind(order);
+    if (typeof ensureOrderVisibleInTable === 'function') ensureOrderVisibleInTable(order);
+    return order;
+  } catch (error) {
+    notify(typeof describeSyncError === 'function' ? describeSyncError(error) : 'No se pudo cargar el detalle. Intenta de nuevo.', 'err');
+    return null;
+  }
+}
+
 async function openOrderTechnicianReport(orderId) {
-  let order = (state.workOrders || []).find(item => item.id === orderId && !item.deletedAt);
-  if (!order) return notify('No se encontro el detalle solicitado.', 'err');
+  let order = await loadNotificationOrder(orderId);
+  if (!order) return;
   if (typeof markNotificationReadByOrderId === 'function') {
     markNotificationReadByOrderId(orderId);
   }
   await markWOViewedOnOpen(order);
   order = (state.workOrders || []).find(item => item.id === orderId && !item.deletedAt) || order;
+  const currentActor = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  if (typeof markOrderChatAsRead === 'function') {
+    markOrderChatAsRead(order.id, currentActor);
+    const unreadDot = document.querySelector(`tr[data-order-id="${order.id}"] .net-unread-chat-dot`);
+    if (unreadDot) unreadDot.remove();
+  }
   currentOrderReportId = order.id;
   selectedOrderRowId = String(order.id);
   selectOrderRow(order.id);
+  const rowEl = document.querySelector(`tr[data-order-id="${order.id}"]`);
+  if (rowEl) {
+    rowEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
   const report = order.technicianReport || {};
   const completed = order.status === 'completada' || !!report.completedAt;
   const reportStatus = getOrderStatusMeta(order).label;
@@ -3961,8 +4733,8 @@ async function openOrderTechnicianReport(orderId) {
   if (!modal) {
     document.body.insertAdjacentHTML('beforeend', '<div class="mo order-tech-report-mo" id="order-tech-report-mo"><div class="md order-tech-report-card" id="order-tech-report-card"></div></div>');
     modal = document.getElementById('order-tech-report-mo');
-    modal.addEventListener('click',event => { if (event.target === modal) requestCloseOrderReport(); });
-    modal.addEventListener('netops:before-modal-close',event => {
+    modal.addEventListener('click', event => { if (event.target === modal) requestCloseOrderReport(); });
+    modal.addEventListener('netops:before-modal-close', event => {
       if (!pendingOrderReviewDecisionId || currentOrderReportId !== pendingOrderReviewDecisionId) return;
       event.preventDefault();
       requestCloseOrderReport();
@@ -4019,29 +4791,30 @@ async function openOrderTechnicianReport(orderId) {
             ${orderReportField('user', 'Capturado por', renderUserColorChip(order.createdByName || order.createdByUsername || 'Sin registro', order.createdById), { raw: true })}
             ${orderReportField('user', 'Asignado a', order.assignedUserName ? renderUserColorChip(order.assignedUserName, order.assignedUserId) : '<span style="color:#64748b;font-weight:600;font-size:12px;">Sin asignar</span>', { raw: true })}
             ${orderReportField('check', 'Resuelto por', (() => {
-              const resolverName = report.completedByName || order.completedByName || (visibleFollowUps.find(f => f.action === 'resuelto_soporte' || f.action === 'solved')?.user) || '';
-              const resolverId = report.completedBy || report.completedById || '';
-              if (resolverName) {
-                const chip = renderUserColorChip(resolverName, resolverId);
-                if (order.status === 'completada') {
-                  return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + chip + ' <span style="font-size:11px;color:#059669;font-weight:700;">Aceptado y concluido por Atención</span></div>';
-                }
-                if (order.status === 'resuelto_soporte') {
-                  return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + chip + ' <span style="font-size:11px;color:#d97706;font-weight:700;">En revisión de Atención</span></div>';
-                }
-                return chip;
-              }
-              if (order.status === 'no_realizado') {
-                return '<span style="color:#dc2626;font-weight:600;font-size:12px;font-style:italic;">No realizable (Sin resolver)</span>';
-              }
-              return '<span style="color:#64748b;font-weight:600;font-size:12px;font-style:italic;">Pendiente de resolución</span>';
-            })(), { raw: true })}
+      const resolverName = report.completedByName || order.completedByName || (visibleFollowUps.find(f => f.action === 'resuelto_soporte' || f.action === 'solved')?.user) || '';
+      const resolverId = report.completedBy || report.completedById || '';
+      if (resolverName) {
+        const chip = renderUserColorChip(resolverName, resolverId);
+        if (order.status === 'completada') {
+          return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + chip + ' <span style="font-size:11px;color:#059669;font-weight:700;">Aceptado y concluido por Atención</span></div>';
+        }
+        if (order.status === 'resuelto_soporte') {
+          return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + chip + ' <span style="font-size:11px;color:#d97706;font-weight:700;">En revisión de Atención</span></div>';
+        }
+        return chip;
+      }
+      if (order.status === 'no_realizado') {
+        return '<span style="color:#dc2626;font-weight:600;font-size:12px;font-style:italic;">No realizable (Sin resolver)</span>';
+      }
+      return '<span style="color:#64748b;font-weight:600;font-size:12px;font-style:italic;">Pendiente de resolución</span>';
+    })(), { raw: true })}
             ${orderReportField('calendar', 'Fecha de creación', order.createdAt ? new Date(order.createdAt).toLocaleString('es-MX') : 'Sin fecha')}
             ${order.updatedAt && order.updatedAt !== order.createdAt ? orderReportField('clock', 'Última edición', `${new Date(order.updatedAt).toLocaleString('es-MX')}${order.updatedByName ? ` por ${renderUserColorChip(order.updatedByName, order.updatedById)}` : ''}`, { raw: true }) : ''}
             ${completed ? orderReportField('calendar', 'Fecha y hora del reporte', detailDate ? new Date(detailDate).toLocaleString('es-MX') : 'Sin fecha') : ''}
             ${orderReportField('work', 'Tipo de trabajo', getOrderDisplayType(order))}
             ${orderReportField('flag', 'Prioridad', pl(order.priority || 'media'))}
             ${orderReportField('tag', 'Categoría', orderCategoryLabel(getOrderCategory(order)))}
+      ${order.equipmentId ? orderReportField('work', 'Torre / Antena', `<button type="button" class="btn bsm bg2" onclick="openTowerMaterialModal('${order.equipmentId}')" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 10px;margin-top:2px;">🗼 Ver material de torre</button>`, { raw: true }) : ''}
           </div>
           <section class="order-report-block order-report-request"><span class="order-report-field-icon">${orderReportIcon('clipboard')}</span><div><small>Detalle solicitado</small><p>${orderEscape(requestedDetail)}</p></div></section>
           ${report.solution ? `<section class="order-report-block"><small>Trabajo realizado</small><p>${orderEscape(report.solution)}</p></section>` : ''}
@@ -4116,7 +4889,11 @@ async function openOrderTechnicianReport(orderId) {
     `;
   }
 
-  card.innerHTML = `<div class="modal-head order-report-head"><div class="order-report-head-main"><span class="order-report-title-icon">${orderReportIcon('clipboard')}</span><div><h2>${completed ? 'Reporte del técnico' : 'Detalle de la orden'}</h2><p>${orderReportIcon('pin')}<span>${orderEscape(getOrderPlace(order))}</span><em>${orderEscape(getOrderFolio(order))}</em></p></div></div><button type="button" class="order-report-close" aria-label="Cerrar" onclick="requestCloseOrderReport()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  const reopenCount = typeof getOrderReopenCount === 'function' ? getOrderReopenCount(order) : ((order.isReopened || order.reopenedAt) ? 1 : 0);
+  const reopenLabel = reopenCount > 1 ? `Reabierto (${reopenCount} veces)` : 'Reabierto (1 vez)';
+  const reopenTitle = reopenCount > 1 ? `Detalle reabierto ${reopenCount} veces` : 'Detalle reabierto 1 vez';
+
+  card.innerHTML = `<div class="modal-head order-report-head"><div class="order-report-head-main"><span class="order-report-title-icon">${orderReportIcon('clipboard')}</span><div><h2>${completed ? 'Reporte del técnico' : 'Detalle de la orden'}</h2><p>${orderReportIcon('pin')}<span>${orderEscape(getOrderPlace(order))}</span><em>${orderEscape(getOrderFolio(order))}</em>${reopenCount > 0 ? `<span class="order-reopened-badge" style="margin-left:6px;" title="${reopenTitle}"><svg class="order-reopened-icon" viewBox="0 0 24 24"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> ${reopenLabel}</span>` : ''}</p></div></div><button type="button" class="order-report-close" aria-label="Cerrar" onclick="requestCloseOrderReport()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     ${bodyContent}`;
   OM('order-tech-report-mo');
 
@@ -4153,12 +4930,37 @@ function renderWOs() {
   const allRows = filteredOrders();
   if (!allRows.length) {
     orderCurrentPage = 1;
-    wrap.innerHTML = '<div class="empty-state">No hay detalles con esos filtros.</div>';
+    wrap.innerHTML = `
+      <div class="table-wrap clean">
+        <table class="table order-table">
+          <thead>
+            <tr>
+              <th class="th-col-folio">Folio</th>
+              <th class="th-col-zone">Zona</th>
+              <th class="th-col-place">Lugar</th>
+              <th class="th-col-client">Cliente</th>
+              <th class="th-col-detail">Detalle</th>
+              ${activeOrderDetailKind === 'network' ? '<th class="order-th-datetime">Fecha y hora</th>' : '<th>Tipo</th>'}
+              <th class="th-col-priority">Prioridad</th>
+              <th class="th-col-state">Estado</th>
+              <th class="th-col-action">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td colspan="9" style="text-align:center;padding:36px 16px;">
+                <div class="empty-state">No hay detalles con esos filtros.</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      ${renderOrderPagination(0, 0, 0, 1)}`;
     return;
   }
 
   const pageMeta = window.netopsPageMeta?.operations || {};
-  const isServerWindowed = Number.isFinite(Number(pageMeta.total)) && Number(pageMeta.total) > 0 && allRows.length <= orderRowsPerPage;
+  const isServerWindowed = !filterOnlyMyAssignments && Number.isFinite(Number(pageMeta.total)) && Number(pageMeta.total) > 0 && allRows.length <= orderRowsPerPage;
   const totalRows = isServerWindowed ? Number(pageMeta.total) : allRows.length;
   const totalPages = Math.max(1, Math.ceil(totalRows / orderRowsPerPage));
   orderCurrentPage = Math.min(Math.max(orderCurrentPage, 1), totalPages);
@@ -4182,67 +4984,74 @@ function renderWOs() {
       <table class="table order-table">
         <thead>
           <tr>
-            <th>Folio</th>
-            <th>Zona</th>
-            <th>Lugar</th>
-            <th>Cliente</th>
-            <th>Detalle</th>
-            <th>Tipo</th>
-            <th>Prioridad</th>
-            <th>Estado</th>
-            <th>Acción</th>
+            <th class="th-col-folio">Folio</th>
+            <th class="th-col-zone">Zona</th>
+            <th class="th-col-place">Lugar</th>
+            <th class="th-col-client">Cliente</th>
+            <th class="th-col-detail">Detalle</th>
+            ${activeOrderDetailKind === 'network' ? '<th class="order-th-datetime">Fecha y hora</th>' : '<th>Tipo</th>'}
+            <th class="th-col-priority">Prioridad</th>
+            <th class="th-col-state">Estado</th>
+            <th class="th-col-action">Acción</th>
           </tr>
         </thead>
         <tbody>
           ${rows.map(w => {
-            const target = getOrderTarget(w);
-            const rowReported = w.status === 'completada' || w.status === 'no_realizado';
-            const rowStatus = getOrderStatusMeta(w);
-            const isSoporte = userHasRole('soporte');
-            const isAtencion = userHasRole('atencion_clientes');
-            const isAdmin = userHasRole('administrador', 'admin');
-            const currentActor = getCurrentUser();
+    const target = getOrderTarget(w);
+    const rowReported = w.status === 'completada' || w.status === 'no_realizado';
+    const rowStatus = getOrderStatusMeta(w);
+    const isSoporte = userHasRole('soporte');
+    const isAtencion = userHasRole('atencion_clientes');
+    const isAdmin = userHasRole('administrador', 'admin');
+    const currentActor = getCurrentUser();
+    const isReopened = typeof isOrderReopened === 'function' ? isOrderReopened(w) : false;
+    const reopenCount = typeof getOrderReopenCount === 'function' ? getOrderReopenCount(w) : (isReopened ? 1 : 0);
+    const reopenLabel = reopenCount > 1 ? `Reabierto (${reopenCount} veces)` : 'Reabierto (1 vez)';
+    const reopenTitle = reopenCount > 1 ? `Detalle reabierto ${reopenCount} veces` : 'Detalle reabierto 1 vez';
+    const unreadChatCount = typeof getOrderUnreadMessagesCount === 'function' ? getOrderUnreadMessagesCount(w, currentActor) : 0;
 
-            const isSentToAttention = isNetworkSupportToAttention(w);
-            let canReopen = false;
-            if (rowReported) {
-              if (w.detailKind === 'network') {
-                if (isSentToAttention) {
-                  // Requerimiento enviado por Soporte a Atención: solo Soporte puede reabrirlo
-                  canReopen = isSoporte || isAdmin;
-                } else {
-                  // Reporte de red enviado por Atención a Soporte: solo Atención puede reabrirlo
-                  canReopen = isAtencion || isAdmin;
-                }
-              } else {
-                canReopen = isSoporte || isAdmin || (isAtencion && isCreatedByAttention(w));
-              }
-            }
+    const isSentToAttention = isNetworkSupportToAttention(w);
+    let canReopen = false;
+    if (rowReported) {
+      if (w.detailKind === 'network') {
+        if (isSentToAttention) {
+          // Requerimiento enviado por Soporte a Atención: solo Soporte puede reabrirlo
+          canReopen = isSoporte || isAdmin;
+        } else {
+          // Reporte de red enviado por Atención a Soporte: solo Atención puede reabrirlo
+          canReopen = isAtencion || isAdmin;
+        }
+      } else {
+        canReopen = isSoporte || isAdmin || (isAtencion && isCreatedByAttention(w));
+      }
+    }
 
-            const pendingAction = getOrderPendingUserAction(w);
-            const rowIsDoneVisual = w.detailKind === 'network' ? (w.status === 'completada') : rowReported;
-            let networkQuickActions = '';
-            if (w.detailKind === 'network') {
-              const isAssignedToOther = (w.assignedUserId || w.assignedUserName) && !isOrderAssignedToUser(w, currentActor);
-              const isCheckingByOther = w.reviewOpenedById && w.reviewOpenedById !== currentActor.id;
-              const assignedArea = typeof getOrderAssignedAreaRole === 'function' ? getOrderAssignedAreaRole(w) : '';
-              const belongsToAttention = assignedArea === 'atencion_clientes' || isSentToAttention;
-              const allowedRoleToRetake = belongsToAttention
-                ? (isAtencion && !isSoporte)
-                : (isSoporte && !isAtencion);
-              const canRetake = typeof canUserRetakeNetworkOrder === 'function'
-                ? canUserRetakeNetworkOrder(w, currentActor)
-                : (!rowReported && allowedRoleToRetake && (isAssignedToOther || isCheckingByOther || !w.assignedUserId));
+    const pendingAction = getOrderPendingUserAction(w);
+    const rowIsDoneVisual = w.detailKind === 'network' ? (w.status === 'completada') : rowReported;
+    let networkQuickActions = '';
+    if (w.detailKind === 'network') {
+      const isAssignedToOther = (w.assignedUserId || w.assignedUserName) && !isOrderAssignedToUser(w, currentActor);
+      const isCheckingByOther = w.reviewOpenedById && w.reviewOpenedById !== currentActor.id;
+      const assignedArea = typeof getOrderAssignedAreaRole === 'function' ? getOrderAssignedAreaRole(w) : '';
+      const targetArea = assignedArea || (isSentToAttention ? 'atencion_clientes' : 'soporte');
+      const belongsToAttention = targetArea === 'atencion_clientes';
+      const allowedRoleToRetake = isAdmin || (belongsToAttention
+        ? (isAtencion && !isSoporte)
+        : (isSoporte && !isAtencion));
+      const canRetake = typeof canUserRetakeNetworkOrder === 'function'
+        ? canUserRetakeNetworkOrder(w, currentActor)
+        : (!rowReported && allowedRoleToRetake && (isAssignedToOther || isCheckingByOther || !w.assignedUserId));
 
-              const retakeDisabledReason = rowReported
-                ? 'El detalle ya fue concluido'
-                : (!allowedRoleToRetake
-                  ? (belongsToAttention ? 'Asignado a Atención a clientes' : 'Asignado a Soporte técnico')
-                  : 'Ya estás a cargo de este caso');
+      const retakeDisabledReason = rowReported
+        ? 'El detalle ya fue concluido'
+        : (!allowedRoleToRetake
+          ? (belongsToAttention ? 'Asignado a Atención a clientes' : 'Asignado a Soporte técnico')
+          : 'Ya estás a cargo de este caso');
 
-              networkQuickActions = `
+      networkQuickActions = `
                 <button type="button" class="btn net-btn-open" onclick="event.stopPropagation();selectOrderRow('${w.id}');openOrderTechnicianReport('${w.id}')" title="Abrir detalle y conversación" aria-label="Abrir detalle y conversación">
-                  <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Abrir chat
+                  <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  ${unreadChatCount > 0 ? `<span class="net-unread-chat-dot" title="${unreadChatCount} nuevo(s) mensaje(s)">${unreadChatCount}</span>` : ''}
                 </button>
                 ${canRetake ? `
                   <button type="button" class="btn net-btn-retake" onclick="event.stopPropagation();selectOrderRow('${w.id}');takeOverNetworkOrder('${w.id}')" title="Asignarme la atención de este caso">
@@ -4254,33 +5063,50 @@ function renderWOs() {
                   </button>
                 `}
               `;
-            }
+    }
 
-            const trClasses = [
-              rowIsDoneVisual ? 'order-row-done' : '',
-              selectedOrderRowId === String(w.id) ? 'order-row-selected' : '',
-              pendingAction.requiresMyAction ? 'order-row-action-required' : ''
-            ].filter(Boolean).join(' ');
+    const trClasses = [
+      rowIsDoneVisual ? 'order-row-done' : '',
+      selectedOrderRowId === String(w.id) ? 'order-row-selected' : '',
+      pendingAction.requiresMyAction ? 'order-row-action-required' : '',
+      pendingAction.waitingOther ? 'order-row-waiting-counterparty' : ''
+    ].filter(Boolean).join(' ');
 
-            return `
+    return `
               <tr data-order-id="${orderEscape(w.id)}" onclick="selectOrderRow('${w.id}', event)" class="${trClasses}">
-                <td data-label="Folio"><strong class="order-folio">${orderEscape(getOrderFolio(w))}</strong></td>
+                <td data-label="Folio">
+                  <div class="order-folio-cell">
+                    <strong class="order-folio">${orderEscape(getOrderFolio(w))}</strong>
+                    ${reopenCount > 0 ? `<span class="order-reopened-badge" title="${reopenTitle}"><svg class="order-reopened-icon" viewBox="0 0 24 24"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> ${reopenLabel}</span>` : ''}
+                  </div>
+                </td>
                 <td data-label="Zona">${orderEscape(getZoneLabel(target.zone || w.region) || '--')}</td>
                 <td data-label="Lugar"><strong class="order-place-main">${orderEscape(getOrderPlace(w))}</strong></td>
-                <td data-label="Cliente"><strong class="order-client-main">${orderEscape(w.clientName || '--')}</strong>${w.clientPhone ? `<div class="order-client-phone">${orderEscape(w.clientPhone)}</div>` : ''}</td>
+                <td data-label="Cliente" class="order-td-client"><strong class="order-client-main" title="${orderEscape(w.clientName || '--')}">${orderEscape(w.clientName || '--')}</strong>${w.clientPhone ? `<div class="order-client-phone">${orderEscape(w.clientPhone)}</div>` : ''}</td>
                 <td data-label="Detalle">
                   <span class="order-category-badge">${orderEscape(orderCategoryLabel(getOrderCategory(w)))}</span>
                   ${w.description ? `<div class="order-detail-text">${orderEscape(w.description)}</div>` : (w.title && w.title !== orderCategoryLabel(getOrderCategory(w)) ? `<div class="order-detail-text">${orderEscape(w.title)}</div>` : '')}
                   <div class="order-assignment-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">
                     ${w.assignedUserName ? (w.assignedUserName.split(',').map(s => s.trim()).filter(Boolean).map(name => renderUserColorChip(name, w.assignedUserId)).join('')) : ''}
-                    ${w.reviewOpenedByName && !['completada','no_realizado'].includes(w.status) && !((w.assignedUserName || '').includes(w.reviewOpenedByName)) ? `
-                      <span class="order-checking-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:12px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;">
-                        <svg style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ${w.reviewOpenedById === (currentActor.id || '') ? 'En atención personal' : `Atendiendo: `}${renderUserColorChip(w.reviewOpenedByName, w.reviewOpenedById)}
+                    ${w.reviewOpenedByName && !['completada', 'no_realizado'].includes(w.status) && !((w.assignedUserName || '').includes(w.reviewOpenedByName)) ? `
+                      <span class="order-checking-badge" title="Atendiendo actualmente: ${orderEscape(w.reviewOpenedByName)}" style="display:inline-flex;align-items:center;flex-wrap:nowrap;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;gap:4px;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:12px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;max-width:100%;box-sizing:border-box;">
+                        <svg style="width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2;flex-shrink:0;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <span class="order-checking-label" style="white-space:nowrap;flex-shrink:0;">${w.reviewOpenedById === (currentActor.id || '') ? 'En atención' : 'Atendiendo:'}</span>
+                        ${renderUserColorChip(w.reviewOpenedByName, w.reviewOpenedById)}
                       </span>
                     ` : ''}
                   </div>
                 </td>
-                <td data-label="Tipo">${orderEscape(getOrderDisplayType(w))}</td>
+                ${activeOrderDetailKind === 'network' ? `
+                  <td data-label="Fecha y hora" class="order-datetime-cell">
+                    <div class="order-datetime-val">
+                      <span class="order-datetime-date">${formatOrderDate(w.createdAt || w.updatedAt)}</span>
+                      <span class="order-datetime-time">${formatOrderTime(w.createdAt || w.updatedAt)}</span>
+                    </div>
+                  </td>
+                ` : `
+                  <td data-label="Tipo">${orderEscape(getOrderDisplayType(w))}</td>
+                `}
                 <td data-label="Prioridad"><span class="priority-badge priority-${orderEscape(w.priority || 'media')}"><span class="priority-dot"></span>${orderEscape(pl(w.priority || 'media'))}</span></td>
                 <td data-label="Estado">
                   <div class="order-state-cell">
@@ -4301,25 +5127,29 @@ function renderWOs() {
                     ` : `
                       <button class="btn order-edit-action order-edit-disabled" disabled style="opacity:0.35;cursor:not-allowed;" title="Solo quien creó el detalle puede editarlo" aria-label="Solo quien creó el detalle puede editarlo">${orderActionIcon('edit')}</button>
                     `)}
-                    <button class="btn order-delete-action" title="${userHasRole('administrador','admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" aria-label="${userHasRole('administrador','admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" onclick="deleteWO('${w.id}')">${orderActionIcon('delete')}</button>
+                    <button class="btn order-delete-action" title="${userHasRole('administrador', 'admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" aria-label="${userHasRole('administrador', 'admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" onclick="deleteWO('${w.id}')">${orderActionIcon('delete')}</button>
                   </div>
                 </td>
               </tr>`;
-          }).join('')}
+  }).join('')}
         </tbody>
       </table>
     </div>
-    <div class="order-table-footer">
-      <div class="order-pagination-nav">
-        <button type="button" class="order-page-button" aria-label="Primera página" title="Primera página" onclick="changeOrderPage(1)" ${orderCurrentPage === 1 ? 'disabled' : ''}>«</button>
-        <button type="button" class="order-page-button" aria-label="Página anterior" title="Página anterior" onclick="changeOrderPage(${orderCurrentPage - 1})" ${orderCurrentPage === 1 ? 'disabled' : ''}>‹</button>
-        <span class="order-page-indicator">Página <strong>${orderCurrentPage}</strong> de <strong>${totalPages}</strong></span>
-        <button type="button" class="order-page-button" aria-label="Página siguiente" title="Página siguiente" onclick="changeOrderPage(${orderCurrentPage + 1})" ${orderCurrentPage === totalPages ? 'disabled' : ''}>›</button>
-        <button type="button" class="order-page-button" aria-label="Última página" title="Última página" onclick="changeOrderPage(${totalPages})" ${orderCurrentPage === totalPages ? 'disabled' : ''}>»</button>
-        <span class="order-page-count" style="margin-left:8px;color:#64748b;font-size:11px;">(<strong>${totalRows ? rangeStart + 1 : 0}-${rangeEnd}</strong> de <strong>${totalRows}</strong> detalles)</span>
-      </div>
-      <label class="order-page-size"><span>Filas por página:</span><select onchange="changeOrderPageSize(this.value)"><option value="10" ${orderRowsPerPage === 10 ? 'selected' : ''}>10</option><option value="15" ${orderRowsPerPage === 15 ? 'selected' : ''}>15</option><option value="20" ${orderRowsPerPage === 20 ? 'selected' : ''}>20</option><option value="50" ${orderRowsPerPage === 50 ? 'selected' : ''}>50</option></select></label>
-    </div>`;
+    ${renderOrderPagination(totalRows, rangeStart, rangeEnd, totalPages)}`;
+}
+
+function renderOrderPagination(totalRows, rangeStart, rangeEnd, totalPages) {
+  return `<div class="inventory-pagination order-table-footer">
+    <div class="inventory-page-nav order-pagination-nav">
+      <button type="button" class="inventory-page-button order-page-button" aria-label="Primera página" title="Primera página" onclick="changeOrderPage(1)" ${orderCurrentPage <= 1 ? 'disabled' : ''}>«</button>
+      <button type="button" class="inventory-page-button order-page-button" aria-label="Página anterior" title="Página anterior" onclick="changeOrderPage(${orderCurrentPage - 1})" ${orderCurrentPage <= 1 ? 'disabled' : ''}>‹</button>
+      <span class="inventory-page-indicator order-page-indicator">Página ${orderCurrentPage} de ${totalPages}</span>
+      <button type="button" class="inventory-page-button order-page-button" aria-label="Página siguiente" title="Página siguiente" onclick="changeOrderPage(${orderCurrentPage + 1})" ${orderCurrentPage >= totalPages ? 'disabled' : ''}>›</button>
+      <button type="button" class="inventory-page-button order-page-button" aria-label="Última página" title="Última página" onclick="changeOrderPage(${totalPages})" ${orderCurrentPage >= totalPages ? 'disabled' : ''}>»</button>
+      <span class="order-page-total-label">(${totalRows ? rangeStart + 1 : 0}-${rangeEnd} de ${totalRows} detalles)</span>
+    </div>
+    <label class="inventory-page-size order-page-size"><span>Filas por página:</span><select onchange="changeOrderPageSize(this.value)"><option value="5" ${orderRowsPerPage === 5 ? 'selected' : ''}>5</option><option value="10" ${orderRowsPerPage === 10 ? 'selected' : ''}>10</option><option value="15" ${orderRowsPerPage === 15 ? 'selected' : ''}>15</option><option value="25" ${orderRowsPerPage === 25 ? 'selected' : ''}>25</option><option value="50" ${orderRowsPerPage === 50 ? 'selected' : ''}>50</option><option value="100" ${orderRowsPerPage === 100 ? 'selected' : ''}>100</option></select></label>
+  </div>`;
 }
 
 /* ==========================================================================
@@ -4387,7 +5217,7 @@ function openResolveNetworkModal(id) {
     if (order.status === 'pendiente') {
       order.status = 'en_revision';
     }
-    saveRecord('workOrders', order).catch(() => {});
+    saveRecord('workOrders', order).catch(() => { });
     if (typeof broadcastNetworkOrderChange === 'function') {
       broadcastNetworkOrderChange(order, 'checking');
     }
@@ -4663,25 +5493,29 @@ async function startAttendingNetworkOrder(id) {
 }
 
 async function takeOverNetworkOrder(id) {
-  if (userHasRole('administrador', 'admin')) {
-    return notify('Acción restringida: El rol administrador no puede asumir la atención de reportes.', 'warn');
-  }
+  const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  const uRole = (typeof normalizeRole === 'function' ? normalizeRole(currentUser?.role) : String(currentUser?.role || '')).trim().toLowerCase();
+  const isAdmin = uRole === 'administrador' || uRole === 'admin';
+  const isSoporte = uRole === 'soporte';
+  const isAtencion = uRole === 'atencion_clientes' || uRole === 'atencion';
+
   const order = (state.workOrders || []).find(x => x.id === id && !x.deletedAt);
   if (!order) return notify('No se encontró el detalle de red.', 'err');
 
   const assignedArea = typeof getOrderAssignedAreaRole === 'function' ? getOrderAssignedAreaRole(order) : '';
   const isSentToAttention = isNetworkSupportToAttention(order);
-  const isSoporte = userHasRole('soporte');
-  const isAtencion = userHasRole('atencion_clientes');
+  const targetArea = assignedArea || (isSentToAttention ? 'atencion_clientes' : 'soporte');
 
-  if ((assignedArea === 'atencion_clientes' || isSentToAttention) && (isSoporte || !isAtencion)) {
-    return notify('Acción restringida: Este caso fue asignado a Atención a clientes y no puede ser retomado por Soporte técnico.', 'warn');
-  }
-  if ((assignedArea === 'soporte' || !isSentToAttention) && (isAtencion || !isSoporte)) {
-    return notify('Acción restringida: Este caso fue asignado a Soporte técnico y no puede ser retomado por Atención a clientes.', 'warn');
-  }
-  if (typeof canUserRetakeNetworkOrder === 'function' && !canUserRetakeNetworkOrder(order, getCurrentUser())) {
-    return notify('Acción restringida: No es posible retomar este caso con tu rol actual.', 'warn');
+  if (!isAdmin) {
+    if (targetArea === 'atencion_clientes' && (!isAtencion || isSoporte)) {
+      return notify('Acción restringida: Este caso fue asignado a Atención a clientes y no puede ser retomado por Soporte técnico.', 'warn');
+    }
+    if (targetArea === 'soporte' && (!isSoporte || isAtencion)) {
+      return notify('Acción restringida: Este caso fue asignado a Soporte técnico y no puede ser retomado por Atención a clientes.', 'warn');
+    }
+    if (typeof canUserRetakeNetworkOrder === 'function' && !canUserRetakeNetworkOrder(order, currentUser)) {
+      return notify('Acción restringida: No es posible retomar este caso con tu rol actual.', 'warn');
+    }
   }
 
   const currentAttendant = order.reviewOpenedByName || order.assignedUserName || 'otro integrante del equipo';
@@ -4695,7 +5529,6 @@ async function takeOverNetworkOrder(id) {
   });
   if (!confirmed) return;
 
-  const currentUser = getCurrentUser();
   const userName = currentUser.name || currentUser.username || 'Soporte técnico';
   const now = new Date().toISOString();
   const prevAssigneeId = order.assignedUserId || order.reviewOpenedById || '';
@@ -4908,17 +5741,7 @@ async function confirmNetworkClientSatisfied(id) {
   updateOrderChatLive(order);
 }
 
-// Auto-apertura si se recibe orderId en la URL
-(function checkUrlForTargetOrder() {
-  if (typeof window === 'undefined') return;
-  const params = new URLSearchParams(window.location.search);
-  const targetId = params.get('orderId');
-  if (targetId) {
-    setTimeout(() => {
-      openOrderTechnicianReport(targetId);
-    }, 600);
-  }
-})();
+// Los enlaces de notificación se abren después de terminar initOrdenesPage.
 
 
 /* ==========================================================================
@@ -5257,4 +6080,1270 @@ function openNetworkWorkflowGuideModal() {
   } else {
     document.getElementById('network-workflow-guide-mo')?.classList.add('open');
   }
+}
+
+let adminStatsFilterPeriod = 'all';
+let adminStatsFilterArea = 'all';
+let adminStatsSearchUser = '';
+let adminStatsLoadingRemote = false;
+
+function formatAdminStatsDuration(msList) {
+  if (!Array.isArray(msList) || !msList.length) return 'Sin datos';
+  const valid = msList.filter(ms => Number.isFinite(ms) && ms > 0);
+  if (!valid.length) return 'Inmediato';
+  const avgMs = valid.reduce((a, b) => a + b, 0) / valid.length;
+  const totalMins = Math.max(1, Math.round(avgMs / 60000));
+  if (totalMins < 60) return `${totalMins} min`;
+  const hours = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  if (hours < 24) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours > 0 ? `${days}d ${remHours}h` : `${days}d`;
+}
+
+function normalizeAdminStatsKey(str) {
+  return String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+
+function buildAdminStatsDonutSvg(segments, total) {
+  const radius = 56;
+  const circumference = 2 * Math.PI * radius;
+  if (!total || total <= 0) {
+    return `
+      <svg viewBox="0 0 160 160" class="admin-stats-donut-svg">
+        <circle cx="80" cy="80" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="20"></circle>
+        <text x="80" y="76" text-anchor="middle" class="admin-stats-donut-num">0</text>
+        <text x="80" y="96" text-anchor="middle" class="admin-stats-donut-sub">Casos</text>
+      </svg>
+    `;
+  }
+  let offset = 0;
+  const circles = segments.filter(s => s.count > 0).map(s => {
+    const ratio = s.count / total;
+    const dash = ratio * circumference;
+    const gap = Math.max(0, circumference - dash);
+    const currentOffset = offset;
+    offset += dash;
+    return `<circle cx="80" cy="80" r="${radius}" fill="none" stroke="${s.color}" stroke-width="20" stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-dashoffset="${(-currentOffset).toFixed(2)}" transform="rotate(-90 80 80)"><title>${orderEscape(s.label)}: ${s.count} (${Math.round(ratio * 100)}%)</title></circle>`;
+  }).join('');
+
+  return `
+    <svg viewBox="0 0 160 160" class="admin-stats-donut-svg">
+      <circle cx="80" cy="80" r="${radius}" fill="none" stroke="#f1f5f9" stroke-width="20"></circle>
+      ${circles}
+      <text x="80" y="76" text-anchor="middle" class="admin-stats-donut-num">${total}</text>
+      <text x="80" y="96" text-anchor="middle" class="admin-stats-donut-sub">Casos totales</text>
+    </svg>
+  `;
+}
+
+function buildAdminStatsTimelineSvg(dailyBuckets) {
+  if (!Array.isArray(dailyBuckets) || !dailyBuckets.length) {
+    return `<div style="padding:28px;text-align:center;color:#64748b;font-size:12.5px;">No hay suficientes registros fechados para graficar la curva temporal.</div>`;
+  }
+  const width = 620;
+  const height = 195;
+  const padLeft = 34;
+  const padRight = 16;
+  const padTop = 20;
+  const padBottom = 36;
+  const plotW = width - padLeft - padRight;
+  const plotH = height - padTop - padBottom;
+  const maxVal = Math.max(4, ...dailyBuckets.map(d => Math.max(d.created, d.resolved)));
+
+  const gridLines = [0, 0.25, 0.5, 0.75, 1].map(step => {
+    const y = Math.round(padTop + plotH * (1 - step));
+    const val = Math.round(maxVal * step);
+    return `
+      <line x1="${padLeft}" y1="${y}" x2="${width - padRight}" y2="${y}" stroke="#e2e8f0" stroke-dasharray="${step === 0 ? 'none' : '3 3'}" stroke-width="1" />
+      <text x="${padLeft - 6}" y="${y + 4}" text-anchor="end" fill="#64748b" font-size="10" font-weight="600">${val}</text>
+    `;
+  }).join('');
+
+  const slotW = plotW / dailyBuckets.length;
+  const barW = Math.max(6, Math.min(18, Math.floor(slotW * 0.34)));
+
+  const bars = dailyBuckets.map((bucket, idx) => {
+    const centerX = padLeft + idx * slotW + slotW / 2;
+    const hCreated = Math.round((bucket.created / maxVal) * plotH);
+    const hResolved = Math.round((bucket.resolved / maxVal) * plotH);
+    const yCreated = padTop + plotH - hCreated;
+    const yResolved = padTop + plotH - hResolved;
+    return `
+      <g class="admin-stats-chart-col">
+        <rect x="${(centerX - barW - 1).toFixed(1)}" y="${yCreated}" width="${barW}" height="${Math.max(2, hCreated)}" rx="3" fill="#0284c7">
+          <title>${bucket.label} · Capturados: ${bucket.created}</title>
+        </rect>
+        <rect x="${(centerX + 1).toFixed(1)}" y="${yResolved}" width="${barW}" height="${Math.max(2, hResolved)}" rx="3" fill="#059669">
+          <title>${bucket.label} · Resueltos/Concluidos: ${bucket.resolved}</title>
+        </rect>
+        ${bucket.created > 0 ? `<text x="${(centerX - barW / 2 - 1).toFixed(1)}" y="${Math.max(11, yCreated - 4)}" text-anchor="middle" fill="#0369a1" font-size="9.5" font-weight="700">${bucket.created}</text>` : ''}
+        ${bucket.resolved > 0 ? `<text x="${(centerX + barW / 2 + 1).toFixed(1)}" y="${Math.max(11, yResolved - 4)}" text-anchor="middle" fill="#047857" font-size="9.5" font-weight="700">${bucket.resolved}</text>` : ''}
+        <text x="${centerX.toFixed(1)}" y="${height - 14}" text-anchor="middle" fill="#475569" font-size="10" font-weight="600">${orderEscape(bucket.shortLabel)}</text>
+      </g>
+    `;
+  }).join('');
+
+  return `
+    <svg viewBox="0 0 ${width} ${height}" class="admin-stats-timeline-svg">
+      ${gridLines}
+      ${bars}
+    </svg>
+  `;
+}
+
+function setAdminStatsFilter(filterType, value) {
+  if (filterType === 'period') adminStatsFilterPeriod = value || 'all';
+  if (filterType === 'area') adminStatsFilterArea = value || 'all';
+  if (filterType === 'search') adminStatsSearchUser = String(value || '');
+  renderAdminNetworkStatsContent();
+}
+
+async function refreshAdminNetworkStatsDataset({ silent = false } = {}) {
+  if (adminStatsLoadingRemote || typeof fetchDataPage !== 'function') return;
+  adminStatsLoadingRemote = true;
+  if (!silent) renderAdminNetworkStatsContent();
+  try {
+    const res = await fetchDataPage('operations', {
+      windowed: '1',
+      detailKind: 'network',
+      adminStats: '1',
+      limit: 2000,
+      offset: 0
+    });
+    if (res && Array.isArray(res.workOrders)) {
+      window.netopsAdminStatsOrders = res.workOrders;
+      window.netopsAdminStatsFetched = true;
+    }
+    if (Array.isArray(res?.supportUsers)) {
+      window.netopsSupportUsers = res.supportUsers;
+    }
+    if (Array.isArray(res?.attentionUsers)) {
+      window.netopsAttentionUsers = res.attentionUsers;
+    }
+  } catch (e) {
+    console.warn('No se pudo cargar el universo extendido de estadísticas:', e);
+  } finally {
+    adminStatsLoadingRemote = false;
+    if (document.getElementById('admin-network-stats-mo')?.classList.contains('open')) {
+      renderAdminNetworkStatsContent();
+    }
+  }
+}
+
+function openAdminNetworkStatsModal() {
+  renderAdminNetworkStatsContent();
+  if (typeof OM === 'function') {
+    OM('admin-network-stats-mo');
+  }
+  if (!window.netopsAdminStatsFetched && typeof fetchDataPage === 'function') {
+    void refreshAdminNetworkStatsDataset({ silent: true });
+  }
+}
+
+function renderAdminNetworkStatsContent() {
+  const content = document.getElementById('admin-network-stats-content');
+  if (!content) return;
+
+  // 1. Unificar órdenes de red disponibles (remotas completas + estado local)
+  const mergedOrdersMap = new Map();
+  (window.netopsAdminStatsOrders || []).forEach(w => {
+    if (w && w.id && !w.deletedAt && w.detailKind === 'network') mergedOrdersMap.set(w.id, w);
+  });
+  (state.workOrders || []).forEach(w => {
+    if (w && w.id && !w.deletedAt && w.detailKind === 'network') mergedOrdersMap.set(w.id, w);
+  });
+  const rawNetworkOrders = Array.from(mergedOrdersMap.values());
+
+  // 2. Filtrado por periodo seleccionado
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const currentMonthPrefix = todayStr.slice(0, 7);
+  const allNetwork = rawNetworkOrders.filter(w => {
+    if (adminStatsFilterPeriod === 'all') return true;
+    const rawDate = w.createdAt || w.updatedAt || '';
+    if (!rawDate) return false;
+    const dStr = String(rawDate).slice(0, 10);
+    if (adminStatsFilterPeriod === 'today') return dStr === todayStr;
+    if (adminStatsFilterPeriod === 'this_month') return dStr.startsWith(currentMonthPrefix);
+    const parsed = new Date(rawDate);
+    if (Number.isNaN(parsed.getTime())) return false;
+    const diffDays = (now.getTime() - parsed.getTime()) / (1000 * 60 * 60 * 24);
+    if (adminStatsFilterPeriod === 'last7') return diffDays <= 7;
+    if (adminStatsFilterPeriod === 'last30') return diffDays <= 30;
+    return true;
+  });
+
+  // 3. Métricas globales de alto nivel
+  const total = allNetwork.length;
+  const completed = allNetwork.filter(w => w.status === 'completada').length;
+  const awaitingConfirmation = allNetwork.filter(w => w.status === 'resuelto_soporte').length;
+  const inReviewActive = allNetwork.filter(w => w.status === 'en_atencion' || w.status === 'en_revision').length;
+  const inAttention = inReviewActive + awaitingConfirmation;
+  const returnedActive = allNetwork.filter(w => w.status === 'devuelto_soporte').length;
+  const pendingStrict = allNetwork.filter(w => !w.status || w.status === 'pendiente').length;
+  const pending = pendingStrict + returnedActive;
+  const unresolvable = allNetwork.filter(w => w.status === 'no_realizado').length;
+  const solvedOrCompleted = completed + awaitingConfirmation;
+  const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const resolutionRate = total > 0 ? Math.round((solvedOrCompleted / total) * 100) : 0;
+
+  // Contabilizar casos con devolución o reapertura histórica
+  let totalReturnedOrReopened = 0;
+  let totalFirstContactResolved = 0;
+  let totalChatSteps = 0;
+  const globalResolutionTimesMs = [];
+  const globalFirstResponseTimesMs = [];
+
+  allNetwork.forEach(w => {
+    const fups = Array.isArray(w.followUps) ? w.followUps : [];
+    totalChatSteps += fups.length;
+    const hadReturn = w.status === 'devuelto_soporte' || Boolean(w.returnAt) || (typeof isOrderReopened === 'function' && isOrderReopened(w)) ||
+      fups.some(f => ['devuelto_soporte', 'reabierto', 'reopened', 'resent'].includes(String(f.action || '').toLowerCase()));
+    if (hadReturn) totalReturnedOrReopened++;
+    if ((w.status === 'completada' || w.status === 'resuelto_soporte') && !hadReturn) {
+      totalFirstContactResolved++;
+    }
+    const createdMs = w.createdAt ? new Date(w.createdAt).getTime() : NaN;
+    if (Number.isFinite(createdMs)) {
+      const repCompletedAt = w.technicianReport?.completedAt || w.completedAt;
+      const resolvedMs = repCompletedAt ? new Date(repCompletedAt).getTime() : NaN;
+      if (Number.isFinite(resolvedMs) && resolvedMs >= createdMs) {
+        globalResolutionTimesMs.push(resolvedMs - createdMs);
+      }
+      const firstStepAt = w.reviewOpenedAt || fups[0]?.at || '';
+      const firstRespMs = firstStepAt ? new Date(firstStepAt).getTime() : NaN;
+      if (Number.isFinite(firstRespMs) && firstRespMs >= createdMs) {
+        globalFirstResponseTimesMs.push(firstRespMs - createdMs);
+      }
+    }
+  });
+
+  const fcrRate = solvedOrCompleted > 0 ? Math.round((totalFirstContactResolved / solvedOrCompleted) * 100) : 100;
+  const reworkRate = total > 0 ? Math.round((totalReturnedOrReopened / total) * 100) : 0;
+  const avgResolutionLabel = formatAdminStatsDuration(globalResolutionTimesMs);
+  const avgFirstResponseLabel = formatAdminStatsDuration(globalFirstResponseTimesMs);
+
+  // 4. Directorio de personal autorizado (Admin, Soporte, Atención)
+  const allowedRoleSet = new Set(['administrador', 'admin', 'soporte', 'atencion_clientes', 'atencion']);
+  const normalizeAreaCode = rawRole => {
+    const r = typeof normalizeRole === 'function' ? normalizeRole(rawRole) : String(rawRole || '').trim().toLowerCase();
+    if (r === 'administrador' || r === 'admin') return 'administrador';
+    if (r === 'atencion_clientes' || r === 'atencion' || r.includes('atencion')) return 'atencion_clientes';
+    if (r === 'soporte' || r.includes('soporte')) return 'soporte';
+    return '';
+  };
+  const getAreaDisplayName = code => {
+    if (code === 'administrador') return 'Administración';
+    if (code === 'atencion_clientes') return 'Atención a Clientes';
+    return 'Soporte Técnico';
+  };
+
+  const catalogById = new Map();
+  const catalogByName = new Map();
+  const forbiddenNames = new Set();
+  const forbiddenIds = new Set();
+
+  (state.users || []).forEach(u => {
+    if (!u || u.deletedAt) return;
+    const normR = typeof normalizeRole === 'function' ? normalizeRole(u.role) : String(u.role || '').toLowerCase();
+    if (!allowedRoleSet.has(normR)) {
+      if (u.id) forbiddenIds.add(String(u.id).trim().toLowerCase());
+      if (u.name) forbiddenNames.add(normalizeAdminStatsKey(u.name));
+      if (u.username) forbiddenNames.add(normalizeAdminStatsKey(u.username));
+      return;
+    }
+    const areaCode = normalizeAreaCode(u.role) || 'soporte';
+    const entry = {
+      id: String(u.id || '').trim(),
+      name: (u.name || u.username || 'Usuario').trim(),
+      username: (u.username || '').trim(),
+      color: u.color || '',
+      areaCode,
+      role: getAreaDisplayName(areaCode)
+    };
+    if (entry.id) catalogById.set(entry.id.toLowerCase(), entry);
+    if (entry.name) catalogByName.set(normalizeAdminStatsKey(entry.name), entry);
+    if (entry.username) catalogByName.set(normalizeAdminStatsKey(entry.username), entry);
+  });
+
+  [...(window.netopsSupportUsers || []), ...(typeof getAvailableSupportUsers === 'function' ? getAvailableSupportUsers() : [])].forEach(u => {
+    if (!u) return;
+    const areaCode = normalizeAreaCode(u.role) || 'soporte';
+    const entry = {
+      id: String(u.id || '').trim(),
+      name: (u.name || u.username || 'Soporte').trim(),
+      username: (u.username || '').trim(),
+      color: u.color || '',
+      areaCode,
+      role: getAreaDisplayName(areaCode)
+    };
+    if (entry.id && !catalogById.has(entry.id.toLowerCase())) catalogById.set(entry.id.toLowerCase(), entry);
+    if (entry.name && !catalogByName.has(normalizeAdminStatsKey(entry.name))) catalogByName.set(normalizeAdminStatsKey(entry.name), entry);
+  });
+
+  [...(window.netopsAttentionUsers || []), ...(typeof getAvailableAttentionUsers === 'function' ? getAvailableAttentionUsers() : [])].forEach(u => {
+    if (!u) return;
+    const entry = {
+      id: String(u.id || '').trim(),
+      name: (u.name || u.username || 'Atención').trim(),
+      username: (u.username || '').trim(),
+      color: u.color || '',
+      areaCode: 'atencion_clientes',
+      role: getAreaDisplayName('atencion_clientes')
+    };
+    if (entry.id && !catalogById.has(entry.id.toLowerCase())) catalogById.set(entry.id.toLowerCase(), entry);
+    if (entry.name && !catalogByName.has(normalizeAdminStatsKey(entry.name))) catalogByName.set(normalizeAdminStatsKey(entry.name), entry);
+  });
+
+  const resolversMap = {};
+  const ensureUserRecord = (rawId, rawName, fallbackRoleHint = 'Soporte Técnico') => {
+    const idClean = String(rawId || '').trim();
+    const nameClean = String(rawName || '').trim();
+    if (!idClean && !nameClean) return null;
+    if (idClean && forbiddenIds.has(idClean.toLowerCase())) return null;
+    if (nameClean && forbiddenNames.has(normalizeAdminStatsKey(nameClean))) return null;
+
+    const catEntry = (idClean && catalogById.get(idClean.toLowerCase())) ||
+      (nameClean && catalogByName.get(normalizeAdminStatsKey(nameClean))) || null;
+
+    const canonicalName = catEntry?.name || nameClean || idClean;
+    const mapKey = normalizeAdminStatsKey(canonicalName);
+    if (!mapKey || forbiddenNames.has(mapKey)) return null;
+
+    let areaCode = catEntry?.areaCode || normalizeAreaCode(fallbackRoleHint) || 'soporte';
+    let roleLabel = catEntry?.role || getAreaDisplayName(areaCode);
+
+    if (!resolversMap[mapKey]) {
+      resolversMap[mapKey] = {
+        key: mapKey,
+        id: catEntry?.id || idClean || '',
+        name: canonicalName,
+        username: catEntry?.username || '',
+        color: catEntry?.color || '',
+        areaCode,
+        role: roleLabel,
+        created: 0,
+        assigned: 0,
+        solved: 0,
+        confirmed: 0,
+        inProgress: 0,
+        pending: 0,
+        returned: 0,
+        retaken: 0,
+        chatMessages: 0,
+        resolutionTimesMs: [],
+        firstResponseTimesMs: [],
+        categories: {},
+        zones: {},
+        lastActivityAt: ''
+      };
+    }
+    return resolversMap[mapKey];
+  };
+
+  // Pre-poblar con todos los miembros del catálogo para ver también quiénes tienen 0 actividad
+  catalogByName.forEach(entry => {
+    ensureUserRecord(entry.id, entry.name, entry.areaCode);
+  });
+
+  // 5. Métricas por Área Operativa (Soporte Técnico, Atención a Clientes, Administración)
+  const createAreaBucket = (code, title, subtitle, color, accentBg) => ({
+    code,
+    title,
+    subtitle,
+    color,
+    accentBg,
+    created: 0,
+    assigned: 0,
+    solved: 0,
+    completed: 0,
+    awaitingConfirmation: 0,
+    inAttention: 0,
+    pending: 0,
+    returned: 0,
+    firstContactSolved: 0,
+    chatMessages: 0,
+    resolutionTimesMs: [],
+    responseTimesMs: []
+  });
+
+  const areaStats = {
+    soporte: createAreaBucket('soporte', 'Soporte Técnico', 'Atención de fallas, enlaces y solución en campo o sistema', '#0284c7', '#f0f9ff'),
+    atencion_clientes: createAreaBucket('atencion_clientes', 'Atención a Clientes', 'Recepción de reportes, llamadas y confirmación con el cliente', '#7c3aed', '#f5f3ff'),
+    administrador: createAreaBucket('administrador', 'Administración', 'Coordinación general, asignaciones y revisión de casos', '#0f172a', '#f8fafc')
+  };
+
+  // Flujo bidireccional entre áreas
+  const flowStats = {
+    atencionToSoporte: { total: 0, completed: 0, awaiting: 0, inProgress: 0, pending: 0, returned: 0 },
+    soporteToAtencion: { total: 0, completed: 0, awaiting: 0, inProgress: 0, pending: 0, returned: 0 }
+  };
+
+  // Prioridades, Categorías, Zonas, Pueblos y Serie Temporal
+  const priorityStats = {
+    muy_alta: { label: 'Muy alta', color: '#dc2626', total: 0, solved: 0, pending: 0 },
+    alta: { label: 'Alta', color: '#ea580c', total: 0, solved: 0, pending: 0 },
+    media: { label: 'Media', color: '#0284c7', total: 0, solved: 0, pending: 0 },
+    baja: { label: 'Baja', color: '#64748b', total: 0, solved: 0, pending: 0 }
+  };
+  const categoriesMap = {};
+  const categoriesDetailMap = {};
+  const zonesMap = {};
+  const zonesDetailMap = {};
+  const townsDetailMap = {};
+  const dailyTimelineMap = new Map();
+
+  const registerUserTouch = (userRec, catLabel, zoneLabel, isoDate) => {
+    if (!userRec) return;
+    if (catLabel) userRec.categories[catLabel] = (userRec.categories[catLabel] || 0) + 1;
+    if (zoneLabel) userRec.zones[zoneLabel] = (userRec.zones[zoneLabel] || 0) + 1;
+    if (isoDate && (!userRec.lastActivityAt || isoDate > userRec.lastActivityAt)) {
+      userRec.lastActivityAt = isoDate;
+    }
+  };
+
+  allNetwork.forEach(w => {
+    const catLabel = orderCategoryLabel(getOrderCategory(w)) || 'General';
+    const zoneLabel = w.region || w.zone || 'General';
+    const townLabel = (typeof getOrderPlace === 'function' ? getOrderPlace(w) : (w.town || w.nodeName || '')).trim() || 'Sin localidad';
+    const prioKey = ['muy_alta', 'alta', 'media', 'baja'].includes(w.priority) ? w.priority : 'media';
+    const isSolvedState = w.status === 'completada' || w.status === 'resuelto_soporte';
+    const isCompletedState = w.status === 'completada';
+    const isSentToAttention = typeof isNetworkSupportToAttention === 'function' ? isNetworkSupportToAttention(w) : (w.targetRole === 'atencion_clientes' || w.originRole === 'soporte');
+    const targetAreaCode = isSentToAttention ? 'atencion_clientes' : 'soporte';
+    const originAreaCode = isSentToAttention ? 'soporte' : 'atencion_clientes';
+
+    const fups = Array.isArray(w.followUps) ? w.followUps : [];
+    const hadReturn = w.status === 'devuelto_soporte' || Boolean(w.returnAt) || (typeof isOrderReopened === 'function' && isOrderReopened(w)) ||
+      fups.some(f => ['devuelto_soporte', 'reabierto', 'reopened', 'resent'].includes(String(f.action || '').toLowerCase()));
+
+    // Flujo inter-áreas
+    const flowBucket = isSentToAttention ? flowStats.soporteToAtencion : flowStats.atencionToSoporte;
+    flowBucket.total++;
+    if (isCompletedState) flowBucket.completed++;
+    else if (w.status === 'resuelto_soporte') flowBucket.awaiting++;
+    else if (w.status === 'en_atencion' || w.status === 'en_revision') flowBucket.inProgress++;
+    else flowBucket.pending++;
+    if (hadReturn) flowBucket.returned++;
+
+    // Prioridad
+    priorityStats[prioKey].total++;
+    if (isSolvedState) priorityStats[prioKey].solved++;
+    else priorityStats[prioKey].pending++;
+
+    // Categorías
+    categoriesMap[catLabel] = (categoriesMap[catLabel] || 0) + 1;
+    if (!categoriesDetailMap[catLabel]) categoriesDetailMap[catLabel] = { total: 0, solved: 0, pending: 0, returned: 0 };
+    categoriesDetailMap[catLabel].total++;
+    if (isSolvedState) categoriesDetailMap[catLabel].solved++;
+    else categoriesDetailMap[catLabel].pending++;
+    if (hadReturn) categoriesDetailMap[catLabel].returned++;
+
+    // Zonas
+    zonesMap[zoneLabel] = (zonesMap[zoneLabel] || 0) + 1;
+    if (!zonesDetailMap[zoneLabel]) zonesDetailMap[zoneLabel] = { total: 0, solved: 0, pending: 0 };
+    zonesDetailMap[zoneLabel].total++;
+    if (isSolvedState) zonesDetailMap[zoneLabel].solved++;
+    else zonesDetailMap[zoneLabel].pending++;
+
+    // Pueblos / Localidades
+    if (!townsDetailMap[townLabel]) townsDetailMap[townLabel] = { total: 0, solved: 0, pending: 0, zone: zoneLabel };
+    townsDetailMap[townLabel].total++;
+    if (isSolvedState) townsDetailMap[townLabel].solved++;
+    else townsDetailMap[townLabel].pending++;
+
+    // Serie temporal diaria
+    const createdDay = w.createdAt ? String(w.createdAt).slice(0, 10) : '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(createdDay)) {
+      if (!dailyTimelineMap.has(createdDay)) dailyTimelineMap.set(createdDay, { date: createdDay, created: 0, resolved: 0 });
+      dailyTimelineMap.get(createdDay).created++;
+    }
+    const resolvedIso = w.technicianReport?.completedAt || w.completedAt || '';
+    const resolvedDay = resolvedIso ? String(resolvedIso).slice(0, 10) : '';
+    if (isSolvedState && /^\d{4}-\d{2}-\d{2}$/.test(resolvedDay)) {
+      if (!dailyTimelineMap.has(resolvedDay)) dailyTimelineMap.set(resolvedDay, { date: resolvedDay, created: 0, resolved: 0 });
+      dailyTimelineMap.get(resolvedDay).resolved++;
+    }
+
+    // Tiempos de la orden
+    const createdMs = w.createdAt ? new Date(w.createdAt).getTime() : NaN;
+    const resolvedMs = resolvedIso ? new Date(resolvedIso).getTime() : NaN;
+    const durationMs = (Number.isFinite(createdMs) && Number.isFinite(resolvedMs) && resolvedMs >= createdMs) ? (resolvedMs - createdMs) : null;
+    const firstTouchIso = w.reviewOpenedAt || fups[0]?.at || '';
+    const firstTouchMs = firstTouchIso ? new Date(firstTouchIso).getTime() : NaN;
+    const responseMs = (Number.isFinite(createdMs) && Number.isFinite(firstTouchMs) && firstTouchMs >= createdMs) ? (firstTouchMs - createdMs) : null;
+
+    // Creador
+    const creatorUser = ensureUserRecord(w.createdById || w.createdBy, w.createdByName || w.createdByUsername, originAreaCode);
+    const creatorArea = creatorUser?.areaCode || originAreaCode;
+    if (areaStats[creatorArea]) areaStats[creatorArea].created++;
+    if (creatorUser) {
+      creatorUser.created++;
+      registerUserTouch(creatorUser, catLabel, zoneLabel, w.createdAt);
+    }
+
+    // Área destino (Asignación de área)
+    if (areaStats[targetAreaCode]) {
+      areaStats[targetAreaCode].assigned++;
+      if (isCompletedState) areaStats[targetAreaCode].completed++;
+      if (w.status === 'resuelto_soporte') areaStats[targetAreaCode].awaitingConfirmation++;
+      if (isSolvedState) {
+        areaStats[targetAreaCode].solved++;
+        if (!hadReturn) areaStats[targetAreaCode].firstContactSolved++;
+      }
+      if (w.status === 'en_atencion' || w.status === 'en_revision') areaStats[targetAreaCode].inAttention++;
+      if (!w.status || w.status === 'pendiente' || w.status === 'devuelto_soporte') areaStats[targetAreaCode].pending++;
+      if (hadReturn) areaStats[targetAreaCode].returned++;
+      if (durationMs !== null) areaStats[targetAreaCode].resolutionTimesMs.push(durationMs);
+      if (responseMs !== null) areaStats[targetAreaCode].responseTimesMs.push(responseMs);
+    }
+
+    // Usuario asignado
+    if (w.assignedUserId || w.assignedUserName) {
+      const assignedIds = String(w.assignedUserId || '').split(',').map(s => s.trim()).filter(Boolean);
+      const assignedNames = String(w.assignedUserName || '').split(',').map(s => s.trim()).filter(Boolean);
+      const countAssignees = Math.max(assignedIds.length, assignedNames.length);
+      for (let i = 0; i < countAssignees; i++) {
+        const assigneeUser = ensureUserRecord(assignedIds[i] || '', assignedNames[i] || assignedIds[i] || '', targetAreaCode);
+        if (assigneeUser) {
+          assigneeUser.assigned++;
+          if (!w.status || w.status === 'pendiente' || w.status === 'devuelto_soporte') {
+            assigneeUser.pending++;
+          }
+          registerUserTouch(assigneeUser, catLabel, zoneLabel, w.updatedAt || w.createdAt);
+        }
+      }
+    }
+
+    // Usuario que resolvió
+    const rep = w.technicianReport || {};
+    const repName = rep.completedByName || w.completedByName;
+    const repId = rep.completedBy || rep.completedById || '';
+    const repRole = rep.completedByRole || (targetAreaCode === 'atencion_clientes' ? 'Atención a clientes' : 'Soporte');
+    const solveFollowUp = fups.find(f => ['solved', 'concluded', 'resuelto_soporte', 'closure_proposed_soporte', 'closure_proposed_atencion'].includes(String(f.action || '').toLowerCase()));
+    const finalResolverName = repName || solveFollowUp?.byName;
+    const finalResolverId = repId || solveFollowUp?.byId;
+    const finalResolverRole = repRole || solveFollowUp?.byRole || (w.originRole === 'soporte' ? 'Atención a clientes' : 'Soporte');
+
+    if (finalResolverName && isSolvedState) {
+      const resolverUser = ensureUserRecord(finalResolverId, finalResolverName, finalResolverRole);
+      if (resolverUser) {
+        resolverUser.solved++;
+        if (durationMs !== null) resolverUser.resolutionTimesMs.push(durationMs);
+        registerUserTouch(resolverUser, catLabel, zoneLabel, resolvedIso || w.updatedAt);
+      }
+    }
+
+    // Usuario en atención activa
+    if (w.status === 'en_atencion' || w.status === 'en_revision' || (w.reviewOpenedById && w.status !== 'completada')) {
+      const holderName = w.reviewOpenedByName || w.assignedUserName;
+      const holderId = w.reviewOpenedById || w.assignedUserId;
+      if (holderName) {
+        const firstHolderName = String(holderName).split(',')[0].trim();
+        const firstHolderId = String(holderId || '').split(',')[0].trim();
+        const holderUser = ensureUserRecord(firstHolderId, firstHolderName, targetAreaCode);
+        if (holderUser) {
+          holderUser.inProgress++;
+          if (responseMs !== null) holderUser.firstResponseTimesMs.push(responseMs);
+          registerUserTouch(holderUser, catLabel, zoneLabel, w.reviewOpenedAt || w.updatedAt);
+        }
+      }
+    }
+
+    // Análisis de bitácora / followUps por usuario y área
+    fups.forEach(step => {
+      const stepUser = ensureUserRecord(step.byId || step.byUserId, step.byName || step.byUsername, targetAreaCode);
+      if (!stepUser) return;
+      const act = String(step.action || '').toLowerCase();
+      stepUser.chatMessages++;
+      if (areaStats[stepUser.areaCode]) areaStats[stepUser.areaCode].chatMessages++;
+      if (act === 'completada' || act === 'confirmed') {
+        stepUser.confirmed++;
+        if (stepUser.areaCode === 'administrador') areaStats.administrador.completed++;
+      } else if (act === 'devuelto_soporte' || act === 'returned') {
+        stepUser.returned++;
+      } else if (act === 'retomado' || act === 'reasignado') {
+        stepUser.retaken++;
+        if (stepUser.areaCode === 'administrador') areaStats.administrador.assigned++;
+      }
+      if (step.at && (!stepUser.lastActivityAt || step.at > stepUser.lastActivityAt)) {
+        stepUser.lastActivityAt = step.at;
+      }
+    });
+  });
+
+  // 6. Ordenar y filtrar lista de personal
+  const allUsersList = Object.values(resolversMap);
+  const searchNorm = normalizeAdminStatsKey(adminStatsSearchUser);
+  const resolversList = allUsersList
+    .filter(u => {
+      if (adminStatsFilterArea !== 'all' && u.areaCode !== adminStatsFilterArea) return false;
+      if (searchNorm && !normalizeAdminStatsKey(u.name).includes(searchNorm) && !normalizeAdminStatsKey(u.role).includes(searchNorm)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const aIsAdmin = a.areaCode === 'administrador';
+      const bIsAdmin = b.areaCode === 'administrador';
+      if (aIsAdmin !== bIsAdmin) return aIsAdmin ? 1 : -1;
+      if (b.solved !== a.solved) return b.solved - a.solved;
+      if (b.inProgress !== a.inProgress) return b.inProgress - a.inProgress;
+      if (b.assigned !== a.assigned) return b.assigned - a.assigned;
+      if (b.created !== a.created) return b.created - a.created;
+      return a.name.localeCompare(b.name, 'es');
+    });
+
+  // Contar integrantes por área
+  const areaMembersCount = { soporte: 0, atencion_clientes: 0, administrador: 0 };
+  const areaActiveMembersCount = { soporte: 0, atencion_clientes: 0, administrador: 0 };
+  allUsersList.forEach(u => {
+    if (areaMembersCount[u.areaCode] !== undefined) {
+      areaMembersCount[u.areaCode]++;
+      if (u.solved > 0 || u.created > 0 || u.assigned > 0 || u.inProgress > 0 || u.chatMessages > 0) {
+        areaActiveMembersCount[u.areaCode]++;
+      }
+    }
+  });
+
+  const categoriesList = Object.entries(categoriesMap).sort((a, b) => b[1] - a[1]);
+  const zonesList = Object.entries(zonesMap).sort((a, b) => b[1] - a[1]);
+  const townsList = Object.entries(townsDetailMap).sort((a, b) => b[1].total - a[1].total).slice(0, 8);
+
+  // Construir buckets de los últimos 10 días con actividad para la gráfica temporal
+  const sortedTimelineDays = Array.from(dailyTimelineMap.values())
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-10)
+    .map(item => {
+      const parts = item.date.split('-');
+      const shortLabel = parts.length === 3 ? `${parts[2]}/${parts[1]}` : item.date;
+      return { ...item, label: item.date, shortLabel };
+    });
+
+  // Segmentos para la Gráfica de Dona de Estados
+  const statusSegments = [
+    { key: 'completada', label: 'Concluidos definitivos', count: completed, color: '#059669' },
+    { key: 'resuelto_soporte', label: 'Resueltos (Por confirmar)', count: awaitingConfirmation, color: '#10b981' },
+    { key: 'en_revision', label: 'En atención activa', count: inReviewActive, color: '#d97706' },
+    { key: 'pendiente', label: 'Pendientes sin abrir', count: pendingStrict, color: '#dc2626' },
+    { key: 'devuelto_soporte', label: 'Devueltos / En retrabajo', count: returnedActive, color: '#e11d48' },
+    { key: 'no_realizado', label: 'No realizados', count: unresolvable, color: '#64748b' }
+  ];
+
+  // Máximo para barras comparativas entre áreas
+  const maxAreaMetric = Math.max(1, ...Object.values(areaStats).flatMap(a => [a.created, a.assigned, a.solved, a.inAttention + a.pending]));
+
+  content.innerHTML = `
+    <!-- Barra de Controles Ejecutivos -->
+    <div class="admin-stats-toolbar">
+      <div class="admin-stats-toolbar-group">
+        <span class="admin-stats-toolbar-label">Periodo:</span>
+        <div class="admin-stats-pill-group">
+          ${[
+            ['all', 'Todo el historial'],
+            ['today', 'Hoy'],
+            ['last7', 'Últimos 7 días'],
+            ['last30', 'Últimos 30 días'],
+            ['this_month', 'Este mes']
+          ].map(([val, lbl]) => `
+            <button type="button" class="admin-stats-filter-pill ${adminStatsFilterPeriod === val ? 'is-active' : ''}" onclick="setAdminStatsFilter('period','${val}')">${lbl}</button>
+          `).join('')}
+        </div>
+      </div>
+      <div class="admin-stats-toolbar-group">
+        <span class="admin-stats-toolbar-label">Área:</span>
+        <div class="admin-stats-pill-group">
+          ${[
+            ['all', 'Soporte y Atención (Todas)'],
+            ['soporte', 'Soporte Técnico'],
+            ['atencion_clientes', 'Atención a Clientes'],
+            ['administrador', 'Supervisión Admin']
+          ].map(([val, lbl]) => `
+            <button type="button" class="admin-stats-filter-pill ${adminStatsFilterArea === val ? 'is-active' : ''}" onclick="setAdminStatsFilter('area','${val}')">${lbl}</button>
+          `).join('')}
+        </div>
+      </div>
+      <div class="admin-stats-toolbar-actions">
+        <button type="button" class="btn bsm bgh" onclick="refreshAdminNetworkStatsDataset()" ${adminStatsLoadingRemote ? 'disabled' : ''}>
+          ${adminStatsLoadingRemote ? '⏳ Sincronizando...' : '↻ Actualizar universo'}
+        </button>
+      </div>
+    </div>
+
+    <!-- 8 KPIs Principales -->
+    <div class="admin-stats-kpi-grid admin-stats-kpi-grid-8">
+      <div class="admin-stats-kpi-card total">
+        <small>Total reportes</small>
+        <strong>${total}</strong>
+        <span>${flowStats.atencionToSoporte.total} de atención · ${flowStats.soporteToAtencion.total} de soporte</span>
+      </div>
+      <div class="admin-stats-kpi-card success">
+        <small>Resueltos y cerrados</small>
+        <strong>${completed}</strong>
+        <span>${rate}% cerrados (${solvedOrCompleted} con solución: ${resolutionRate}%)</span>
+      </div>
+      <div class="admin-stats-kpi-card warning">
+        <small>En revisión</small>
+        <strong>${inAttention}</strong>
+        <span>${inReviewActive} en proceso · ${awaitingConfirmation} por confirmar</span>
+      </div>
+      <div class="admin-stats-kpi-card pending">
+        <small>Pendientes</small>
+        <strong>${pending}</strong>
+        <span>${pendingStrict} nuevos · ${returnedActive} reabiertos</span>
+      </div>
+      <div class="admin-stats-kpi-card info">
+        <small>Solución directa</small>
+        <strong>${fcrRate}%</strong>
+        <span>${totalFirstContactResolved} casos sin reabrir</span>
+      </div>
+      <div class="admin-stats-kpi-card danger-soft">
+        <small>Casos devueltos</small>
+        <strong>${totalReturnedOrReopened}</strong>
+        <span>${reworkRate}% requirieron nueva revisión</span>
+      </div>
+      <div class="admin-stats-kpi-card purple">
+        <small>Tiempo de solución</small>
+        <strong>${avgResolutionLabel}</strong>
+        <span>Promedio desde el reporte</span>
+      </div>
+      <div class="admin-stats-kpi-card slate">
+        <small>Primer contacto</small>
+        <strong>${avgFirstResponseLabel}</strong>
+        <span>${totalChatSteps} notas en seguimiento</span>
+      </div>
+    </div>
+
+    <!-- SECCIÓN 1: DESEMPEÑO EXTENSO POR ÁREA OPERATIVA -->
+    <div class="admin-stats-section">
+      <div class="admin-stats-section-head">
+        <div class="admin-stats-section-title">
+          <span>🏢</span> Desempeño y Productividad por Área Operativa
+        </div>
+        <span class="admin-stats-section-badge">Soporte y Atención</span>
+      </div>
+      <div class="admin-stats-areas-grid">
+        ${[areaStats.soporte, areaStats.atencion_clientes]
+          .filter(a => adminStatsFilterArea === 'all' || a.code === adminStatsFilterArea)
+          .map(area => {
+            const membersTotal = areaMembersCount[area.code] || 0;
+            const membersActive = areaActiveMembersCount[area.code] || 0;
+            const effRate = area.assigned > 0 ? Math.round((area.solved / area.assigned) * 100) : (area.solved > 0 ? 100 : 0);
+            const closeRate = area.assigned > 0 ? Math.round((area.completed / area.assigned) * 100) : 0;
+            const fcrAreaRate = area.solved > 0 ? Math.round((area.firstContactSolved / area.solved) * 100) : 100;
+            const avgResTime = formatAdminStatsDuration(area.resolutionTimesMs);
+            const avgRespTime = formatAdminStatsDuration(area.responseTimesMs);
+            return `
+              <div class="admin-stats-area-card" style="border-top: 4px solid ${area.color};">
+                <div class="admin-stats-area-head" style="background:${area.accentBg};">
+                  <div>
+                    <h4>${orderEscape(area.title)}</h4>
+                    <p>${orderEscape(area.subtitle)}</p>
+                  </div>
+                  <span class="admin-stats-area-members-badge" style="color:${area.color};">
+                    👥 ${membersActive}/${membersTotal} activos
+                  </span>
+                </div>
+                <div class="admin-stats-area-metrics-grid">
+                  <div class="admin-stats-area-metric">
+                    <small>Registrados</small>
+                    <strong>${area.created}</strong>
+                  </div>
+                  <div class="admin-stats-area-metric">
+                    <small>Asignados</small>
+                    <strong>${area.assigned}</strong>
+                  </div>
+                  <div class="admin-stats-area-metric is-emerald">
+                    <small>Solucionados</small>
+                    <strong>${area.solved}</strong>
+                  </div>
+                  <div class="admin-stats-area-metric is-blue">
+                    <small>Cerrados</small>
+                    <strong>${area.completed}</strong>
+                  </div>
+                  <div class="admin-stats-area-metric is-amber">
+                    <small>En revisión</small>
+                    <strong>${area.inAttention} / ${area.awaitingConfirmation}</strong>
+                  </div>
+                  <div class="admin-stats-area-metric is-red">
+                    <small>Pendientes</small>
+                    <strong>${area.pending} (${area.returned} dev.)</strong>
+                  </div>
+                </div>
+                <div class="admin-stats-area-bars">
+                  <div class="admin-stats-area-bar-item">
+                    <div class="admin-stats-area-bar-label">
+                      <span>Efectividad del área</span>
+                      <strong>${effRate}%</strong>
+                    </div>
+                    <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill" style="width:${Math.min(100, effRate)}%;background:${area.color};"></div></div>
+                  </div>
+                  <div class="admin-stats-area-bar-item">
+                    <div class="admin-stats-area-bar-label">
+                      <span>Solución directa</span>
+                      <strong>${fcrAreaRate}% (${closeRate}% cerrados)</strong>
+                    </div>
+                    <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill" style="width:${Math.min(100, fcrAreaRate)}%;background:#059669;"></div></div>
+                  </div>
+                </div>
+                <div class="admin-stats-area-footer">
+                  <span>⏱️ Tiempo promedio: <strong>${avgResTime}</strong></span>
+                  <span>⚡ Respuesta inicial: <strong>${avgRespTime}</strong></span>
+                  <span>💬 Mensajes: <strong>${area.chatMessages}</strong></span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        ${(adminStatsFilterArea === 'all' || adminStatsFilterArea === 'administrador') ? `
+          <div class="admin-stats-admin-unified-bar">
+            <div class="admin-stats-admin-unified-bar-info">
+              <span style="font-size:20px;">🛡️</span>
+              <div>
+                <strong>Supervisión de Administración</strong>
+                <span>Coordinación general, asignaciones y revisión de casos</span>
+              </div>
+            </div>
+            <div class="admin-stats-admin-unified-bar-kpis">
+              <span>Registrados por Admin: <strong>${areaStats.administrador.created}</strong></span>
+              <span>•</span>
+              <span>Reasignaciones: <strong>${areaStats.administrador.assigned}</strong></span>
+              <span>•</span>
+              <span>Casos aprobados: <strong>${areaStats.administrador.completed}</strong></span>
+              <span>•</span>
+              <span>Supervisores: <strong>${areaActiveMembersCount.administrador}/${areaMembersCount.administrador}</strong></span>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    </div>
+
+    <!-- SECCIÓN 2: GRÁFICAS VISUALES DE INTELIGENCIA OPERATIVA -->
+    <div class="admin-stats-grid-2">
+      <!-- Gráfica 1: Dona de Estado Operativo -->
+      <div class="admin-stats-section">
+        <div class="admin-stats-section-head">
+          <div class="admin-stats-section-title"><span>🍩</span> Gráfica de Distribución por Estado</div>
+          <span class="admin-stats-section-badge">${total} casos</span>
+        </div>
+        <div class="admin-stats-donut-layout">
+          <div class="admin-stats-donut-wrap">
+            ${buildAdminStatsDonutSvg(statusSegments, total)}
+          </div>
+          <div class="admin-stats-donut-legend">
+            ${statusSegments.map(seg => {
+              const pct = total > 0 ? Math.round((seg.count / total) * 100) : 0;
+              return `
+                <div class="admin-stats-legend-item">
+                  <span class="admin-stats-legend-dot" style="background:${seg.color};"></span>
+                  <span class="admin-stats-legend-name">${orderEscape(seg.label)}</span>
+                  <strong class="admin-stats-legend-val">${seg.count} <small>(${pct}%)</small></strong>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráfica 2: Comparativa Multidimensional entre Áreas -->
+      <div class="admin-stats-section">
+        <div class="admin-stats-section-head">
+          <div class="admin-stats-section-title"><span>📊</span> Comparativa de Volumen y Resolución por Área</div>
+          <span class="admin-stats-section-badge">Soporte vs Atención</span>
+        </div>
+        <div class="admin-stats-comparative-chart">
+          <div class="admin-stats-comp-legend">
+            <span><i style="background:#0284c7;"></i> Capturados</span>
+            <span><i style="background:#6366f1;"></i> Asignados</span>
+            <span><i style="background:#059669;"></i> Resueltos</span>
+            <span><i style="background:#d97706;"></i> Activos/Pend.</span>
+          </div>
+          ${[areaStats.soporte, areaStats.atencion_clientes]
+            .filter(a => adminStatsFilterArea === 'all' || a.code === adminStatsFilterArea)
+            .map(area => {
+            const wCreated = Math.round((area.created / maxAreaMetric) * 100);
+            const wAssigned = Math.round((area.assigned / maxAreaMetric) * 100);
+            const wSolved = Math.round((area.solved / maxAreaMetric) * 100);
+            const activeLoad = area.inAttention + area.pending;
+            const wActive = Math.round((activeLoad / maxAreaMetric) * 100);
+            return `
+              <div class="admin-stats-comp-group">
+                <div class="admin-stats-comp-header">
+                  <strong>${orderEscape(area.title)}</strong>
+                  <span>${area.solved} resueltos de ${area.assigned} asignados · ${area.created} capturados</span>
+                </div>
+                <div class="admin-stats-comp-bars">
+                  <div class="admin-stats-comp-bar-row">
+                    <small>Capturados</small>
+                    <div class="admin-stats-comp-track"><div style="width:${wCreated}%;background:#0284c7;"></div></div>
+                    <b>${area.created}</b>
+                  </div>
+                  <div class="admin-stats-comp-bar-row">
+                    <small>Asignados</small>
+                    <div class="admin-stats-comp-track"><div style="width:${wAssigned}%;background:#6366f1;"></div></div>
+                    <b>${area.assigned}</b>
+                  </div>
+                  <div class="admin-stats-comp-bar-row">
+                    <small>Resueltos</small>
+                    <div class="admin-stats-comp-track"><div style="width:${wSolved}%;background:#059669;"></div></div>
+                    <b>${area.solved}</b>
+                  </div>
+                  <div class="admin-stats-comp-bar-row">
+                    <small>En cola/atención</small>
+                    <div class="admin-stats-comp-track"><div style="width:${wActive}%;background:#d97706;"></div></div>
+                    <b>${activeLoad}</b>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+          <div class="admin-stats-comp-admin-footer">
+            <span>🛡️ <b>Administración (Supervisión Unificada):</b> ${areaStats.administrador.created} casos creados · ${areaStats.administrador.assigned} reasignaciones · ${areaStats.administrador.completed} cierres</span>
+            <span style="font-weight:700;color:#0f172a;">${areaActiveMembersCount.administrador} supervisor(es)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECCIÓN 2B: CURVA TEMPORAL Y FLUJO INTER-ÁREAS / PRIORIDADES -->
+    <div class="admin-stats-grid-2">
+      <!-- Gráfica 3: Evolución Diaria de Ingreso vs Resolución -->
+      <div class="admin-stats-section">
+        <div class="admin-stats-section-head">
+          <div class="admin-stats-section-title"><span>📈</span> Ritmo Diario: Casos Capturados vs Resueltos</div>
+          <div class="admin-stats-comp-legend">
+            <span><i style="background:#0284c7;"></i> Capturados</span>
+            <span><i style="background:#059669;"></i> Resueltos</span>
+          </div>
+        </div>
+        <div class="admin-stats-timeline-wrap">
+          ${buildAdminStatsTimelineSvg(sortedTimelineDays)}
+        </div>
+      </div>
+
+      <!-- Gráfica 4: Flujo Inter-Áreas y Desempeño por Prioridad -->
+      <div class="admin-stats-section">
+        <div class="admin-stats-section-head">
+          <div class="admin-stats-section-title"><span>🔄</span> Flujo Inter-Áreas y Cumplimiento por Prioridad</div>
+          <span class="admin-stats-section-badge">Atención ↔ Soporte</span>
+        </div>
+        <div class="admin-stats-flow-boxes">
+          <div class="admin-stats-flow-card">
+            <div class="admin-stats-flow-title">
+              <strong>Atención a Clientes ➔ Soporte Técnico</strong>
+              <span>${flowStats.atencionToSoporte.total} reportes</span>
+            </div>
+            <div class="admin-stats-flow-pills">
+              <span class="is-ok">✓ ${flowStats.atencionToSoporte.completed} concluidos</span>
+              <span class="is-rev">👁 ${flowStats.atencionToSoporte.awaiting} por confirmar</span>
+              <span class="is-att">⚡ ${flowStats.atencionToSoporte.inProgress} en atención</span>
+              <span class="is-pend">⏳ ${flowStats.atencionToSoporte.pending} pendientes</span>
+              <span class="is-ret">↩ ${flowStats.atencionToSoporte.returned} devueltos</span>
+            </div>
+          </div>
+          <div class="admin-stats-flow-card">
+            <div class="admin-stats-flow-title">
+              <strong>Soporte Técnico ➔ Atención a Clientes</strong>
+              <span>${flowStats.soporteToAtencion.total} requerimientos</span>
+            </div>
+            <div class="admin-stats-flow-pills">
+              <span class="is-ok">✓ ${flowStats.soporteToAtencion.completed} concluidos</span>
+              <span class="is-rev">👁 ${flowStats.soporteToAtencion.awaiting} por confirmar</span>
+              <span class="is-att">⚡ ${flowStats.soporteToAtencion.inProgress} en atención</span>
+              <span class="is-pend">⏳ ${flowStats.soporteToAtencion.pending} pendientes</span>
+              <span class="is-ret">↩ ${flowStats.soporteToAtencion.returned} devueltos</span>
+            </div>
+          </div>
+        </div>
+        <div class="admin-stats-priority-breakdown">
+          <div class="admin-stats-subhead">Efectividad según Nivel de Prioridad</div>
+          ${Object.values(priorityStats).map(p => {
+            const pRate = p.total > 0 ? Math.round((p.solved / p.total) * 100) : 0;
+            return `
+              <div class="admin-stats-prio-row">
+                <span class="admin-stats-prio-label"><i style="background:${p.color};"></i> ${p.label}</span>
+                <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill" style="width:${pRate}%;background:${p.color};"></div></div>
+                <strong class="admin-stats-prio-val">${p.solved}/${p.total} (${pRate}%)</strong>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- SECCIÓN 3: RENDIMIENTO DE RESOLUCIÓN Y GESTIÓN POR USUARIO (TABLA EXTENSA) -->
+    <div class="admin-stats-section">
+      <div class="admin-stats-section-head">
+        <div class="admin-stats-section-title">
+          <span>👨‍💻</span> Rendimiento de resolución por usuario
+        </div>
+        <div class="admin-stats-user-search-wrap">
+          <input type="search" class="admin-stats-user-search" placeholder="Buscar personal o área..." value="${orderEscape(adminStatsSearchUser)}" oninput="setAdminStatsFilter('search', this.value)">
+        </div>
+      </div>
+      <div class="admin-stats-table-wrap">
+        <table class="admin-stats-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Personal</th>
+              <th>Área</th>
+              <th style="text-align:center;">Registrados</th>
+              <th style="text-align:center;">Asignados</th>
+              <th style="text-align:center;">Solucionados</th>
+              <th style="text-align:center;">Cerrados</th>
+              <th style="text-align:center;">En revisión</th>
+              <th style="text-align:center;">Pendientes</th>
+              <th style="text-align:center;">Reabiertos</th>
+              <th style="text-align:center;">Mensajes</th>
+              <th style="text-align:center;">Tiempo Prom.</th>
+              <th style="text-align:right;">Efectividad / Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${resolversList.length ? resolversList.map((r, idx) => {
+              const isAdmin = r.areaCode === 'administrador';
+              const pctTotal = solvedOrCompleted > 0 ? Math.round((r.solved / solvedOrCompleted) * 100) : (completed > 0 ? Math.round((r.solved / completed) * 100) : 0);
+              const workloadBase = Math.max(r.assigned, r.solved + r.inProgress + r.pending);
+              const effIndividual = workloadBase > 0 ? Math.round((r.solved / workloadBase) * 100) : (r.solved > 0 ? 100 : 0);
+              const avgUserTime = formatAdminStatsDuration(r.resolutionTimesMs);
+              const roleBadgeClass = isAdmin ? 'is-admin' : (r.areaCode === 'atencion_clientes' ? 'is-atencion' : 'is-soporte');
+              return `
+                <tr class="${isAdmin ? 'is-admin-row' : ''}">
+                  <td style="font-weight:700;color:#64748b;">${idx + 1}</td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:7px;">
+                      ${typeof renderUserColorChip === 'function' ? renderUserColorChip(r.name, r.id) : `<strong>${orderEscape(r.name)}</strong>`}
+                    </div>
+                  </td>
+                  <td><span class="admin-stats-role-pill ${roleBadgeClass}">${isAdmin ? 'Supervisión' : orderEscape(r.role)}</span></td>
+                  <td style="text-align:center;font-weight:700;color:#0284c7;">${r.created}</td>
+                  <td style="text-align:center;font-weight:700;color:#4f46e5;">${r.assigned}</td>
+                  <td style="text-align:center;font-weight:800;color:${isAdmin ? '#0f172a' : '#047857'};">${isAdmin ? (r.solved || '—') : r.solved}</td>
+                  <td style="text-align:center;font-weight:700;color:#0d9488;">${r.confirmed}</td>
+                  <td style="text-align:center;font-weight:700;color:#d97706;">${r.inProgress}</td>
+                  <td style="text-align:center;font-weight:700;color:#dc2626;">${r.pending}</td>
+                  <td style="text-align:center;font-size:11.5px;color:#475569;">${r.returned}</td>
+                  <td style="text-align:center;font-weight:700;color:#334155;">${r.chatMessages}</td>
+                  <td style="text-align:center;font-size:11.5px;font-weight:600;color:#0f172a;">${isAdmin ? 'Supervisión' : avgUserTime}</td>
+                  <td style="text-align:right;min-width:155px;">
+                    ${isAdmin ? `
+                      <div style="font-size:11px;color:#0f172a;font-weight:800;text-align:right;">Supervisión</div>
+                      <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill" style="width:100%;background:#0f172a;"></div></div>
+                    ` : `
+                      <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+                        <span style="color:#047857;font-weight:700;">Efec: ${effIndividual}%</span>
+                        <span style="font-weight:800;color:#0f172a;">Global: ${pctTotal}%</span>
+                      </div>
+                      <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill" style="width:${Math.max(pctTotal, effIndividual > 0 ? 6 : 0)}%;"></div></div>
+                    `}
+                  </td>
+                </tr>
+              `;
+            }).join('') : `<tr><td colspan="13" style="text-align:center;color:#64748b;padding:18px;">Sin registros para los filtros seleccionados.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SECCIÓN 4: RADIOGRAFÍA INDIVIDUAL POR INTEGRANTE (FICHAS DE DESEMPEÑO) -->
+    <div class="admin-stats-section">
+      <div class="admin-stats-section-head">
+        <div class="admin-stats-section-title">
+          <span>🪪</span> Radiografía Individual de Desempeño por Integrante
+        </div>
+        <span class="admin-stats-section-badge">${resolversList.length} integrantes</span>
+      </div>
+      <div class="admin-stats-profiles-grid">
+        ${resolversList.length ? resolversList.map(r => {
+          const isAdmin = r.areaCode === 'administrador';
+          const lastActLabel = r.lastActivityAt ? new Date(r.lastActivityAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : 'Sin actividad reciente';
+
+          if (isAdmin) {
+            return `
+              <div class="admin-stats-profile-card is-admin-profile" style="border-top: 3px solid #0f172a; background: #f8fafc;">
+                <div class="admin-stats-profile-top">
+                  <div>
+                    <div class="admin-stats-profile-name">${typeof renderUserColorChip === 'function' ? renderUserColorChip(r.name, r.id) : `<strong>${orderEscape(r.name)}</strong>`}</div>
+                    <span class="admin-stats-profile-role" style="color:#0f172a;font-weight:700;">Supervisión General</span>
+                  </div>
+                  <span class="admin-stats-load-badge is-ok" style="background:#0f172a;color:#fff;">Supervisión</span>
+                </div>
+                <div class="admin-stats-profile-kpis" style="grid-template-columns: repeat(3, 1fr);">
+                  <div><small>Registrados</small><strong>${r.created}</strong></div>
+                  <div><small>Reasignaciones</small><strong>${r.assigned + r.retaken}</strong></div>
+                  <div><small>Cerrados</small><strong style="color:#0f172a;">${r.confirmed}</strong></div>
+                </div>
+                <div style="font-size:11.5px;color:#475569;margin-top:6px;line-height:1.45;">
+                  Coordinación de reportes: <b>${r.chatMessages}</b> notas en seguimiento y enlace entre Soporte y Atención.
+                </div>
+                <div class="admin-stats-profile-foot" style="margin-top:8px;">
+                  Última actividad: <strong>${orderEscape(lastActLabel)}</strong>
+                </div>
+              </div>
+            `;
+          }
+
+          const workloadBase = Math.max(1, r.solved + r.inProgress + r.pending);
+          const wSolved = Math.round((r.solved / workloadBase) * 100);
+          const wInProg = Math.round((r.inProgress / workloadBase) * 100);
+          const wPend = Math.max(0, 100 - wSolved - wInProg);
+          const effInd = (r.assigned > 0 || r.solved > 0) ? Math.round((r.solved / Math.max(r.assigned, r.solved + r.inProgress + r.pending)) * 100) : 0;
+          const topCats = Object.entries(r.categories).sort((a, b) => b[1] - a[1]).slice(0, 3);
+          const topZones = Object.entries(r.zones).sort((a, b) => b[1] - a[1]).slice(0, 3);
+          const avgRes = formatAdminStatsDuration(r.resolutionTimesMs);
+          const avgResp = formatAdminStatsDuration(r.firstResponseTimesMs);
+          const loadStatus = (r.inProgress + r.pending) >= 5 ? ['Carga Alta', 'is-high'] : ((r.inProgress + r.pending) >= 1 ? ['En atención', 'is-medium'] : (r.solved > 0 || r.created > 0 ? ['Al día', 'is-ok'] : ['Sin pendientes', 'is-idle']));
+
+          return `
+            <div class="admin-stats-profile-card">
+              <div class="admin-stats-profile-top">
+                <div>
+                  <div class="admin-stats-profile-name">${typeof renderUserColorChip === 'function' ? renderUserColorChip(r.name, r.id) : `<strong>${orderEscape(r.name)}</strong>`}</div>
+                  <span class="admin-stats-profile-role">${orderEscape(r.role)}</span>
+                </div>
+                <span class="admin-stats-load-badge ${loadStatus[1]}">${loadStatus[0]}</span>
+              </div>
+
+              <div class="admin-stats-profile-kpis">
+                <div><small>Registrados</small><strong>${r.created}</strong></div>
+                <div><small>Asignados</small><strong>${r.assigned}</strong></div>
+                <div><small>Solucionados</small><strong style="color:#047857;">${r.solved}</strong></div>
+                <div><small>Cerrados</small><strong style="color:#0284c7;">${r.confirmed}</strong></div>
+                <div><small>En revisión</small><strong style="color:#d97706;">${r.inProgress}</strong></div>
+                <div><small>Pendientes</small><strong style="color:#dc2626;">${r.pending}</strong></div>
+              </div>
+
+              <div class="admin-stats-profile-stack-wrap">
+                <div class="admin-stats-profile-stack-head">
+                  <span>Efectividad: <strong>${effInd}%</strong></span>
+                  <span>Notas: <strong>${r.chatMessages}</strong></span>
+                </div>
+                <div class="admin-stats-stacked-bar">
+                  <div style="width:${wSolved}%;background:#059669;" title="Solucionados: ${r.solved}"></div>
+                  <div style="width:${wInProg}%;background:#d97706;" title="En revisión: ${r.inProgress}"></div>
+                  <div style="width:${wPend}%;background:#ef4444;" title="Pendientes: ${r.pending}"></div>
+                </div>
+              </div>
+
+              <div class="admin-stats-profile-meta">
+                <div><span>⏱️ Tiempo solución:</span> <strong>${avgRes}</strong></div>
+                <div><span>⚡ Primer contacto:</span> <strong>${avgResp}</strong></div>
+              </div>
+
+              <div class="admin-stats-profile-tags">
+                <small>Categorías frecuentes:</small>
+                <div class="admin-stats-tag-row">
+                  ${topCats.length ? topCats.map(([c, cnt]) => `<span class="admin-stats-mini-tag">${orderEscape(c)} <b>(${cnt})</b></span>`).join('') : '<span class="admin-stats-mini-empty">Sin categorías</span>'}
+                </div>
+              </div>
+
+              <div class="admin-stats-profile-tags">
+                <small>Zonas principales:</small>
+                <div class="admin-stats-tag-row">
+                  ${topZones.length ? topZones.map(([z, cnt]) => `<span class="admin-stats-mini-tag is-zone">${orderEscape(z)} <b>(${cnt})</b></span>`).join('') : '<span class="admin-stats-mini-empty">Sin zonas</span>'}
+                </div>
+              </div>
+
+              <div class="admin-stats-profile-foot">
+                Última actividad: <strong>${orderEscape(lastActLabel)}</strong>
+              </div>
+            </div>
+          `;
+        }).join('') : `<div style="grid-column:1/-1;text-align:center;color:#64748b;padding:20px;">Sin integrantes para este filtro.</div>`}
+      </div>
+    </div>
+
+    <!-- SECCIÓN 5: DESGLOSE POR CATEGORÍA, ZONA / REGIÓN Y LOCALIDADES CRÍTICAS -->
+    <div class="admin-stats-grid-3">
+      <div class="admin-stats-section">
+        <div class="admin-stats-section-title"><span>📊</span> Distribución por categoría</div>
+        <div class="admin-stats-cat-list">
+          ${categoriesList.length ? categoriesList.map(([cat, count]) => {
+            const catPct = total > 0 ? Math.round((count / total) * 100) : 0;
+            const det = categoriesDetailMap[cat] || { solved: 0, pending: 0, returned: 0 };
+            const effCat = count > 0 ? Math.round((det.solved / count) * 100) : 0;
+            return `
+              <div class="admin-stats-cat-row">
+                <div class="admin-stats-cat-header">
+                  <span>${orderEscape(cat)}</span>
+                  <strong>${count} (${catPct}%)</strong>
+                </div>
+                <div class="admin-stats-cat-sub">
+                  <span>✓ ${det.solved} resueltos (${effCat}%)</span>
+                  <span>⏳ ${det.pending} activos</span>
+                </div>
+                <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill" style="width:${catPct}%;"></div></div>
+              </div>
+            `;
+          }).join('') : '<div style="color:#64748b;font-size:12px;">Sin datos de categorías.</div>'}
+        </div>
+      </div>
+
+      <div class="admin-stats-section">
+        <div class="admin-stats-section-title"><span>📍</span> Distribución por zona / región</div>
+        <div class="admin-stats-cat-list">
+          ${zonesList.length ? zonesList.map(([zone, count]) => {
+            const zonePct = total > 0 ? Math.round((count / total) * 100) : 0;
+            const det = zonesDetailMap[zone] || { solved: 0, pending: 0 };
+            const effZone = count > 0 ? Math.round((det.solved / count) * 100) : 0;
+            return `
+              <div class="admin-stats-cat-row">
+                <div class="admin-stats-cat-header">
+                  <span>${orderEscape(zone)}</span>
+                  <strong>${count} (${zonePct}%)</strong>
+                </div>
+                <div class="admin-stats-cat-sub">
+                  <span>✓ ${det.solved} resueltos (${effZone}%)</span>
+                  <span>⏳ ${det.pending} activos</span>
+                </div>
+                <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill zone" style="width:${zonePct}%;"></div></div>
+              </div>
+            `;
+          }).join('') : '<div style="color:#64748b;font-size:12px;">Sin datos de zonas.</div>'}
+        </div>
+      </div>
+
+      <div class="admin-stats-section">
+        <div class="admin-stats-section-title"><span>🏘️</span> Localidades con Mayor Incidencia</div>
+        <div class="admin-stats-cat-list">
+          ${townsList.length ? townsList.map(([town, info]) => {
+            const townPct = total > 0 ? Math.round((info.total / total) * 100) : 0;
+            const effTown = info.total > 0 ? Math.round((info.solved / info.total) * 100) : 0;
+            return `
+              <div class="admin-stats-cat-row">
+                <div class="admin-stats-cat-header">
+                  <span>${orderEscape(town)} <small style="color:#64748b;">(${orderEscape(info.zone)})</small></span>
+                  <strong>${info.total} (${townPct}%)</strong>
+                </div>
+                <div class="admin-stats-cat-sub">
+                  <span>✓ ${info.solved} resueltos (${effTown}%)</span>
+                  <span>⏳ ${info.pending} pendientes</span>
+                </div>
+                <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill" style="width:${townPct}%;background:#7c3aed;"></div></div>
+              </div>
+            `;
+          }).join('') : '<div style="color:#64748b;font-size:12px;">Sin datos de localidades.</div>'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+if (typeof window !== 'undefined') {
+  window.openOrderTechnicianReport = openOrderTechnicianReport;
+  window.loadNotificationOrder = loadNotificationOrder;
+  window.ensureOrderVisibleInTable = ensureOrderVisibleInTable;
+  window.ensureMatchingDetailKind = ensureMatchingDetailKind;
+  window.selectOrderRow = selectOrderRow;
+  window.requestCloseOrderReport = requestCloseOrderReport;
+  window.closeOrderReportModalDirectly = closeOrderReportModalDirectly;
+  window.promptCloseOrderChatDecision = promptCloseOrderChatDecision;
+  window.dismissCloseOrderChatDecision = dismissCloseOrderChatDecision;
+  window.confirmJustCloseOrderReport = confirmJustCloseOrderReport;
+  window.executeChatCloseAction = executeChatCloseAction;
+  window.getOrderCurrentUserClosureAction = getOrderCurrentUserClosureAction;
+  window.openAdminNetworkStatsModal = openAdminNetworkStatsModal;
+  window.renderAdminNetworkStatsContent = renderAdminNetworkStatsContent;
+  window.setAdminStatsFilter = setAdminStatsFilter;
+  window.refreshAdminNetworkStatsDataset = refreshAdminNetworkStatsDataset;
 }

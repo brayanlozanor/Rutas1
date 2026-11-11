@@ -35,22 +35,13 @@ html[data-role="tecnico"] body #plan-panel {
   padding-right: 0 !important;
 }
 
-/* Ocultar campana flotante inferior para técnicos (tienen la campana en la cabecera superior móvil, sin estorbar botones) */
+/* Ocultar campana flotante inferior únicamente en vista móvil de técnico con barra inferior */
 body.plan-technician-view #notification-bell,
+#notification-bell.technician-bell,
 body.plan-technician-view .floating-notification-bell,
 body.plan-technician-view button.floating-notification-bell,
-body.planificar-page #notification-bell,
-body.planificar-page .floating-notification-bell,
-html[data-role="tecnico"] #notification-bell,
-html[data-role="tecnico"] .floating-notification-bell,
-html[data-role="tecnico"] button.floating-notification-bell,
-#notification-bell.technician-bell,
 .tech-bottom-nav ~ #notification-bell,
-.tech-bottom-nav ~ .floating-notification-bell {
-  display: none !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
+.tech-bottom-nav ~ .floating-notification-bell,
 body:has(.tech-bottom-nav) #notification-bell,
 body:has(.tech-bottom-nav) .floating-notification-bell,
 body:has(.tech-bottom-nav) button.floating-notification-bell {
@@ -161,7 +152,7 @@ body.plan-technician-view .plan-calendar-grid{display:grid;grid-template-columns
 body.plan-technician-view .tech-today-board{grid-area:agenda;margin:0;border:0;border-radius:22px;background:#fff;box-shadow:0 10px 28px rgba(29,64,105,.1)}
 body.plan-technician-view .tech-today-board>.sh{padding:20px 20px 10px}body.plan-technician-view .tech-today-board #plan-title{font-size:21px}
 body.plan-technician-view .plan-days{display:block;padding:0 15px 16px}body.plan-technician-view .day-col{margin-bottom:14px;border:1px solid #e4ebf5;border-radius:15px;overflow:hidden}body.plan-technician-view .day-head{padding:11px 15px;background:#edf5ff;color:#0967d8}body.plan-technician-view .day-body{display:block;padding:0}
-body.plan-technician-view .stop-card{position:relative;margin:0;padding:16px;border:0;border-bottom:1px solid #e7edf5;border-radius:0;background:#fff;box-shadow:none}body.plan-technician-view .stop-card:last-child{border-bottom:0}body.plan-technician-view .stop-title{font-size:14px;color:#12284a}body.plan-technician-view .stop-meta{margin-top:3px;color:#71829a}body.plan-technician-view .stop-state-row{margin-top:9px}body.plan-technician-view .stop-actions{margin-top:10px}
+body.plan-technician-view .stop-card{position:relative;margin:0;padding:16px;border:0;border-bottom:1px solid #e7edf5;border-radius:0;background:#fff;box-shadow:none}body.plan-technician-view .stop-card:last-child{border-bottom:0}body.plan-technician-view .stop-title{font-size:14px;color:#12284a}body.plan-technician-view .stop-meta{margin-top:3px;color:#71829a}body.plan-technician-view .stop-state-row{margin-top:9px}body.plan-technician-view .stop-actions{margin-top:10px}body.plan-technician-view .stop-detail-switches{display:none!important}
 @media(max-width:1050px){body.plan-technician-view .plan-shell{grid-template-columns:1fr;grid-template-areas:"map" "calendar" "agenda"}body.plan-technician-view .plan-map{height:390px!important}}
 @media(max-width:760px){
  body.plan-technician-view{padding:0 0 78px!important;background:#f4f8fd!important}body.plan-technician-view .topbar.app-sidebar,body.plan-technician-view #mobile-menu-toggle{display:none!important}
@@ -635,8 +626,7 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar {
   place-items: center;
 }
 
-/* Floating bell para técnicos: siempre oculto porque la campana ya está en la cabecera móvil */
-#notification-bell.technician-bell,
+/* Floating bell para técnicos en vista móvil con barra de navegación */
 body:has(.tech-bottom-nav) #notification-bell {
   display: none !important;
   visibility: hidden !important;

@@ -1,0 +1,499 @@
+/* ==========================================================================
+   CATÁLOGO DE RUTAS PREESTABLECIDAS Y RECOMENDACIONES DE CORREDORES
+   ========================================================================== */
+
+.preset-routes-modal-overlay {
+  z-index: 22000 !important;
+}
+
+.preset-routes-dialog-card {
+  width: min(1140px, 96vw) !important;
+  max-height: 90vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+  border-radius: 18px !important;
+  background: #ffffff !important;
+  border: 1px solid #dce5ef !important;
+  box-shadow: 0 28px 80px rgba(10, 29, 54, 0.3) !important;
+  overflow: hidden !important;
+  animation: netModalCardSlideEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+.preset-dialog-head {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 18px 24px !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid #e5edf5 !important;
+  gap: 16px !important;
+}
+
+.preset-head-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+}
+
+.preset-head-icon {
+  display: grid !important;
+  place-items: center !important;
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #e0f2fe, #bae6fd) !important;
+  color: #0284c7 !important;
+  flex-shrink: 0 !important;
+}
+
+.preset-dialog-head h2 {
+  margin: 0 !important;
+  font-size: 16.5px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  letter-spacing: -0.01em !important;
+}
+
+.preset-dialog-head p {
+  margin: 2px 0 0 !important;
+  font-size: 12px !important;
+  color: #64748b !important;
+  line-height: 1.4 !important;
+}
+
+.preset-dialog-close {
+  display: grid !important;
+  place-items: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  border: none !important;
+  cursor: pointer !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  transition: all 0.15s ease !important;
+}
+
+.preset-dialog-close:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Barra de filtros y búsqueda */
+.preset-dialog-filterbar {
+  padding: 12px 24px !important;
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+
+.preset-search-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 10px !important;
+  padding: 0 12px !important;
+  height: 38px !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.preset-search-wrap:focus-within {
+  border-color: #0284c7 !important;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.14) !important;
+}
+
+.preset-search-wrap input {
+  flex: 1 !important;
+  border: none !important;
+  outline: none !important;
+  font-size: 12.5px !important;
+  color: #1e293b !important;
+  background: transparent !important;
+  font-family: inherit !important;
+}
+
+.preset-cat-tabs {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  overflow-x: auto !important;
+  padding-bottom: 2px !important;
+  scrollbar-width: none !important;
+}
+
+.preset-cat-tabs::-webkit-scrollbar {
+  display: none !important;
+}
+
+.preset-cat-tab {
+  padding: 5px 12px !important;
+  border-radius: 9999px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  color: #475569 !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  transition: all 0.14s ease !important;
+  flex-shrink: 0 !important;
+}
+
+.preset-cat-tab:hover {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+
+.preset-cat-tab.active {
+  background: #0284c7 !important;
+  border-color: #0284c7 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.28) !important;
+}
+
+/* Contenedor de cuadrícula */
+.preset-routes-body {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  padding: 18px 24px !important;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)) !important;
+  gap: 14px !important;
+  background: #f8fafc !important;
+}
+
+/* Tarjeta individual de ruta */
+.preset-route-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 14px !important;
+  padding: 14px 16px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease !important;
+}
+
+.preset-route-card:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08) !important;
+  border-color: #bae6fd !important;
+}
+
+.preset-route-card-head {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+  gap: 10px !important;
+}
+
+.preset-route-badges {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin-bottom: 4px !important;
+}
+
+.preset-category-badge {
+  display: inline-flex !important;
+  padding: 2px 7px !important;
+  border-radius: 6px !important;
+  background: #eff6ff !important;
+  border: 1px solid #bfdbfe !important;
+  color: #1d4ed8 !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.03em !important;
+}
+
+.preset-count-badge {
+  display: inline-flex !important;
+  padding: 2px 7px !important;
+  border-radius: 6px !important;
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+}
+
+.preset-route-title {
+  margin: 0 !important;
+  font-size: 13.5px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  line-height: 1.35 !important;
+}
+
+.preset-maps-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 4px 8px !important;
+  border-radius: 7px !important;
+  background: #f0fdf4 !important;
+  border: 1px solid #bbf7d0 !important;
+  color: #15803d !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-decoration: none !important;
+  flex-shrink: 0 !important;
+  transition: all 0.14s ease !important;
+}
+
+.preset-maps-btn:hover {
+  background: #dcfce7 !important;
+  border-color: #86efac !important;
+  color: #166534 !important;
+  transform: translateY(-1px) !important;
+}
+
+.preset-route-notes {
+  margin: 0 !important;
+  font-size: 11.5px !important;
+  color: #64748b !important;
+  line-height: 1.4 !important;
+}
+
+/* Secuencia de paradas */
+.preset-stops-flow {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 5px !important;
+  max-height: 120px !important;
+  overflow-y: auto !important;
+  padding: 8px !important;
+  background: #f8fafc !important;
+  border: 1px solid #f1f5f9 !important;
+  border-radius: 9px !important;
+  scrollbar-width: thin !important;
+}
+
+.preset-stop-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 2.5px 7px !important;
+  border-radius: 6px !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  font-size: 11px !important;
+  color: #334155 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+}
+
+.preset-stop-chip .stop-num {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 15px !important;
+  height: 15px !important;
+  border-radius: 50% !important;
+  background: #0284c7 !important;
+  color: #ffffff !important;
+  font-size: 8.5px !important;
+  font-weight: 800 !important;
+}
+
+.preset-stop-chip .stop-name {
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+/* Caja de continuidad */
+.preset-continuation-box {
+  background: #fefce8 !important;
+  border: 1px solid #fef08a !important;
+  border-radius: 9px !important;
+  padding: 8px 10px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 5px !important;
+}
+
+.continuation-head {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  font-size: 11px !important;
+  color: #854d0e !important;
+}
+
+.preset-link-btn {
+  display: inline-flex !important;
+  padding: 1px 6px !important;
+  border-radius: 5px !important;
+  background: #ffffff !important;
+  border: 1px solid #fde047 !important;
+  color: #a16207 !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  text-decoration: none !important;
+}
+
+.continuation-stops {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 4px !important;
+}
+
+.continuation-stop-pill {
+  font-size: 10px !important;
+  background: #ffffff !important;
+  border: 1px solid #fef08a !important;
+  padding: 1px 6px !important;
+  border-radius: 4px !important;
+  color: #713f12 !important;
+  font-weight: 600 !important;
+}
+
+/* Botones de acción en la tarjeta */
+.preset-card-actions {
+  display: flex !important;
+  gap: 6px !important;
+  margin-top: auto !important;
+  padding-top: 6px !important;
+  border-top: 1px solid #f1f5f9 !important;
+}
+
+.preset-attach-btn {
+  flex: 1 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  background: linear-gradient(135deg, #0284c7, #0369a1) !important;
+  color: #ffffff !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  padding: 6px 12px !important;
+  border-radius: 8px !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: all 0.14s ease !important;
+}
+
+.preset-attach-btn:hover {
+  filter: brightness(1.08) !important;
+  transform: translateY(-1px) !important;
+}
+
+.preset-attach-btn:active {
+  transform: scale(0.98) !important;
+}
+
+.preset-dialog-footer {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 12px 24px !important;
+  background: #ffffff !important;
+  border-top: 1px solid #e2e8f0 !important;
+  gap: 12px !important;
+}
+
+/* Sugerencias en el modal de Crear Nuevo Plan */
+.plan-create-preset-suggestions {
+  margin-top: 12px !important;
+  padding: 10px 12px !important;
+  border-radius: 10px !important;
+  background: #f0f9ff !important;
+  border: 1px solid #bae6fd !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.plan-create-preset-head {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  font-size: 11.5px !important;
+  color: #0369a1 !important;
+  font-weight: 700 !important;
+}
+
+.plan-create-preset-chips {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 5px !important;
+  max-height: 90px !important;
+  overflow-y: auto !important;
+}
+
+.plan-create-preset-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
+  background: #ffffff !important;
+  border: 1px solid #93c5fd !important;
+  color: #1d4ed8 !important;
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all 0.12s ease !important;
+}
+
+.plan-create-preset-chip:hover {
+  background: #dbeafe !important;
+  border-color: #3b82f6 !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Banner de recomendación de continuidad en el planificador */
+.plan-continuity-banner {
+  background: linear-gradient(135deg, #fffbeb, #fef3c7) !important;
+  border: 1.5px solid #fde68a !important;
+  border-radius: 12px !important;
+  padding: 12px 16px !important;
+  margin-bottom: 12px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 12px !important;
+  flex-wrap: wrap !important;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.08) !important;
+  animation: netChatBubbleFadeIn 0.2s ease-out forwards !important;
+}
+
+.plan-continuity-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+
+.plan-continuity-icon {
+  font-size: 20px !important;
+  line-height: 1 !important;
+}
+
+.plan-continuity-text strong {
+  display: block !important;
+  font-size: 12.5px !important;
+  color: #92400e !important;
+  font-weight: 800 !important;
+}
+
+.plan-continuity-text p {
+  margin: 2px 0 0 !important;
+  font-size: 11.5px !important;
+  color: #b45309 !important;
+}
+
+.plan-continuity-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+

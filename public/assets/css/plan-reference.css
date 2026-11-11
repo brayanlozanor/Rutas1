@@ -1,4 +1,4 @@
-/* Apariencia del planificador: diseño 100% estático que aprovecha todo el alto disponible sin romper el menú lateral */
+/* El planificador aprovecha el alto disponible con desplazamiento por columna. */
 
 /* Panel principal del planificador dentro de .ct */
 body.planificar-page:not(.plan-technician-view) #plan-panel {
@@ -136,20 +136,24 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
    DISEÑO EN ESCRITORIO (min-width: 901px): OCUPA TODO EL ALTO SIN ESPACIOS SOBRANTES
    ========================================================================= */
 @media (min-width: 901px) {
-  body.planificar-page:not(.plan-technician-view) {
-    height: 100vh!important;
+  html:has(body.planificar-page:not(.plan-technician-view)) {
     height: 100dvh!important;
-    max-height: 100vh!important;
     max-height: 100dvh!important;
+    overflow: hidden!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) {
+    /* style.css aplica zoom:.8 en este mismo intervalo de escritorio. */
+    height: 125dvh!important;
+    min-height: 125dvh!important;
+    max-height: 125dvh!important;
     overflow: hidden!important;
   }
 
   body.planificar-page:not(.plan-technician-view) > .main,
   body.planificar-page:not(.plan-technician-view) .main {
-    height: 100vh!important;
-    height: 100dvh!important;
-    max-height: 100vh!important;
-    max-height: 100dvh!important;
+    height: 100%!important;
+    max-height: 100%!important;
     min-height: 0!important;
     overflow: hidden!important;
     padding: 0!important;
@@ -219,17 +223,14 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     padding: 0!important;
     margin: 0!important;
     flex: 1 1 0!important;
-    height: calc(100vh - 105px)!important;
-    height: calc(100dvh - 105px)!important;
-    min-height: calc(100vh - 105px)!important;
-    min-height: calc(100dvh - 105px)!important;
-    max-height: calc(100vh - 105px)!important;
-    max-height: calc(100dvh - 105px)!important;
+    height: auto!important;
+    min-height: 0!important;
+    max-height: none!important;
     overflow: hidden!important;
     align-items: stretch!important;
   }
 
-  /* Columna 1: Barra lateral de técnico y ruta (ESTÁTICA, SIN SCROLLBAR) */
+  /* Los controles conservan su tamaño y se desplazan cuando no caben. */
   body.planificar-page:not(.plan-technician-view) .plan-sidebar {
     grid-area: sidebar!important;
     box-sizing: border-box!important;
@@ -237,7 +238,11 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     min-height: 0!important;
     max-height: 100%!important;
     overflow: hidden!important;
-    overflow-y: hidden!important;
+    overflow-y: auto!important;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #b7c8d9 #edf2f7;
+    position: static!important;
     display: flex!important;
     flex-direction: column!important;
     gap: 8px!important;
@@ -246,6 +251,10 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     background: #fff!important;
     border: 1px solid #dce5ee!important;
     box-shadow: 0 4px 14px rgba(18,42,76,.06)!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .plan-sidebar > * {
+    flex-shrink: 0;
   }
 
   body.planificar-page:not(.plan-technician-view) .plan-route-intel-box {
@@ -329,25 +338,39 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
 
   /* Recuadro interno donde desliza la lista y los detalles */
   body.planificar-page:not(.plan-technician-view) .plan-days {
-    display: block!important;
+    display: flex!important;
+    flex-direction: column!important;
+    gap: 14px!important;
     flex: 1 1 0!important;
     min-height: 0!important;
     height: 100%!important;
     overflow-y: auto!important;
     overflow-x: hidden!important;
     padding-right: 6px!important;
+    padding-bottom: 16px!important;
     scrollbar-width: thin!important;
   }
 
-  /* Las columnas de días conservan su aspecto íntegro natural y deslizan limpiamente sin aplastarse */
+  body.planificar-page:not(.plan-technician-view) .plan-days > * {
+    flex: 0 0 auto!important;
+    flex-shrink: 0!important;
+  }
+
+  /* Las columnas de días conservan su altura íntegra sin comprimirse ni encimarse */
   body.planificar-page:not(.plan-technician-view) .day-col {
+    display: flex!important;
+    flex-direction: column!important;
+    flex: 0 0 auto!important;
+    flex-shrink: 0!important;
+    height: auto!important;
     min-height: auto!important;
-    margin-bottom: 12px!important;
+    max-height: none!important;
+    margin-bottom: 0!important;
     border: 1px solid #d8e4ee!important;
     border-radius: 12px!important;
     background: #fff!important;
     box-shadow: 0 3px 12px rgba(16,43,75,.05)!important;
-    overflow: visible!important;
+    overflow: hidden!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .day-col:last-child {
@@ -357,12 +380,29 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
   body.planificar-page:not(.plan-technician-view) .day-head {
     padding: 11px 14px!important;
     border-radius: 12px 12px 0 0!important;
+    flex: 0 0 auto!important;
+    flex-shrink: 0!important;
   }
 
   body.planificar-page:not(.plan-technician-view) .day-body {
-    padding: 10px!important;
+    /* Cada bloque de día agrupa sus paradas verticalmente con separación uniforme y sin colapsar */
+    display: flex!important;
+    flex-direction: column!important;
+    gap: 12px!important;
+    overflow: visible!important;
+    flex: 0 0 auto!important;
+    flex-shrink: 0!important;
+    height: auto!important;
+    min-height: auto!important;
+    max-height: none!important;
+    padding: 12px!important;
     background: #f7f9fc!important;
     border-radius: 0 0 12px 12px!important;
+  }
+
+  body.planificar-page:not(.plan-technician-view) .day-body > * {
+    flex: 0 0 auto!important;
+    flex-shrink: 0!important;
   }
 
   /* Panel de información técnica y órdenes del sitio activo (Rellena el espacio productivamente) */
@@ -540,6 +580,174 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
     margin: 2px 0 0;
     font-size: 10px;
     color: #15803d;
+  }
+
+  /* Chips de especificaciones técnicas del sitio */
+  body.planificar-page:not(.plan-technician-view) .site-spec-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: #fff;
+    border: 1px solid #d3e3f2;
+    border-radius: 6px;
+    font-size: 10px;
+    color: #1e3a58;
+  }
+  body.planificar-page:not(.plan-technician-view) .site-spec-chip b {
+    color: #102b50;
+  }
+
+  /* Itinerario de sitios en la barra lateral */
+  body.planificar-page:not(.plan-technician-view) .sidebar-place-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 7px;
+    border: 1px solid #e2ecf5;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    transition: all .15s ease;
+  }
+  body.planificar-page:not(.plan-technician-view) .sidebar-place-item:hover {
+    border-color: #0874e8;
+    background: #f0f7ff;
+  }
+  body.planificar-page:not(.plan-technician-view) .sidebar-place-num {
+    display: inline-grid;
+    place-items: center;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    background: #eaf3ff;
+    color: #0874e8;
+    font-size: 9px;
+    font-weight: 900;
+    flex-shrink: 0;
+  }
+  body.planificar-page:not(.plan-technician-view) .sidebar-place-name {
+    font-size: 10px;
+    font-weight: 700;
+    color: #102b50;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+  body.planificar-page:not(.plan-technician-view) .sidebar-place-dist {
+    font-size: 9px;
+    color: #64758e;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  /* Resumen de inteligencia de lugares en modo lista */
+  body.planificar-page:not(.plan-technician-view) .place-intel-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+    background: #fff;
+    border: 1px solid #d8e5f2;
+    border-radius: 9px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(18, 42, 76, .03);
+    transition: all .15s ease;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-intel-card:hover {
+    border-color: #0874e8;
+    box-shadow: 0 4px 12px rgba(8, 116, 232, .1);
+    transform: translateY(-1px);
+  }
+  body.planificar-page:not(.plan-technician-view) .place-intel-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-seq-badge {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #edf5ff;
+    color: #0874e8;
+    font-size: 11px;
+    font-weight: 900;
+    flex-shrink: 0;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-name {
+    display: block;
+    font-size: 12px;
+    font-weight: 800;
+    color: #102b50;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-town {
+    display: block;
+    font-size: 9.5px;
+    color: #64758e;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-maps-link {
+    font-size: 14px;
+    text-decoration: none;
+    padding: 2px 4px;
+    border-radius: 4px;
+    background: #f1f6fc;
+    transition: background .15s ease;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-maps-link:hover {
+    background: #e1efff;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-chips-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-chips-row span {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #f4f8fc;
+    border: 1px solid #e1ecf6;
+    color: #334e68;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-chips-row b {
+    color: #102b50;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-intel-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 2px;
+    padding-top: 5px;
+    border-top: 1px solid #edf3f8;
+    font-size: 9.5px;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-leg-info {
+    color: #4b627d;
+    font-weight: 700;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-orders-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 800;
+    font-size: 8.5px;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-orders-badge.has-pending {
+    background: #fff8e6;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+  body.planificar-page:not(.plan-technician-view) .place-orders-badge.all-done {
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
   }
 
   /* Etiquetas de equipo multitécnico en barra lateral */

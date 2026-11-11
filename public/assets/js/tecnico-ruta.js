@@ -654,6 +654,9 @@
       const eq = stop.equipmentId ? (state.equipment || []).find(e => e.id === stop.equipmentId) : null;
       const node = stop.nodeId ? (state.nodes || []).find(n => n.id === stop.nodeId && !n.deletedAt) : null;
       const name = stop.name || eq?.name || node?.name || 'Parada';
+      const towerAnt = (eq && !stop.nodeId) ? eq : null;
+      const hasMat = towerAnt ? !!(towerAnt.towerSections || towerAnt.towerRadios || towerAnt.towerBatteries || towerAnt.towerPanels || towerAnt.towerExtraNotes || towerAnt.towerMaterialNotes || (Array.isArray(towerAnt.towerMaterialPhotos) && towerAnt.towerMaterialPhotos.length)) : false;
+      const towerBtn = towerAnt ? `<button type="button" class="btn bsm btn-tower-callout ${hasMat ? 'is-registered' : 'is-pending'}" onclick="event.stopPropagation(); openTowerMaterialModal(\'${escapeTech(towerAnt.id)}\')" title="Material e infraestructura de torre ${escapeTech(towerAnt.name)}" style="margin-left: 8px; vertical-align: middle;"><span class="tower-btn-icon">🗼</span> <span class="tower-btn-label">Material torre</span><span class="tower-btn-tag">${hasMat ? '✓' : 'Registrar'}</span></button>` : '';
       const progress = getStopProgressForTech(stop);
       const details = getStopDetailsForTech(stop);
       const active = details.filter(d => d.status !== 'completada' && d.status !== 'no_realizado');
@@ -668,9 +671,12 @@
         <article class="tech-stop-card ${stop.adminReleasedAt ? 'done' : ''}" data-stop-id="${escapeTech(stop.id)}">
           <div class="tech-stop-head">
             <span class="route-stop-num">${index + 1}</span>
-            <div>
-              <h3>${escapeTech(name)}</h3>
-              <p>${escapeTech(region.n)}${eq?.ip ? ` · ${escapeTech(eq.ip)}` : ''}</p>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;">
+                <h3 style="margin:0;">${escapeTech(name)}</h3>
+                ${towerBtn}
+              </div>
+              <p style="margin:4px 0 0;">${escapeTech(region.n)}${eq?.ip ? ` · ${escapeTech(eq.ip)}` : ''}</p>
             </div>
           </div>
           <div class="route-stop-status">
@@ -1011,6 +1017,35 @@
         notify(mode === 'terminado'
           ? 'Detalle terminado y guardado correctamente.'
           : 'Reporte guardado correctamente.');
+        if (mode === 'terminado') {
+          const towerAntenna = typeof findAntennaForDetail === 'function'
+            ? findAntennaForDetail(detail, stopWithDetail)
+            : ((detail.equipmentId || stopWithDetail?.equipmentId) ? (state.equipment || []).find(e => e.id === (detail.equipmentId || stopWithDetail.equipmentId) && !e.deletedAt) : null);
+          if (towerAntenna) {
+            const hasMat = typeof hasTowerMaterial === 'function' ? hasTowerMaterial(towerAntenna) : false;
+            const promptedRecently = typeof wasTowerMaterialPromptedRecently === 'function' && wasTowerMaterialPromptedRecently(towerAntenna.id);
+            if (!hasMat) {
+              if (typeof openTowerMaterialModal === 'function') {
+                openTowerMaterialModal(towerAntenna.id, {
+                  completionDetail: detail,
+                  fromCompletion: true,
+                  mandatory: true,
+                  detailTitle: detail.title || detail.clientName || 'Trabajo en torre'
+                });
+              }
+            } else if (!promptedRecently) {
+              if (typeof openTowerMaterialModal === 'function') {
+                openTowerMaterialModal(towerAntenna.id, {
+                  completionDetail: detail,
+                  fromCompletion: true,
+                  mandatory: false,
+                  canContinue: true,
+                  detailTitle: detail.title || detail.clientName || 'Trabajo en torre'
+                });
+              }
+            }
+          }
+        }
       } catch (e) {
         if (detailIndex >= 0) state.workOrders[detailIndex] = originalDetail;
         originalStops.forEach(item => Object.assign(item.stop, item.data));

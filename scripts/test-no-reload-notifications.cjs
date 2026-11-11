@@ -28,9 +28,10 @@ assert(commonJs.includes('if (isHappeningNow && !isOwnUpdater && prev.status !==
 console.log('✓ Test 3 Passed: Periodic background pollers only notify changes happening right now in real time.');
 
 // Test 4: Priority reminder does not fire upon page reload or initial open
-assert(commonJs.includes('if (!lastTime) {\n      // Al abrir o recargar la página, inicializar silenciosamente'), 'checkPriorityUnresolvedReminders must not blast notifications on load/reload');
-assert(!commonJs.includes('if ((now - orderTime) >= intervalMs) {\n        lastReminders[key] = now;\n        touched = true;\n        notifyNetworkDetailEvent'), 'Old initial reminder blast must be gone');
-console.log('✓ Test 4 Passed: Priority reminders do not fire immediately upon reload/refresh.');
+assert(commonJs.includes('if (!saved.lastShownAt && reminder) {'), 'Grouped reminders must initialize silently');
+assert(commonJs.includes('NETWORK_SUMMARY_INTERVAL_MS = 30 * 60 * 1000'), 'Reminders must use a single 30 minute cooldown');
+assert(!commonJs.includes("reminderTitle = 'Chat pendiente de abrir'"), 'Per-case reminder notifications must be removed');
+console.log('Test 4 Passed: Reminders are grouped and do not fire on initial load.');
 
 // Test 5: Inbox deduplication preserves unread: false on reload/refresh
 assert(commonJs.includes('function addNotificationToInbox'), 'addNotificationToInbox must exist');

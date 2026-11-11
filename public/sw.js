@@ -1,5 +1,6 @@
 // Service Worker de WiFiMex para Notificaciones en Celular, Escritorio y Background
-const CACHE_NAME = 'wifimex-netops-sw-v2';
+const CACHE_NAME = 'wifimex-netops-sw-v5';
+let networkPushQueue = Promise.resolve();
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -13,21 +14,22 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const rawUrl = event.notification.data?.url || '/ordenes.html?detailKind=network';
   const orderId = event.notification.data?.orderId || '';
-  const targetUrl = rawUrl.startsWith('http') ? rawUrl : (self.location.origin + '/' + rawUrl.replace(/^\/+/, ''));
+  const target = new URL(rawUrl, self.location.origin + '/');
+  if (orderId && !target.searchParams.has('orderId')) target.searchParams.set('orderId',orderId);
+  const targetUrl = target.href;
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clientList) => {
       for (const client of clientList) {
         if ('focus' in client) {
-          client.focus();
-          try {
-            client.postMessage({
-              type: 'NETOPS_OPEN_NOTIFICATION_TARGET',
-              url: rawUrl,
-              orderId
-            });
-          } catch (e) {}
-          return;
+          // Navegar funciona también si la pestaña aún no tiene el receptor activo.
+          if (typeof client.navigate === 'function') {
+            try {
+              const navigated = await client.navigate(targetUrl);
+              if (navigated) return navigated.focus();
+            } catch (e) {}
+          }
+          continue;
         }
       }
       if (self.clients.openWindow) {
@@ -50,11 +52,28 @@ self.addEventListener('push', (event) => {
     badge: '/assets/brand/wifimex-network-mark.svg',
     vibrate: [200, 100, 200],
     tag: payload.tag || ('wifimex-notif-' + Date.now()),
-    renotify: true,
+    renotify: false,
     data: {
       url: payload.url || '/ordenes.html?detailKind=network',
       orderId: payload.orderId || ''
     }
   };
-  event.waitUntil(self.registration.showNotification(payload.title || 'WiFiMex', options));
+  const delivery = networkPushQueue.then(async () => {
+    const isNetwork = !String(payload.url || '').includes('detailKind=physical');
+    if (!isNetwork) return self.registration.showNotification(payload.title || 'WiFiMex', options);
+    const clockKey = self.location.origin + '/__netops-network-summary-clock';
+    const cache = await caches.open(CACHE_NAME);
+    const previous = await cache.match(clockKey);
+    const lastShownAt = previous ? Number(await previous.text()) : 0;
+    if (lastShownAt && Date.now() - lastShownAt < 30 * 60 * 1000) return;
+    await cache.put(clockKey, new Response(String(Date.now())));
+    return self.registration.showNotification('Revisa los detalles de redes', {
+      ...options,
+      body:'Tienes casos o mensajes pendientes. Abre Detalles de red para revisarlos.',
+      tag:'netops-network-network-summary',
+      data:{url:'/ordenes.html?detailKind=network',orderId:''}
+    });
+  });
+  networkPushQueue = delivery.catch(() => {});
+  event.waitUntil(delivery);
 });

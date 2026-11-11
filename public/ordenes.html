@@ -1,15 +1,31 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>WiFiMex · Órdenes</title>
-<link rel="icon" type="image/svg+xml" href="assets/brand/wifimex-network-mark.svg?v=20260724"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="assets/css/style.css?v=20260902-evidence-viewer-v1"><link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3"><link rel="stylesheet" href="assets/css/orders-reference.css?v=20260811-v1"><link rel="stylesheet" href="assets/css/orders-table-simple.css?v=20260829-actions-v2"><link rel="stylesheet" href="assets/css/orders-design-v2.css?v=20261105-v11">
-  <link rel="stylesheet" href="assets/css/detail-view-toggle.css?v=20260823-completion-options-v22">
-  <script>try{document.documentElement.dataset.role=(JSON.parse(localStorage.getItem('user')||'{}').role||'').toLowerCase()}catch(e){}</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>WiFiMex · Órdenes</title>
+  <link rel="icon" type="image/svg+xml" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;600;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css?v=20260902-evidence-viewer-v1">
+  <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3">
+  <link rel="stylesheet" href="assets/css/orders-reference.css?v=20261110-full-table-v2">
+  <link rel="stylesheet" href="assets/css/orders-table-simple.css?v=20261110-full-table-v2">
+  <link rel="stylesheet" href="assets/css/orders-design-v2.css?v=20261111-network-animations-v1">
+  <link rel="stylesheet" href="assets/css/detail-view-toggle.css?v=20261110-pagination-always-v3">
+  <link rel="stylesheet" href="assets/css/inventory-pagination.css?v=20261111-pagination-parity-v4">
+  <link rel="stylesheet" href="assets/css/tower-material-modal.css?v=20261109-tower-mat-v1">
+  <script>try { document.documentElement.dataset.role = (JSON.parse(localStorage.getItem('user') || '{}').role || '').toLowerCase() } catch (e) { }</script>
 </head>
+
 <body class="orders-page" onload="initOrdenesPage()">
-  <script>if(localStorage.getItem('netops_menu_open_v3')==='0')document.body.classList.add('sidebar-collapsed')</script>
+  <script>if (localStorage.getItem('netops_menu_open_v3') === '0') document.body.classList.add('sidebar-collapsed')</script>
   <div class="topbar">
-    <a href="mapa.html" class="logo-link"><div class="logo">WiFi<span>Mex</span></div></a>
+    <a href="mapa.html" class="logo-link">
+      <div class="logo">WiFi<span>Mex</span></div>
+    </a>
     <nav class="nav">
       <a href="mapa.html" class="nb">Mapa Mikrotiks</a>
       <a href="antenas.html" class="nb">Antenas</a>
@@ -20,50 +36,168 @@
       <a href="material.html" class="nb">Material</a>
       <a href="tecnicos.html" class="nb">Usuarios</a>
     </nav>
-    <div class="sbar"><div class="user-pill" data-user-name>Sesion activa</div><button class="btn bgh" onclick="logout()">Cerrar sesion</button></div>
+    <div class="sbar">
+      <div class="user-pill" data-user-name>Sesion activa</div><button class="btn bgh" onclick="logout()">Cerrar
+        sesion</button>
+    </div>
   </div>
 
   <div class="page-shell wide-shell order-layout">
     <section class="hero-panel compact-hero orders-hero">
       <div class="orders-hero-main">
         <div class="orders-hero-copy">
-          <span class="module-hero-icon orders-module-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h5M10 12h6M10 16h6M10 8h1"/></svg></span>
-          <div><h1 id="orders-hero-title">Centro de órdenes</h1><p id="orders-hero-subtitle">Administra, prioriza y consulta los detalles de trabajo de toda la red.</p></div>
+          <span class="orders-module-icon" aria-hidden="true"><svg viewBox="0 0 24 24">
+              <path d="M7 3h8l4 4v14H7z" />
+              <path d="M15 3v5h5M10 12h6M10 16h6M10 8h1" />
+            </svg></span>
+          <div>
+            <h1 id="orders-hero-title">Centro de órdenes</h1>
+            <p id="orders-hero-subtitle">Administra, prioriza y consulta los detalles de trabajo de toda la red.</p>
+          </div>
         </div>
         <div class="order-detail-tabs" role="tablist" aria-label="Tipo de detalle" style="display: none !important;">
-          <button id="order-tab-network" class="order-detail-tab" type="button" role="tab" aria-selected="false" onclick="selectOrderDetailKind('network')"><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><path d="M12 7v4M5 16v-3h14v3"/></svg> Detalles de red</button>
-          <button id="order-tab-physical" class="order-detail-tab is-active" type="button" role="tab" aria-selected="true" onclick="selectOrderDetailKind('physical')"><svg viewBox="0 0 24 24"><path d="M14 6a4 4 0 0 0-5 5L3 17l4 4 6-6a4 4 0 0 0 5-5l-3 3-4-4z"/></svg> Detalles físicos</button>
+          <button id="order-tab-network" class="order-detail-tab" type="button" role="tab" aria-selected="false"
+            onclick="selectOrderDetailKind('network')"><svg viewBox="0 0 24 24">
+              <circle cx="12" cy="5" r="2" />
+              <circle cx="5" cy="18" r="2" />
+              <circle cx="19" cy="18" r="2" />
+              <path d="M12 7v4M5 16v-3h14v3" />
+            </svg> Detalles de red</button>
+          <button id="order-tab-physical" class="order-detail-tab is-active" type="button" role="tab"
+            aria-selected="true" onclick="selectOrderDetailKind('physical')"><svg viewBox="0 0 24 24">
+              <path d="M14 6a4 4 0 0 0-5 5L3 17l4 4 6-6a4 4 0 0 0 5-5l-3 3-4-4z" />
+            </svg> Detalles físicos</button>
         </div>
       </div>
       <div class="stats-grid compact-stats orders-stats">
-        <div class="stat-card stat-pending"><span class="order-stat-icon">◷</span><div><div class="label">Pendientes</div><strong id="wo-pending">0</strong></div></div>
-        <div class="stat-card stat-critical"><span class="order-stat-icon">!</span><div><div class="label">Críticas</div><strong id="wo-critical">0</strong></div></div>
-        <div class="stat-card stat-done"><span class="order-stat-icon">✓</span><div><div class="label">Completadas</div><strong id="wo-done">0</strong></div></div>
-        <div class="stat-card stat-total"><span class="order-stat-icon">▦</span><div><div class="label">Total</div><strong id="wo-total">0</strong></div></div>
+        <div class="stat-card stat-pending"><span class="order-stat-icon">◷</span>
+          <div>
+            <div class="label">Pendientes</div><strong id="wo-pending">0</strong>
+          </div>
+        </div>
+        <div class="stat-card stat-critical"><span class="order-stat-icon">!</span>
+          <div>
+            <div class="label">Críticas</div><strong id="wo-critical">0</strong>
+          </div>
+        </div>
+        <div class="stat-card stat-done"><span class="order-stat-icon">✓</span>
+          <div>
+            <div class="label">Completadas</div><strong id="wo-done">0</strong>
+          </div>
+        </div>
+        <div class="stat-card stat-total"><span class="order-stat-icon">▦</span>
+          <div>
+            <div class="label">Total</div><strong id="wo-total">0</strong>
+          </div>
+        </div>
+        <div class="stat-card stat-my-pending" id="wo-stat-my-pending-card" style="display:none;"><span
+            class="order-stat-icon">👤</span>
+          <div>
+            <div class="label">Mis pendientes</div><strong id="wo-my-pending">0</strong>
+          </div>
+        </div>
+        <div class="stat-card stat-my-done" id="wo-stat-my-done-card" style="display:none;"><span
+            class="order-stat-icon">★</span>
+          <div>
+            <div class="label">Mis resueltos</div><strong id="wo-my-done">0</strong>
+          </div>
+        </div>
       </div>
     </section>
     <section class="content-card orders-filter-card">
       <div class="order-filter-topbar">
-        <button class="btn bc order-new-button" onclick="openWO()"><span aria-hidden="true">＋</span> Nuevo detalle</button>
-        <button id="wo-clear-filters" type="button" class="btn bgh order-clear-button" onclick="clearOrderFilters()"><span aria-hidden="true">▽</span> Limpiar filtros</button>
-        <label class="order-search-box" for="wo-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="wo-search" class="search-input order-search" placeholder="Buscar cliente, nodo, pueblo o detalle" oninput="debounceAction('ordenes-search', resetOrderPagination)"></label>
+        <button class="btn bc order-new-button" onclick="openWO()"><span aria-hidden="true">＋</span> Nuevo
+          detalle</button>
+        <button id="wo-admin-stats-btn" type="button" class="btn bc order-admin-stats-button" style="display:none;"
+          onclick="openAdminNetworkStatsModal()"><svg
+            style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2;" viewBox="0 0 24 24">
+            <path d="M18 20V10M12 20V4M6 20v-6" />
+          </svg> <span>Resumen estadístico</span></button>
+        <button id="wo-clear-filters" type="button" class="btn bgh order-clear-button"
+          onclick="clearOrderFilters()"><span aria-hidden="true">▽</span> Limpiar filtros</button>
+        <label class="order-search-box" for="wo-search"><svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-4-4" />
+          </svg><input id="wo-search" class="search-input order-search"
+            placeholder="Buscar cliente, nodo, pueblo o detalle"
+            oninput="debounceAction('ordenes-search', resetOrderPagination)"></label>
       </div>
       <div class="order-filter-builder">
         <div class="order-google-filter-bar" aria-label="Filtros de órdenes">
-          <div class="order-filter-menu-wrap"><button type="button" class="order-google-filter" data-order-filter-kind="status" onclick="toggleOrderFilterMenu('status',this,event)"><span>Estado</span><b>⌄</b></button><div class="order-filter-menu" data-order-filter-menu="status"></div></div>
-          <div class="order-filter-menu-wrap"><button type="button" class="order-google-filter" data-order-filter-kind="type" onclick="toggleOrderFilterMenu('type',this,event)"><span>Tipo</span><b>⌄</b></button><div class="order-filter-menu" data-order-filter-menu="type"></div></div>
-          <div class="order-filter-menu-wrap"><button type="button" class="order-google-filter" data-order-filter-kind="zone" onclick="toggleOrderFilterMenu('zone',this,event)"><span>Zona</span><b>⌄</b></button><div class="order-filter-menu" data-order-filter-menu="zone"></div></div>
-          <div class="order-filter-menu-wrap"><button type="button" class="order-google-filter" data-order-filter-kind="priority" onclick="toggleOrderFilterMenu('priority',this,event)"><span>Prioridad</span><b>⌄</b></button><div class="order-filter-menu" data-order-filter-menu="priority"></div></div>
-          <div class="order-filter-menu-wrap"><button type="button" class="order-google-filter" data-order-filter-kind="category" onclick="toggleOrderFilterMenu('category',this,event)"><span>Categoría</span><b>⌄</b></button><div class="order-filter-menu" data-order-filter-menu="category"></div></div>
-          <div class="order-filter-menu-wrap"><button type="button" class="order-google-filter" data-order-filter-kind="creator" onclick="toggleOrderFilterMenu('creator',this,event)"><span>Creado por</span><b>⌄</b></button><div class="order-filter-menu" data-order-filter-menu="creator"></div></div>
-          <label class="order-google-sort"><span>Ordenar:</span><select id="wo-sort" onchange="resetOrderPagination()"><option value="priority">Prioridad y fecha</option><option value="status">Por estado</option><option value="newest">Más recientes</option><option value="oldest">Más antiguas</option><option value="town">Pueblo A-Z</option><option value="client">Cliente A-Z</option></select></label>
+          <button type="button" class="order-my-details-btn" id="wo-filter-my-assignments" style="display:none;"
+            onclick="toggleOnlyMyAssignments()" title="Ver únicamente mis detalles pendientes asignados"><span
+              class="my-details-icon" aria-hidden="true">★</span><span class="my-details-label">Mis detalles</span><span
+              class="my-details-badge" id="wo-my-details-count" style="display:none;">0</span></button>
+          <div class="order-filter-menu-wrap" id="order-filter-wrap-status"><button type="button"
+              class="order-google-filter" data-order-filter-kind="status"
+              onclick="toggleOrderFilterMenu('status',this,event)"><span>Estado</span><b>⌄</b></button>
+            <div class="order-filter-menu" data-order-filter-menu="status"></div>
+          </div>
+          <div class="order-filter-menu-wrap" id="order-filter-wrap-type"><button type="button"
+              class="order-google-filter" data-order-filter-kind="type"
+              onclick="toggleOrderFilterMenu('type',this,event)"><span>Tipo</span><b>⌄</b></button>
+            <div class="order-filter-menu" data-order-filter-menu="type"></div>
+          </div>
+          <div class="order-filter-menu-wrap" id="order-filter-wrap-date" style="display:none;"><button type="button"
+              class="order-google-filter" data-order-filter-kind="date"
+              onclick="toggleOrderFilterMenu('date',this,event)"><span>Fecha</span><b>⌄</b></button>
+            <div class="order-filter-menu" data-order-filter-menu="date"></div>
+          </div>
+          <div class="order-filter-menu-wrap" id="order-filter-wrap-assignee" style="display:none;"><button
+              type="button" class="order-google-filter" data-order-filter-kind="assignee"
+              onclick="toggleOrderFilterMenu('assignee',this,event)"><span>Asignación</span><b>⌄</b></button>
+            <div class="order-filter-menu" data-order-filter-menu="assignee"></div>
+          </div>
+          <div class="order-filter-menu-wrap"><button type="button" class="order-google-filter"
+              data-order-filter-kind="zone"
+              onclick="toggleOrderFilterMenu('zone',this,event)"><span>Zona</span><b>⌄</b></button>
+            <div class="order-filter-menu" data-order-filter-menu="zone"></div>
+          </div>
+          <div class="order-filter-menu-wrap"><button type="button" class="order-google-filter"
+              data-order-filter-kind="priority"
+              onclick="toggleOrderFilterMenu('priority',this,event)"><span>Prioridad</span><b>⌄</b></button>
+            <div class="order-filter-menu" data-order-filter-menu="priority"></div>
+          </div>
+          <div class="order-filter-menu-wrap"><button type="button" class="order-google-filter"
+              data-order-filter-kind="category"
+              onclick="toggleOrderFilterMenu('category',this,event)"><span>Categoría</span><b>⌄</b></button>
+            <div class="order-filter-menu" data-order-filter-menu="category"></div>
+          </div>
+          <div class="order-filter-menu-wrap"><button type="button" class="order-google-filter"
+              data-order-filter-kind="creator" onclick="toggleOrderFilterMenu('creator',this,event)"><span>Creado
+                por</span><b>⌄</b></button>
+            <div class="order-filter-menu" data-order-filter-menu="creator"></div>
+          </div>
+          <select id="wo-sort" style="display:none;" onchange="resetOrderPagination()">
+            <option value="priority" selected>Prioridad y fecha</option>
+            <option value="status">Por estado</option>
+            <option value="newest">Más recientes</option>
+            <option value="oldest">Más antiguas</option>
+            <option value="town">Pueblo A-Z</option>
+            <option value="client">Cliente A-Z</option>
+          </select>
           <div class="order-subtle-guides-group" aria-label="Guías de referencia">
-            <button type="button" class="order-subtle-help-btn is-colors-guide" onclick="openNetworkColorsGuideModal()" title="Consultar el significado de los colores">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.12-.29-.29-.44-.65-.44-1.12 0-.93.75-1.65 1.65-1.65H16c3.31 0 6-2.69 6-6 0-4.96-4.49-9-10-9Z"/></svg>
+            <button type="button" class="order-subtle-help-btn is-colors-guide" onclick="openNetworkColorsGuideModal()"
+              title="Consultar el significado de los colores">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="13.5" cy="6.5" r="1.5" />
+                <circle cx="17.5" cy="10.5" r="1.5" />
+                <circle cx="8.5" cy="7.5" r="1.5" />
+                <circle cx="6.5" cy="12.5" r="1.5" />
+                <path
+                  d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.12-.29-.29-.44-.65-.44-1.12 0-.93.75-1.65 1.65-1.65H16c3.31 0 6-2.69 6-6 0-4.96-4.49-9-10-9Z" />
+              </svg>
               <span>Guía de colores</span>
             </button>
-            <button type="button" class="order-subtle-help-btn is-workflow-guide" onclick="openNetworkWorkflowGuideModal()" title="Consultar el flujo de trabajo">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <button type="button" class="order-subtle-help-btn is-workflow-guide"
+              onclick="openNetworkWorkflowGuideModal()" title="Consultar el flujo de trabajo">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
               <span>Guía de flujo</span>
             </button>
           </div>
@@ -74,19 +208,25 @@
         </div>
       </div>
     </section>
-    <section class="content-card orders-table-card"><div id="orders-table"></div></section>
+    <section class="content-card orders-table-card">
+      <div id="orders-table"></div>
+    </section>
   </div>
 
   <div class="mo" id="wo-mo">
     <div class="md modal-modern" style="max-width:720px;">
       <div class="modal-modern-head">
         <div class="modal-modern-title-group">
-          <span class="modal-icon-badge" style="background:linear-gradient(135deg,#e0f2fe,#bae6fd);color:#0369a1;border:1px solid #bae6fd;">
-            <svg style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+          <span class="modal-icon-badge"
+            style="background:linear-gradient(135deg,#e0f2fe,#bae6fd);color:#0369a1;border:1px solid #bae6fd;">
+            <svg style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2" viewBox="0 0 24 24">
+              <path d="M12 4v16m8-8H4" />
+            </svg>
           </span>
           <div>
             <h2 class="modal-modern-title" id="wo-modal-title">Agregar nuevo detalle</h2>
-            <p class="modal-modern-subtitle" id="wo-modal-subtitle">Captura la información de la incidencia o requerimiento de servicio.</p>
+            <p class="modal-modern-subtitle" id="wo-modal-subtitle">Captura la información de la incidencia o
+              requerimiento de servicio.</p>
           </div>
         </div>
         <button class="modal-modern-close" onclick="CM('wo-mo')" title="Cerrar ventana">✕</button>
@@ -136,7 +276,8 @@
         </div>
         <div class="fi" id="wo-detail-field" style="margin:0">
           <label id="wo-detail-label">Detalle específico <b class="req-star">* Obligatorio</b></label>
-          <textarea id="wo-detail" rows="3" placeholder="Describe puntualmente lo que sucede, alcance, síntomas o referencia técnica..."></textarea>
+          <textarea id="wo-detail" rows="3"
+            placeholder="Describe puntualmente lo que sucede, alcance, síntomas o referencia técnica..."></textarea>
         </div>
       </div>
 
@@ -149,12 +290,15 @@
         <div class="modal-grid wo-node-equipment-grid" id="wo-node-equipment-grid" style="margin-bottom:8px">
           <div class="fi autocomplete-inline" id="wo-node-field" style="margin:0">
             <label id="wo-node-label">Pueblo vinculado <b class="req-star">* Obligatorio</b></label>
-            <input id="wo-node" autocomplete="off" oninput="renderWONodeSuggestions(); updateWORelationInfo()" onfocus="renderWONodeSuggestions()" onblur="hideWONodeSuggestionsSoon()" placeholder="Busca un pueblo o escribe uno nuevo...">
+            <input id="wo-node" autocomplete="off" oninput="renderWONodeSuggestions(); updateWORelationInfo()"
+              onfocus="renderWONodeSuggestions()" onblur="hideWONodeSuggestionsSoon()"
+              placeholder="Busca un pueblo o escribe uno nuevo...">
             <div id="wo-node-suggestions" class="autocomplete-menu"></div>
           </div>
           <div class="fi wo-equipment-field wo-equipment-readonly" id="wo-equipment-field" style="margin:0">
             <label id="wo-equipment-label">Antena asignada</label>
-            <input id="wo-equipment" autocomplete="off" readonly placeholder="Se asigna automáticamente al elegir un pueblo">
+            <input id="wo-equipment" autocomplete="off" readonly
+              placeholder="Se asigna automáticamente al elegir un pueblo">
             <div id="wo-equipment-suggestions" class="autocomplete-menu"></div>
           </div>
         </div>
@@ -166,16 +310,22 @@
         <div class="fi wo-target-team-field" id="wo-target-team-field" style="display:none;margin:0 0 10px">
           <label id="wo-target-team-label">Destino del reporte de red</label>
           <div class="wo-target-toggle-group" style="display:flex;gap:8px;margin-bottom:6px;">
-            <button type="button" class="btn bsm bc" id="wo-target-btn-soporte" onclick="switchAdminNetworkTarget('soporte')">A Soporte técnico</button>
-            <button type="button" class="btn bsm bgh" id="wo-target-btn-atencion" onclick="switchAdminNetworkTarget('atencion_clientes')">A Atención a clientes</button>
+            <button type="button" class="btn bsm bc" id="wo-target-btn-soporte"
+              onclick="switchAdminNetworkTarget('soporte')">A Soporte técnico</button>
+            <button type="button" class="btn bsm bgh" id="wo-target-btn-atencion"
+              onclick="switchAdminNetworkTarget('atencion_clientes')">A Atención a clientes</button>
           </div>
         </div>
         <div class="fi wo-assign-field" id="wo-assign-field" style="margin:0">
           <label id="wo-assign-label">Asignación a Soporte técnico</label>
           <div class="wo-multi-assign-wrapper" id="wo-multi-assign-wrapper">
             <div class="wo-assign-quick-bar">
-              <button type="button" class="wo-assign-all-btn is-active" id="wo-assign-all-btn" onclick="toggleWOAssignAll()">
-                <svg style="width:14px;height:14px;fill:currentColor;" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+              <button type="button" class="wo-assign-all-btn is-active" id="wo-assign-all-btn"
+                onclick="toggleWOAssignAll()">
+                <svg style="width:14px;height:14px;fill:currentColor;" viewBox="0 0 24 24">
+                  <path
+                    d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+                </svg>
                 <span id="wo-assign-all-text">Todo el equipo (Sin asignar específico)</span>
               </button>
               <span class="wo-assign-hint">O elige uno o varios miembros:</span>
@@ -212,9 +362,13 @@
                 <option value="alta">Alta</option>
                 <option value="muy_alta">Muy alta</option>
               </select>
-              <div class="wo-priority-interval-box" id="wo-priority-interval-box" style="display:inline-flex;align-items:center;gap:4px;background:#f8fafc;border:1px solid #cbd5e1;padding:0 8px;border-radius:8px;height:40px;flex-shrink:0;" title="Intervalo en minutos para recordar atención pendiente">
+              <div class="wo-priority-interval-box" id="wo-priority-interval-box"
+                style="display:inline-flex;align-items:center;gap:4px;background:#f8fafc;border:1px solid #cbd5e1;padding:0 8px;border-radius:8px;height:40px;flex-shrink:0;"
+                title="Intervalo en minutos para recordar atención pendiente">
                 <span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap;">Recordar c/</span>
-                <input type="number" id="wo-priority-minutes" min="1" max="1440" style="width:48px;height:28px;text-align:center;font-weight:800;font-size:13px;color:#0f172a;border:1px solid #94a3b8;border-radius:6px;background:#fff;padding:0 2px;" oninput="onWOPriorityMinutesInput()" onchange="onWOPriorityMinutesChange()">
+                <input type="number" id="wo-priority-minutes" min="1" max="1440"
+                  style="width:48px;height:28px;text-align:center;font-weight:800;font-size:13px;color:#0f172a;border:1px solid #94a3b8;border-radius:6px;background:#fff;padding:0 2px;"
+                  oninput="onWOPriorityMinutesInput()" onchange="onWOPriorityMinutesChange()">
                 <span style="font-size:11px;font-weight:700;color:#64748b;">min</span>
               </div>
             </div>
@@ -222,9 +376,11 @@
         </div>
 
         <section id="wo-evidence-zone" class="wo-evidence-zone" tabindex="0">
-          <input id="wo-evidence-input" type="file" accept="image/*" multiple hidden onchange="addWOEvidenceFiles(this.files);this.value=''">
+          <input id="wo-evidence-input" type="file" accept="image/*" multiple hidden
+            onchange="addWOEvidenceFiles(this.files);this.value=''">
           <div class="wo-evidence-copy">
-            <strong id="wo-evidence-title">Adjuntar evidencias <span class="optional-label" id="wo-evidence-req-label" style="font-weight:normal;color:#64748b;margin-left:4px;">Opcional</span></strong>
+            <strong id="wo-evidence-title">Adjuntar evidencias <span class="optional-label" id="wo-evidence-req-label"
+                style="font-weight:normal;color:#64748b;margin-left:4px;">Opcional</span></strong>
             <small>Arrastra imágenes aquí, selecciónalas o pega una captura con Ctrl + V. Máximo 6.</small>
           </div>
           <label class="btn bgh wo-evidence-button" for="wo-evidence-input">Seleccionar imágenes</label>
@@ -248,35 +404,48 @@
           <p id="netres-modal-subtitle">Registra la solución técnica implementada y notifica a Atención a clientes.</p>
         </div>
         <button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('network-resolve-mo')">
-          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          <svg viewBox="0 0 24 24">
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg>
         </button>
       </div>
       <input id="netres-order-id" type="hidden">
       <div id="netres-order-summary" class="netres-summary-box"></div>
       <div class="fi">
         <label>Solución técnica aplicada <span class="required-indicator">*</span></label>
-        <textarea id="netres-solution" rows="4" placeholder="Describe los ajustes en MikroTik, perfiles, enlaces o acciones técnicas realizadas para solventar la falla..."></textarea>
+        <textarea id="netres-solution" rows="4"
+          placeholder="Describe los ajustes en MikroTik, perfiles, enlaces o acciones técnicas realizadas para solventar la falla..."></textarea>
       </div>
       <div class="fi">
-        <label>Evidencia técnica opcional <span class="optional-indicator">(Captura de pantalla, prueba de ping o fotografía)</span></label>
+        <label>Evidencia técnica opcional <span class="optional-indicator">(Captura de pantalla, prueba de ping o
+            fotografía)</span></label>
         <div class="netres-evidence-picker">
-          <input type="file" id="netres-file-input" accept="image/*" multiple style="display:none" onchange="handleNetresEvidenceFile(event)">
+          <input type="file" id="netres-file-input" accept="image/*" multiple style="display:none"
+            onchange="handleNetresEvidenceFile(event)">
           <div class="netres-picker-bar">
             <button type="button" class="btn bgh" onclick="document.getElementById('netres-file-input').click()">
               Adjuntar evidencia
             </button>
-            <span class="netres-picker-hint">También puedes pegar una captura directamente con <strong>Ctrl + V</strong></span>
+            <span class="netres-picker-hint">También puedes pegar una captura directamente con <strong>Ctrl +
+                V</strong></span>
           </div>
           <div id="netres-evidence-preview" class="netres-evidence-grid"></div>
         </div>
       </div>
       <div class="card-actions" style="display:flex;justify-content:space-between;align-items:center;">
         <div>
-          <button type="button" class="btn btn-modal-unresolvable" onclick="openUnresolvableNetworkModalFromResolve()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>Declarar no realizable</button>
+          <button type="button" class="btn btn-modal-unresolvable"
+            onclick="openUnresolvableNetworkModalFromResolve()"><svg viewBox="0 0 24 24" width="14" height="14"
+              fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+              style="vertical-align:middle;margin-right:6px;" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+            </svg>Declarar no realizable</button>
         </div>
         <div style="display:flex;gap:8px;">
           <button type="button" class="btn bgh" onclick="CM('network-resolve-mo')">Cancelar</button>
-          <button type="button" class="btn bc" onclick="submitNetworkResolution()">Guardar resolución y notificar</button>
+          <button type="button" class="btn bc" onclick="submitNetworkResolution()">Guardar resolución y
+            notificar</button>
         </div>
       </div>
     </div>
@@ -291,31 +460,37 @@
           <p>Registra las observaciones del cliente para reabrir la atención técnica.</p>
         </div>
         <button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('network-return-mo')">
-          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          <svg viewBox="0 0 24 24">
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg>
         </button>
       </div>
       <input id="netret-order-id" type="hidden">
       <div id="netret-order-summary" class="netres-summary-box"></div>
       <div class="fi">
         <label>Observaciones del cliente o falla persistente <span class="required-indicator">*</span></label>
-        <textarea id="netret-reason" rows="4" placeholder="Especifica qué continúa fallando según lo indicado por el cliente..."></textarea>
+        <textarea id="netret-reason" rows="4"
+          placeholder="Especifica qué continúa fallando según lo indicado por el cliente..."></textarea>
       </div>
       <div class="fi">
         <label>Evidencia opcional <span class="optional-indicator">(Captura del cliente o fotografía)</span></label>
         <div class="netres-evidence-picker">
-          <input type="file" id="netret-file-input" accept="image/*" multiple style="display:none" onchange="handleNetretEvidenceFiles(event)">
+          <input type="file" id="netret-file-input" accept="image/*" multiple style="display:none"
+            onchange="handleNetretEvidenceFiles(event)">
           <div class="netres-picker-bar">
             <button type="button" class="btn bgh" onclick="document.getElementById('netret-file-input').click()">
               Adjuntar evidencia
             </button>
-            <span class="netres-picker-hint">También puedes pegar una captura directamente con <strong>Ctrl + V</strong></span>
+            <span class="netres-picker-hint">También puedes pegar una captura directamente con <strong>Ctrl +
+                V</strong></span>
           </div>
           <div id="netret-evidence-preview" class="netres-evidence-grid"></div>
         </div>
       </div>
       <div class="card-actions">
         <button type="button" class="btn bgh" onclick="CM('network-return-mo')">Cancelar</button>
-        <button type="button" class="btn btn-warning-return" onclick="submitNetworkReturn()">Confirmar devolución a Soporte</button>
+        <button type="button" class="btn btn-warning-return" onclick="submitNetworkReturn()">Confirmar devolución a
+          Soporte</button>
       </div>
     </div>
   </div>
@@ -326,118 +501,204 @@
       <div class="modal-head">
         <div>
           <div style="display:flex;align-items:center;gap:8px;">
-            <span style="display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#fee2e2;color:#dc2626;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span>
+            <span
+              style="display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#fee2e2;color:#dc2626;"><svg
+                viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+              </svg></span>
             <h2 style="margin:0;">Declarar reporte no realizable</h2>
           </div>
-          <p>Notifique a Atención a clientes la justificación técnica por la cual no es posible solucionar la incidencia.</p>
+          <p>Notifique a Atención a clientes la justificación técnica por la cual no es posible solucionar la
+            incidencia.</p>
         </div>
         <button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('network-unresolvable-mo')">
-          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          <svg viewBox="0 0 24 24">
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg>
         </button>
       </div>
       <input id="netunres-order-id" type="hidden">
       <div id="netunres-order-summary" class="netres-summary-box"></div>
       <div class="fi">
         <label>Justificación técnica / Motivo de imposibilidad <span class="required-indicator">*</span></label>
-        <textarea id="netunres-reason" rows="4" placeholder="Explique con formalidad por qué no es posible solucionar este reporte (sin cobertura, daño severo en línea troncal inalcanzable, equipo sin reemplazo, etc.)..."></textarea>
+        <textarea id="netunres-reason" rows="4"
+          placeholder="Explique con formalidad por qué no es posible solucionar este reporte (sin cobertura, daño severo en línea troncal inalcanzable, equipo sin reemplazo, etc.)..."></textarea>
       </div>
       <div class="fi">
-        <label>Evidencia técnica opcional <span class="optional-indicator">(Captura, diagnóstico o fotografía)</span></label>
+        <label>Evidencia técnica opcional <span class="optional-indicator">(Captura, diagnóstico o
+            fotografía)</span></label>
         <div class="netres-evidence-picker">
-          <input type="file" id="netunres-file-input" accept="image/*" multiple style="display:none" onchange="handleNetunresEvidenceFiles(event)">
+          <input type="file" id="netunres-file-input" accept="image/*" multiple style="display:none"
+            onchange="handleNetunresEvidenceFiles(event)">
           <div class="netres-picker-bar">
             <button type="button" class="btn bgh" onclick="document.getElementById('netunres-file-input').click()">
               Adjuntar evidencia
             </button>
-            <span class="netres-picker-hint">También puedes pegar una captura directamente con <strong>Ctrl + V</strong></span>
+            <span class="netres-picker-hint">También puedes pegar una captura directamente con <strong>Ctrl +
+                V</strong></span>
           </div>
           <div id="netunres-evidence-preview" class="netres-evidence-grid"></div>
         </div>
       </div>
       <div class="card-actions">
         <button type="button" class="btn bgh" onclick="CM('network-unresolvable-mo')">Cancelar</button>
-        <button type="button" class="btn btn-danger-unresolvable" onclick="submitNetworkUnresolvable()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>Confirmar y notificar imposibilidad</button>
+        <button type="button" class="btn btn-danger-unresolvable" onclick="submitNetworkUnresolvable()"><svg
+            viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"
+            aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+          </svg>Confirmar y notificar imposibilidad</button>
       </div>
     </div>
   </div>
 
   <!-- Modal Guía de Colores -->
   <div class="mo" id="network-colors-guide-mo">
-    <div class="md modal-modern network-guide-modal" style="max-width:700px;">
+    <div class="md modal-modern network-guide-modal" style="max-width:720px;">
       <div class="modal-modern-head">
         <div class="modal-modern-title-group">
           <span class="modal-icon-badge" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;">
-            <svg style="width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.12-.29-.29-.44-.65-.44-1.12 0-.93.75-1.65 1.65-1.65H16c3.31 0 6-2.69 6-6 0-4.96-4.49-9-10-9Z"/></svg>
+            <svg style="width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2" viewBox="0 0 24 24">
+              <circle cx="13.5" cy="6.5" r="1.5" />
+              <circle cx="17.5" cy="10.5" r="1.5" />
+              <circle cx="8.5" cy="7.5" r="1.5" />
+              <circle cx="6.5" cy="12.5" r="1.5" />
+              <path
+                d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.12-.29-.29-.44-.65-.44-1.12 0-.93.75-1.65 1.65-1.65H16c3.31 0 6-2.69 6-6 0-4.96-4.49-9-10-9Z" />
+            </svg>
           </span>
           <div>
-            <h2 class="modal-modern-title">Guía de colores</h2>
-            <p class="modal-modern-subtitle">Significado rápido de estados, avisos en tabla y eventos del chat.</p>
+            <h2 class="modal-modern-title">Guía de colores y estados</h2>
+            <p class="modal-modern-subtitle">Referencia rápida de estados en tabla, etiquetas de confirmación y eventos del chat.</p>
           </div>
         </div>
         <button class="modal-modern-close" onclick="CM('network-colors-guide-mo')" title="Cerrar ventana">✕</button>
       </div>
       <div class="network-guide-body">
         <div class="network-guide-section">
-          <h3>1. Estados del detalle</h3>
+          <h3>1. Estados principales del detalle</h3>
           <div class="network-guide-grid">
             <div class="network-guide-item">
-              <span class="order-status-badge is-pending"><span class="order-status-dot"></span><span>Pendiente</span></span>
-              <p>Reporte nuevo sin iniciar atención.</p>
+              <span class="order-status-badge is-pending"><span
+                  class="order-status-dot"></span><span>Pendiente</span></span>
+              <p>Detalle recién registrado; aún no ha sido abierto para su atención.</p>
             </div>
             <div class="network-guide-item">
-              <span class="order-status-badge is-reviewing"><span class="order-status-dot"></span><span>En atención</span></span>
-              <p>Caso activo con chat abierto entre áreas.</p>
+              <span class="order-status-badge is-reviewing"><span class="order-status-dot"></span><span>En
+                  atención</span></span>
+              <p>Caso activo en seguimiento o conversación directa entre Soporte y Atención a clientes.</p>
             </div>
             <div class="network-guide-item">
-              <span class="order-status-badge is-resolving"><span class="order-status-dot"></span><span>Resuelto</span></span>
-              <p>Solución registrada; espera confirmación de cierre.</p>
+              <span class="order-status-badge is-resolving"><span
+                  class="order-status-dot"></span><span>Resuelto</span></span>
+              <p>El área encargada registró la solución y envió el caso para confirmación de cierre.</p>
             </div>
             <div class="network-guide-item">
-              <span class="order-status-badge is-returned"><span class="order-status-dot"></span><span>Devuelto</span></span>
-              <p>Cierre rechazado con observaciones para reabrir revisión.</p>
+              <span class="order-status-badge is-returned"><span
+                  class="order-status-dot"></span><span>Devuelto</span></span>
+              <p>La propuesta de cierre fue rechazada con observaciones para continuar la revisión.</p>
             </div>
             <div class="network-guide-item">
-              <span class="order-status-badge is-unresolvable"><span class="order-status-dot"></span><span>No realizado</span></span>
-              <p>Declarado sin solución técnica posible.</p>
+              <span class="order-status-badge is-unresolvable"><span class="order-status-dot"></span><span>No
+                  realizado</span></span>
+              <p>Declarado sin viabilidad técnica; espera confirmación de la contraparte.</p>
             </div>
             <div class="network-guide-item">
-              <span class="order-status-badge is-done"><span class="order-status-dot"></span><span>Concluido</span></span>
-              <p>Cerrado por ambas partes (se ubica al final de la tabla).</p>
+              <span class="order-status-badge is-done"><span
+                  class="order-status-dot"></span><span>Concluido</span></span>
+              <p>Confirmado por ambas áreas (se agrupa al final de la tabla; indica cuántas veces fue reabierto si aplica).</p>
             </div>
           </div>
         </div>
 
         <div class="network-guide-section">
-          <h3>2. Avisos de confirmación en tabla</h3>
+          <h3>2. Colores de fila en la tabla y en "Mis detalles"</h3>
+          <div class="network-guide-grid">
+            <div class="network-guide-item" style="border-left:4px solid #f59e0b;background:#fffbeb;">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-weight:800;color:#92400e;font-size:11px;">
+                <span style="width:10px;height:10px;border-radius:2px;background:#f59e0b;display:inline-block;"></span>
+                Ámbar / Amarillo · Falta por confirmar (Tu turno)
+              </span>
+              <p style="color:#78350f;margin-top:4px;">
+                <strong>Acción requerida por ti:</strong> La otra área envió resolución, propuesta de cierre, pase a físicos o inviabilidad, y te corresponde a ti validar, confirmar o devolver el detalle.
+              </p>
+            </div>
+            <div class="network-guide-item" style="border-left:4px solid #8b5cf6;background:#f5f3ff;">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-weight:800;color:#5b21b6;font-size:11px;">
+                <span style="width:10px;height:10px;border-radius:2px;background:#8b5cf6;display:inline-block;"></span>
+                Violeta / Lavanda · Falta confirmar la otra parte
+              </span>
+              <p style="color:#4c1d95;margin-top:4px;">
+                <strong>Turno de la contraparte:</strong> Tu área ya dio solución o envió la propuesta y se encuentra en espera de confirmación del otro lado (permanece visible en "Mis detalles" para seguimiento).
+              </p>
+            </div>
+            <div class="network-guide-item" style="border-left:4px solid #0284c7;background:#ffffff;">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-weight:800;color:#0369a1;font-size:11px;">
+                <span style="width:10px;height:10px;border-radius:2px;background:#0284c7;display:inline-block;"></span>
+                Blanco / Normal · Se están atendiendo ya
+              </span>
+              <p style="color:#334155;margin-top:4px;">
+                <strong>En atención activa:</strong> Casos que se están atendiendo actualmente en progreso o conversación activa sin propuestas pendientes de confirmar.
+              </p>
+            </div>
+            <div class="network-guide-item" style="border-left:4px solid #16a34a;background:#dcfce7;">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-weight:800;color:#14532d;font-size:11px;">
+                <span style="width:10px;height:10px;border-radius:2px;background:#16a34a;display:inline-block;"></span>
+                Verde esmeralda · Concluido
+              </span>
+              <p style="color:#166534;margin-top:4px;">
+                <strong>Finalizado:</strong> Reporte resuelto y confirmado formalmente por ambas áreas. Se resalta en verde esmeralda distinguible con hover consistente en verde menta y texto nítido sin tachar (se ubica al final de la tabla).
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="network-guide-section">
+          <h3>3. Etiquetas de confirmación y filtros rápidos</h3>
           <div class="network-guide-grid">
             <div class="network-guide-item">
               <span class="order-pending-action-pill is-mine is-closure">Confirmar cierre</span>
-              <p>Debes validar o devolver la solución propuesta.</p>
+              <p>Aparece en <strong>Mis detalles</strong>: la otra área marcó el caso como resuelto y te corresponde validarlo o devolverlo.</p>
             </div>
             <div class="network-guide-item">
               <span class="order-pending-action-pill is-mine is-unresolvable">Confirmar no realizable</span>
-              <p>Debes confirmar o rechazar la imposibilidad técnica.</p>
+              <p>Aparece en <strong>Mis detalles</strong>: debes validar o rechazar la baja por imposibilidad técnica.</p>
             </div>
             <div class="network-guide-item">
-              <span class="order-pending-action-pill is-mine is-physical">Confirmar envío a Físicos</span>
-              <p>Debes autorizar o rechazar el pase a visita en campo.</p>
+              <span class="order-pending-action-pill is-mine is-physical">Confirmar a Físicos</span>
+              <p>Aparece en <strong>Mis detalles</strong>: la contraparte propuso derivar el caso a visita técnica en campo.</p>
             </div>
             <div class="network-guide-item">
-              <span class="order-pending-action-pill is-waiting">Por confirmar cierre</span>
-              <p>Propuesta enviada; esperando respuesta de la otra parte.</p>
+              <span class="order-pending-action-pill is-waiting">En espera de respuesta</span>
+              <p>Tu área ya envió la resolución o propuesta técnica y se encuentra en espera de la confirmación o respuesta del otro lado.</p>
             </div>
           </div>
         </div>
 
         <div class="network-guide-section">
-          <h3>3. Avisos de acciones en el chat</h3>
+          <h3>4. Colores de eventos dentro del chat</h3>
           <div class="network-guide-grid network-guide-grid-compact">
-            <div class="network-guide-chip-row"><span class="guide-color-swatch" style="background:#eff6ff;border-left:4px solid #2563eb;color:#1e3a8a;">Azul</span><span>Inicio de atención o caso retomado.</span></div>
-            <div class="network-guide-chip-row"><span class="guide-color-swatch" style="background:#f0fdf4;border-left:4px solid #16a34a;color:#14532d;">Verde</span><span>Propuesta de solución enviada.</span></div>
-            <div class="network-guide-chip-row"><span class="guide-color-swatch" style="background:#fff7ed;border-left:4px solid #ea580c;color:#7c2d12;">Naranja</span><span>Devolución o rechazo con observaciones.</span></div>
-            <div class="network-guide-chip-row"><span class="guide-color-swatch" style="background:#fef2f2;border-left:4px solid #dc2626;color:#7f1d1d;">Rojo</span><span>Reporte declarado o confirmado no realizable.</span></div>
-            <div class="network-guide-chip-row"><span class="guide-color-swatch" style="background:#f5f3ff;border-left:4px solid #7c3aed;color:#4c1d95;">Violeta</span><span>Solicitud o acuerdo para Detalles Físicos.</span></div>
-            <div class="network-guide-chip-row"><span class="guide-color-swatch" style="background:#f0fdfa;border-left:4px solid #0d9488;color:#134e4a;">Turquesa</span><span>Caso concluido por ambas partes.</span></div>
+            <div class="network-guide-chip-row"><span class="guide-color-swatch"
+                style="background:#eff6ff;border-left:4px solid #2563eb;color:#1e3a8a;">Azul</span><span>Inicio de
+                atención o caso retomado por un compañero de la misma área.</span></div>
+            <div class="network-guide-chip-row"><span class="guide-color-swatch"
+                style="background:#f0fdf4;border-left:4px solid #16a34a;color:#14532d;">Verde</span><span>Propuesta de
+                solución enviada para confirmar cierre.</span></div>
+            <div class="network-guide-chip-row"><span class="guide-color-swatch"
+                style="background:#fff7ed;border-left:4px solid #ea580c;color:#7c2d12;">Naranja</span><span>Devolución o
+                rechazo de cierre con observaciones.</span></div>
+            <div class="network-guide-chip-row"><span class="guide-color-swatch"
+                style="background:#fef2f2;border-left:4px solid #dc2626;color:#7f1d1d;">Rojo</span><span>Reporte
+                declarado o confirmado como no realizable.</span></div>
+            <div class="network-guide-chip-row"><span class="guide-color-swatch"
+                style="background:#f5f3ff;border-left:4px solid #7c3aed;color:#4c1d95;">Violeta</span><span>Propuesta o
+                confirmación de pase a Detalles Físicos.</span></div>
+            <div class="network-guide-chip-row"><span class="guide-color-swatch"
+                style="background:#f0fdfa;border-left:4px solid #0d9488;color:#134e4a;">Turquesa</span><span>Caso
+                concluido definitivamente por ambas partes.</span></div>
           </div>
         </div>
       </div>
@@ -449,15 +710,19 @@
 
   <!-- Modal Guía del Flujo de Trabajo -->
   <div class="mo" id="network-workflow-guide-mo">
-    <div class="md modal-modern network-guide-modal" style="max-width:700px;">
+    <div class="md modal-modern network-guide-modal" style="max-width:720px;">
       <div class="modal-modern-head">
         <div class="modal-modern-title-group">
           <span class="modal-icon-badge" style="background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4;">
-            <svg style="width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <svg style="width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
           </span>
           <div>
-            <h2 class="modal-modern-title">Flujo de trabajo</h2>
-            <p class="modal-modern-subtitle">Reglas operativas entre Atención a clientes y Soporte técnico.</p>
+            <h2 class="modal-modern-title">Guía de flujo operativo</h2>
+            <p class="modal-modern-subtitle">Coordinación entre Soporte técnico y Atención a clientes.</p>
           </div>
         </div>
         <button class="modal-modern-close" onclick="CM('network-workflow-guide-mo')" title="Cerrar ventana">✕</button>
@@ -465,24 +730,24 @@
       <div class="network-guide-body">
         <ol class="network-workflow-steps">
           <li>
-            <strong>1. Orden automático en tabla</strong>
-            <p>Al inicio aparecen los casos que <strong>requieren tu confirmación</strong>, seguidos de los activos. Los <strong>Concluidos</strong> se ubican hasta abajo por fecha de cierre.</p>
+            <strong>1. Filtro «Mis detalles» y selector de «Estado»</strong>
+            <p>En <strong>Mis detalles</strong> aparecen los casos asignados a ti o a tu área que faltan por atender o confirmar. Para ver todo el historial, resueltos o concluidos en verde, usa el filtro de <strong>Estado</strong>.</p>
           </li>
           <li>
-            <strong>2. Seguimiento por chat directo</strong>
-            <p>Quien crea el reporte y quien lo atiende se comunican por chat (admite imágenes con <code>Ctrl + V</code>) sin devolver el caso en cada consulta. Otro integrante del área receptora puede integrarse con <strong>Retomar</strong>.</p>
+            <strong>2. Regla de área para «Retomar»</strong>
+            <p>Solo personal de la <strong>misma área asignada</strong> (Soporte con Soporte, Atención con Atención) o un <strong>Administrador</strong> pueden retomar el caso para atenderlo en el chat y dar seguimiento.</p>
           </li>
           <li>
-            <strong>3. Cierre confirmado por ambas partes</strong>
-            <p>El área que <strong>recibe el reporte</strong> registra la solución en <strong>Enviar a concluir</strong> y el área que <strong>lo creó</strong> confirma el cierre o lo devuelve si persiste el problema.</p>
+            <strong>3. Atención por chat y resolución</strong>
+            <p>Al abrir el chat el caso pasa a <em>En atención</em> (puedes enviar texto, fotos o pegar capturas con <code>Ctrl + V</code>). Al cerrar el chat, puedes mantenerlo en atención o seleccionar <strong>Enviar a concluir</strong> con la solución aplicada.</p>
           </li>
           <li>
-            <strong>4. Reporte no realizable</strong>
-            <p>Solo quien <strong>recibe el reporte</strong> puede declararlo <em>No realizable</em> con justificación técnica; quien lo solicitó debe confirmar o rechazar dicha baja.</p>
+            <strong>4. Confirmación de ambas partes</strong>
+            <p>El área receptora envía la solución (o propone <em>No realizable</em> si no es viable). La contraparte revisa: si todo quedó listo presiona <strong>Confirmar cierre</strong> y pasa a <em>Concluido</em> (fondo verde); si la falla sigue, presiona <strong>Devolver</strong> para corregir.</p>
           </li>
           <li>
-            <strong>5. Pase a Detalles Físicos</strong>
-            <p>Cualquier parte puede proponer <strong>Enviar a Físicos</strong>; el cambio se aplica cuando la contraparte confirma el acuerdo.</p>
+            <strong>5. Enviar a Físicos y Reapertura</strong>
+            <p>Cualquier área puede solicitar <strong>Enviar a Físicos</strong> si requiere visita en campo (se transfiere al confirmar la otra parte). Si un caso ya concluido vuelve a fallar, se puede <strong>Reabrir</strong> y mostrará cuántas veces ha sido reabierto.</p>
           </li>
         </ol>
       </div>
@@ -492,9 +757,39 @@
     </div>
   </div>
 
+  <div class="mo" id="admin-network-stats-mo">
+    <div class="md modal-modern admin-stats-modal-dialog" style="max-width:1180px;width:96vw;">
+      <div class="modal-modern-head">
+        <div class="modal-modern-title-group">
+          <span class="modal-icon-badge"
+            style="background:linear-gradient(135deg,#eff6ff,#dbeafe);color:#1d4ed8;border:1px solid #bfdbfe;">
+            <svg style="width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.2" viewBox="0 0 24 24">
+              <path d="M18 20V10M12 20V4M6 20v-6" />
+            </svg>
+          </span>
+          <div>
+            <h2 class="modal-modern-title">Resumen Estadístico Avanzado de Red</h2>
+            <p class="modal-modern-subtitle">Inteligencia operativa: gráficas comparativas, desempeño por área (Soporte, Atención y Admin), tiempos de respuesta y productividad individual.
+            </p>
+          </div>
+        </div>
+        <button class="modal-modern-close" onclick="CM('admin-network-stats-mo')" title="Cerrar ventana">✕</button>
+      </div>
+      <div class="admin-stats-modal-body" id="admin-network-stats-content"
+        style="max-height:80vh;overflow-y:auto;padding:18px 22px;">
+        <!-- Rendered dynamically -->
+      </div>
+      <div class="card-actions" style="justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;color:#64748b;font-weight:600;">Panel exclusivo de Administración · Análisis integral de áreas y personal</span>
+        <button type="button" class="btn bgh" onclick="CM('admin-network-stats-mo')">Cerrar panel</button>
+      </div>
+    </div>
+  </div>
+
   <div class="nt" id="nt"></div>
   <script src="assets/js/api.js?v=20261105-v11"></script>
-  <script src="assets/js/common.js?v=20261105-v11"></script>
-  <script src="assets/js/ordenes.js?v=20261105-v11"></script>
+  <script src="assets/js/common.js?v=20261110-instant-notif-v1"></script>
+  <script src="assets/js/ordenes.js?v=20261110-pagination-always-v3"></script>
 </body>
+
 </html>

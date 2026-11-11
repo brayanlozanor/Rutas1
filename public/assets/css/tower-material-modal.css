@@ -1,0 +1,1118 @@
+/* Estilos para el formato y modal de Material de Torre (Antenas) */
+#tower-material-mo {
+  position: fixed !important;
+  inset: 0 !important;
+  display: none;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 16px !important;
+  background: rgba(15, 23, 42, 0.65) !important;
+  backdrop-filter: blur(8px) !important;
+  z-index: 10500 !important;
+}
+
+#tower-material-mo.open {
+  display: flex !important;
+}
+
+.tower-material-card {
+  width: min(860px, calc(100vw - 32px)) !important;
+  max-width: 860px !important;
+  max-height: calc(100dvh - 32px) !important;
+  margin: auto !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 22px !important;
+  box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.35) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  animation: towerMatModalIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+@keyframes towerMatModalIn {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.tower-mat-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  position: relative;
+}
+
+.tower-mat-icon-wrap {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #e0f2fe;
+  color: #0369a1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tower-mat-icon-wrap svg {
+  width: 26px;
+  height: 26px;
+}
+
+.tower-mat-title-box {
+  flex: 1;
+  min-width: 0;
+}
+
+.tower-mat-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #0284c7;
+  margin-bottom: 4px;
+}
+
+.tower-mat-title-box h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 4px;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.tower-mat-title-box p {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 6px;
+  line-height: 1.4;
+}
+
+.tower-mat-updated-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-top: 4px;
+}
+
+.tower-mat-updated-info strong {
+  color: #0f172a;
+}
+
+.tower-mat-close-btn {
+  background: transparent !important;
+  border: none !important;
+  color: #64748b !important;
+  font-size: 18px !important;
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  flex-shrink: 0;
+}
+
+.tower-mat-close-btn:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.tower-mat-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.tower-mat-completion-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 14px;
+  padding: 12px 16px;
+  color: #166534;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tower-mat-banner-icon {
+  width: 24px;
+  height: 24px;
+  background: #22c55e;
+  color: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.tower-mat-completion-banner strong {
+  display: block;
+  font-size: 14px;
+  color: #14532d;
+  margin-bottom: 2px;
+}
+
+.tower-mat-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tower-mat-field label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tower-mat-field-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.tower-mat-field-help {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.tower-mat-field input[type="text"],
+.tower-mat-field textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #0f172a;
+  background: #f8fafc;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.tower-mat-field input[type="text"]:focus,
+.tower-mat-field textarea:focus {
+  outline: none;
+  border-color: #0284c7;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.12);
+}
+
+.tower-mat-photos-section {
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  padding: 16px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tower-mat-photos-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tower-mat-photo-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tower-mat-photo-buttons label.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+  margin: 0;
+}
+
+.tower-mat-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+  min-height: 50px;
+}
+
+.tower-mat-no-photos {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 18px 12px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.tower-mat-thumb-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  background: #0f172a;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+}
+
+.tower-mat-thumb-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.tower-mat-thumb-wrap:hover img {
+  transform: scale(1.05);
+}
+
+.tower-mat-thumb-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.9);
+  color: #ffffff;
+  border: none;
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.tower-mat-thumb-del:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+}
+
+.tower-mat-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.tower-mat-actions .btn {
+  padding: 11px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 12px;
+}
+
+/* Acceso y resumen en tarjetas de antena */
+.ant-icon-btn.tower {
+  background: #e0f2fe !important;
+  color: #0284c7 !important;
+  border-color: #bae6fd !important;
+}
+
+.ant-icon-btn.tower:hover {
+  background: #0284c7 !important;
+  color: #ffffff !important;
+  border-color: #0284c7 !important;
+}
+
+.antenna-tower-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f0f9ff;
+  color: #0369a1;
+  border: 1px solid #e0f2fe;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.antenna-tower-pill:hover {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+}
+
+@media (max-width: 640px) {
+  .tower-material-card {
+    width: 100% !important;
+    max-height: 95dvh !important;
+    border-radius: 18px !important;
+  }
+  .tower-mat-header {
+    padding: 16px 18px 12px;
+  }
+  .tower-mat-body {
+    padding: 16px 18px;
+    gap: 14px;
+  }
+  .tower-mat-actions {
+    flex-direction: column-reverse;
+  }
+  .tower-mat-actions button {
+    width: 100%;
+  }
+}
+
+
+
+/* ==========================================================================
+   BOTÓN LLAMATIVO Y RECORDATORIO DE MATERIAL DE TORRE EN PLANIFICAR
+   ========================================================================== */
+
+/* Botón llamativo al lado del detalle (para que no se pierda en la vista) */
+.btn-tower-callout {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 6px 12px !important;
+  border-radius: 9px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25) !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  white-space: nowrap !important;
+  text-decoration: none !important;
+  position: relative !important;
+  overflow: visible !important;
+  border: 1.5px solid transparent !important;
+}
+
+/* Estado pendiente: Degradado azul real / violeta eléctrico de alta visibilidad con brillo */
+.btn-tower-callout.is-pending,
+.btn-tower-callout:not(.is-registered) {
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 55%, #4f46e5 100%) !important;
+  border-color: #93c5fd !important;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.3) inset !important;
+  animation: towerCalloutPulse 3s infinite ease-in-out !important;
+}
+
+.btn-tower-callout.is-pending:hover,
+.btn-tower-callout:not(.is-registered):hover {
+  transform: translateY(-1.5px) scale(1.02) !important;
+  background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 55%, #4338ca 100%) !important;
+  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.4) inset !important;
+  border-color: #bfdbfe !important;
+}
+
+/* Estado registrado: Verde esmeralda vivo con check */
+.btn-tower-callout.is-registered {
+  background: linear-gradient(135deg, #059669 0%, #0d9488 100%) !important;
+  border-color: #6ee7b7 !important;
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.25) inset !important;
+}
+
+.btn-tower-callout.is-registered:hover {
+  transform: translateY(-1px) !important;
+  background: linear-gradient(135deg, #047857 0%, #0f766e 100%) !important;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.5) !important;
+}
+
+/* Icono y etiqueta */
+.btn-tower-callout .tower-btn-icon {
+  font-size: 14px !important;
+  line-height: 1 !important;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+}
+
+.btn-tower-callout .tower-btn-label {
+  letter-spacing: 0.2px !important;
+}
+
+.btn-tower-callout .tower-btn-tag {
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 1px 5px !important;
+  border-radius: 5px !important;
+  font-size: 9px !important;
+  font-weight: 900 !important;
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+}
+
+@keyframes towerCalloutPulse {
+  0%, 100% {
+    box-shadow: 0 2px 10px rgba(37, 99, 235, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.3) inset;
+  }
+  50% {
+    box-shadow: 0 3px 18px rgba(37, 99, 235, 0.75), 0 0 0 2px rgba(147, 197, 253, 0.8) inset;
+  }
+}
+
+/* Pastilla llamativa en la línea de estado del detalle */
+.tower-detail-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 2px 9px !important;
+  border-radius: 9999px !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  text-decoration: none !important;
+  transition: all 0.15s ease !important;
+  white-space: nowrap !important;
+  line-height: 1.4 !important;
+}
+
+.tower-detail-pill.is-pending {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1.5px solid #3b82f6 !important;
+  box-shadow: 0 1px 4px rgba(59, 130, 246, 0.25) !important;
+}
+
+.tower-detail-pill.is-pending:hover {
+  background: #dbeafe !important;
+  border-color: #2563eb !important;
+  transform: translateY(-0.5px) !important;
+}
+
+.tower-detail-pill.is-registered {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border: 1.5px solid #10b981 !important;
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.2) !important;
+}
+
+.tower-detail-pill.is-registered:hover {
+  background: #d1fae5 !important;
+  border-color: #059669 !important;
+}
+
+.tower-detail-pill .tower-pill-icon {
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+
+.tower-detail-pill .tower-pill-badge {
+  font-size: 9px !important;
+  font-weight: 900 !important;
+}
+
+/* Banner de recordatorio en el modal de resumen de terminación del técnico */
+.tech-summary-tower-reminder {
+  margin: 12px 0 16px !important;
+  padding: 14px 16px !important;
+  border-radius: 14px !important;
+  background: linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%) !important;
+  border: 1.5px solid #93c5fd !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.12) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+
+.tech-summary-tower-reminder .tower-reminder-head {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.tech-summary-tower-reminder .tower-reminder-icon {
+  font-size: 28px !important;
+  line-height: 1 !important;
+  display: grid !important;
+  place-items: center !important;
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 12px !important;
+  background: #dbeafe !important;
+  border: 1px solid #bfdbfe !important;
+  flex-shrink: 0 !important;
+}
+
+.tech-summary-tower-reminder .tower-reminder-text-wrap {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  flex: 1 !important;
+}
+
+.tech-summary-tower-reminder .tower-reminder-kicker {
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  letter-spacing: 0.5px !important;
+  color: #0369a1 !important;
+  text-transform: uppercase !important;
+}
+
+.tech-summary-tower-reminder strong {
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+}
+
+.tech-summary-tower-reminder p {
+  margin: 0 !important;
+  font-size: 12px !important;
+  color: #334155 !important;
+  line-height: 1.4 !important;
+}
+
+/* Botón grande destacado en el recordatorio */
+.btn-tower-featured {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  padding: 10px 18px !important;
+  border-radius: 11px !important;
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 50%, #4f46e5 100%) !important;
+  color: #ffffff !important;
+  border: 1.5px solid #93c5fd !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.3) inset !important;
+  cursor: pointer !important;
+  transition: all 0.18s ease !important;
+  text-decoration: none !important;
+  width: 100% !important;
+}
+
+.btn-tower-featured:hover {
+  transform: translateY(-1.5px) !important;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.6) !important;
+  background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 50%, #4338ca 100%) !important;
+}
+
+.btn-tower-featured .tower-btn-icon {
+  font-size: 16px !important;
+}
+
+/* Soporte en vista técnico */
+html[data-role="tecnico"] body.plan-technician-view .plan-stop-details-panel .plan-detail-row .plan-detail-actions .btn-tower-callout {
+  min-height: 36px !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+  padding: 7px 13px !important;
+}
+
+/* Botón de material de torre junto al título de la antena */
+.clickable-stop-title {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.clickable-stop-title .stop-title-text {
+  display: inline !important;
+}
+
+.clickable-stop-title .btn-tower-callout,
+.tech-stop-head .btn-tower-callout {
+  display: inline-flex !important;
+  align-items: center !important;
+  vertical-align: middle !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+  text-decoration: none !important;
+  flex-shrink: 0 !important;
+}
+
+.clickable-stop-title:hover .btn-tower-callout,
+.tech-stop-head:hover .btn-tower-callout {
+  text-decoration: none !important;
+}
+
+/* ==========================================================================
+   APARTADO DE PUERTOS MIKROTIK PARA BALANCEADORES (B-...)
+   ========================================================================== */
+.tower-mat-balancer-section {
+  background: linear-gradient(180deg, #faf5ff 0%, #f8fafc 100%);
+  border: 1.5px solid #ddd6fe;
+  border-radius: 16px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.balancer-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e9d5ff;
+}
+
+.balancer-section-title-wrap {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.balancer-section-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #6d28d9;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.balancer-section-title-wrap h4 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #1e1b4b;
+}
+
+.balancer-section-title-wrap p {
+  margin: 0;
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.balancer-section-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.balancer-ports-counter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ede9fe;
+  border: 1px solid #c4b5fd;
+  color: #4c1d95;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.balancer-ports-counter-pill strong {
+  font-weight: 800;
+  color: #2e1065;
+}
+
+.balancer-ports-counter-pill small {
+  color: #6d28d9;
+  font-size: 11px;
+}
+
+.balancer-port-admin-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 4px 10px;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.balancer-admin-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.balancer-port-step-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.balancer-port-step-btn:hover:not(:disabled) {
+  background: #ede9fe;
+  border-color: #a78bfa;
+  color: #5b21b6;
+}
+
+.balancer-port-step-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.balancer-port-count-input {
+  width: 48px !important;
+  height: 26px !important;
+  text-align: center !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  color: #1e293b !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  padding: 2px 4px !important;
+  background: #fff !important;
+}
+
+.balancer-port-readonly-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.balancer-ports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.balancer-port-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 13px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.balancer-port-card.is-complete {
+  border-color: #86efac;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 38%);
+}
+
+.balancer-port-card.is-partial {
+  border-color: #fde047;
+  background: linear-gradient(180deg, #fefce8 0%, #ffffff 38%);
+}
+
+.balancer-port-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.balancer-port-title-group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.balancer-port-badge {
+  font-size: 13px;
+  font-weight: 800;
+  color: #1e293b;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.balancer-port-badge small {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.balancer-port-status {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.balancer-port-status.is-complete {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.balancer-port-status.is-partial {
+  background: #fef9c3;
+  color: #854d0e;
+  border: 1px solid #fde047;
+}
+
+.balancer-port-status.is-empty {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.balancer-port-note-input {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 6px 10px !important;
+  font-size: 12px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.balancer-port-note-input:focus {
+  outline: none !important;
+  border-color: #7c3aed !important;
+  background: #ffffff !important;
+}
+
+.balancer-port-sides-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.balancer-modem-slot {
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 8px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 126px;
+}
+
+.balancer-modem-slot.has-photo {
+  border-style: solid;
+  border-color: #bae6fd;
+  background: #f0f9ff;
+}
+
+.balancer-slot-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.balancer-slot-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1e293b;
+  line-height: 1.2;
+}
+
+.balancer-slot-optional {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+
+.balancer-slot-remove {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.balancer-slot-remove:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.balancer-slot-drop {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 6px 4px;
+}
+
+.balancer-slot-hint {
+  font-size: 10.5px;
+  color: #64748b;
+  line-height: 1.3;
+}
+
+.balancer-slot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+}
+
+.balancer-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.balancer-upload-btn.primary {
+  background: #0284c7;
+  color: #ffffff;
+  border: 1px solid #0284c7;
+}
+
+.balancer-upload-btn.primary:hover {
+  background: #0369a1;
+}
+
+.balancer-upload-btn.secondary {
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.balancer-upload-btn.secondary:hover {
+  background: #f1f5f9;
+}
+
+.balancer-slot-preview {
+  width: 100%;
+  height: 82px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: #0f172a;
+  cursor: zoom-in;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.balancer-slot-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.balancer-slot-replace-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.balancer-mini-upload {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #0369a1;
+  background: #ffffff;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+
+.balancer-mini-upload:hover {
+  background: #e0f2fe;
+}
+
+@media (max-width: 640px) {
+  .balancer-ports-grid {
+    grid-template-columns: 1fr;
+  }
+  .balancer-section-meta {
+    align-items: flex-start;
+    width: 100%;
+  }
+}
+
+/* Estado obligatorio y botón Continuar */
+.tower-mat-completion-banner.is-mandatory {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+}
+
+.tower-mat-completion-banner.is-mandatory .tower-mat-banner-icon {
+  background: #f59e0b !important;
+  color: #ffffff !important;
+}
+
+.tower-mat-completion-banner.is-mandatory strong {
+  color: #78350f !important;
+}
+
+#tower-mat-continue-btn {
+  background: #16a34a !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  border: none !important;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+#tower-mat-continue-btn:hover {
+  background: #15803d !important;
+}
+
+

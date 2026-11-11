@@ -6,9 +6,6 @@ let linkLayer;
 let didInitialFit = false;
 let mapaPageStarted = false;
 let mapaResizeObserver = null;
-function mapRemoteParams(){return {scoped:'1',includeRelated:'1'};}
-const previousMapDataPartParams=window.netopsGetDataPartParams;
-window.netopsGetDataPartParams=part=>(part==='equipment'||part==='nodes')?mapRemoteParams():previousMapDataPartParams?.(part);
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
@@ -45,7 +42,7 @@ function initMapaPage() {
   initMapCanvas();
   renderMapStats();
   updateMapMarkers({ fit: true });
-  loadDB({ showOverlay: false, preferCache: true }).then(() => {
+  loadDB({ loadingTitle: 'Cargando mapa', loadingSubtitle: 'Consultando sitios y estados.', overlayDelay: 180 }).then(() => {
     fillMapFilters();
     applyMapRoleRestrictions();
     renderMapStats();
@@ -289,17 +286,10 @@ function updateMapMarkers(options = {}) {
 
 function renderAntennaNodeLinksOverlay(bounds = []) {
   if (!linkLayer) return;
-  const inferredLinks = new Map();
-  (state.workOrders || []).forEach(order => {
-    if (!order || order.deletedAt || !order.equipmentId || !order.nodeId) return;
-    if (!inferredLinks.has(order.equipmentId)) inferredLinks.set(order.equipmentId, new Set());
-    inferredLinks.get(order.equipmentId).add(order.nodeId);
-  });
   (state.equipment || []).filter(eq => !eq.deletedAt).forEach(eq => {
     const eqLat = safeFloat(eq.lat), eqLng = safeFloat(eq.lng);
     if (isNaN(eqLat) || isNaN(eqLng)) return;
     const linkedIds = new Set(getEquipmentLinkedNodeIds(eq.id));
-    (inferredLinks.get(eq.id) || new Set()).forEach(nodeId => linkedIds.add(nodeId));
     const linkedNodes = (state.nodes || []).filter(node => node && !node.deletedAt && linkedIds.has(node.id));
     linkedNodes.forEach(node => {
       const nLat = safeFloat(node.lat), nLng = safeFloat(node.lng);

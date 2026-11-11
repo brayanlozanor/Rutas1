@@ -99,6 +99,17 @@ html[data-role="tecnico"] body.plan-technician-view .stop-actions .plan-resolved
   background:#f1fbf5!important;
   color:#078a42!important;
 }
+html[data-role="tecnico"] body.plan-technician-view .stop-actions .plan-resolved-toggle:disabled{
+  opacity:0.55!important;
+  cursor:not-allowed!important;
+  border-color:#cbd5e1!important;
+  background:#f8fafc!important;
+  color:#94a3b8!important;
+}
+html[data-role="tecnico"] body.plan-technician-view .stop-detail-switches,
+body.plan-technician-view .stop-detail-switches{
+  display:none!important;
+}
 @media(max-width:520px){
   html[data-role="tecnico"] body.plan-technician-view .stop-actions .stop-action-pending,
   html[data-role="tecnico"] body.plan-technician-view .stop-actions .plan-resolved-toggle{width:100%!important;flex-basis:100%!important}

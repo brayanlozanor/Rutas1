@@ -123,7 +123,7 @@ function forbidden(requestId) {
 
 function sanitizeDataForSession(data,session) {
   if (!data||typeof data!=='object'||hasRole(session,'administrador','admin','soporte')) return data;
-  if (Array.isArray(data.users)) data.users=hasRole(session,'atencion_clientes')?data.users.filter(user=>['tecnico','administrador','admin','soporte'].includes(String(user.role||'').toLowerCase())):data.users.filter(user=>String(user.id||'')===String(session.sub||''));
+  if (Array.isArray(data.users)) data.users=hasRole(session,'atencion_clientes')?data.users.filter(user=>['tecnico','administrador','admin','soporte','atencion_clientes','atencion'].includes(String(user.role||'').toLowerCase())):data.users.filter(user=>String(user.id||'')===String(session.sub||''));
   if (Array.isArray(data.auditLog)) data.auditLog=hasRole(session,'atencion_clientes')?data.auditLog.filter(item=>String(item.byRole||'').toLowerCase()==='tecnico'):data.auditLog.filter(item=>String(item.byId||'')===String(session.sub||''));
   return data;
 }
@@ -289,7 +289,7 @@ export default {
       }
 
       if (request.method === 'GET' && url.pathname === '/api/dashboard-goal') {
-        if (!hasRole(session,'administrador','admin','atencion_clientes')) return forbidden(requestId);
+        if (!hasRole(session,'administrador','admin','soporte','atencion_clientes')) return forbidden(requestId);
         return json({ok:true,...(await getDashboardGoal(env))});
       }
 

@@ -30,7 +30,7 @@ const expected = {
   antenas: ['equipment'],
   dashboard: ['operations', 'people'],
   historial: ['audit'],
-  mapa: ['equipment', 'nodes'],
+  mapa: ['map'],
   material: ['materials'],
   nodos: ['nodes'],
   ordenes: ['operations', 'people'],

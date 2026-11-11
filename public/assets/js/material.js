@@ -9,6 +9,830 @@ let dispatchCurrentPage = 1;
 const dispatchPageSize = 8;
 
 let activeAdminMainTab = 'dispatches'; // 'dispatches' | 'catalog'
+
+/* ==========================================================================
+   MOTOR DE FIRMA DIGITAL Y GENERADOR DE OFICIO FORMAL DE MATERIAL
+   ========================================================================== */
+function initSignatureCanvas() {
+  if (typeof window !== 'undefined' && typeof window._systemInitSignatureCanvas === 'function') {
+    return window._systemInitSignatureCanvas();
+  }
+}
+
+function clearSignatureCanvas() {
+  if (typeof window !== 'undefined' && typeof window._systemClearSignatureCanvas === 'function') {
+    return window._systemClearSignatureCanvas();
+  }
+}
+
+function promptDigitalSignature(opts) {
+  if (typeof window !== 'undefined' && typeof window._systemPromptDigitalSignature === 'function') {
+    return window._systemPromptDigitalSignature(opts);
+  }
+  return Promise.resolve(null);
+}
+
+function confirmSignaturePrompt() {
+  if (typeof window !== 'undefined' && typeof window._systemConfirmSignaturePrompt === 'function') {
+    return window._systemConfirmSignaturePrompt();
+  }
+}
+
+function cancelSignaturePrompt() {
+  if (typeof window !== 'undefined' && typeof window._systemCancelSignaturePrompt === 'function') {
+    return window._systemCancelSignaturePrompt();
+  }
+}
+
+let activeOficioDispatchId = null;
+let activeOficioType = 'entrega';
+
+function renderOficioEntregaHTML(d) {
+  const items = Array.isArray(d.items) && d.items.length 
+    ? d.items 
+    : [{ materialName: d.materialName || 'Material', quantity: d.quantity || 0, unit: d.unit || 'pieza' }];
+
+  const totalDelivered = items.reduce((sum, it) => sum + (Number(it.quantity) || Number(it.deliveredQuantity) || 0), 0);
+
+  const rowsHtml = items.map((it, idx) => {
+    const qtyDelivered = Number(it.quantity) || Number(it.deliveredQuantity) || 0;
+    const unit = it.unit || d.unit || 'pieza';
+    return `
+      <tr>
+        <td style="text-align: center; font-weight: 700; color: #64748b;">${idx + 1}</td>
+        <td style="font-weight: 600;">${escapeHtml(it.materialName)}</td>
+        <td style="text-align: right; font-weight: 700;">${qtyDelivered}</td>
+        <td style="text-align: center; color: #475569;">${escapeHtml(unit)}</td>
+        <td style="color: #64748b;">${escapeHtml(it.notes || it.obs || 'Entregado')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const statusLabel = d.receiverSignature || d.status === 'received' || d.status === 'completed' || d.status === 'pending_handover'
+    ? '<span style="color:#047857;font-weight:800">✓ RECIBIDO Y CONFIRMADO</span>'
+    : '<span style="color:#d97706;font-weight:800">⏳ PENDIENTE DE CONFIRMACIÓN DEL TÉCNICO</span>';
+
+  return `
+    <div class="oficio-sheet">
+      <!-- ENCABEZADO CON LOGO WIFIMEX -->
+      <div class="oficio-header">
+        <div class="oficio-brand-col">
+          <img src="assets/brand/wifimex-logo.jpg" alt="WiFi-Mex" class="oficio-logo">
+          <div>
+            <div class="oficio-company-title">WiFi-Mex</div>
+          </div>
+        </div>
+        <div class="oficio-doc-col">
+          <div class="oficio-type-title">ENTREGA DE MATERIAL</div>
+          <div class="oficio-folio-badge">${escapeHtml(d.deliveryFolio || d.folio || ('ENT-' + String(d.id || '').slice(-6).toUpperCase()))}</div>
+          <div class="oficio-date-text">Emisión: ${new Date(d.createdAt || d.at || Date.now()).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}</div>
+        </div>
+      </div>
+
+      <!-- METADATOS GENERALES -->
+      <div class="oficio-meta-box">
+        <div class="oficio-meta-item">
+          <small>Entregado por</small>
+          <strong>${escapeHtml(d.giverSignatureName || d.createdByName || 'Soporte')}</strong>
+        </div>
+        <div class="oficio-meta-item">
+          <small>Recibido por (Técnico)</small>
+          <strong>${escapeHtml(d.receiverSignatureName || d.technicianName || 'Técnico')}</strong>
+        </div>
+        <div class="oficio-meta-item">
+          <small>Referencia</small>
+          <strong>${escapeHtml(d.reference || 'Operación general de ruta')}</strong>
+        </div>
+        <div class="oficio-meta-item">
+          <small>Estado</small>
+          <div>${statusLabel}</div>
+        </div>
+      </div>
+
+      <!-- TABLA DE MATERIALES -->
+      <div class="oficio-table-wrap">
+        <table class="oficio-table">
+          <thead>
+            <tr>
+              <th style="width: 40px; text-align: center;">#</th>
+              <th>Material / Insumo</th>
+              <th style="text-align: right; width: 120px;">Entregado</th>
+              <th style="text-align: center; width: 90px;">Unidad</th>
+              <th>Observaciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" style="text-align: right;">TOTAL:</td>
+              <td style="text-align: right;">${totalDelivered}</td>
+              <td style="text-align: center;">-</td>
+              <td>${items.length} partida(s)</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- OBSERVACIONES -->
+      ${d.notes ? `
+        <div class="oficio-notes-box">
+          <div class="oficio-notes-title">Observaciones de entrega:</div>
+          <div>${escapeHtml(d.notes)}</div>
+        </div>
+      ` : ''}
+
+      <!-- CONSTANCIA -->
+      <div class="oficio-legal-clause">
+        "Se hace constar la entrega y recepción física de los materiales detallados. El técnico asume el resguardo y buen uso de los mismos para los trabajos asignados en WiFi-Mex."
+      </div>
+
+      <!-- CUADRO DE FIRMAS (ENTREGA) -->
+      <div class="oficio-signatures-section">
+        <div class="oficio-signature-card">
+          <div class="oficio-signature-kicker">ENTREGÓ</div>
+          <div class="oficio-signature-box">
+            ${d.giverSignature ? `
+              <img src="${d.giverSignature}" alt="Firma Entrega" class="oficio-signature-img">
+            ` : `
+              <div class="oficio-signature-pending">
+                <span>[ Pendiente de firma de entrega ]</span>
+              </div>
+            `}
+          </div>
+          <div class="oficio-signature-name">${escapeHtml(d.giverSignatureName || d.createdByName || 'Soporte')}</div>
+          <div class="oficio-signature-role">Entrega (Soporte)</div>
+          ${d.giverSignatureAt ? `<div class="oficio-signature-timestamp">Firmado: ${new Date(d.giverSignatureAt).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })}</div>` : ''}
+        </div>
+
+        <div class="oficio-signature-card">
+          <div class="oficio-signature-kicker">RECIBIÓ DE CONFORMIDAD</div>
+          <div class="oficio-signature-box">
+            ${d.receiverSignature ? `
+              <img src="${d.receiverSignature}" alt="Firma Recepción" class="oficio-signature-img">
+            ` : `
+              <div class="oficio-signature-pending">
+                <span>[ Pendiente de confirmación y firma del técnico ]</span>
+              </div>
+            `}
+          </div>
+          <div class="oficio-signature-name">${escapeHtml(d.receiverSignatureName || d.acceptedByName || d.technicianName || 'Técnico')}</div>
+          <div class="oficio-signature-role">Recibe (Técnico)</div>
+          ${d.receiverSignatureAt ? `<div class="oficio-signature-timestamp">Firmado: ${new Date(d.receiverSignatureAt).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })}</div>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderOficioRecepcionHTML(d) {
+  const items = Array.isArray(d.items) && d.items.length 
+    ? d.items 
+    : [{ materialName: d.materialName || 'Material', quantity: d.quantity || 0, unit: d.unit || 'pieza' }];
+
+  const totalDelivered = items.reduce((sum, it) => sum + (Number(it.quantity) || Number(it.deliveredQuantity) || 0), 0);
+  const totalUsed = Number(d.usedQuantity) || 0;
+  const totalReturned = Number(d.returnedChange) || 0;
+  const totalDamaged = Number(d.returnedDamaged) || 0;
+
+  const rowsHtml = items.map((it, idx) => {
+    const qtyDelivered = Number(it.quantity) || Number(it.deliveredQuantity) || 0;
+    const qtyUsed = it.usedQuantity !== undefined ? Number(it.usedQuantity) : (items.length === 1 ? totalUsed : '-');
+    const qtyReturned = it.returnedGood !== undefined ? Number(it.returnedGood) : (items.length === 1 ? totalReturned : '-');
+    const qtyDamaged = it.returnedDamaged !== undefined ? Number(it.returnedDamaged) : (items.length === 1 ? totalDamaged : '-');
+    const unit = it.unit || d.unit || 'pieza';
+
+    return `
+      <tr>
+        <td style="text-align: center; font-weight: 700; color: #64748b;">${idx + 1}</td>
+        <td style="font-weight: 600;">${escapeHtml(it.materialName)}</td>
+        <td style="text-align: right; font-weight: 700;">${qtyDelivered}</td>
+        <td style="text-align: right; color: #0284c7; font-weight: 600;">${qtyUsed}</td>
+        <td style="text-align: right; color: #059669; font-weight: 700;">${qtyReturned}</td>
+        <td style="text-align: right; color: ${qtyDamaged > 0 ? '#dc2626' : '#64748b'}; font-weight: 600;">${qtyDamaged}</td>
+        <td style="text-align: center; color: #475569;">${escapeHtml(unit)}</td>
+        <td style="color: #64748b;">${escapeHtml(it.notes || it.obs || 'Conforme')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const statusLabel = d.returnReceiverSignature || d.status === 'completed'
+    ? '<span style="color:#047857;font-weight:800">✓ RECEPCIÓN FINALIZADA</span>'
+    : (d.status === 'pending_handover'
+      ? '<span style="color:#c2410c;font-weight:800">⏳ PENDIENTE DE CONFIRMACIÓN DE SOPORTE</span>'
+      : '<span style="color:#d97706;font-weight:800">⏳ EN PROCESO DE DEVOLUCIÓN</span>');
+
+  return `
+    <div class="oficio-sheet">
+      <!-- ENCABEZADO CON LOGO WIFIMEX -->
+      <div class="oficio-header">
+        <div class="oficio-brand-col">
+          <img src="assets/brand/wifimex-logo.jpg" alt="WiFi-Mex" class="oficio-logo">
+          <div>
+            <div class="oficio-company-title">WiFi-Mex</div>
+          </div>
+        </div>
+        <div class="oficio-doc-col">
+          <div class="oficio-type-title">RECEPCIÓN DE MATERIAL</div>
+          <div class="oficio-folio-badge">${escapeHtml(d.receiptFolio || ('REC-' + String(d.id || '').slice(-6).toUpperCase()))}</div>
+          <div class="oficio-date-text">Emisión: ${new Date(d.receivedAt || d.returnReceiverSignatureAt || d.returnGiverSignatureAt || d.updatedAt || Date.now()).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}</div>
+        </div>
+      </div>
+
+      <!-- METADATOS GENERALES -->
+      <div class="oficio-meta-box">
+        <div class="oficio-meta-item">
+          <small>Entregado por (Técnico)</small>
+          <strong>${escapeHtml(d.returnGiverSignatureName || d.technicianName || 'Técnico')}</strong>
+        </div>
+        <div class="oficio-meta-item">
+          <small>Recibido por (Soporte)</small>
+          <strong>${escapeHtml(d.returnReceiverSignatureName || d.receivedByAdminName || d.createdByName || 'Soporte')}</strong>
+        </div>
+        <div class="oficio-meta-item">
+          <small>Referencia</small>
+          <strong>${escapeHtml(d.reference || 'Liquidación y devolución de material')}</strong>
+        </div>
+        <div class="oficio-meta-item">
+          <small>Estado</small>
+          <div>${statusLabel}</div>
+        </div>
+      </div>
+
+      <!-- TABLA DE MATERIALES -->
+      <div class="oficio-table-wrap">
+        <table class="oficio-table">
+          <thead>
+            <tr>
+              <th style="width: 40px; text-align: center;">#</th>
+              <th>Material / Insumo</th>
+              <th style="text-align: right; width: 90px;">Entregado</th>
+              <th style="text-align: right; width: 85px;">Utilizado</th>
+              <th style="text-align: right; width: 85px;">Devuelto</th>
+              <th style="text-align: right; width: 80px;">Dañado</th>
+              <th style="text-align: center; width: 75px;">Unidad</th>
+              <th>Observaciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" style="text-align: right;">TOTALES:</td>
+              <td style="text-align: right;">${totalDelivered}</td>
+              <td style="text-align: right;">${totalUsed}</td>
+              <td style="text-align: right;">${totalReturned}</td>
+              <td style="text-align: right;">${totalDamaged}</td>
+              <td style="text-align: center;">-</td>
+              <td>${items.length} partida(s)</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- OBSERVACIONES -->
+      ${d.receiveNotes || d.returnDetails?.adminNotes ? `
+        <div class="oficio-notes-box">
+          <div class="oficio-notes-title">Observaciones de recepción:</div>
+          <div>${escapeHtml(d.receiveNotes || d.returnDetails?.adminNotes)}</div>
+        </div>
+      ` : ''}
+
+      <!-- CONSTANCIA -->
+      <div class="oficio-legal-clause">
+        "Se hace constar la entrega física del material sobrante y el reporte del material utilizado por parte del técnico, así como la recepción física y conformidad por parte de WiFi-Mex."
+      </div>
+
+      <!-- CUADRO DE FIRMAS (RECEPCIÓN) -->
+      <div class="oficio-signatures-section">
+        <div class="oficio-signature-card">
+          <div class="oficio-signature-kicker">ENTREGÓ</div>
+          <div class="oficio-signature-box">
+            ${d.returnGiverSignature ? `
+              <img src="${d.returnGiverSignature}" alt="Firma Entrega Técnico" class="oficio-signature-img">
+            ` : `
+              <div class="oficio-signature-pending">
+                <span>[ Pendiente de entrega y firma del técnico ]</span>
+              </div>
+            `}
+          </div>
+          <div class="oficio-signature-name">${escapeHtml(d.returnGiverSignatureName || d.handoverAcceptedByName || d.technicianName || 'Técnico')}</div>
+          <div class="oficio-signature-role">Entrega (Técnico)</div>
+          ${d.returnGiverSignatureAt ? `<div class="oficio-signature-timestamp">Firmado: ${new Date(d.returnGiverSignatureAt).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })}</div>` : ''}
+        </div>
+
+        <div class="oficio-signature-card">
+          <div class="oficio-signature-kicker">RECIBIÓ DE CONFORMIDAD</div>
+          <div class="oficio-signature-box">
+            ${d.returnReceiverSignature ? `
+              <img src="${d.returnReceiverSignature}" alt="Firma Recepción Soporte" class="oficio-signature-img">
+            ` : `
+              <div class="oficio-signature-pending">
+                <span>[ Pendiente de confirmación y firma de Soporte ]</span>
+              </div>
+            `}
+          </div>
+          <div class="oficio-signature-name">${escapeHtml(d.returnReceiverSignatureName || d.receivedByAdminName || d.createdByName || 'Soporte')}</div>
+          <div class="oficio-signature-role">Recibe (Soporte)</div>
+          ${d.returnReceiverSignatureAt ? `<div class="oficio-signature-timestamp">Firmado: ${new Date(d.returnReceiverSignatureAt).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })}</div>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderOficioHTML(d, requestedType) {
+  const hasReception = d.status === 'completed' || d.status === 'pending_handover' || d.returnedChange > 0 || d.usedQuantity > 0 || !!d.returnDetails;
+  const type = requestedType || (hasReception ? 'recepcion' : 'entrega');
+  if (type === 'recepcion') {
+    return renderOficioRecepcionHTML(d);
+  }
+  return renderOficioEntregaHTML(d);
+}
+
+function abrirOficioMaterial(dispatchId, tipo) {
+  const all = getAllDispatches();
+  const d = all.find(item => item.id === dispatchId);
+  if (!d) return notify('No se encontró el formato para este movimiento.', 'err');
+
+  activeOficioDispatchId = dispatchId;
+  const hasReception = d.status === 'completed' || d.status === 'pending_handover' || d.returnedChange > 0 || d.usedQuantity > 0 || !!d.returnDetails;
+  
+  if (tipo) {
+    activeOficioType = tipo;
+  } else if (hasReception) {
+    activeOficioType = 'recepcion';
+  } else {
+    activeOficioType = 'entrega';
+  }
+
+  const tabEntrega = document.getElementById('oficio-tab-btn-entrega');
+  const tabRecepcion = document.getElementById('oficio-tab-btn-recepcion');
+  if (tabEntrega) tabEntrega.classList.toggle('active', activeOficioType === 'entrega');
+  if (tabRecepcion) {
+    tabRecepcion.classList.toggle('active', activeOficioType === 'recepcion');
+    tabRecepcion.style.display = hasReception ? 'inline-flex' : 'none';
+  }
+
+  const container = document.getElementById('material-oficio-content');
+  if (container) {
+    container.innerHTML = renderOficioHTML(d, activeOficioType);
+  }
+  OM('material-oficio-mo');
+}
+
+function cambiarPestanaOficio(tipo) {
+  if (!activeOficioDispatchId) return;
+  abrirOficioMaterial(activeOficioDispatchId, tipo);
+}
+
+function imprimirOficioMaterial() {
+  const contentEl = document.getElementById('material-oficio-content');
+  if (!contentEl) {
+    window.print();
+    return;
+  }
+  const sheet = contentEl.querySelector('.oficio-sheet');
+  if (!sheet) {
+    window.print();
+    return;
+  }
+
+  // Título oficial descriptivo para el PDF generado
+  const docType = sheet.querySelector('.oficio-type-title')?.textContent?.trim() || 'Formato de Material';
+  const folio = sheet.querySelector('.oficio-folio-badge')?.textContent?.trim() || '';
+  const pageTitle = `WiFi-Mex - ${docType}${folio ? ' ' + folio : ''}`;
+
+  // Eliminar iframe previo si existiera
+  const oldIframe = document.getElementById('netops-oficio-print-iframe');
+  if (oldIframe) {
+    try { oldIframe.remove(); } catch (e) {}
+  }
+
+  const iframe = document.createElement('iframe');
+  iframe.id = 'netops-oficio-print-iframe';
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = 'none';
+  iframe.style.visibility = 'hidden';
+  iframe.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(iframe);
+
+  try {
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title></title>
+  <base href="${window.location.origin}/">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    @page {
+      size: letter portrait;
+      margin: 0;
+    }
+    *, *:before, *:after {
+      box-sizing: border-box !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    html, body {
+      margin: 0 !important;
+      padding: 12mm 14mm !important;
+      background: #ffffff !important;
+      color: #0f172a !important;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+      font-size: 12px;
+      line-height: 1.35;
+      width: 100% !important;
+      height: auto !important;
+      box-sizing: border-box !important;
+    }
+    .oficio-sheet {
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 auto !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+      border: none !important;
+      box-shadow: none !important;
+      border-radius: 0 !important;
+    }
+    .oficio-header {
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: flex-start !important;
+      gap: 16px !important;
+      border-bottom: 2px solid #0f172a !important;
+      padding-bottom: 10px !important;
+      margin-bottom: 12px !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .oficio-brand-col {
+      display: flex !important;
+      align-items: center !important;
+      gap: 12px !important;
+    }
+    .oficio-logo {
+      height: 46px !important;
+      max-width: 160px !important;
+      width: auto !important;
+      object-fit: contain !important;
+    }
+    .oficio-company-title {
+      font-size: 16px !important;
+      font-weight: 800 !important;
+      color: #0f172a !important;
+      letter-spacing: -0.01em !important;
+      line-height: 1.2 !important;
+    }
+    .oficio-company-sub {
+      font-size: 11px !important;
+      color: #475569 !important;
+      margin-top: 2px !important;
+    }
+    .oficio-doc-col {
+      text-align: right !important;
+      min-width: 200px !important;
+    }
+    .oficio-type-title {
+      font-size: 13px !important;
+      font-weight: 800 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.05em !important;
+      color: #0284c7 !important;
+      margin-bottom: 3px !important;
+    }
+    .oficio-folio-badge {
+      display: inline-block !important;
+      background: #0f172a !important;
+      color: #ffffff !important;
+      padding: 3px 8px !important;
+      border-radius: 6px !important;
+      font-family: 'Space Mono', monospace !important;
+      font-size: 12px !important;
+      font-weight: 700 !important;
+      letter-spacing: 0.05em !important;
+    }
+    .oficio-date-text {
+      font-size: 10.5px !important;
+      color: #64748b !important;
+      margin-top: 3px !important;
+    }
+    .oficio-meta-box {
+      background: #f8fafc !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 8px !important;
+      padding: 8px 12px !important;
+      margin-bottom: 12px !important;
+      display: grid !important;
+      grid-template-columns: repeat(4, 1fr) !important;
+      gap: 8px 12px !important;
+      font-size: 11px !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .oficio-meta-item small {
+      display: block !important;
+      font-size: 9.5px !important;
+      font-weight: 700 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.05em !important;
+      color: #64748b !important;
+      margin-bottom: 2px !important;
+    }
+    .oficio-meta-item strong {
+      color: #0f172a !important;
+      font-size: 11.5px !important;
+    }
+    .oficio-table-wrap {
+      margin-bottom: 12px !important;
+      border: 1px solid #94a3b8 !important;
+      border-radius: 6px !important;
+      overflow: visible !important;
+    }
+    .oficio-table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+      font-size: 11px !important;
+      text-align: left !important;
+    }
+    .oficio-table th {
+      background: #0f172a !important;
+      color: #ffffff !important;
+      padding: 7px 9px !important;
+      font-weight: 700 !important;
+      font-size: 10px !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.04em !important;
+      border-right: 1px solid #334155 !important;
+    }
+    .oficio-table th:last-child {
+      border-right: none !important;
+    }
+    .oficio-table td {
+      padding: 6px 9px !important;
+      border-bottom: 1px solid #e2e8f0 !important;
+      border-right: 1px solid #f1f5f9 !important;
+      color: #1e293b !important;
+    }
+    .oficio-table td:last-child {
+      border-right: none !important;
+    }
+    .oficio-table tbody tr:nth-child(even) {
+      background: #f8fafc !important;
+    }
+    .oficio-table tfoot td {
+      background: #f1f5f9 !important;
+      font-weight: 800 !important;
+      color: #0f172a !important;
+      border-top: 2px solid #94a3b8 !important;
+      padding: 7px 9px !important;
+    }
+    .oficio-notes-box {
+      background: #fdfefe !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 6px !important;
+      padding: 7px 10px !important;
+      margin-bottom: 10px !important;
+      font-size: 10.5px !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .oficio-notes-title {
+      font-size: 9px !important;
+      font-weight: 800 !important;
+      text-transform: uppercase !important;
+      color: #475569 !important;
+      letter-spacing: 0.05em !important;
+      margin-bottom: 2px !important;
+    }
+    .oficio-legal-clause {
+      font-size: 10px !important;
+      color: #334155 !important;
+      font-style: italic !important;
+      line-height: 1.35 !important;
+      margin-bottom: 12px !important;
+      padding: 6px 10px !important;
+      border-left: 3px solid #0284c7 !important;
+      background: #f0f9ff !important;
+      border-radius: 4px !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .oficio-signatures-section {
+      display: grid !important;
+      grid-template-columns: 1fr 1fr !important;
+      gap: 14px !important;
+      margin-top: 8px !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .oficio-signature-card {
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 8px !important;
+      padding: 8px 10px !important;
+      text-align: center !important;
+      background: #ffffff !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+    }
+    .oficio-signature-kicker {
+      font-size: 9px !important;
+      font-weight: 800 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.05em !important;
+      color: #64748b !important;
+      margin-bottom: 4px !important;
+    }
+    .oficio-signature-box {
+      min-height: 65px !important;
+      height: 65px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      margin: 3px 0 !important;
+      border-bottom: 1.5px solid #0f172a !important;
+    }
+    .oficio-signature-img {
+      max-height: 60px !important;
+      max-width: 90% !important;
+      object-fit: contain !important;
+    }
+    .oficio-signature-pending {
+      font-size: 10px !important;
+      color: #94a3b8 !important;
+      font-style: italic !important;
+    }
+    .oficio-signature-name {
+      font-size: 11px !important;
+      font-weight: 800 !important;
+      color: #0f172a !important;
+      margin-top: 4px !important;
+    }
+    .oficio-signature-role {
+      font-size: 10px !important;
+      color: #64748b !important;
+    }
+    .oficio-signature-timestamp {
+      font-size: 9px !important;
+      color: #047857 !important;
+      margin-top: 2px !important;
+      font-weight: 600 !important;
+    }
+  </style>
+</head>
+<body>
+  ${sheet.outerHTML}
+</body>
+</html>`);
+    doc.close();
+
+    const doPrint = () => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch (e) {
+        console.warn('Fallo impresión via iframe, ejecutando impresión estándar:', e);
+        window.print();
+      }
+    };
+
+    const imgs = Array.from(doc.images || []);
+    if (!imgs.length) {
+      setTimeout(doPrint, 150);
+    } else {
+      let left = imgs.length;
+      const check = () => {
+        left--;
+        if (left <= 0) setTimeout(doPrint, 150);
+      };
+      imgs.forEach(im => {
+        if (im.complete) check();
+        else {
+          im.onload = check;
+          im.onerror = check;
+        }
+      });
+      setTimeout(doPrint, 1200);
+    }
+  } catch (err) {
+    console.warn('Error al armar documento de impresión:', err);
+    window.print();
+  }
+}
+
+async function firmarOficioDirecto(dispatchId, roleType) {
+  const all = getAllDispatches();
+  const dispatch = all.find(d => d.id === dispatchId);
+  if (!dispatch) return notify('Despacho no encontrado.', 'err');
+
+  const currentUser = getCurrentUser();
+  const userRole = (currentUser.role || '').toLowerCase();
+  const isTechUser = userRole === 'tecnico';
+  const isSupportOrAdmin = ['admin', 'soporte'].includes(userRole);
+
+  const isGiver = roleType === 'giver';
+  const isReceiver = roleType === 'receiver';
+  const isReturnGiver = roleType === 'return_giver';
+  const isReturnReceiver = roleType === 'return_receiver';
+
+  // Validación estricta institucional: a quién le corresponde cada firma
+  if (isReceiver || isReturnGiver) {
+    // Le corresponde al técnico
+    if (!isTechUser && isSupportOrAdmin) {
+      return notify(`Esta firma le corresponde al técnico asignado (${dispatch.technicianName || 'Técnico'}). Debe colocarla desde su perfil al confirmar.`, 'warn');
+    }
+  }
+
+  if (isGiver || isReturnReceiver) {
+    // Le corresponde a soporte / almacén
+    if (isTechUser) {
+      return notify('Esta firma le corresponde al personal de Soporte al entregar o recibir el material.', 'warn');
+    }
+  }
+
+  let title = 'Firma de Conformidad';
+  let role = 'Responsable';
+  if (isGiver) {
+    title = 'Firma de quien entrega el material';
+    role = 'Entrega (Soporte)';
+  } else if (isReceiver) {
+    title = 'Firma de quien recibe el material';
+    role = 'Recibe (Técnico)';
+  } else if (isReturnGiver) {
+    title = 'Firma de quien entrega el material';
+    role = 'Entrega (Técnico)';
+  } else if (isReturnReceiver) {
+    title = 'Firma de quien recibe (Soporte)';
+    role = 'Recibe (Soporte)';
+  }
+
+  const sig = await promptDigitalSignature({
+    title,
+    subtitle: 'Dibuja tu firma en el recuadro para validar este documento de WiFi-Mex.',
+    signerName: currentUser.name || currentUser.username || (isGiver || isReturnReceiver ? 'Soporte' : (dispatch.technicianName || 'Técnico')),
+    role
+  });
+  if (!sig) return;
+
+  const now = new Date().toISOString();
+  if (isGiver) {
+    dispatch.giverSignature = sig.signature;
+    dispatch.giverSignatureName = sig.signerName;
+    dispatch.giverSignatureAt = now;
+  } else if (isReceiver) {
+    dispatch.receiverSignature = sig.signature;
+    dispatch.receiverSignatureName = sig.signerName;
+    dispatch.receiverSignatureAt = now;
+    if (dispatch.status === 'pending_receipt') {
+      dispatch.status = 'received';
+      dispatch.acceptedAt = now;
+      dispatch.acceptedByName = sig.signerName;
+    }
+  } else if (isReturnGiver) {
+    dispatch.returnGiverSignature = sig.signature;
+    dispatch.returnGiverSignatureName = sig.signerName;
+    dispatch.returnGiverSignatureAt = now;
+  } else if (isReturnReceiver) {
+    dispatch.returnReceiverSignature = sig.signature;
+    dispatch.returnReceiverSignatureName = sig.signerName;
+    dispatch.returnReceiverSignatureAt = now;
+    if (dispatch.status === 'pending_handover' && dispatch.returnGiverSignature) {
+      dispatch.status = 'completed';
+    }
+  }
+  dispatch.updatedAt = now;
+
+  if (Array.isArray(state.materialMovements)) {
+    const idx = state.materialMovements.findIndex(x => x.id === dispatchId);
+    if (idx >= 0) state.materialMovements[idx] = { ...dispatch };
+  }
+  for (const m of (state.materials || [])) {
+    const idx = (m.movements || []).findIndex(x => x.id === dispatchId);
+    if (idx >= 0) {
+      m.movements[idx] = { ...dispatch };
+      m.updatedAt = now;
+    }
+  }
+
+  await saveRecord('materialMovements', dispatch);
+  notify('✓ Firma registrada y guardada en el formato.');
+  abrirOficioMaterial(dispatchId, activeOficioType);
+  renderMaterialViews();
+}
+
 let activeDispatchFilterStatus = 'all'; // 'all' | 'pending_receipt' | 'received' | 'pending_handover' | 'completed'
 let activeTechTab = 'pending_receipt'; // 'pending_receipt' | 'received' | 'pending_handover' | 'completed'
 
@@ -466,6 +1290,9 @@ function renderTechnicianDispatchCard(d) {
         <button type="button" class="dispatch-btn dispatch-btn-outline" onclick="verDetalleEnvio('${d.id}')" title="Ver información completa de la orden">
           👁️ Ver detalle
         </button>
+        <button type="button" class="dispatch-btn dispatch-btn-oficio" onclick="abrirOficioMaterial('${d.id}')" title="Ver formato con firmas WiFi-Mex">
+          📄 Formato
+        </button>
         ${isPendingReceipt ? `
           <button class="dispatch-btn dispatch-btn-success" onclick="aceptarRecepcionTecnico('${d.id}')">
             ${isEdited ? '✓ Confirmar recepción' : '✓ Confirmar que recibí'}
@@ -770,6 +1597,9 @@ function renderAdminDispatchCard(d) {
         <button type="button" class="dispatch-btn dispatch-btn-outline" onclick="verDetalleEnvio('${d.id}')" title="Ver información completa de la orden">
           👁️ Ver detalle
         </button>
+        <button type="button" class="dispatch-btn dispatch-btn-oficio" onclick="abrirOficioMaterial('${d.id}')" title="Ver formato con firmas WiFi-Mex">
+          📄 Formato
+        </button>
         ${isRejectedDelivery ? `
           <button type="button" class="dispatch-btn dispatch-btn-secondary" onclick="editarEnvio('${d.id}')" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5;font-weight:700" title="Modificar materiales de la entrega devuelta">
             ✎ Corregir entrega devuelta
@@ -979,6 +1809,7 @@ function verDetalleEnvio(dispatchId) {
       }
     }
     actionsEl.innerHTML = `
+      <button class="btn bsm" style="background:#0284c7;color:#fff;font-weight:700;display:inline-flex;align-items:center;gap:6px" onclick="abrirOficioMaterial('${d.id}')">📄 Ver Formato</button>
       ${actionButtons}
       <button class="btn bsm bgh" onclick="CM('dispatch-detail-modal')">Cerrar</button>
     `;
@@ -1147,98 +1978,123 @@ async function abrirEntrega(materialId = '', technicianId = '') {
 }
 
 async function guardarEntrega() {
-  const technicianId = document.getElementById('deliver-tech')?.value;
-  const reference = document.getElementById('deliver-reference')?.value.trim();
-  const notes = document.getElementById('deliver-notes')?.value.trim();
+  try {
+    const selectTech = document.getElementById('deliver-tech');
+    const technicianId = selectTech?.value;
+    const reference = (document.getElementById('deliver-reference')?.value || '').trim();
+    const notes = (document.getElementById('deliver-notes')?.value || '').trim();
 
-  if (!technicianId) {
-    return notify('Selecciona el técnico receptor.', 'err');
-  }
-
-  const tech = (state.technicians || []).find(t => t.id === technicianId || t.userId === technicianId);
-  if (!tech) return notify('Técnico no encontrado.', 'err');
-
-  // Recolectar filas de materiales
-  const rows = Array.from(document.querySelectorAll('#deliver-items-list .deliver-item-row'));
-  const items = [];
-
-  for (const row of rows) {
-    const matName = row.querySelector('.deliver-row-material')?.value?.trim();
-    const qtyVal = Number(row.querySelector('.deliver-row-qty')?.value);
-    const unitVal = row.querySelector('.deliver-row-unit')?.value || 'pieza';
-    if (!matName || !(qtyVal > 0)) {
-      return notify('Verifica que todos los materiales tengan un nombre y cantidad mayor a cero.', 'err');
+    if (!technicianId) {
+      return notify('Selecciona el técnico receptor.', 'err');
     }
-    const mat = (state.materials || []).find(m => m.name.toLowerCase() === matName.toLowerCase() || m.id === matName);
-    items.push({
-      materialId: mat?.id || ('mat-' + Math.random().toString(36).slice(2, 10)),
-      materialName: mat?.name || matName,
-      quantity: qtyVal,
-      unit: unitVal
+
+    const selectedOptionText = selectTech?.selectedOptions?.[0]?.textContent?.trim() || '';
+    const tech = (state.technicians || []).find(t => t.id === technicianId || t.userId === technicianId || t.usuario === technicianId) || {
+      id: technicianId,
+      nombre: selectedOptionText || 'Técnico'
+    };
+    const techDisplayName = tech.nombre || tech.name || selectedOptionText || 'Técnico';
+
+    // Recolectar filas de materiales
+    const rows = Array.from(document.querySelectorAll('#deliver-items-list .deliver-item-row'));
+    const items = [];
+
+    for (const row of rows) {
+      const matInput = row.querySelector('.deliver-row-material');
+      const matName = (matInput?.value || '').trim();
+      const qtyVal = Number(row.querySelector('.deliver-row-qty')?.value);
+      const unitVal = row.querySelector('.deliver-row-unit')?.value || 'pieza';
+      if (!matName || !(qtyVal > 0)) {
+        return notify('Verifica que todos los materiales tengan un nombre y cantidad mayor a cero.', 'err');
+      }
+      const mat = (state.materials || []).find(m => (m?.name && m.name.toLowerCase() === matName.toLowerCase()) || m?.id === matName);
+      items.push({
+        materialId: mat?.id || ('mat-' + Math.random().toString(36).slice(2, 10)),
+        materialName: mat?.name || matName,
+        quantity: qtyVal,
+        unit: unitVal
+      });
+    }
+
+    if (!items.length) {
+      return notify('Agrega al menos un material a la entrega.', 'err');
+    }
+
+    const currentUser = (typeof getCurrentUser === 'function' ? getCurrentUser() : null) || {};
+    const supportName = currentUser.name || currentUser.username || 'Soporte';
+    const now = new Date().toISOString();
+
+    // Cerrar modal de entrega para dar paso limpio al lienzo de firma sin traslape
+    CM('deliver-material-mo');
+
+    // FIRMA OBLIGATORIA DE SOPORTE QUE ENTREGA
+    const sig = await promptDigitalSignature({
+      title: 'Firma de Entrega de Material',
+      subtitle: `Firma de quien entrega el material para el técnico ${techDisplayName}.`,
+      signerName: supportName,
+      role: 'Entrega (Soporte)'
     });
-  }
 
-  if (!items.length) {
-    return notify('Agrega al menos un material a la entrega.', 'err');
-  }
+    if (!sig || !sig.signature) {
+      OM('deliver-material-mo');
+      notify('Entrega cancelada: la firma de entrega es obligatoria.', 'warn');
+      return;
+    }
 
-  // BOTÓN EXTRA DE CONFIRMACIÓN OBLIGATORIO
-  const confirmMsg = items.length === 1 
-    ? `¿Estás seguro de registrar la entrega de ${items[0].quantity} ${items[0].unit}(s) de "${items[0].materialName}" al técnico ${tech.nombre}?`
-    : `¿Estás seguro de registrar la entrega de ${items.length} materiales al técnico ${tech.nombre}? (${items.map(i => `${i.quantity} ${i.unit} de ${i.materialName}`).join(', ')})`;
-  
-  const confirmed = await askConfirmation({
-    title: 'Confirmar entrega de material',
-    message: confirmMsg,
-    confirmText: 'Sí, registrar entrega',
-    cancelText: 'Cancelar',
-    tone: 'ok'
-  });
-  if (!confirmed) return;
+    const primaryMaterial = (state.materials || []).find(m => m.id === items[0].materialId);
 
-  const currentUser = getCurrentUser();
-  const now = new Date().toISOString();
-  const primaryMaterial = state.materials.find(m => m.id === items[0].materialId);
+    const dispatch = {
+      id: gid('mm'),
+      materialId: items[0].materialId,
+      materialName: items.length === 1 ? items[0].materialName : `${items[0].materialName} (+${items.length - 1} más)`,
+      unit: items[0].unit,
+      items: items,
+      quantity: items.reduce((sum, item) => sum + item.quantity, 0),
+      technicianId: tech.id || technicianId,
+      technicianUserId: tech.userId || tech.id || technicianId,
+      technicianName: techDisplayName,
+      type: 'give',
+      reference: reference,
+      reason: 'Entrega a técnico',
+      notes: notes,
+      status: 'pending_receipt',
+      isEdited: false,
+      giverSignature: sig.signature,
+      giverSignatureName: sig.signerName || supportName,
+      giverSignatureAt: sig.timestamp || now,
+      giverSignatureRole: sig.role || 'Entrega (Soporte)',
+      receiverSignature: null,
+      receiverSignatureName: null,
+      receiverSignatureAt: null,
+      createdBy: currentUser.id || '',
+      createdByName: supportName,
+      at: now,
+      createdAt: now,
+      updatedAt: now
+    };
 
-  const dispatch = {
-    id: gid('mm'),
-    materialId: items[0].materialId,
-    materialName: items.length === 1 ? items[0].materialName : `${items[0].materialName} (+${items.length - 1} más)`,
-    unit: items[0].unit,
-    items: items,
-    quantity: items.reduce((sum, item) => sum + item.quantity, 0),
-    technicianId: tech.id,
-    technicianName: tech.nombre || tech.name,
-    type: 'give',
-    reference: reference,
-    reason: 'Entrega a técnico',
-    notes: notes,
-    status: 'pending_receipt',
-    isEdited: false,
-    createdBy: currentUser.id || '',
-    createdByName: currentUser.name || currentUser.username || 'Soporte',
-    at: now,
-    createdAt: now,
-    updatedAt: now
-  };
+    // Mantener en estado de movimientos directos
+    state.materialMovements = state.materialMovements || [];
+    state.materialMovements.unshift(dispatch);
 
-  // Mantener en estado de movimientos directos
-  state.materialMovements = state.materialMovements || [];
-  state.materialMovements.unshift(dispatch);
+    if (primaryMaterial) {
+      primaryMaterial.movements = primaryMaterial.movements || [];
+      primaryMaterial.movements.unshift(dispatch);
+      primaryMaterial.updatedAt = now;
+    }
 
-  if (primaryMaterial) {
-    primaryMaterial.movements = primaryMaterial.movements || [];
-    primaryMaterial.movements.unshift(dispatch);
-    primaryMaterial.updatedAt = now;
-  }
+    renderMaterialViews();
 
-  CM('deliver-material-mo');
-  renderMaterialViews();
-
-  const saved = await saveRecord('materialMovements', dispatch);
-  if (saved) {
-    notify(`✓ Entrega de ${items.length} material(es) registrada para ${tech.nombre}.`);
-    void loadMaterialPage();
+    const saved = await saveRecord('materialMovements', dispatch);
+    if (saved) {
+      notify(`✓ Entrega registrada y firmada para ${techDisplayName}.`);
+      void loadMaterialPage();
+      abrirOficioMaterial(dispatch.id);
+    }
+  } catch (err) {
+    console.error('Error en guardarEntrega:', err);
+    notify('Error al procesar la entrega: ' + (err?.message || err), 'err');
+    OM('deliver-material-mo');
   }
 }
 
@@ -1607,104 +2463,121 @@ function onReceiveDispatchSelected() {
 }
 
 async function guardarRecepcion() {
-  const dispatchId = document.getElementById('receive-dispatch-select')?.value;
-  const all = getAllDispatches();
-  const dispatch = all.find(d => d.id === dispatchId);
-  if (!dispatch) return notify('Envío original no encontrado.', 'err');
+  try {
+    const dispatchId = document.getElementById('receive-dispatch-select')?.value;
+    const all = getAllDispatches();
+    const dispatch = all.find(d => d.id === dispatchId);
+    if (!dispatch) return notify('Envío original no encontrado.', 'err');
 
-  const goodInputs = Array.from(document.querySelectorAll('.receive-item-good'));
-  const damagedInputs = Array.from(document.querySelectorAll('.receive-item-damaged'));
-  const usedInputs = Array.from(document.querySelectorAll('.receive-item-used'));
+    const goodInputs = Array.from(document.querySelectorAll('.receive-item-good'));
+    const damagedInputs = Array.from(document.querySelectorAll('.receive-item-damaged'));
+    const usedInputs = Array.from(document.querySelectorAll('.receive-item-used'));
 
-  let totalGood = 0;
-  let totalDamaged = 0;
-  let totalUsed = 0;
+    let totalGood = 0;
+    let totalDamaged = 0;
+    let totalUsed = 0;
 
-  goodInputs.forEach(inp => totalGood += Number(inp.value) || 0);
-  damagedInputs.forEach(inp => totalDamaged += Number(inp.value) || 0);
-  usedInputs.forEach(inp => totalUsed += Number(inp.value) || 0);
+    goodInputs.forEach(inp => totalGood += Number(inp.value) || 0);
+    damagedInputs.forEach(inp => totalDamaged += Number(inp.value) || 0);
+    usedInputs.forEach(inp => totalUsed += Number(inp.value) || 0);
 
-  if (totalGood + totalDamaged + totalUsed <= 0) {
-    return notify('Indica al menos una cantidad a recibir.', 'err');
-  }
-
-  // BOTÓN EXTRA DE CONFIRMACIÓN OBLIGATORIO
-  const confirmed = await askConfirmation({
-    title: 'Confirmar recepción de material',
-    message: `¿Estás seguro de registrar la recepción del material devuelto / utilizado para este envío? (Buen estado: ${totalGood}, Dañado: ${totalDamaged}, Utilizado: ${totalUsed}). El técnico deberá confirmar la entrega desde su perfil.`,
-    confirmText: 'Sí, registrar recepción',
-    cancelText: 'Cancelar',
-    tone: 'ok'
-  });
-  if (!confirmed) return;
-
-  const currentUser = getCurrentUser();
-  const now = new Date().toISOString();
-  const reference = document.getElementById('receive-reference')?.value.trim();
-  const notes = document.getElementById('receive-notes')?.value.trim();
-
-  const items = Array.isArray(dispatch.items) && dispatch.items.length 
-    ? dispatch.items 
-    : [{ materialId: dispatch.materialId, materialName: dispatch.materialName, quantity: dispatch.quantity, unit: dispatch.unit || 'pieza' }];
-
-  const returnItems = items.map((it, idx) => ({
-    materialId: it.materialId || dispatch.materialId,
-    materialName: it.materialName,
-    deliveredQuantity: Number(it.quantity) || 0,
-    returnedGood: Number(goodInputs[idx]?.value) || 0,
-    returnedDamaged: Number(damagedInputs[idx]?.value) || 0,
-    usedQuantity: Number(usedInputs[idx]?.value) || 0,
-    unit: it.unit || 'pieza'
-  }));
-
-  // "y de manera inversa, el tecnico debe de aceptar haber entregado cierto material"
-  dispatch.status = 'pending_handover';
-  dispatch.returnedChange = totalGood;
-  dispatch.returnedDamaged = totalDamaged;
-  dispatch.usedQuantity = totalUsed;
-  dispatch.receivedByAdminId = currentUser.id || '';
-  dispatch.receivedByAdminName = currentUser.name || currentUser.username || 'Soporte';
-  dispatch.receivedAt = now;
-  dispatch.receiveNotes = notes;
-  if (reference) dispatch.reference = reference;
-  dispatch.returnDetails = {
-    adminReceivedBy: currentUser.id || '',
-    adminReceivedByName: currentUser.name || currentUser.username || 'Soporte',
-    adminReceivedAt: now,
-    adminNotes: notes,
-    reference: reference,
-    items: returnItems,
-    techConfirmedBy: null,
-    techConfirmedByName: null,
-    techConfirmedAt: null
-  };
-  dispatch.receiptRejectionReason = null;
-  dispatch.receiptRejectedAt = null;
-  dispatch.receiptRejectedBy = null;
-  dispatch.receiptRejectedByName = null;
-  dispatch.updatedAt = now;
-
-  // Actualizar en state.materialMovements
-  if (Array.isArray(state.materialMovements)) {
-    const idx = state.materialMovements.findIndex(x => x.id === dispatchId);
-    if (idx >= 0) state.materialMovements[idx] = { ...dispatch };
-  }
-
-  for (const m of (state.materials || [])) {
-    const idx = (m.movements || []).findIndex(x => x.id === dispatchId);
-    if (idx >= 0) {
-      m.movements[idx] = { ...dispatch };
-      m.updatedAt = now;
+    if (totalGood + totalDamaged + totalUsed <= 0) {
+      return notify('Indica al menos una cantidad a recibir.', 'err');
     }
-  }
 
-  CM('receive-material-mo');
-  renderMaterialViews();
+    // Cerrar modal de recepción para dar paso limpio al lienzo de firma sin traslape
+    CM('receive-material-mo');
 
-  const saved = await saveRecord('materialMovements', dispatch);
-  if (saved) {
-    notify('✓ Recepción registrada. El técnico debe confirmar haber entregado el material en su perfil.');
-    void loadMaterialPage();
+    const currentUser = (typeof getCurrentUser === 'function' ? getCurrentUser() : null) || {};
+    const supportSignerName = currentUser.name || currentUser.username || 'Soporte';
+
+    const sig = await promptDigitalSignature({
+      title: 'Firma de Recepción de Material',
+      subtitle: 'Certificas la recepción del material devuelto.',
+      signerName: supportSignerName,
+      role: 'Recibe (Soporte)'
+    });
+    if (!sig || !sig.signature) {
+      OM('receive-material-mo');
+      notify('Recepción cancelada: la firma de recepción es obligatoria.', 'warn');
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const reference = (document.getElementById('receive-reference')?.value || '').trim();
+    const notes = (document.getElementById('receive-notes')?.value || '').trim();
+
+    const items = Array.isArray(dispatch.items) && dispatch.items.length 
+      ? dispatch.items 
+      : [{ materialId: dispatch.materialId, materialName: dispatch.materialName, quantity: dispatch.quantity, unit: dispatch.unit || 'pieza' }];
+
+    const returnItems = items.map((it, idx) => ({
+      materialId: it.materialId || dispatch.materialId,
+      materialName: it.materialName,
+      deliveredQuantity: Number(it.quantity) || 0,
+      returnedGood: Number(goodInputs[idx]?.value) || 0,
+      returnedDamaged: Number(damagedInputs[idx]?.value) || 0,
+      usedQuantity: Number(usedInputs[idx]?.value) || 0,
+      unit: it.unit || 'pieza'
+    }));
+
+    // Soporte registra la recepción en almacén con su firma
+    dispatch.returnReceiverSignature = sig.signature;
+    dispatch.returnReceiverSignatureName = sig.signerName || supportSignerName;
+    dispatch.returnReceiverSignatureAt = sig.timestamp || now;
+    dispatch.returnReceiverSignatureRole = sig.role || 'Recibe (Soporte)';
+    dispatch.status = dispatch.returnGiverSignature ? 'completed' : 'pending_handover';
+    dispatch.returnedChange = totalGood;
+    dispatch.returnedDamaged = totalDamaged;
+    dispatch.usedQuantity = totalUsed;
+    dispatch.receivedByAdminId = currentUser.id || '';
+    dispatch.receivedByAdminName = currentUser.name || currentUser.username || 'Soporte';
+    dispatch.receivedAt = now;
+    dispatch.receiveNotes = notes;
+    if (reference) dispatch.reference = reference;
+    dispatch.returnDetails = {
+      adminReceivedBy: currentUser.id || '',
+      adminReceivedByName: currentUser.name || currentUser.username || 'Soporte',
+      adminReceivedAt: now,
+      adminNotes: notes,
+      reference: reference,
+      items: returnItems,
+      techConfirmedBy: null,
+      techConfirmedByName: null,
+      techConfirmedAt: null
+    };
+    dispatch.receiptRejectionReason = null;
+    dispatch.receiptRejectedAt = null;
+    dispatch.receiptRejectedBy = null;
+    dispatch.receiptRejectedByName = null;
+    dispatch.updatedAt = now;
+
+    // Actualizar en state.materialMovements
+    if (Array.isArray(state.materialMovements)) {
+      const idx = state.materialMovements.findIndex(x => x.id === dispatchId);
+      if (idx >= 0) state.materialMovements[idx] = { ...dispatch };
+    }
+
+    for (const m of (state.materials || [])) {
+      const idx = (m.movements || []).findIndex(x => x.id === dispatchId);
+      if (idx >= 0) {
+        m.movements[idx] = { ...dispatch };
+        m.updatedAt = now;
+      }
+    }
+
+    CM('receive-material-mo');
+    renderMaterialViews();
+
+    const saved = await saveRecord('materialMovements', dispatch);
+    if (saved) {
+      notify('✓ Recepción registrada. El técnico debe confirmar haber entregado el material en su perfil.');
+      void loadMaterialPage();
+    }
+  } catch (err) {
+    console.error('Error en guardarRecepcion:', err);
+    notify('Error al procesar la recepción: ' + (err?.message || err), 'err');
+    OM('receive-material-mo');
   }
 }
 
@@ -1792,17 +2665,34 @@ async function guardarEntregaTecnicoASoporte() {
   if (!confirmed) return;
 
   const currentUser = getCurrentUser();
+  const techSignerName = currentUser.name || currentUser.username || dispatch.technicianName || 'Técnico';
+
+  const sig = await promptDigitalSignature({
+    title: 'Firma de Entrega de Material (Devolución)',
+    subtitle: 'Certificas la entrega física de los sobrantes a soporte.',
+    signerName: techSignerName,
+    role: 'Entrega (Técnico)'
+  });
+  if (!sig || !sig.signature) {
+    notify('Devolución cancelada: la firma es obligatoria.', 'warn');
+    return;
+  }
+
   const now = new Date().toISOString();
   const ref = document.getElementById('tech-return-reference')?.value.trim();
   const notes = document.getElementById('tech-return-notes')?.value.trim();
 
-  dispatch.status = 'pending_handover';
+  dispatch.status = dispatch.returnReceiverSignature ? 'completed' : 'pending_handover';
+  dispatch.returnGiverSignature = sig.signature;
+  dispatch.returnGiverSignatureName = sig.signerName || techSignerName;
+  dispatch.returnGiverSignatureAt = sig.timestamp || now;
+  dispatch.returnGiverSignatureRole = sig.role || 'Entrega (Técnico)';
   dispatch.returnedChange = totalReturned;
   dispatch.usedQuantity = totalUsed;
   dispatch.handoverInitiatedByTech = true;
   dispatch.handoverAcceptedAt = now;
   dispatch.handoverAcceptedBy = currentUser.id || '';
-  dispatch.handoverAcceptedByName = currentUser.name || currentUser.username || 'Técnico';
+  dispatch.handoverAcceptedByName = techSignerName;
   if (ref) dispatch.reference = ref;
   if (notes) dispatch.notes = notes;
   dispatch.receiptRejectionReason = null;
@@ -1829,7 +2719,8 @@ async function guardarEntregaTecnicoASoporte() {
 
   const saved = await saveRecord('materialMovements', dispatch);
   if (saved) {
-    notify('✓ Entrega de material registrada hacia soporte.');
+    notify('✓ Entrega de material registrada y firmada hacia soporte.');
+    abrirOficioMaterial(dispatch.id);
     void loadMaterialPage();
   }
 }
@@ -1843,6 +2734,9 @@ async function aceptarRecepcionTecnico(dispatchId) {
   const all = getAllDispatches();
   const dispatch = all.find(d => d.id === dispatchId);
   if (!dispatch) return notify('Envío no encontrado.', 'err');
+
+  const currentUser = getCurrentUser();
+  const techSignerName = currentUser.name || currentUser.username || dispatch.technicianName || 'Técnico';
 
   // BOTÓN EXTRA DE CONFIRMACIÓN OBLIGATORIO
   const itemsText = Array.isArray(dispatch.items) && dispatch.items.length
@@ -1858,13 +2752,23 @@ async function aceptarRecepcionTecnico(dispatchId) {
   });
   if (!confirmed) return;
 
-  const currentUser = getCurrentUser();
+  const sig = await promptDigitalSignature({
+    title: 'Firma de Recepción de Material',
+    subtitle: `Dibuja tu firma para certificar que recibiste el material (${itemsText}).`,
+    signerName: techSignerName,
+    role: 'Recibe (Técnico)'
+  });
+  if (!sig) return;
+
   const now = new Date().toISOString();
 
   dispatch.status = 'received';
   dispatch.acceptedAt = now;
+  dispatch.receiverSignature = sig.signature;
+  dispatch.receiverSignatureName = sig.signerName || techSignerName;
+  dispatch.receiverSignatureAt = sig.timestamp || now;
   dispatch.acceptedBy = currentUser.id || '';
-  dispatch.acceptedByName = currentUser.name || currentUser.username || 'Técnico';
+  dispatch.acceptedByName = techSignerName;
   dispatch.receiptRejectionReason = null;
   dispatch.receiptRejectedAt = null;
   dispatch.receiptRejectedBy = null;
@@ -1887,7 +2791,8 @@ async function aceptarRecepcionTecnico(dispatchId) {
   renderMaterialViews();
   const saved = await saveRecord('materialMovements', dispatch);
   if (saved) {
-    notify('✓ Has confirmado haber recibido el material.');
+    notify('✓ Has confirmado y firmado haber recibido el material.');
+    abrirOficioMaterial(dispatch.id);
     void loadMaterialPage();
   }
 }
@@ -1897,6 +2802,9 @@ async function aceptarEntregaTecnico(dispatchId) {
   const all = getAllDispatches();
   const dispatch = all.find(d => d.id === dispatchId);
   if (!dispatch) return notify('Envío no encontrado.', 'err');
+
+  const currentUser = getCurrentUser();
+  const techSignerName = currentUser.name || currentUser.username || dispatch.technicianName || 'Técnico';
 
   // BOTÓN EXTRA DE CONFIRMACIÓN OBLIGATORIO
   const confirmed = await askConfirmation({
@@ -1908,13 +2816,23 @@ async function aceptarEntregaTecnico(dispatchId) {
   });
   if (!confirmed) return;
 
-  const currentUser = getCurrentUser();
+  const sig = await promptDigitalSignature({
+    title: 'Firma de Entrega de Material (Devolución)',
+    subtitle: 'Certificas la entrega física de los sobrantes a soporte.',
+    signerName: techSignerName,
+    role: 'Entrega (Técnico)'
+  });
+  if (!sig) return;
+
   const now = new Date().toISOString();
 
-  dispatch.status = 'completed';
+  dispatch.status = dispatch.returnReceiverSignature ? 'completed' : 'pending_handover';
+  dispatch.returnGiverSignature = sig.signature;
+  dispatch.returnGiverSignatureName = sig.signerName || techSignerName;
+  dispatch.returnGiverSignatureAt = sig.timestamp || now;
   dispatch.handoverAcceptedAt = now;
   dispatch.handoverAcceptedBy = currentUser.id || '';
-  dispatch.handoverAcceptedByName = currentUser.name || currentUser.username || 'Técnico';
+  dispatch.handoverAcceptedByName = techSignerName;
   if (dispatch.returnDetails) {
     dispatch.returnDetails.techConfirmedAt = now;
     dispatch.returnDetails.techConfirmedBy = currentUser.id || '';
@@ -1942,7 +2860,8 @@ async function aceptarEntregaTecnico(dispatchId) {
   renderMaterialViews();
   const saved = await saveRecord('materialMovements', dispatch);
   if (saved) {
-    notify('✓ Has confirmado la entrega del material a soporte.');
+    notify('✓ Has confirmado y firmado la entrega del material a soporte.');
+    abrirOficioMaterial(dispatch.id);
     void loadMaterialPage();
   }
 }

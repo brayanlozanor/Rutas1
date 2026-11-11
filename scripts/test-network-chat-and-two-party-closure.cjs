@@ -12,19 +12,13 @@ const ordersDesignCss = fs.readFileSync('public/assets/css/orders-design-v2.css'
 new vm.Script(commonJs, { filename: 'common.js' });
 new vm.Script(ordenesJs, { filename: 'ordenes.js' });
 
-// 1. Equal Button Length in Main Table (Abrir chat === Retomar)
-console.log('1. Checking equal width on Abrir detalle y conversación & Retomar buttons...');
+// 1. Button Layout in Main Table (Logo only for chat button)
+console.log('1. Checking logo-only button & accessible title in Main Table...');
 assert(ordenesJs.includes('net-btn-open'), 'ordenes.js must render net-btn-open for network details');
 assert(ordenesJs.includes('Abrir detalle y conversación'), 'ordenes.js must preserve accessible "Abrir detalle y conversación" title');
-assert(ordenesJs.includes('Abrir chat'), 'ordenes.js must render compact "Abrir chat" label matching Retomar width');
+assert(!ordenesJs.includes('<span>Abrir chat</span>'), 'ordenes.js must keep only the logo icon without "Abrir chat" text');
 assert(ordenesJs.includes('net-btn-retake'), 'ordenes.js must render net-btn-retake (Retomar)');
-assert(
-  ordersDesignCss.includes('.orders-page .order-actions .net-btn-open,\r\n.orders-page .order-actions .net-btn-retake') ||
-  ordersDesignCss.includes('.orders-page .order-actions .net-btn-open,\n.orders-page .order-actions .net-btn-retake'),
-  'orders-design-v2.css must share identical width rule between .net-btn-open and .net-btn-retake in .order-actions'
-);
-assert(ordersDesignCss.includes('width: 88px !important;'), 'Both action buttons must share exact 88px width');
-assert(ordersDesignCss.includes(':not(.net-btn-open)'), 'orders-design-v2.css must exclude net-btn-open from 28px icon-only buttons');
+assert(ordersDesignCss.includes('.net-btn-open'), 'orders-design-v2.css must style .net-btn-open');
 assert(ordenesJs.includes('net-btn-retake-disabled'), 'ordenes.js must render disabled Retomar slot so all rows align vertically');
 assert(ordenesJs.includes('order-reopen-disabled'), 'ordenes.js must render disabled Reabrir slot so all rows align vertically');
 

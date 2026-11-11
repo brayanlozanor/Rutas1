@@ -13,7 +13,7 @@ const requirements = [
   [orders.includes("order.detailKind !== 'network'"), 'Abrir un detalle físico todavía registra una vista'],
   [orders.includes("order.detailKind === 'network' ? orderViewedSummary(order) : ''"), 'Los detalles físicos todavía muestran el seguimiento Visto'],
   [orders.includes("appendOrderFollowUp(order,'review_opened','En revisión')"), 'No se registra el seguimiento de apertura'],
-  [orders.includes("'Abierta para revisión', orderReviewOpenedSummary(order)"), 'El detalle no muestra la hora de apertura'],
+  [orders.includes("orderReviewOpenedSummary(order)"), 'El detalle no muestra la función de resumen de apertura'],
   [orders.includes("order.reviewOpenedAt = ''") && orders.includes("order.reviewOpenedById = ''"), 'Volver a enviar no reinicia la revisión'],
   [common.includes('async function markSharedDetailInReviewOnOpen'), 'Pueblos y antenas no comparten la apertura automática'],
   [nodes.includes("markSharedDetailInReviewOnOpen(d,'refreshNodeNetworkDetailViews')"), 'Abrir desde Pueblos no inicia la revisión'],

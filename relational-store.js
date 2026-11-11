@@ -364,6 +364,42 @@ let schemaEnsuredPromise = null;
 let schemaEnsuredAt = 0;
 const SCHEMA_CHECK_INTERVAL_MS = 60 * 1000;
 
+let equipmentColumnsEnsured = false;
+async function ensureEquipmentColumns(env) {
+  if (equipmentColumnsEnsured) return;
+  let colInfo;
+  try {
+    colInfo = await all(env, 'PRAGMA table_info(equipment)');
+  } catch (e) {
+    return;
+  }
+  if (!colInfo || colInfo.length === 0) return;
+  const columns = new Set(colInfo.map(column => column.name));
+  const requiredColumns = [
+    ['tower_material_notes', 'TEXT'],
+    ['tower_sections', 'TEXT'],
+    ['tower_radios', 'TEXT'],
+    ['tower_batteries', 'TEXT'],
+    ['tower_panels', 'TEXT'],
+    ['tower_extra_notes', 'TEXT'],
+    ['tower_material_photos_json', 'TEXT'],
+    ['tower_material_updated_at', 'TEXT'],
+    ['tower_material_updated_by_name', 'TEXT'],
+    ['tower_material_updated_by', 'TEXT'],
+    ['balancer_port_count', 'INTEGER DEFAULT 9'],
+    ['balancer_ports_json', 'TEXT']
+  ];
+  for (const [name, definition] of requiredColumns) {
+    if (columns.has(name)) continue;
+    try {
+      await run(env, `ALTER TABLE equipment ADD COLUMN ${name} ${definition}`);
+    } catch (error) {
+      if (!/duplicate column name/i.test(String(error?.message || error))) throw error;
+    }
+  }
+  equipmentColumnsEnsured = true;
+}
+
 export async function ensureRelationalSchema(env) {
   const now = Date.now();
   if (schemaEnsuredPromise && (now - schemaEnsuredAt) < SCHEMA_CHECK_INTERVAL_MS) {
@@ -378,6 +414,7 @@ export async function ensureRelationalSchema(env) {
     await syncWorkOrderColumns(env).catch(e => console.warn('[ensureRelationalSchema] work_orders:', e));
     await syncUserColumns(env).catch(e => console.warn('[ensureRelationalSchema] users:', e));
     await syncMaterialInventorySchema(env).catch(e => console.warn('[ensureRelationalSchema] materials:', e));
+    await ensureEquipmentColumns(env).catch(e => console.warn('[ensureRelationalSchema] equipment:', e));
     await ensurePlansColumns(env).catch(e => console.warn('[ensureRelationalSchema] plans:', e));
     await ensurePerformanceIndices(env).catch(e => console.warn('[ensureRelationalSchema] indices:', e));
     await ensureWorkOrderRelationRecovery(env).catch(e => console.warn('[ensureRelationalSchema] recovery:', e));
@@ -533,6 +570,7 @@ function addLastAction(out, audit) {
 }
 
 async function loadEquipment(env, ctx, page = null) {
+  await ensureEquipmentColumns(env);
   const limit = page?.paged === '1' ? Math.max(1, Math.min(100, Number(page.limit) || 50)) : null;
   const offset = page ? Math.max(0, Number(page.offset) || 0) : 0;
   const requestedId = nullableText(page?.id);
@@ -602,7 +640,19 @@ async function loadEquipment(env, ctx, page = null) {
     if (row.station_names_legacy) out.stationNames = row.station_names_legacy;
     if (row.radio_free_text_legacy) out.radioFreeText = row.radio_free_text_legacy;
     if (radiosBy.has(row.id)) out.radioLinks = radiosBy.get(row.id);
-    if (linksBy.has(row.id)) out.linkedNodeIds = linksBy.get(row.id);
+    out.linkedNodeIds = linksBy.get(row.id) || [];
+    if (row.tower_material_notes !== null && row.tower_material_notes !== undefined) out.towerMaterialNotes = row.tower_material_notes || '';
+    if (row.tower_sections !== null && row.tower_sections !== undefined) out.towerSections = row.tower_sections || '';
+    if (row.tower_radios !== null && row.tower_radios !== undefined) out.towerRadios = row.tower_radios || '';
+    if (row.tower_batteries !== null && row.tower_batteries !== undefined) out.towerBatteries = row.tower_batteries || '';
+    if (row.tower_panels !== null && row.tower_panels !== undefined) out.towerPanels = row.tower_panels || '';
+    if (row.tower_extra_notes !== null && row.tower_extra_notes !== undefined) out.towerExtraNotes = row.tower_extra_notes || '';
+    if (row.tower_material_photos_json) out.towerMaterialPhotos = parseJson(row.tower_material_photos_json, []) || [];
+    if (row.tower_material_updated_at) out.towerMaterialUpdatedAt = row.tower_material_updated_at;
+    if (row.tower_material_updated_by_name) out.towerMaterialUpdatedByName = row.tower_material_updated_by_name;
+    if (row.tower_material_updated_by) out.towerMaterialUpdatedById = row.tower_material_updated_by;
+    if (row.balancer_port_count !== null && row.balancer_port_count !== undefined) out.balancerPortCount = Number(row.balancer_port_count) || 9;
+    if (row.balancer_ports_json) out.balancerPorts = parseJson(row.balancer_ports_json, []) || [];
     if (row.created_at) out.createdAt = row.created_at;
     if (row.updated_at) out.updatedAt = row.updated_at;
     if (row.deleted_at) out.deletedAt = row.deleted_at;
@@ -658,8 +708,12 @@ async function loadNodes(env, ctx, page = null) {
 }
 
 async function loadPlanningMapCatalog(env) {
+  await ensureEquipmentColumns(env);
   const [equipmentRows,nodeRows,linkRows]=await Promise.all([
-    all(env,`SELECT e.id,e.name,e.ip,e.type,e.lat,e.lng,e.status,e.provider,e.notes,e.ssid,z.code AS region,
+    all(env,`SELECT e.id,e.name,e.ip,e.type,e.lat,e.lng,e.status,e.provider,e.notes,e.ssid,
+      e.tower_material_notes,e.tower_sections,e.tower_radios,e.tower_batteries,e.tower_panels,e.tower_extra_notes,
+      e.tower_material_photos_json,e.tower_material_updated_at,e.tower_material_updated_by_name,e.tower_material_updated_by,
+      e.balancer_port_count,e.balancer_ports_json,z.code AS region,
       COALESCE(p.very_high,0) AS map_very_high,COALESCE(p.high_count,0) AS map_high,
       COALESCE(p.medium_count,0) AS map_medium,COALESCE(p.low_count,0) AS map_low,
       COALESCE(p.planned_open,0) AS map_planned_open,COALESCE(p.detail_total,0) AS map_detail_total,
@@ -702,7 +756,16 @@ async function loadPlanningMapCatalog(env) {
   const linksByEquipment=new Map();
   for(const row of linkRows){const list=linksByEquipment.get(row.equipment_id)||[];list.push(row.node_id);linksByEquipment.set(row.equipment_id,list);}
   return {
-    equipment:equipmentRows.map(row=>({id:row.id,name:row.name||'',ip:row.ip||'',type:row.type||'',lat:row.lat,lng:row.lng,status:row.status||'',provider:row.provider||'',notes:row.notes||'',region:row.region||'',ssid:row.ssid||'',linkedNodeIds:linksByEquipment.get(row.id)||[],mapVeryHigh:Number(row.map_very_high)||0,mapHigh:Number(row.map_high)||0,mapMedium:Number(row.map_medium)||0,mapLow:Number(row.map_low)||0,mapPlannedOpen:Number(row.map_planned_open)||0,mapDetailTotal:Number(row.map_detail_total)||0,mapDetailResolved:Number(row.map_detail_resolved)||0})),
+    equipment:equipmentRows.map(row=>({
+      id:row.id,name:row.name||'',ip:row.ip||'',type:row.type||'',lat:row.lat,lng:row.lng,status:row.status||'',provider:row.provider||'',notes:row.notes||'',region:row.region||'',ssid:row.ssid||'',
+      linkedNodeIds:linksByEquipment.get(row.id)||[],
+      towerMaterialNotes:row.tower_material_notes||'',towerSections:row.tower_sections||'',towerRadios:row.tower_radios||'',towerBatteries:row.tower_batteries||'',towerPanels:row.tower_panels||'',towerExtraNotes:row.tower_extra_notes||'',
+      towerMaterialPhotos:row.tower_material_photos_json?(parseJson(row.tower_material_photos_json,[])||[]):[],
+      towerMaterialUpdatedAt:row.tower_material_updated_at||'',towerMaterialUpdatedByName:row.tower_material_updated_by_name||'',towerMaterialUpdatedById:row.tower_material_updated_by||'',
+      balancerPortCount:row.balancer_port_count!==null&&row.balancer_port_count!==undefined?(Number(row.balancer_port_count)||9):9,
+      balancerPorts:row.balancer_ports_json?(parseJson(row.balancer_ports_json,[])||[]):[],
+      mapVeryHigh:Number(row.map_very_high)||0,mapHigh:Number(row.map_high)||0,mapMedium:Number(row.map_medium)||0,mapLow:Number(row.map_low)||0,mapPlannedOpen:Number(row.map_planned_open)||0,mapDetailTotal:Number(row.map_detail_total)||0,mapDetailResolved:Number(row.map_detail_resolved)||0
+    })),
     nodes:nodeRows.map(row=>({id:row.id,nodeCode:row.node_code||'',town:row.town||'',lat:row.lat,lng:row.lng,status:row.status||'',notes:row.notes||'',zone:row.zone||'',mapVeryHigh:Number(row.map_very_high)||0,mapHigh:Number(row.map_high)||0,mapMedium:Number(row.map_medium)||0,mapLow:Number(row.map_low)||0,mapPlannedOpen:Number(row.map_planned_open)||0,mapDetailTotal:Number(row.map_detail_total)||0,mapDetailResolved:Number(row.map_detail_resolved)||0}))
   };
 }
@@ -772,12 +835,19 @@ function entitySummaryQuery(part,page={}) {
 
 function workOrderQuery(page = {}) {
   const requestedId = nullableText(page?.id);
+  if (requestedId) {
+    const cleanId = requestedId.trim();
+    const folioIds = Array.isArray(page?._workOrderFolioIds) ? page._workOrderFolioIds.filter(Boolean) : [];
+    const folioClause = folioIds.length ? ` OR w.id IN (${folioIds.map(() => '?').join(',')})` : '';
+    return {
+      where: ` WHERE (w.id = ? OR w.id LIKE ?${folioClause}) AND w.deleted_at IS NULL`,
+      binds: [cleanId, `%${cleanId}%`, ...folioIds],
+      orderBy: 'w.rowid DESC'
+    };
+  }
   const clauses = [];
   const binds = [];
-  if (requestedId) {
-    clauses.push('w.id=?');
-    binds.push(requestedId);
-  } else if (page?.openOnly === '1') {
+  if (page?.openOnly === '1') {
     clauses.push('w.deleted_at IS NULL');
     clauses.push("COALESCE(w.status,'pendiente') NOT IN ('completada','no_realizado','eliminada')");
   } else if (page?.windowed === '1'||page?.scoped==='1') {
@@ -794,10 +864,81 @@ function workOrderQuery(page = {}) {
   }
   const filterColumns = {status:'w.status',type:'w.visit_type',zone:'z.code',priority:'w.priority',category:'w.category',creator:'w.created_by'};
   for (const [key,column] of Object.entries(filterColumns)) {
-    const values = csvValues(page?.[key]);
+    let values = csvValues(page?.[key]);
     if (!values.length) continue;
+    if (key === 'status') {
+      const expanded = new Set(values);
+      if (expanded.has('resuelto_soporte')) {
+        expanded.add('por_confirmar');
+        expanded.add('resuelto');
+      }
+      if (expanded.has('completada')) {
+        expanded.add('concluido');
+        expanded.add('done');
+      }
+      values = [...expanded];
+    }
     clauses.push(`${column} IN (${values.map(() => '?').join(',')})`);
     binds.push(...values);
+  }
+  const assigneeValues = csvValues(page?.assignee || page?.assigned);
+  if (assigneeValues.length) {
+    const assigneeClauses = [];
+    assigneeValues.forEach(val => {
+      if (val === 'unassigned') {
+        assigneeClauses.push("(w.assigned_user_id IS NULL OR w.assigned_user_id = '')");
+      } else {
+        assigneeClauses.push("(w.assigned_user_id LIKE ? OR lower(COALESCE(w.assigned_user_name,'')) LIKE ?)");
+        binds.push(`%${val}%`, `%${val.toLowerCase()}%`);
+      }
+    });
+    clauses.push(`(${assigneeClauses.join(' OR ')})`);
+  }
+  const myAssignments = nullableText(page?.onlyMyAssignments);
+  if (myAssignments) {
+    clauses.push("COALESCE(w.status,'pendiente') NOT IN ('completada','concluido','done')");
+    if (nullableText(page?.detailKind) === 'network') {
+      // Para detalles de red se conservan todos los activos (tanto pendientes de atender como por confirmar/devolver)
+    } else {
+      clauses.push("(w.assigned_user_id LIKE ? OR lower(COALESCE(w.assigned_user_name,'')) LIKE ? OR w.review_opened_by LIKE ? OR w.created_by LIKE ?)");
+      binds.push(`%${myAssignments}%`, `%${myAssignments.toLowerCase()}%`, `%${myAssignments}%`, `%${myAssignments}%`);
+    }
+  }
+  const dateFilter = nullableText(page?.date);
+  if (dateFilter) {
+    const dateVals = csvValues(dateFilter);
+    const dateClauses = [];
+    dateVals.forEach(df => {
+      if (df === 'today') {
+        dateClauses.push("date(COALESCE(w.created_at, w.updated_at)) = date('now', 'localtime')");
+      } else if (df === 'yesterday') {
+        dateClauses.push("date(COALESCE(w.created_at, w.updated_at)) = date('now', '-1 day', 'localtime')");
+      } else if (df === 'last7') {
+        dateClauses.push("date(COALESCE(w.created_at, w.updated_at)) >= date('now', '-7 days', 'localtime')");
+      } else if (df === 'last30') {
+        dateClauses.push("date(COALESCE(w.created_at, w.updated_at)) >= date('now', '-30 days', 'localtime')");
+      } else if (df === 'this_month') {
+        dateClauses.push("strftime('%Y-%m', COALESCE(w.created_at, w.updated_at)) = strftime('%Y-%m', 'now', 'localtime')");
+      } else if (df.startsWith('range:') || df.includes('_')) {
+        const parts = df.replace('range:', '').split('_');
+        const dFrom = parts[0];
+        const dTo = parts[1];
+        if (dFrom && dTo) {
+          dateClauses.push("date(COALESCE(w.created_at, w.updated_at)) >= date(?) AND date(COALESCE(w.created_at, w.updated_at)) <= date(?)");
+          binds.push(dFrom, dTo);
+        } else if (dFrom) {
+          dateClauses.push("date(COALESCE(w.created_at, w.updated_at)) >= date(?)");
+          binds.push(dFrom);
+        } else if (dTo) {
+          dateClauses.push("date(COALESCE(w.created_at, w.updated_at)) <= date(?)");
+          binds.push(dTo);
+        }
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(df)) {
+        dateClauses.push("date(COALESCE(w.created_at, w.updated_at)) = ?");
+        binds.push(df);
+      }
+    });
+    if (dateClauses.length) clauses.push(`(${dateClauses.join(' OR ')})`);
   }
   const detailKind=nullableText(page?.detailKind);
   if(detailKind){clauses.push("COALESCE(w.detail_kind,'physical')=?");binds.push(detailKind);}
@@ -844,7 +985,7 @@ function workOrderQuery(page = {}) {
 async function resolveExactWorkOrderFolioSearch(env,page) {
   if(!page||page._workOrderFolioResolved)return;
   page._workOrderFolioResolved=true;
-  const requested=text(page.q).trim().toUpperCase();
+  const requested=text(page.q || page.id).trim().toUpperCase();
   const prefixed=/^(DET|NEW|RED)-\d{6}$/.test(requested);
   const numberOnly=/^\d{6}$/.test(requested);
   if(!prefixed&&!numberOnly)return;
@@ -861,13 +1002,15 @@ async function resolveExactWorkOrderFolioSearch(env,page) {
 async function loadWorkOrders(env, ctx, page = null) {
   await resolveExactWorkOrderFolioSearch(env,page);
   const requestedId = nullableText(page?.id);
-  const limit = page ? Math.max(1, Math.min(100, Number(page.limit) || 75)) : null;
+  const maxLimit = page?.adminStats === '1' ? 2000 : 100;
+  const limit = page ? Math.max(1, Math.min(maxLimit, Number(page.limit) || 75)) : null;
   const offset = page ? Math.max(0, Number(page.offset) || 0) : 0;
   const query = workOrderQuery(page);
   const pagination = !requestedId && limit ? ' LIMIT ? OFFSET ?' : '';
   const binds = [...query.binds];
   if (pagination) binds.push(limit,offset);
-  const rows = await all(env, `SELECT w.*,z.code AS zone_code,e.name AS linked_equipment_name FROM work_orders w LEFT JOIN zones z ON z.id=w.zone_id LEFT JOIN equipment e ON e.id=w.equipment_id${query.where} ORDER BY ${query.orderBy}${pagination}`, binds);
+  const orderClause = query.orderBy ? ` ORDER BY ${query.orderBy}` : ' ORDER BY w.rowid DESC';
+  const rows = await all(env, `SELECT w.*,z.code AS zone_code,e.name AS linked_equipment_name FROM work_orders w LEFT JOIN zones z ON z.id=w.zone_id LEFT JOIN equipment e ON e.id=w.equipment_id${query.where}${orderClause}${pagination}`, binds);
   const ids = rows.map(row => row.id);
   if (!ids.length) return [];
   if (!ctx.audit) ctx.audit = await getLatestAuditMap(env,ids);
@@ -911,12 +1054,24 @@ async function loadWorkOrders(env, ctx, page = null) {
     addActorFields(out,'reviewOpenedBy',ctx.users.get(row.review_opened_by));
     out.assignedUserId = row.assigned_user_id || '';
     const firstAssignedId = String(row.assigned_user_id || '').split(',')[0].trim();
+    const normAccents = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
     let assignedUserObj = firstAssignedId ? ctx.users?.get(firstAssignedId) : null;
+    if (!assignedUserObj && firstAssignedId && ctx.users) {
+      const targetId = normAccents(firstAssignedId);
+      for (const u of ctx.users.values()) {
+        if (normAccents(u.id) === targetId || normAccents(u.username) === targetId || normAccents(u.name) === targetId) {
+          assignedUserObj = u;
+          break;
+        }
+      }
+    }
     if (!assignedUserObj && row.assigned_user_name && ctx.users) {
-      const targetName = String(row.assigned_user_name).split(',')[0].trim().toLowerCase();
+      const targetName = normAccents(String(row.assigned_user_name).split(',')[0]);
       if (targetName) {
         for (const u of ctx.users.values()) {
-          if (String(u.name || '').trim().toLowerCase() === targetName || String(u.username || '').trim().toLowerCase() === targetName) {
+          const uName = normAccents(u.name);
+          const uUser = normAccents(u.username);
+          if (uName === targetName || uUser === targetName || (uName && (uName.includes(targetName) || targetName.includes(uName)))) {
             assignedUserObj = u;
             break;
           }
@@ -925,7 +1080,7 @@ async function loadWorkOrders(env, ctx, page = null) {
     }
     out.assignedUserName = assignedUserObj?.name || row.assigned_user_name || '';
     if (assignedUserObj?.role) out.assignedUserRole = normalizeRole(assignedUserObj.role);
-    out.targetRole = row.target_role || '';
+    out.targetRole = row.target_role || (out.assignedUserRole === 'atencion_clientes' || out.assignedUserRole === 'soporte' ? out.assignedUserRole : '');
     out.originRole = row.origin_role || '';
     if (row.reviewed_at) out.reviewedAt = row.reviewed_at;
     if (row.last_resent_at) out.lastResentAt = row.last_resent_at;
@@ -1296,7 +1451,9 @@ async function loadWeekPlan(env,page={}) {
   for(const idsChunk of chunkValues(stopIds))links.push(...await all(env,`SELECT * FROM plan_stop_orders WHERE plan_stop_id IN (${idsChunk.map(()=>'?').join(',')}) ORDER BY plan_stop_id,position,work_order_id`,idsChunk));
   const assignmentByPlan = new Map();
   for (const assignment of assignments) {
-    if (!assignmentByPlan.has(assignment.plan_id)) assignmentByPlan.set(assignment.plan_id, assignment);
+    const list = assignmentByPlan.get(assignment.plan_id) || [];
+    list.push(assignment);
+    assignmentByPlan.set(assignment.plan_id, list);
   }
   const detailsByStop = new Map();
   for (const link of links) { const list=detailsByStop.get(link.plan_stop_id)||[]; list.push(link.work_order_id); detailsByStop.set(link.plan_stop_id,list); }
@@ -1324,12 +1481,14 @@ async function loadWeekPlan(env,page={}) {
     const planStops = stopsByPlan.get(plan.id)||[];
     if (plan.legacy_source === 'weekPlan _generalPlans') {
       if (!Array.isArray(scope._generalPlans)) scope._generalPlans=[];
-      const assignment = assignmentByPlan.get(plan.id);
+      const planAssignments = assignmentByPlan.get(plan.id) || [];
+      const assignment = planAssignments[0];
       scope._generalPlans.push({
         id:plan.id,
         name:plan.name,
         stops:planStops,
         assignedTechId:assignment?.technician_id || '',
+        assignedTechIds:planAssignments.map(item=>item.technician_id),
         assignedAt:assignment?.assigned_at || '',
         scheduledDate:plan.scheduled_date || '',
         ...(plan.created_at?{createdAt:plan.created_at}:{})
@@ -1381,6 +1540,24 @@ export async function loadState(env) {
 }
 
 export async function loadStatePart(env, part, page = {}) {
+  if (part === 'map') {
+    // El mapa necesita ubicaciones, relaciones y estados, no los reportes completos.
+    // Cargarlos una sola vez evita repetir las mismas ordenes por cada pagina de sitios.
+    const users = await getUserMap(env);
+    const ctx = { users, audit: new Map() };
+    const [equipment,nodes,orders] = await Promise.all([
+      loadEquipment(env,ctx,{scoped:'1'}),
+      loadNodes(env,ctx,{scoped:'1'}),
+      all(env,`SELECT w.id,w.equipment_id,w.node_id,w.node_code_legacy,w.status,w.priority,w.category,
+        EXISTS(SELECT 1 FROM plan_stop_orders pso WHERE pso.work_order_id=w.id) AS is_planned
+        FROM work_orders w WHERE w.deleted_at IS NULL AND (w.equipment_id IS NOT NULL OR w.node_id IS NOT NULL)`)
+    ]);
+    const workOrders = orders.map(row=>({
+      id:row.id,equipmentId:row.equipment_id||'',nodeId:row.node_id||'',nodeCode:row.node_code_legacy||'',
+      status:isInstallationCategory(row.category)?'completada':row.status||'',priority:row.priority||'',isPlanned:!!row.is_planned
+    }));
+    return {equipment,nodes,workOrders};
+  }
   if (part === 'equipment' || part === 'nodes') {
     const usersMap = await getUserMap(env);
     const ctx={users:usersMap,audit:null};
@@ -1477,7 +1654,7 @@ export async function loadStatePart(env, part, page = {}) {
     const [totalRow,statsRow,creatorRows]=await Promise.all([
       first(env,`SELECT COUNT(*) AS total FROM work_orders w LEFT JOIN zones z ON z.id=w.zone_id${query.where}`,query.binds),
       first(env,`SELECT COUNT(*) AS total, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND priority IN ('muy_alta','alta') THEN 1 ELSE 0 END) AS critical, SUM(CASE WHEN status='completada' THEN 1 ELSE 0 END) AS done FROM work_orders WHERE deleted_at IS NULL AND COALESCE(detail_kind,'physical')=?${statsCategoryClause}`,[statsDetailKind,...excludedStatsCategories]),
-      all(env,`SELECT DISTINCT u.id,u.name,u.username,u.color FROM work_orders w JOIN users u ON u.id=w.created_by WHERE w.deleted_at IS NULL ORDER BY lower(u.name),lower(u.username)`)
+      all(env,`SELECT DISTINCT u.id,u.name,u.username,u.color FROM work_orders w JOIN users u ON u.id=w.created_by JOIN roles r ON r.id=u.role_id WHERE w.deleted_at IS NULL AND r.code IN ('administrador','admin','soporte','atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`)
     ]);
     return {
       workOrders,
@@ -1576,11 +1753,16 @@ async function replaceZones(env, ownerTable, ownerColumn, ownerId, zones) {
 }
 
 async function upsertEquipment(env, rec) {
+  await ensureEquipmentColumns(env);
   const zoneId=await ensureZone(env,rec.region);
-  await run(env, `INSERT INTO equipment(id,name,ip,type,lat,lng,status,provider,notes,zone_id,ssid,radio_summary_legacy,radio_models_legacy,radio_names_legacy,station_names_legacy,radio_free_text_legacy,created_at,updated_at,deleted_at,purged_at,created_by,updated_by)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET name=excluded.name,ip=excluded.ip,type=excluded.type,lat=excluded.lat,lng=excluded.lng,status=excluded.status,provider=excluded.provider,notes=excluded.notes,zone_id=excluded.zone_id,ssid=excluded.ssid,radio_summary_legacy=excluded.radio_summary_legacy,radio_models_legacy=excluded.radio_models_legacy,radio_names_legacy=excluded.radio_names_legacy,station_names_legacy=excluded.station_names_legacy,radio_free_text_legacy=excluded.radio_free_text_legacy,created_at=COALESCE(equipment.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,purged_at=excluded.purged_at,created_by=COALESCE(equipment.created_by,excluded.created_by),updated_by=excluded.updated_by`,
-    [rec.id,text(rec.name),text(rec.ip),text(rec.type),nullableNumber(rec.lat),nullableNumber(rec.lng),text(rec.status),text(rec.provider),text(rec.notes),zoneId,rec.ssid??null,rec.radioSummary??null,rec.radioModels??null,rec.radioNames??null,rec.stationNames??null,rec.radioFreeText??null,rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,rec.purgedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById)]);
+  const balancerPortCount = Number.isInteger(Number(rec.balancerPortCount)) && Number(rec.balancerPortCount) >= 1 && Number(rec.balancerPortCount) <= 48
+    ? Number(rec.balancerPortCount)
+    : 9;
+  const balancerPortsJson = JSON.stringify(Array.isArray(rec.balancerPorts) ? rec.balancerPorts : []);
+  await run(env, `INSERT INTO equipment(id,name,ip,type,lat,lng,status,provider,notes,zone_id,ssid,radio_summary_legacy,radio_models_legacy,radio_names_legacy,station_names_legacy,radio_free_text_legacy,created_at,updated_at,deleted_at,purged_at,created_by,updated_by,tower_material_notes,tower_sections,tower_radios,tower_batteries,tower_panels,tower_extra_notes,tower_material_photos_json,tower_material_updated_at,tower_material_updated_by_name,tower_material_updated_by,balancer_port_count,balancer_ports_json)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET name=excluded.name,ip=excluded.ip,type=excluded.type,lat=excluded.lat,lng=excluded.lng,status=excluded.status,provider=excluded.provider,notes=excluded.notes,zone_id=excluded.zone_id,ssid=excluded.ssid,radio_summary_legacy=excluded.radio_summary_legacy,radio_models_legacy=excluded.radio_models_legacy,radio_names_legacy=excluded.radio_names_legacy,station_names_legacy=excluded.station_names_legacy,radio_free_text_legacy=excluded.radio_free_text_legacy,created_at=COALESCE(equipment.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,purged_at=excluded.purged_at,created_by=COALESCE(equipment.created_by,excluded.created_by),updated_by=excluded.updated_by,tower_material_notes=excluded.tower_material_notes,tower_sections=excluded.tower_sections,tower_radios=excluded.tower_radios,tower_batteries=excluded.tower_batteries,tower_panels=excluded.tower_panels,tower_extra_notes=excluded.tower_extra_notes,tower_material_photos_json=excluded.tower_material_photos_json,tower_material_updated_at=excluded.tower_material_updated_at,tower_material_updated_by_name=excluded.tower_material_updated_by_name,tower_material_updated_by=excluded.tower_material_updated_by,balancer_port_count=excluded.balancer_port_count,balancer_ports_json=excluded.balancer_ports_json`,
+    [rec.id,text(rec.name),text(rec.ip),text(rec.type),nullableNumber(rec.lat),nullableNumber(rec.lng),text(rec.status),text(rec.provider),text(rec.notes),zoneId,rec.ssid??null,rec.radioSummary??null,rec.radioModels??null,rec.radioNames??null,rec.stationNames??null,rec.radioFreeText??null,rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,rec.purgedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById),rec.towerMaterialNotes??null,rec.towerSections??null,rec.towerRadios??null,rec.towerBatteries??null,rec.towerPanels??null,rec.towerExtraNotes??null,JSON.stringify(Array.isArray(rec.towerMaterialPhotos)?rec.towerMaterialPhotos:[]),rec.towerMaterialUpdatedAt??null,rec.towerMaterialUpdatedByName??null,nullableText(rec.towerMaterialUpdatedById),balancerPortCount,balancerPortsJson]);
   if (Array.isArray(rec.radioLinks)) {
     await run(env,'DELETE FROM equipment_radios WHERE equipment_id=?',[rec.id]);
     const stmts=rec.radioLinks.map((r,i)=>env.DB.prepare(`INSERT INTO equipment_radios(id,equipment_id,position,name,model,antenna_type,sector,port,ip,ssid,gateway,location_raw,lat,lng) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(generatedId('er'),rec.id,i,text(r.name),text(r.model),text(r.antennaType),text(r.sector),text(r.port),text(r.ip),text(r.ssid),text(r.gateway),text(r.location),nullableNumber(r.lat),nullableNumber(r.lng)));
@@ -1879,8 +2061,9 @@ async function replaceWeekPlanUnsafe(env,weekPlan) {
       seenPlanIds.add(planId);
       const techExists=scopeKey && scopeKey!=='__shared__' ? await first(env,'SELECT id FROM technicians WHERE id=?',[scopeKey]) : null;
       planStatements.push(env.DB.prepare('INSERT INTO plans(id,name,scope_type,scope_key,day_key,technician_id,status,scheduled_date,created_at,legacy_source) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(planId,text(plan.name,'Plan general'),scopeKey==='__shared__'?'shared':'technician',scopeKey,'general',techExists?.id||null,'activo',plan.scheduledDate??null,plan.createdAt??null,'weekPlan _generalPlans'));
-      if (plan.assignedTechId) {
-        const assignedTech = await first(env,'SELECT id FROM technicians WHERE id=?',[plan.assignedTechId]);
+      const assignedTechIds = [...new Set([plan.assignedTechId, ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])].filter(Boolean))];
+      for (const techId of assignedTechIds) {
+        const assignedTech = await first(env,'SELECT id FROM technicians WHERE id=?',[techId]);
         if (assignedTech?.id) {
           assignmentStatements.push(env.DB.prepare('INSERT INTO plan_assignments(id,plan_id,technician_id,assigned_at) VALUES(?,?,?,?)').bind(`pa-${planId}-${assignedTech.id}`,planId,assignedTech.id,plan.assignedAt??new Date().toISOString()));
         }

@@ -9,11 +9,42 @@ let dashboardMonthlyGoal=350;
 let dashboardSelectedPeriod='week';
 let dashboardGlobalStats={};
 const DASHBOARD_PHYSICAL_EXCLUDED_CATEGORIES=new Set(['instalacion','nueva_instalacion','instalacion_nueva','reubicacion_antena','reubicacion','resurtir_antena','surtir_antena','solicitud_respaldo','solicitud_de_respaldo']);
-function dashboardOperationsParams(){const selected=document.getElementById('dashboard-from')?.value||dashboardDateKey();const selectedDate=new Date(`${selected}T00:00:00`);const now=new Date();const previousMonth=new Date(now.getFullYear(),now.getMonth()-1,1);const from=new Date(Math.min(selectedDate.getTime(),previousMonth.getTime()));const toKey=document.getElementById('dashboard-to')?.value||dashboardDateKey();const toDate=new Date(`${toKey}T00:00:00`);toDate.setDate(toDate.getDate()+1);const tomorrow=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);return {scoped:'1',windowed:'1',detailKind:'physical',from:from.toISOString(),to:new Date(Math.max(toDate.getTime(),tomorrow.getTime())).toISOString()};}
+function dashboardOperationsParams(){const selected=document.getElementById('dashboard-from')?.value||dashboardDateKey();const selectedDate=new Date(`${selected}T00:00:00`);const now=new Date();const previousMonth=new Date(now.getFullYear(),now.getMonth()-1,1);const from=new Date(Math.min(selectedDate.getTime(),previousMonth.getTime()));const toKey=document.getElementById('dashboard-to')?.value||dashboardDateKey();const toDate=new Date(`${toKey}T00:00:00`);toDate.setDate(toDate.getDate()+1);const tomorrow=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);return {scoped:'1',windowed:'1',limit:100,detailKind:'physical',from:from.toISOString(),to:new Date(Math.max(toDate.getTime(),tomorrow.getTime())).toISOString()};}
 const dashboardGlobal=typeof window!=='undefined'?window:globalThis;
 const previousDashboardDataPartParams=dashboardGlobal.netopsGetDataPartParams;
 dashboardGlobal.netopsGetDataPartParams=part=>part==='operations'?dashboardOperationsParams():part==='people'?{scoped:'1',role:'tecnico'}:previousDashboardDataPartParams?.(part);
-async function loadDashboardData(shouldRender=true){if(typeof fetchDataPage!=='function'){if(shouldRender)renderAdminDashboard();return;}const sequence=++dashboardLoadSequence;try{const params=dashboardOperationsParams();let data=await fetchDataPage('operations',{...params,offset:0,limit:100});let rows=Array.isArray(data.workOrders)?data.workOrders:[];dashboardGlobalStats={...(data.stats||{})};const total=Number(data.total)||rows.length;for(let offset=100;offset<total;offset+=100){const page=await fetchDataPage('operations',{...params,offset,limit:100});rows.push(...(page.workOrders||[]));}if(sequence!==dashboardLoadSequence)return;state.workOrders=[...new Map(rows.map(row=>[row.id,row])).values()];if(shouldRender)renderAdminDashboard();}catch(error){if(typeof notify==='function')notify(typeof describeSyncError==='function'?describeSyncError(error):String(error),'err');}}
+async function loadDashboardData(shouldRender = true, initialPage = null) {
+  if (typeof fetchDataPage !== 'function') {
+    if (shouldRender) renderAdminDashboard();
+    return;
+  }
+  const sequence = ++dashboardLoadSequence;
+  try {
+    const params = dashboardOperationsParams();
+    const data = initialPage || await fetchDataPage('operations', {...params,offset:0,limit:100});
+    const rows = Array.isArray(data.workOrders) ? [...data.workOrders] : [];
+    const total = Number(data.total) || rows.length;
+    const offsets = [];
+    for (let offset = 100; offset < total; offset += 100) offsets.push(offset);
+    let next = 0;
+    const pages = new Array(offsets.length);
+    await Promise.all(Array.from({length:Math.min(3,offsets.length)}, async () => {
+      while (next < offsets.length && sequence === dashboardLoadSequence) {
+        const index = next++;
+        pages[index] = await fetchDataPage('operations', {...params,offset:offsets[index],limit:100});
+      }
+    }));
+    if (sequence !== dashboardLoadSequence) return;
+    for (const page of pages) rows.push(...(page?.workOrders || []));
+    dashboardGlobalStats = {...(data.stats || {})};
+    state.workOrders = [...new Map(rows.map(row => [row.id,row])).values()];
+    if (shouldRender) renderAdminDashboard();
+  } catch (error) {
+    if (sequence === dashboardLoadSequence && typeof notify === 'function') {
+      notify(typeof describeSyncError === 'function' ? describeSyncError(error) : String(error), 'err');
+    }
+  }
+}
 
 function dashboardEscape(value) {
   return typeof escapeHtml === 'function' ? escapeHtml(String(value ?? '')) : String(value ?? '').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -316,12 +347,13 @@ function resetDashboardFilters() {
 
 async function initAdminDashboard() {
   initCommon();
-  if(!userHasRole('administrador','admin','atencion_clientes')){location.href='mapa.html';return;}
+  if(!userHasRole('administrador','admin','soporte','atencion_clientes')){location.href='mapa.html';return;}
   const today=new Date(); const weekStart=dashboardWeekStart(today);
   document.getElementById('dashboard-from').value=dashboardDateKey(weekStart); document.getElementById('dashboard-to').value=dashboardDateKey(today);
   await Promise.all([loadDB({loadingTitle:'Cargando dashboard',loadingSubtitle:'Calculando indicadores y rendimiento.'}),loadDashboardGoal()]);
   dashboardGlobalStats={...(window.netopsPageMeta?.operations?.stats||dashboardGlobalStats)};
-  await loadDashboardData(false);
+  const initialOperations = window.netopsCloudLoadOk !== false ? window.netopsPageMeta?.operations : null;
+  await loadDashboardData(false, initialOperations ? {...initialOperations,workOrders:state.workOrders} : null);
   const canEditGoal=typeof isPrincipalAdministratorClient==='function'&&isPrincipalAdministratorClient();
   const goalInput=document.getElementById('dashboard-monthly-goal'); const goalButton=document.getElementById('dashboard-save-goal');
   const goalEditor=goalInput?.closest?.('.dashboard-goal-editor'); if(goalEditor) goalEditor.hidden=!canEditGoal;

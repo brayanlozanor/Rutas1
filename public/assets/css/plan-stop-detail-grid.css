@@ -247,32 +247,38 @@
   .planificar-page .plan-stop-details-panel .plan-detail-group{grid-template-columns:minmax(0,1fr)!important}
   .planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary{
     height:auto!important;
-    min-height:116px!important;
+    min-height:110px!important;
     max-height:none!important;
-    padding:9px 9px 48px 40px!important;
+    padding:10px 76px 10px 40px!important;
   }
   .planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-actions{
-    top:auto!important;
+    top:50%!important;
     right:8px!important;
-    bottom:8px!important;
-    transform:none!important;
-    flex-wrap:wrap!important;
+    bottom:auto!important;
+    transform:translateY(-50%)!important;
+    flex-wrap:nowrap!important;
   }
 }
 
 /* Cliente y detalle siempre visibles en pendientes y resueltos. */
+.planificar-page .stop-resolved-panel{
+  container-type:inline-size!important;
+}
+@container (max-width:620px){
+  .planificar-page .stop-resolved-panel{grid-template-columns:minmax(0,1fr)!important}
+}
 .planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary,
 .planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary{
   height:auto!important;
-  min-height:126px!important;
+  min-height:110px!important;
   max-height:none!important;
   overflow:visible!important;
 }
 .planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary{
-  padding:9px 98px 9px 40px!important;
+  padding:10px 76px 10px 40px!important;
 }
 .planificar-page .stop-resolved-panel>.plan-detail-row.completed-summary{
-  padding:9px 42px 9px 40px!important;
+  padding:10px 44px 10px 40px!important;
   justify-content:center!important;
 }
 .planificar-page .plan-stop-details-panel .plan-detail-row.pending-summary .plan-detail-main,

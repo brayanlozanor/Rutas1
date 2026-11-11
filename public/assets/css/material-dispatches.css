@@ -1913,5 +1913,516 @@ html[data-role="tecnico"] .role-admin-only { display: none !important; }
   border-color: #cbd5e1;
 }
 
+/* ==========================================================================
+   OFICIO FORMAL DE ENTREGA Y RECEPCIÓN & FIRMAS DIGITALES
+   ========================================================================== */
+
+.dispatch-btn-oficio {
+  background: #f8fafc !important;
+  color: #0369a1 !important;
+  border: 1px solid #bae6fd !important;
+  font-weight: 700 !important;
+}
+
+.dispatch-btn-oficio:hover {
+  background: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  color: #0284c7 !important;
+}
+
+/* Lienzo de Firma Digital */
+.signature-canvas-container {
+  touch-action: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  background: #ffffff !important;
+}
+
+#material-signature-canvas {
+  touch-action: none !important;
+}
+
+/* Formato de Entrega y Recepción de Material */
+.oficio-sheet {
+  background: #ffffff;
+  color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Helvetica, Arial, sans-serif;
+  line-height: 1.45;
+  padding: 8px 4px;
+}
+
+.oficio-tabs-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.oficio-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.oficio-tab-btn:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.oficio-tab-btn.active {
+  background: #ffffff;
+  color: #0284c7;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.oficio-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+}
+
+.oficio-brand-col {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.oficio-logo {
+  height: 52px;
+  max-width: 180px;
+  width: auto;
+  object-fit: contain;
+}
+
+.oficio-company-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.oficio-company-sub {
+  font-size: 11px;
+  color: #475569;
+  margin-top: 2px;
+  font-weight: 500;
+}
+
+.oficio-doc-col {
+  text-align: right;
+  min-width: 200px;
+}
+
+.oficio-type-title {
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #0284c7;
+  margin-bottom: 3px;
+}
+
+.oficio-folio-badge {
+  display: inline-block;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: "Space Mono", monospace, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.oficio-date-text {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+/* Grilla de metadatos */
+.oficio-meta-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 18px;
+  font-size: 12px;
+}
+
+.oficio-meta-item small {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.oficio-meta-item strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+/* Tabla Formal de Insumos */
+.oficio-table-wrap {
+  margin-bottom: 18px;
+  overflow-x: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.oficio-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: left;
+}
+
+.oficio-table th {
+  background: #0f172a;
+  color: #ffffff;
+  padding: 9px 12px;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-right: 1px solid #334155;
+}
+
+.oficio-table th:last-child {
+  border-right: none;
+}
+
+.oficio-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  border-right: 1px solid #f1f5f9;
+  color: #1e293b;
+}
+
+.oficio-table td:last-child {
+  border-right: none;
+}
+
+.oficio-table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.oficio-table tfoot td {
+  background: #f1f5f9;
+  font-weight: 800;
+  color: #0f172a;
+  border-top: 2px solid #cbd5e1;
+}
+
+/* Observaciones y Notas */
+.oficio-notes-box {
+  background: #fdfefe;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 12px;
+}
+
+.oficio-notes-title {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #475569;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+/* Declaratoria legal de conformidad */
+.oficio-legal-clause {
+  font-size: 11px;
+  color: #475569;
+  font-style: italic;
+  line-height: 1.4;
+  margin-bottom: 22px;
+  padding: 8px 12px;
+  border-left: 3px solid #0284c7;
+  background: #f0f9ff;
+  border-radius: 4px;
+}
+
+/* Cuadro de firmas */
+.oficio-signatures-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+  margin-top: 10px;
+  page-break-inside: avoid;
+}
+
+.oficio-signature-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  text-align: center;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.oficio-signature-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.oficio-signature-box {
+  min-height: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6px 0;
+  border-bottom: 1.5px solid #0f172a;
+}
+
+.oficio-signature-img {
+  max-height: 72px;
+  max-width: 90%;
+  object-fit: contain;
+}
+
+.oficio-signature-pending {
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.oficio-signature-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: 6px;
+}
+
+.oficio-signature-role {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.oficio-signature-timestamp {
+  font-size: 10px;
+  color: #047857;
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   ESTILOS DE IMPRESIÓN OFICIAL (WINDOW.PRINT)
+   ========================================================================== */
+@media print {
+  @page {
+    size: letter portrait;
+    margin: 0;
+  }
+
+  /* Ocultar toda la interfaz externa y elementos laterales con máxima especificidad */
+  body:not(.sidebar-collapsed) .topbar.app-sidebar,
+  body.sidebar-collapsed .topbar.app-sidebar,
+  .topbar,
+  .topbar.app-sidebar,
+  .topbar.app-sidebar *,
+  .sidebar,
+  .nav,
+  .material-dashboard,
+  .material-dashboard *,
+  .page-shell,
+  .nt,
+  .loading-overlay,
+  .oficio-modal-toolbar,
+  #deliver-material-mo,
+  #edit-dispatch-mo,
+  #receive-material-mo,
+  #tech-return-material-mo,
+  #material-mo,
+  #entry-mo,
+  #dispatch-detail-modal,
+  #material-signature-mo,
+  body > *:not(#material-oficio-mo) {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    max-height: 0 !important;
+    max-width: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+
+  /* Neutralizar completamente pseudo-elementos del sidebar que se desborden al imprimir */
+  body:not(.sidebar-collapsed) .topbar.app-sidebar .nav:before,
+  body:not(.sidebar-collapsed) .topbar.app-sidebar:before,
+  body .topbar:before, body .topbar:after,
+  .nav:before, .nav:after,
+  .nav-emoji:before, .nav-emoji:after {
+    display: none !important;
+    content: none !important;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    height: auto !important;
+    min-height: auto !important;
+    width: 100% !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 12mm 14mm !important;
+    box-sizing: border-box !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  #material-oficio-mo {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    display: block !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    z-index: 1 !important;
+    backdrop-filter: none !important;
+    overflow: visible !important;
+  }
+
+  #material-oficio-mo .md.oficio-modal-dialog {
+    max-width: 100% !important;
+    width: 100% !important;
+    max-height: none !important;
+    height: auto !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  #material-oficio-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    background: transparent !important;
+  }
+
+  .oficio-sheet {
+    padding: 0 !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .oficio-header {
+    border-bottom: 2px solid #0f172a !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .oficio-folio-badge {
+    background: #0f172a !important;
+    color: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .oficio-meta-box {
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .oficio-table-wrap {
+    overflow: visible !important;
+    border: 1px solid #94a3b8 !important;
+  }
+
+  .oficio-table th {
+    background: #0f172a !important;
+    color: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .oficio-table tfoot td {
+    background: #f1f5f9 !important;
+    border-top: 2px solid #94a3b8 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .oficio-notes-box {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .oficio-legal-clause {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .oficio-signatures-section {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 16px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .oficio-signature-card {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+
+
 
 
