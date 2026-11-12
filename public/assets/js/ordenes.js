@@ -124,6 +124,18 @@ function isCreatedByAttention(order) {
   return false;
 }
 
+function isOrderCreator(order, user) {
+  if (!order || !user) return false;
+  const uid = user.id ? String(user.id).trim() : '';
+  const uname = user.username ? String(user.username).trim().toLowerCase() : '';
+  const name = user.name ? String(user.name).trim().toLowerCase() : '';
+
+  if (uid && order.createdById && String(order.createdById).trim() === uid) return true;
+  if (uname && order.createdByUsername && String(order.createdByUsername).trim().toLowerCase() === uname) return true;
+  if (name && order.createdByName && String(order.createdByName).trim().toLowerCase() === name) return true;
+  return false;
+}
+
 let editingWOId = '';
 let copyingWOFromId = '';
 let activeOrderDetailKind = new URLSearchParams(window.location.search).get('detailKind') === 'network' ? 'network' : 'physical';
@@ -187,7 +199,7 @@ let _currentlyLoadedNotificationOrder = null;
 
 function orderRemoteParams(page = orderCurrentPage) {
   const filters = orderFilters();
-  const useWideRoleWindow = Boolean(filterOnlyMyAssignments);
+  const useWideRoleWindow = Boolean(filterOnlyMyAssignments && activeOrderDetailKind === 'network');
   const params = {
     windowed: '1',
     offset: useWideRoleWindow ? 0 : Math.max(0, (page - 1) * orderRowsPerPage),
@@ -201,7 +213,7 @@ function orderRemoteParams(page = orderCurrentPage) {
   ['status', 'type', 'zone', 'priority', 'category', 'creator', 'date', 'assignee'].forEach(key => {
     if (filters[key]?.size) params[key] = [...filters[key]].join(',');
   });
-  if (filterOnlyMyAssignments) {
+  if (filterOnlyMyAssignments && activeOrderDetailKind === 'network') {
     const actor = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
     params.onlyMyAssignments = actor.id || actor.username || '1';
   }
@@ -551,14 +563,21 @@ function initOrdenesPage() {
         showOrderReviewDecision(pendingOrderReviewDecisionId);
         return;
       }
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
-      const reportModal = document.getElementById('order-tech-report-mo');
-      if (!reportModal?.classList.contains('open')) return;
-      const hasOtherOpenModal = Array.from(document.querySelectorAll('.mo.open')).some(el => el !== reportModal);
-      if (hasOtherOpenModal) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      requestCloseOrderReport();
+      if (event.key === 'Escape' && !event.defaultPrevented) {
+        const decisionModal = document.getElementById('order-chat-close-decision-mo');
+        const reportModal = document.getElementById('order-tech-report-mo');
+        const isDecisionOpen = decisionModal?.classList.contains('open');
+        const isReportOpen = reportModal?.classList.contains('open');
+
+        if (isDecisionOpen || isReportOpen) {
+          const hasHigherModal = Array.from(document.querySelectorAll('.mo.open')).some(el => el !== reportModal && el !== decisionModal);
+          if (hasHigherModal) return; // Permitir que ventanas modales superiores (galería de evidencias, etc.) cierren primero
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          closeOrderReportModalDirectly();
+          return;
+        }
+      }
     });
     document.addEventListener('click', interceptOrderReviewNavigation, true);
   }
@@ -763,6 +782,9 @@ function selectOrderDetailKind(kind, force = false) {
   const hasOrders = Array.isArray(state.workOrders) && state.workOrders.length > 0;
   if (!force && hasOrders && next === activeOrderDetailKind) return;
   activeOrderDetailKind = next;
+  if (next !== 'network') {
+    filterOnlyMyAssignments = false;
+  }
   orderCurrentPage = 1;
   activeOrderFilters.category.clear();
   updateOrderDetailTabs();
@@ -792,6 +814,10 @@ function clearOrderFilters() {
 }
 
 function toggleOnlyMyAssignments(forceVal) {
+  if (activeOrderDetailKind !== 'network') {
+    filterOnlyMyAssignments = false;
+    return;
+  }
   filterOnlyMyAssignments = typeof forceVal === 'boolean' ? forceVal : !filterOnlyMyAssignments;
   const btn = document.getElementById('wo-filter-my-assignments');
   if (btn) btn.classList.toggle('is-active', filterOnlyMyAssignments);
@@ -806,6 +832,9 @@ function toggleOnlyPendingCounterparty(forceVal) {
 
 function updateOrderFiltersForDetailKind() {
   const isNetwork = activeOrderDetailKind === 'network';
+  if (!isNetwork) {
+    filterOnlyMyAssignments = false;
+  }
   const wrapStatus = document.getElementById('order-filter-wrap-status');
   const wrapType = document.getElementById('order-filter-wrap-type');
   const wrapDate = document.getElementById('order-filter-wrap-date');
@@ -819,7 +848,10 @@ function updateOrderFiltersForDetailKind() {
   if (wrapType) wrapType.style.display = isNetwork ? 'none' : '';
   if (wrapDate) wrapDate.style.display = isNetwork ? '' : 'none';
   if (wrapAssignee) wrapAssignee.style.display = isNetwork ? '' : 'none';
-  if (btnMyAssignments) btnMyAssignments.style.display = isNetwork ? '' : 'none';
+  if (btnMyAssignments) {
+    btnMyAssignments.style.display = isNetwork ? '' : 'none';
+    btnMyAssignments.classList.toggle('is-active', isNetwork && filterOnlyMyAssignments);
+  }
   if (btnAdminStats) btnAdminStats.style.display = (isAdmin && isNetwork) ? 'inline-flex' : 'none';
 
   const myPendingCard = document.getElementById('wo-stat-my-pending-card');
@@ -1119,7 +1151,7 @@ function renderActiveOrderFilters() {
     const safeValue = encodeURIComponent(value).replace(/'/g, '%27');
     return `<button type="button" class="order-filter-chip" onclick="removeOrderFilter('${kind}','${safeValue}')"><span>${orderEscape(groupLabel)}: <strong>${orderEscape(valueLabel)}</strong></span><b aria-hidden="true">×</b></button>`;
   }));
-  if (filterOnlyMyAssignments) {
+  if (filterOnlyMyAssignments && activeOrderDetailKind === 'network') {
     chips.unshift(`<button type="button" class="order-filter-chip is-my-assignment-chip" onclick="toggleOnlyMyAssignments(false)"><span><strong>★ Mis detalles</strong></span><b aria-hidden="true">×</b></button>`);
   }
   wrap.innerHTML = chips.join('');
@@ -2327,8 +2359,8 @@ function filteredOrders() {
     if (w.deletedAt) return false;
 
     // Filtro "Mis detalles"
-    // Solo los que faltan por resolver (sin envíos) o los que faltan por confirmar de este lado
-    if (filterOnlyMyAssignments) {
+    // Solo los que faltan por resolver (sin envíos) o los que faltan por confirmar de este lado (solo en red)
+    if (filterOnlyMyAssignments && activeOrderDetailKind === 'network') {
       const st = String(w.status || 'pendiente').toLowerCase();
       const isCompleted = st === 'completada' || st === 'concluido' || st === 'done';
       if (isCompleted) return false;
@@ -2602,22 +2634,32 @@ async function reopenCompletedWO(id) {
   }
 
   const isSentToAttention = isNetworkSupportToAttention(w);
+  const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  const isCreator = typeof isOrderCreator === 'function' ? isOrderCreator(w, currentUser) : (
+    Boolean(currentUser && (
+      (w.createdById && String(w.createdById).trim() === String(currentUser.id).trim()) ||
+      (w.createdByUsername && String(w.createdByUsername).toLowerCase().trim() === String(currentUser.username || '').toLowerCase().trim()) ||
+      (w.createdByName && String(w.createdByName).toLowerCase().trim() === String(currentUser.name || '').toLowerCase().trim())
+    ))
+  );
   const isAdmin = userHasRole('administrador', 'admin');
   const isSoporte = userHasRole('administrador', 'admin', 'soporte');
   const isAtencion = userHasRole('atencion_clientes');
 
-  // Regla institucional estricta: solo el área solicitante puede reabrir lo que envió a la contraparte (Admin puede reabrir todo)
-  if (!isAdmin) {
+  // Regla institucional:
+  // Quien creó el reporte SIEMPRE puede reabrirlo (al igual que el Administrador).
+  // Si no es el creador ni administrador, solo el área solicitante puede reabrir lo que envió a la contraparte.
+  if (!isAdmin && !isCreator) {
     if (w.detailKind === 'network') {
       if (isSentToAttention && !isSoporte) {
-        return notify('Acción restringida: Únicamente el personal de Soporte técnico puede reabrir requerimientos dirigidos a Atención a clientes.', 'warn');
+        return notify('Acción restringida: Únicamente el creador del reporte o personal autorizado de Soporte puede reabrirlo.', 'warn');
       }
       if (!isSentToAttention && !isAtencion) {
-        return notify('Acción restringida: Únicamente el personal de Atención a clientes puede reabrir reportes de red dirigidos a Soporte técnico.', 'warn');
+        return notify('Acción restringida: Únicamente el creador del reporte o personal autorizado de Atención a clientes puede reabrirlo.', 'warn');
       }
     } else {
       if (!isSoporte && !(isAtencion && isCreatedByAttention(w))) {
-        return notify('Acción restringida: Como Atención a clientes solo puedes reabrir detalles que hayan sido creados desde tu área.', 'warn');
+        return notify('Acción restringida: Únicamente el creador del reporte o personal autorizado puede reabrirlo.', 'warn');
       }
     }
   }
@@ -2632,12 +2674,15 @@ async function reopenCompletedWO(id) {
   });
   if (!confirmed) return;
 
-  const currentUser = getCurrentUser();
   const userName = currentUser.name || currentUser.username || (isSoporte ? 'Soporte técnico' : 'Atención a clientes');
   const now = new Date().toISOString();
 
   w.status = 'pendiente';
   w.completedAt = '';
+  w.closedReason = '';
+  if (w.technicianReport && w.technicianReport.result === 'completada') {
+    w.technicianReport.result = 'pendiente';
+  }
   w.updatedAt = now;
   w.updatedById = currentUser.id || '';
   w.isReopened = true;
@@ -2649,9 +2694,9 @@ async function reopenCompletedWO(id) {
   w.reviewOpenedByUsername = '';
   w.reviewOpenedAt = '';
 
-  const reOpenLabel = isSentToAttention ? 'Requerimiento reabierto por Soporte técnico' : 'Reporte reabierto por Atención a clientes';
+  const reOpenLabel = isCreator ? 'Detalle reabierto por el creador' : (isSentToAttention ? 'Requerimiento reabierto por Soporte técnico' : 'Reporte reabierto por Atención a clientes');
   appendSharedNetworkFollowUp(w, 'reabierto', reOpenLabel, `Reabierto formalmente por ${userName} para nueva revisión y atención (reapertura #${currentReopenCount}).`);
-  setUpdatedAudit(w, isSentToAttention ? 'reabrió requerimiento a Atención a clientes' : 'reabrió reporte de red a Soporte técnico');
+  setUpdatedAudit(w, 'reabrió detalle concluido');
 
   const auditStart = Array.isArray(state.auditLog) ? state.auditLog.length : 0;
   const saved = await saveRecordWithAudit('workOrders', w, auditStart);
@@ -2858,7 +2903,11 @@ function promptCloseOrderChatDecision(order, actionType) {
     modal = document.createElement('div');
     modal.id = 'order-chat-close-decision-mo';
     modal.className = 'mo';
-    modal.style.zIndex = '14000';
+    document.body.appendChild(modal);
+  }
+  modal.style.setProperty('z-index', '16000', 'important');
+  // Asegurar siempre que esté después de order-tech-report-mo en el DOM para nunca quedar detrás
+  if (modal.parentElement === document.body) {
     document.body.appendChild(modal);
   }
 
@@ -3104,6 +3153,59 @@ async function resendWO(id) {
   await saveOrderWorkflow(order, 'volvió a enviar detalle', note ? 'Detalle reenviado con información nueva.' : 'Detalle reenviado sin crear otro folio.', { firstPage: true });
 }
 
+function resolveOrderRegisteredNode(order) {
+  if (typeof window !== 'undefined' && typeof window.resolveOrderRegisteredNode === 'function' && window.resolveOrderRegisteredNode !== resolveOrderRegisteredNode) {
+    return window.resolveOrderRegisteredNode(order);
+  }
+  if (!order) return { nodeId: '', nodeName: 'Pueblo registrado' };
+  let nodeId = order.nodeId ? String(order.nodeId) : '';
+  let nodeName = order.nodeName ? String(order.nodeName).trim() : '';
+
+  if (nodeId) {
+    const nd = (state.nodes || []).find(n => !n.deletedAt && String(n.id) === nodeId)
+      || (state.nodes || []).find(n => String(n.id) === nodeId);
+    if (nd) {
+      const label = typeof getNodeLabel === 'function' ? getNodeLabel(nd) : (nd.name || nd.id);
+      return { nodeId: String(nd.id), nodeName: label };
+    }
+    if (nodeName) return { nodeId, nodeName };
+  }
+
+  const candidateName = (nodeName || order.town || order.detailLocation || '').trim().toLowerCase();
+  if (candidateName) {
+    const nd = (state.nodes || []).find(n => !n.deletedAt && (
+      (n.name || '').trim().toLowerCase() === candidateName ||
+      (n.town || '').trim().toLowerCase() === candidateName ||
+      candidateName.includes((n.name || '').trim().toLowerCase())
+    ));
+    if (nd) {
+      const label = typeof getNodeLabel === 'function' ? getNodeLabel(nd) : (nd.name || nd.id);
+      return { nodeId: String(nd.id), nodeName: label };
+    }
+  }
+
+  if (order.equipmentId && typeof getEquipmentLinkedNodeIds === 'function') {
+    const linkedNodeIds = getEquipmentLinkedNodeIds(order.equipmentId);
+    if (linkedNodeIds && linkedNodeIds.length > 0) {
+      const nd = (state.nodes || []).find(n => !n.deletedAt && String(n.id) === String(linkedNodeIds[0]))
+        || (state.nodes || []).find(n => String(n.id) === String(linkedNodeIds[0]));
+      if (nd) {
+        const label = typeof getNodeLabel === 'function' ? getNodeLabel(nd) : (nd.name || nd.id);
+        return { nodeId: String(nd.id), nodeName: label };
+      }
+      return { nodeId: String(linkedNodeIds[0]), nodeName: nodeName || 'Pueblo vinculado' };
+    }
+  }
+
+  return {
+    nodeId: nodeId || '',
+    nodeName: nodeName || order.detailLocation || order.town || 'Pueblo registrado'
+  };
+}
+if (typeof window !== 'undefined') {
+  window.resolveOrderRegisteredNode = resolveOrderRegisteredNode;
+}
+
 async function sendWOToPhysical(id) {
   const order = (state.workOrders || []).find(item => item.id === id && !item.deletedAt);
   if (!order || order.detailKind !== 'network') return;
@@ -3113,23 +3215,57 @@ async function sendWOToPhysical(id) {
     document.getElementById('order-action-note')?.focus();
     return;
   }
-  const previousCategory = orderCategoryLabel(getOrderCategory(order));
-  const previousDetail = order.description || order.title || '';
-  order.detailKind = 'physical';
-  order.category = 'otro';
-  order.title = note;
-  order.description = note;
-  order.status = 'pendiente';
-  order.completedAt = '';
-  order.reviewOpenedAt = '';
-  order.reviewOpenedById = '';
-  order.reviewOpenedByName = '';
-  order.reviewOpenedByUsername = '';
-  order.reviewedAt = '';
-  order.lastResentAt = new Date().toISOString();
-  resetOrderReportForResend(order);
-  appendOrderFollowUp(order, 'physical', 'Enviado a detalle físico', `${note} · Origen de red: ${previousCategory}${previousDetail ? ` · Reporte original: ${previousDetail}` : ''}`);
-  await saveOrderWorkflow(order, 'envió detalle a físicos', 'El mismo folio fue enviado a Detalles físicos.');
+  const now = new Date().toISOString();
+  const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  const orderFolio = typeof getWorkOrderFolio === 'function' ? getWorkOrderFolio(order) : (order.folio || order.id);
+  const registeredNode = resolveOrderRegisteredNode(order);
+  const nodeId = registeredNode.nodeId || order.nodeId || '';
+  const nodeName = registeredNode.nodeName || order.nodeName || 'Pueblo registrado';
+  const targetPlace = nodeName;
+
+  const newPhysical = {
+    id: typeof generateId === 'function' ? generateId() : ('ph_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+    detailKind: 'physical',
+    category: 'otro',
+    title: note.length > 80 ? (note.slice(0, 77) + '...') : note,
+    description: note,
+    priority: order.priority || 'media',
+    visitType: 'comunidad',
+    equipmentId: '',
+    equipmentName: '',
+    nodeId: nodeId,
+    nodeName: nodeName,
+    region: order.region || '',
+    detailLocation: order.detailLocation || nodeName,
+    clientName: '',
+    clientPhone: '',
+    assignedUserId: '', // No se asigna a nadie para resolver
+    assignedUserName: '',
+    status: 'pendiente',
+    createdById: currentUser.id || '',
+    createdByName: currentUser.name || currentUser.username || 'Personal',
+    createdAt: now,
+    updatedAt: now,
+    originNetworkOrderId: order.id,
+    originNetworkFolio: orderFolio,
+    followUps: [
+      {
+        action: 'physical_record_created',
+        user: currentUser.name || currentUser.username || 'Sistema',
+        at: now,
+        note: `Registro físico creado en pueblo ${nodeName} desde el detalle de red ${orderFolio}`
+      }
+    ]
+  };
+
+  state.workOrders = state.workOrders || [];
+  state.workOrders.push(newPhysical);
+  await saveRecord('workOrders', newPhysical);
+
+  hideOrderActionForm();
+  appendOrderFollowUp(order, 'physical', 'Detalle físico registrado', `${note} · Vinculado a pueblo: ${targetPlace}`);
+  await saveOrderWorkflow(order, 'registró detalle físico en pueblo', `Se creó registro físico en ${targetPlace}.`);
+  notify(`Detalle físico registrado exitosamente en ${targetPlace}. El caso de red permanece activo.`, 'ok');
 }
 
 function getPhysicalDerivationStatus(order) {
@@ -3157,13 +3293,19 @@ function getPhysicalDerivationStatus(order) {
   return {
     pending: true,
     proposedBy: latestProp.action === 'physical_proposed_soporte' ? 'soporte' : 'atencion',
-    proposedByName: latestProp.byName || '',
+    proposedByName: latestProp.byName || latestProp.user || '',
     note: latestProp.note || 'Requiere visita presencial para revisión física en sitio.',
     at: latestProp.at || ''
   };
 }
+if (typeof window !== 'undefined') {
+  window.getPhysicalDerivationStatus = getPhysicalDerivationStatus;
+}
 
 async function promptSendNetworkToPhysical(id) {
+  if (typeof openInsertPhysicalRecordModal === 'function') {
+    return openInsertPhysicalRecordModal(id);
+  }
   const order = (state.workOrders || []).find(item => item.id === id && !item.deletedAt);
   if (!order) return notify('No se encontró el detalle solicitado.', 'err');
   if (order.status === 'completada') {
@@ -3252,50 +3394,108 @@ async function confirmSendNetworkToPhysical(id) {
     return notify('La otra parte involucrada debe confirmar el acuerdo para enviar a Detalles Físicos.', 'warn');
   }
 
+  const prop = order.physicalProposal || {};
+  const registeredNode = typeof resolveOrderRegisteredNode === 'function'
+    ? resolveOrderRegisteredNode(order)
+    : { nodeId: order.nodeId || '', nodeName: order.nodeName || 'Pueblo registrado' };
+  const nodeId = registeredNode.nodeId || prop.nodeId || order.nodeId || '';
+  const nodeName = registeredNode.nodeName || prop.nodeName || order.nodeName || 'Pueblo registrado';
+  const equipmentId = ''; // Forzosamente en el pueblo
+  const equipmentName = '';
+  const category = prop.category || 'otro';
+  const priority = prop.priority || order.priority || 'media';
+  const rawDescription = prop.description || physStatus.note || order.description || order.title || 'Revisión física en sitio';
+  const description = typeof extractCleanPhysicalDescription === 'function' ? extractCleanPhysicalDescription(rawDescription) : rawDescription;
+
+  const nd = (state.nodes || []).find(n => String(n.id) === String(nodeId));
+  const targetPlace = nodeName;
+  const categoryLabel = typeof orderCategoryLabel === 'function' ? orderCategoryLabel(category) : category;
+
   const folio = getOrderFolio(order);
+  const propBy = physStatus.proposedByName ? `\n• Propuesto por: ${physStatus.proposedByName}` : '';
   const confirmed = await askConfirmation({
-    title: '¿Confirmar pase a Detalles Físicos?',
-    message: `${physStatus.proposedByName || 'La contraparte'} propuso enviar este caso a campo ("${physStatus.note}"). Al aceptar, ambas partes estarán de acuerdo y pasará a Detalles Físicos.`,
-    confirmText: 'Sí, enviar a Físicos',
+    title: '¿Confirmar acuerdo y registrar detalle físico?',
+    message: `• Pueblo: ${nodeName}\n• Falla: ${description}${propBy}\n\nSe registrará en el pueblo y se cerrará este reporte de red.`,
+    confirmText: 'Confirmar y cerrar reporte',
     cancelText: 'Cancelar',
     tone: 'ok'
   });
   if (!confirmed) return;
 
-  const note = physStatus.note || 'Requiere visita presencial para revisión física en sitio.';
-  const previousCategory = orderCategoryLabel(getOrderCategory(order));
-  const previousDetail = order.description || order.title || '';
   const currentUser = getCurrentUser();
   const userName = currentUser.name || currentUser.username || (isSoporte ? 'Soporte técnico' : 'Atención a clientes');
   const now = new Date().toISOString();
 
-  order.detailKind = 'physical';
-  order.category = 'otro';
-  order.title = note;
-  order.description = note;
-  order.status = 'pendiente';
-  order.completedAt = '';
+  const newPhysical = {
+    id: typeof generateId === 'function' ? generateId() : ('ph_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+    detailKind: 'physical',
+    category: category,
+    title: description.length > 80 ? (description.slice(0, 77) + '...') : description,
+    description: description,
+    priority: priority,
+    visitType: 'comunidad',
+    equipmentId: '',
+    equipmentName: '',
+    nodeId: nodeId || '',
+    nodeName: nodeName,
+    region: nd?.region || order.region || '',
+    detailLocation: nd?.location || order.detailLocation || nodeName,
+    lat: nd?.lat || order.lat || '',
+    lng: nd?.lng || order.lng || '',
+    clientName: '',
+    clientPhone: '',
+    assignedUserId: '', // No se asigna a nadie para resolver
+    assignedUserName: '',
+    status: 'pendiente',
+    createdById: currentUser.id || '',
+    createdByName: userName,
+    createdAt: now,
+    updatedAt: now,
+    originNetworkOrderId: order.id,
+    originNetworkFolio: folio,
+    followUps: [
+      {
+        action: 'physical_record_created',
+        user: userName,
+        at: now,
+        note: `Registro físico creado por acuerdo mutuo en pueblo ${nodeName} desde reporte de red ${folio}`
+      }
+    ]
+  };
+
+  state.workOrders = state.workOrders || [];
+  state.workOrders.push(newPhysical);
+  await saveRecord('workOrders', newPhysical);
+
+  // Cerrar el reporte de red original
+  order.status = 'completada';
+  order.completedAt = now;
+  order.closedReason = 'physical_registered';
   order.reviewOpenedAt = '';
   order.reviewOpenedById = '';
   order.reviewOpenedByName = '';
   order.reviewOpenedByUsername = '';
-  order.reviewedAt = '';
-  order.lastResentAt = now;
   order.updatedAt = now;
   order.updatedById = currentUser.id || '';
+  order.technicianReport = {
+    ...(order.technicianReport || {}),
+    result: 'completada',
+    solution: `Concluido por pase a detalle físico acordado por ambas partes en ${targetPlace}: ${description}`,
+    completedAt: now
+  };
 
-  resetOrderReportForResend(order);
   appendSharedNetworkFollowUp(
     order,
     'physical',
     'Derivado a Detalle Físico por acuerdo mutuo',
-    `${note} · Propuesto por ${physStatus.proposedByName || 'Equipo'} y confirmado por ${userName} · Origen: ${previousCategory}${previousDetail ? ` · Reporte original: ${previousDetail}` : ''}`
+    `Acuerdo mutuo completado. Registrado en ${targetPlace}: "${description}". Reporte de red cerrado.`
   );
-  setUpdatedAudit(order, 'confirmó acuerdo para derivar detalle de red a detalles físicos');
+  delete order.physicalProposal;
+  setUpdatedAudit(order, 'confirmó acuerdo mutuo y cerró detalle de red con registro físico');
 
   const saved = await saveRecord('workOrders', order);
   if (!saved) {
-    notify('No se pudo derivar la orden a detalles físicos. Intente nuevamente.', 'err');
+    notify('No se pudo guardar la actualización del reporte. Intente nuevamente.', 'err');
     return;
   }
 
@@ -3312,7 +3512,7 @@ async function confirmSendNetworkToPhysical(id) {
     CM('order-tech-report-mo');
   }
 
-  notify(`El folio ${folio} fue transferido a Detalles Físicos por acuerdo de ambas partes.`, 'ok');
+  notify(`Acuerdo completado: Detalle físico registrado en ${targetPlace} y reporte de red ${folio} cerrado.`, 'ok');
   await loadOrderPage();
 }
 
@@ -3430,7 +3630,7 @@ function openOrderActions(id) {
     ${order.reviewOpenedAt ? `<p class="order-action-review-meta">Abierta para revisión: <strong>${orderEscape(orderReviewOpenedSummary(order))}</strong></p>` : ''}
     <div class="order-workflow-actions">
       ${!solved ? `<button type="button" class="btn action-reviewed" onclick="showOrderActionForm('${orderEscape(id)}','reviewed')">Revisado</button><button type="button" class="btn action-solved" onclick="solveWOFromActions('${orderEscape(id)}')">Solucionado</button>` : ''}
-      ${!solved && order.detailKind === 'network' ? `<button type="button" class="btn action-physical" onclick="showOrderActionForm('${orderEscape(id)}','physical')">Detalle físico</button>` : ''}
+      ${!solved && order.detailKind === 'network' ? `<button type="button" class="btn action-physical" onclick="openInsertPhysicalRecordModal('${orderEscape(id)}')">Registrar detalle físico</button>` : ''}
       ${!solved ? `<button type="button" class="btn action-same" onclick="showOrderActionForm('${orderEscape(id)}','same')">Sigue el mismo tema</button><button type="button" class="btn action-resend" onclick="resendWO('${orderEscape(id)}')">Volver a enviar</button>` : ''}
       <button type="button" class="btn action-copy" ${solved ? `onclick="openWOCopy('${orderEscape(id)}')"` : 'disabled title="Disponible cuando esté solucionado"'}>Copiar como nuevo</button>
     </div>
@@ -3955,9 +4155,17 @@ function renderOrderFooterActions(order) {
   const rowReported = isCompleted || isUnresolvablePending;
   const isSentToAttention = isNetworkSupportToAttention(order);
 
+  const isCreator = typeof isOrderCreator === 'function' ? isOrderCreator(order, currentUser) : (
+    Boolean(currentUser && (
+      (order.createdById && String(order.createdById).trim() === String(currentUser.id).trim()) ||
+      (order.createdByUsername && String(order.createdByUsername).toLowerCase().trim() === String(currentUser.username || '').toLowerCase().trim()) ||
+      (order.createdByName && String(order.createdByName).toLowerCase().trim() === String(currentUser.name || '').toLowerCase().trim())
+    ))
+  );
+
   let canReopen = false;
   if (isCompleted) {
-    canReopen = isSentToAttention ? (isSoporte || isAdmin) : (isAtencion || isAdmin);
+    canReopen = isAdmin || isCreator || (isSentToAttention ? isSoporte : isAtencion);
   }
 
   const isAssignedToOther = (order.assignedUserId || order.assignedUserName) && !isOrderAssignedToUser(order, currentUser);
@@ -3997,8 +4205,8 @@ function renderOrderFooterActions(order) {
       }
     } else {
       physicalActionHtml = `
-        <button type="button" class="btn net-btn-physical" onclick="promptSendNetworkToPhysical('${order.id}')" title="Proponer envío a Detalles Físicos (requiere acuerdo de ambas partes)">
-          <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Enviar a Detalles Físicos
+        <button type="button" class="btn net-btn-physical" onclick="openInsertPhysicalRecordModal('${order.id}')" title="Registrar un detalle físico en el pueblo vinculado a este caso">
+          <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Registrar detalle físico
         </button>
       `;
     }
@@ -4117,7 +4325,10 @@ function renderOrderFooterActions(order) {
 }
 
 async function sendOrderChatMessage(orderId) {
-  const order = (state.workOrders || []).find(x => x.id === orderId && !x.deletedAt);
+  let order = (state.workOrders || []).find(x => x.id === orderId && !x.deletedAt);
+  if (!order && typeof findOrFetchWorkOrder === 'function') {
+    order = await findOrFetchWorkOrder(orderId);
+  }
   if (!order) return notify('No se encontró el detalle.', 'err');
 
   // REGLA: mientras el detalle esté concluido no se puede seguir conversando hasta que se vuelva a abrir
@@ -4273,7 +4484,10 @@ async function takeOverAndJoinChat(orderId) {
 }
 
 async function proposeTwoPartyClosure(orderId) {
-  const order = (state.workOrders || []).find(x => x.id === orderId && !x.deletedAt);
+  let order = (state.workOrders || []).find(x => x.id === orderId && !x.deletedAt);
+  if (!order && typeof findOrFetchWorkOrder === 'function') {
+    order = await findOrFetchWorkOrder(orderId);
+  }
   if (!order) return notify('No se encontró el detalle.', 'err');
 
   const currentUser = getCurrentUser();
@@ -4336,7 +4550,10 @@ async function proposeTwoPartyClosure(orderId) {
 }
 
 async function confirmTwoPartyClosure(orderId) {
-  const order = (state.workOrders || []).find(x => x.id === orderId && !x.deletedAt);
+  let order = (state.workOrders || []).find(x => x.id === orderId && !x.deletedAt);
+  if (!order && typeof findOrFetchWorkOrder === 'function') {
+    order = await findOrFetchWorkOrder(orderId);
+  }
   if (!order) return notify('No se encontró el detalle.', 'err');
 
   const currentUser = getCurrentUser();
@@ -4847,22 +5064,24 @@ async function openOrderTechnicianReport(orderId) {
       ${renderOrderFooterActions(order)}
     `;
   } else {
-    // Vista clásica para órdenes físicas
+    // Vista para detalles físicos de infraestructura (antenas y nodos)
     bodyContent = `
+      <div class="physical-record-banner" style="background:#f5f3ff;border:1px solid #ddd6fe;border-left:4px solid #7c3aed;padding:12px 14px;border-radius:10px;margin-bottom:14px;font-size:12.5px;color:#5b21b6;display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <div><strong>Bitácora de infraestructura:</strong> Este detalle pertenece al historial físico de antenas y pueblos. No se asigna a ningún usuario para resolver; queda registrado para consulta operativa en sitio.</div>
+      </div>
       <div class="order-report-summary">
-        ${orderReportField('user', 'Nombre del cliente', order.clientName || 'Sin nombre')}
-        ${orderReportField('phone', 'Número telefónico', phone)}
-        ${orderReportField('pin', 'Lugar', getOrderPlace(order))}
+        ${order.equipmentName ? orderReportField('work', 'Antena vinculada', `${orderEscape(order.equipmentName)} ${order.equipmentId ? `<button type="button" class="btn bsm bg2" onclick="openTowerMaterialModal('${order.equipmentId}')" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:2px 8px;margin-left:6px;">🗼 Material de torre</button>` : ''}`, { raw: true }) : ''}
+        ${order.nodeName ? orderReportField('pin', 'Pueblo', orderEscape(order.nodeName)) : orderReportField('pin', 'Lugar', getOrderPlace(order))}
         ${orderReportField('target', 'Ubicación capturada', capturedLocation)}
-        ${orderReportField('check', 'Estado', `<span class="order-report-status ${order.status === 'completada' ? 'is-completed' : (order.status === 'resuelto_soporte' ? 'is-resolving' : (order.status === 'devuelto_soporte' ? 'is-returned' : (order.status === 'no_realizado' ? 'is-failed' : 'is-pending')))}">${orderEscape(reportStatus)}</span>`, { raw: true, className: 'status-field' })}
-        ${orderReportField('user', 'Capturado por', renderUserColorChip(order.createdByName || order.createdByUsername || 'Sin registro', order.createdById), { raw: true })}
-        ${orderReportField('user', 'Asignado a', order.assignedUserName ? renderUserColorChip(order.assignedUserName, order.assignedUserId) : '<span style="color:#64748b;font-weight:600;font-size:12px;">Sin asignar</span>', { raw: true })}
-        ${orderReportField('check', 'Resuelto por', report.completedByName || order.completedByName || 'Pendiente', { raw: true })}
-        ${orderReportField('calendar', 'Fecha de creación', order.createdAt ? new Date(order.createdAt).toLocaleString('es-MX') : 'Sin fecha')}
+        ${orderReportField('check', 'Estado', `<span class="order-report-status ${order.status === 'completada' ? 'is-completed' : 'is-pending'}">${order.status === 'completada' ? 'Completado' : 'Registro activo'}</span>`, { raw: true, className: 'status-field' })}
+        ${orderReportField('user', 'Registrado por', renderUserColorChip(order.createdByName || order.createdByUsername || 'Sin registro', order.createdById), { raw: true })}
+        ${orderReportField('calendar', 'Fecha de registro', order.createdAt ? new Date(order.createdAt).toLocaleString('es-MX') : 'Sin fecha')}
         ${order.updatedAt && order.updatedAt !== order.createdAt ? orderReportField('clock', 'Última edición', `${new Date(order.updatedAt).toLocaleString('es-MX')}${order.updatedByName ? ` por ${renderUserColorChip(order.updatedByName, order.updatedById)}` : ''}`, { raw: true }) : ''}
         ${orderReportField('work', 'Tipo de trabajo', getOrderDisplayType(order))}
         ${orderReportField('flag', 'Prioridad', pl(order.priority || 'media'))}
         ${orderReportField('tag', 'Categoría', orderCategoryLabel(getOrderCategory(order)))}
+        ${order.originNetworkFolio ? orderReportField('tag', 'Origen de red', `<a href="/ordenes.html?detailKind=network&orderId=${encodeURIComponent(order.originNetworkOrderId || order.originNetworkFolio)}" style="color:#2563eb;font-weight:700;text-decoration:underline;">Folio ${orderEscape(order.originNetworkFolio)}</a>`, { raw: true }) : ''}
       </div>
       <section class="order-report-block order-report-request"><span class="order-report-field-icon">${orderReportIcon('clipboard')}</span><div><small>Detalle solicitado</small><p>${orderEscape(requestedDetail)}</p></div></section>
       ${report.solution ? `<section class="order-report-block"><small>Trabajo realizado</small><p>${orderEscape(report.solution)}</p></section>` : ''}
@@ -5011,18 +5230,27 @@ function renderWOs() {
     const unreadChatCount = typeof getOrderUnreadMessagesCount === 'function' ? getOrderUnreadMessagesCount(w, currentActor) : 0;
 
     const isSentToAttention = isNetworkSupportToAttention(w);
+    const isCreator = typeof isOrderCreator === 'function' ? isOrderCreator(w, currentActor) : (
+      Boolean(currentActor && (
+        (w.createdById && String(w.createdById).trim() === String(currentActor.id).trim()) ||
+        (w.createdByUsername && String(w.createdByUsername).toLowerCase().trim() === String(currentActor.username || '').toLowerCase().trim()) ||
+        (w.createdByName && String(w.createdByName).toLowerCase().trim() === String(currentActor.name || '').toLowerCase().trim())
+      ))
+    );
     let canReopen = false;
     if (rowReported) {
-      if (w.detailKind === 'network') {
+      if (isAdmin || isCreator) {
+        canReopen = true;
+      } else if (w.detailKind === 'network') {
         if (isSentToAttention) {
           // Requerimiento enviado por Soporte a Atención: solo Soporte puede reabrirlo
-          canReopen = isSoporte || isAdmin;
+          canReopen = isSoporte;
         } else {
           // Reporte de red enviado por Atención a Soporte: solo Atención puede reabrirlo
-          canReopen = isAtencion || isAdmin;
+          canReopen = isAtencion;
         }
       } else {
-        canReopen = isSoporte || isAdmin || (isAtencion && isCreatedByAttention(w));
+        canReopen = isSoporte || (isAtencion && isCreatedByAttention(w));
       }
     }
 
@@ -5086,16 +5314,24 @@ function renderWOs() {
                 <td data-label="Detalle">
                   <span class="order-category-badge">${orderEscape(orderCategoryLabel(getOrderCategory(w)))}</span>
                   ${w.description ? `<div class="order-detail-text">${orderEscape(w.description)}</div>` : (w.title && w.title !== orderCategoryLabel(getOrderCategory(w)) ? `<div class="order-detail-text">${orderEscape(w.title)}</div>` : '')}
-                  <div class="order-assignment-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">
-                    ${w.assignedUserName ? (w.assignedUserName.split(',').map(s => s.trim()).filter(Boolean).map(name => renderUserColorChip(name, w.assignedUserId)).join('')) : ''}
-                    ${w.reviewOpenedByName && !['completada', 'no_realizado'].includes(w.status) && !((w.assignedUserName || '').includes(w.reviewOpenedByName)) ? `
-                      <span class="order-checking-badge" title="Atendiendo actualmente: ${orderEscape(w.reviewOpenedByName)}" style="display:inline-flex;align-items:center;flex-wrap:nowrap;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;gap:4px;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:12px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;max-width:100%;box-sizing:border-box;">
-                        <svg style="width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2;flex-shrink:0;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        <span class="order-checking-label" style="white-space:nowrap;flex-shrink:0;">${w.reviewOpenedById === (currentActor.id || '') ? 'En atención' : 'Atendiendo:'}</span>
-                        ${renderUserColorChip(w.reviewOpenedByName, w.reviewOpenedById)}
-                      </span>
-                    ` : ''}
-                  </div>
+                  ${w.detailKind === 'physical' ? `
+                    <div class="order-infrastructure-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">
+                      ${w.equipmentName ? `<span class="order-equip-tag" style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:10px;background:#ede9fe;color:#6d28d9;border:1px solid #ddd6fe;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07 19.07 4.93"/></svg> Antena: ${orderEscape(w.equipmentName)}</span>` : ''}
+                      ${w.nodeName ? `<span class="order-node-tag" style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:10px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg> Pueblo: ${orderEscape(w.nodeName)}</span>` : ''}
+                      ${w.originNetworkFolio ? `<span class="order-origin-tag" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;">Red: ${orderEscape(w.originNetworkFolio)}</span>` : ''}
+                    </div>
+                  ` : `
+                    <div class="order-assignment-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">
+                      ${w.assignedUserName ? (w.assignedUserName.split(',').map(s => s.trim()).filter(Boolean).map(name => renderUserColorChip(name, w.assignedUserId)).join('')) : ''}
+                      ${w.reviewOpenedByName && !['completada', 'no_realizado'].includes(w.status) && !((w.assignedUserName || '').includes(w.reviewOpenedByName)) ? `
+                        <span class="order-checking-badge" title="Atendiendo actualmente: ${orderEscape(w.reviewOpenedByName)}" style="display:inline-flex;align-items:center;flex-wrap:nowrap;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;gap:4px;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:12px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;max-width:100%;box-sizing:border-box;">
+                          <svg style="width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2;flex-shrink:0;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                          <span class="order-checking-label" style="white-space:nowrap;flex-shrink:0;">${w.reviewOpenedById === (currentActor.id || '') ? 'En atención' : 'Atendiendo:'}</span>
+                          ${renderUserColorChip(w.reviewOpenedByName, w.reviewOpenedById)}
+                        </span>
+                      ` : ''}
+                    </div>
+                  `}
                 </td>
                 ${activeOrderDetailKind === 'network' ? `
                   <td data-label="Fecha y hora" class="order-datetime-cell">

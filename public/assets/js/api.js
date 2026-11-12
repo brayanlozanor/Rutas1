@@ -559,7 +559,12 @@ function getCurrentUser() {
 }
 
 function normalizeRole(role) {
-    return String(role || '').trim().toLowerCase();
+    const raw = String(role || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (raw === 'admin' || raw === 'administrador') return 'administrador';
+    if (raw === 'soporte') return 'soporte';
+    if (raw === 'atencion' || raw === 'atencion_clientes' || raw === 'atencion a clientes' || raw === 'atencion_a_clientes') return 'atencion_clientes';
+    if (raw === 'tecnico' || raw === 'tecnica') return 'tecnico';
+    return raw;
 }
 
 function userHasRole(...roles) {
@@ -979,14 +984,16 @@ async function generateDeletionCode(id) {
 async function rejectDeletionRequest(id) {
     const req = (state.deletionRequests || []).find(item => item.id === id);
     if (!req) return;
-    const ok = typeof askConfirmation === 'function'
-        ? await askConfirmation({
+    const confirmFn = typeof askConfirmation === 'function' ? askConfirmation : window.askConfirmation;
+    const ok = typeof confirmFn === 'function'
+        ? await confirmFn({
             title: 'Rechazar solicitud',
             message: `No se eliminara ${getRequestTargetLabel(req)}.`,
             confirmText: 'Rechazar',
+            cancelText: 'Cancelar',
             tone: 'danger'
         })
-        : confirm(`Rechazar solicitud para ${getRequestTargetLabel(req)}?`);
+        : true;
     if (!ok) return;
     req.status = 'rejected';
     req.updatedAt = new Date().toISOString();
@@ -1021,14 +1028,16 @@ function applyDeletionRequestTarget(req) {
 async function approveDeletionRequest(id) {
     const req = (state.deletionRequests || []).find(item => item.id === id);
     if (!req || !isPendingDeletionRequest(req)) return;
-    const ok = typeof askConfirmation === 'function'
-        ? await askConfirmation({
+    const confirmFn = typeof askConfirmation === 'function' ? askConfirmation : window.askConfirmation;
+    const ok = typeof confirmFn === 'function'
+        ? await confirmFn({
             title: 'Aprobar eliminacion',
             message: `Se eliminara ${getRequestTargetLabel(req)} para todos los usuarios.`,
             confirmText: 'Aprobar y eliminar',
+            cancelText: 'Cancelar',
             tone: 'ok'
         })
-        : confirm(`Eliminar ${getRequestTargetLabel(req)}?`);
+        : true;
     if (!ok) return;
     if (!applyDeletionRequestTarget(req)) {
         req.status = 'missing';
@@ -1066,15 +1075,17 @@ function completeDeletionRequest(targetType, targetId) {
 }
 
 async function handleProtectedDelete({ targetType, targetId, targetName, applyDelete, refresh }) {
+    const confirmFn = typeof askConfirmation === 'function' ? askConfirmation : window.askConfirmation;
     if (userHasRole('administrador', 'admin')) {
-        const ok = typeof askConfirmation === 'function'
-            ? await askConfirmation({
+        const ok = typeof confirmFn === 'function'
+            ? await confirmFn({
                 title: 'Eliminar registro',
                 message: `Se eliminara ${targetName}. Esta accion se guardara en la nube.`,
                 confirmText: 'Eliminar',
+                cancelText: 'Cancelar',
                 tone: 'danger'
             })
-            : confirm(`Eliminar ${targetName}?`);
+            : true;
         if (!ok) return false;
         const auditStart=Array.isArray(state.auditLog)?state.auditLog.length:0;
         applyDelete();
@@ -1093,14 +1104,15 @@ async function handleProtectedDelete({ targetType, targetId, targetName, applyDe
 
     const req = findDeletionRequest(targetType, targetId);
     if (!req) {
-        const ok = typeof askConfirmation === 'function'
-            ? await askConfirmation({
+        const ok = typeof confirmFn === 'function'
+            ? await confirmFn({
                 title: 'Solicitar eliminacion',
                 message: `Se enviara una solicitud a administradores para eliminar ${targetName}.`,
                 confirmText: 'Enviar solicitud',
+                cancelText: 'Cancelar',
                 tone: 'ok'
             })
-            : confirm(`Se enviara solicitud de eliminacion para ${targetName}. Continuar?`);
+            : true;
         if (!ok) return false;
         await createDeletionRequest(targetType, targetId, targetName);
         notify('Solicitud enviada al administrador.');
@@ -1706,7 +1718,23 @@ function applyStateData(data) {
     }
     state.equipment   = Array.isArray(data.equipment) ? data.equipment : [];
     state.nodes       = Array.isArray(data.nodes) ? data.nodes : [];
-    state.workOrders  = Array.isArray(data.workOrders) ? data.workOrders : [];
+    if (Array.isArray(data.workOrders) && data.workOrders.length) {
+        state.workOrders = data.workOrders;
+        if (typeof saveWorkOrdersToGlobalCache === 'function') {
+            saveWorkOrdersToGlobalCache(data.workOrders);
+        }
+    } else if (Array.isArray(state.workOrders) && state.workOrders.length) {
+        // Preservar los detalles que ya están en memoria para que no se borren al consultar partes sin órdenes
+        if (typeof saveWorkOrdersToGlobalCache === 'function') {
+            saveWorkOrdersToGlobalCache(state.workOrders);
+        }
+    } else if (typeof getGlobalWorkOrdersCache === 'function') {
+        const cached = getGlobalWorkOrdersCache();
+        const cachedList = Object.values(cached);
+        state.workOrders = cachedList.length ? cachedList : (Array.isArray(data.workOrders) ? data.workOrders : []);
+    } else {
+        state.workOrders = Array.isArray(data.workOrders) ? data.workOrders : [];
+    }
     state.technicians = Array.isArray(data.technicians) ? data.technicians : [];
     state.users       = Array.isArray(data.users) ? data.users : [];
     state.techAccessLog = Array.isArray(data.techAccessLog) ? data.techAccessLog : [];

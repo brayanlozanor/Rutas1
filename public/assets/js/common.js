@@ -41,11 +41,11 @@ function getCurrentUser() {
 }
 
 function normalizeRole(role) {
-    const raw = String(role || '').trim().toLowerCase();
+    const raw = String(role || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (raw === 'admin' || raw === 'administrador') return 'administrador';
     if (raw === 'soporte') return 'soporte';
     if (raw === 'atencion' || raw === 'atencion_clientes' || raw === 'atencion a clientes' || raw === 'atencion_a_clientes') return 'atencion_clientes';
-    if (raw === 'tecnico') return 'tecnico';
+    if (raw === 'tecnico' || raw === 'tecnica') return 'tecnico';
     return raw;
 }
 
@@ -192,8 +192,7 @@ function notify(message, type = 'ok') {
     }
     nt.textContent = message;
     nt.className = `nt show${type === 'err' ? ' err' : type === 'warn' ? ' warn' : ''}`;
-    const technicianNotice = document.documentElement.dataset.role === 'tecnico' || document.body.classList.contains('plan-technician-view');
-    document.body.classList.toggle('notification-visible', technicianNotice);
+    document.body.classList.remove('notification-visible');
     const delay = type === 'warn' ? 4500 : 3000;
     clearTimeout(nt._hideTimer);
     nt._hideTimer = setTimeout(() => {
@@ -853,6 +852,10 @@ function _injectActionConfirmStyles() {
             background: rgba(46,204,113,.12);
             color: #27ae60;
         }
+        .action-confirm-icon-wrap.warning {
+            background: rgba(245,158,11,.14);
+            color: #d97706;
+        }
         .action-confirm-icon-wrap::after {
             content: '';
             position: absolute;
@@ -910,6 +913,12 @@ function _injectActionConfirmStyles() {
             color: #fff;
             border: none;
             box-shadow: 0 4px 14px rgba(34,197,94,.35);
+        }
+        .action-confirm-actions .btn-ok-warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: #fff;
+            border: none;
+            box-shadow: 0 4px 14px rgba(245,158,11,.35);
         }
         .action-confirm-card {
             width:min(560px,calc(100vw - 30px));
@@ -977,7 +986,7 @@ function ensureActionConfirmModal() {
     return modal;
 }
 
-function askConfirmation({ title = 'Confirmar accion', message = '', confirmText = 'Confirmar', cancelText = 'Cancelar', tone = 'danger' } = {}) {
+function askConfirmation({ title = 'Confirmar acción', message = '', confirmText = 'Confirmar', cancelText = 'Cancelar', tone = 'danger' } = {}) {
     const modal = ensureActionConfirmModal();
     const titleEl = document.getElementById('action-confirm-title');
     const messageEl = document.getElementById('action-confirm-message');
@@ -986,22 +995,27 @@ function askConfirmation({ title = 'Confirmar accion', message = '', confirmText
     const icon = document.getElementById('action-confirm-icon');
     if (titleEl) titleEl.textContent = title;
     if (messageEl) messageEl.textContent = message;
-    if (ok) {
-        ok.textContent = confirmText;
-        ok.className = `btn ${tone === 'ok' ? 'bg2' : 'br'}`;
-    }
     if (cancel) cancel.textContent = cancelText;
     const iconWrap = document.getElementById('action-confirm-icon-wrap');
     if (icon) {
-        icon.innerHTML = tone === 'ok'
-            ? '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
-            : '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+        if (tone === 'ok') {
+            icon.innerHTML = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+        } else if (tone === 'warning') {
+            icon.innerHTML = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>';
+        } else if (tone === 'delete') {
+            icon.innerHTML = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+        } else {
+            // danger / default reject
+            icon.innerHTML = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>';
+        }
     }
+    const iconClass = (tone === 'ok') ? 'ok' : ((tone === 'warning') ? 'warning' : 'danger');
     if (iconWrap) {
-        iconWrap.className = `action-confirm-icon-wrap ${tone === 'ok' ? 'ok' : 'danger'}`;
+        iconWrap.className = `action-confirm-icon-wrap ${iconClass}`;
     }
     if (ok) {
-        ok.className = `btn ${tone === 'ok' ? 'btn-ok-success' : 'btn-ok-danger'}`;
+        ok.textContent = confirmText;
+        ok.className = `btn ${tone === 'ok' ? 'btn-ok-success' : (tone === 'warning' ? 'btn-ok-warning' : 'btn-ok-danger')}`;
     }
     modal.classList.add('open');
     return new Promise(resolve => {
@@ -1022,6 +1036,7 @@ function askConfirmation({ title = 'Confirmar accion', message = '', confirmText
         modal.addEventListener('click', onOutside);
     });
 }
+window.askConfirmation = askConfirmation;
 
 function ensureActionPromptModal() {
     _injectActionConfirmStyles();
@@ -1434,9 +1449,15 @@ function closeTopModal() {
         closeEvidenceViewer();
         return true;
     }
-    if (modal.id === 'order-tech-report-mo' && typeof requestCloseOrderReport === 'function') {
-        requestCloseOrderReport();
-        return true;
+    if (modal.id === 'order-chat-close-decision-mo' || modal.id === 'order-tech-report-mo') {
+        if (typeof closeOrderReportModalDirectly === 'function') {
+            closeOrderReportModalDirectly();
+            return true;
+        }
+        if (typeof requestCloseOrderReport === 'function') {
+            requestCloseOrderReport(true);
+            return true;
+        }
     }
     const beforeClose = new CustomEvent('netops:before-modal-close', {
         cancelable: true,
@@ -1808,6 +1829,12 @@ function setStoredNotificationsInbox(items) {
 }
 
 function addNotificationToInbox({ id, title, message, type, orderId = '', eventId = '', url = '', createdAt = new Date().toISOString() }) {
+  const isTecnico = (typeof userHasRole === 'function' && userHasRole('tecnico')) ||
+                    (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
+                    (typeof normalizeRole === 'function' && normalizeRole(typeof getCurrentUser === 'function' ? getCurrentUser()?.role : '') === 'tecnico') ||
+                    (document.documentElement?.dataset?.role === 'tecnico') ||
+                    (document.body && document.body.classList.contains('plan-technician-view'));
+  if (isTecnico) return;
   const inbox = getStoredNotificationsInbox();
   const isPhysical = type === 'physical' || type === 'sent_to_physical';
   const computedUrl = url || (orderId ? `/ordenes.html?detailKind=${isPhysical ? 'physical' : 'network'}&orderId=${encodeURIComponent(orderId)}` : '');
@@ -1936,7 +1963,20 @@ function markAllNotificationsAsRead() {
 }
 
 function ensureNotificationCenter() {
-    const isTecnico = typeof userHasRole === 'function' && userHasRole('tecnico');
+    const isTecnico = (typeof userHasRole === 'function' && userHasRole('tecnico')) ||
+                      (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
+                      (typeof normalizeRole === 'function' && normalizeRole(typeof getCurrentUser === 'function' ? getCurrentUser()?.role : '') === 'tecnico') ||
+                      (document.documentElement?.dataset?.role === 'tecnico') ||
+                      (document.body && document.body.classList.contains('plan-technician-view'));
+    if (isTecnico) {
+        const bell = document.getElementById('notification-bell');
+        if (bell) bell.remove();
+        const mobileBell = document.querySelector('.tech-header-bell');
+        if (mobileBell) mobileBell.remove();
+        const mobileCount = document.getElementById('tech-mobile-bell-count');
+        if (mobileCount) mobileCount.remove();
+        return;
+    }
     let btn = document.getElementById('notification-bell');
     if (!btn) {
         btn = document.createElement('button');
@@ -2004,10 +2044,23 @@ function openNotificationPanel() {
 }
 
 function renderNotificationCenter() {
+    const isTecnico = (typeof userHasRole === 'function' && userHasRole('tecnico')) ||
+                      (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
+                      (typeof normalizeRole === 'function' && normalizeRole(typeof getCurrentUser === 'function' ? getCurrentUser()?.role : '') === 'tecnico') ||
+                      (document.documentElement?.dataset?.role === 'tecnico') ||
+                      (document.body && document.body.classList.contains('plan-technician-view'));
+    if (isTecnico) {
+        const bell = document.getElementById('notification-bell');
+        if (bell) bell.remove();
+        const mobileBell = document.querySelector('.tech-header-bell');
+        if (mobileBell) mobileBell.remove();
+        const mobileCount = document.getElementById('tech-mobile-bell-count');
+        if (mobileCount) mobileCount.remove();
+        return;
+    }
     const bell = document.getElementById('notification-bell');
     const count = document.getElementById('notification-count');
     const list = document.getElementById('notification-list');
-    const isTecnico = typeof userHasRole === 'function' && userHasRole('tecnico');
     if (bell) {
         bell.classList.toggle('technician-bell', isTecnico);
         bell.onclick = openNotificationPanel;
@@ -2439,7 +2492,7 @@ function openSharedNetworkDetailActions(id,refreshName) {
     <div class="modal-head"><div><h2>Acciones del detalle de red</h2><p>${escapeHtml(getWorkOrderFolio(detail))} · Creado ${escapeHtml(detail.createdAt ? new Date(detail.createdAt).toLocaleDateString('es-MX') : 'sin fecha')}</p></div><button type="button" class="btn bgh" onclick="CM('shared-network-actions-mo')">Cerrar</button></div>
     <div class="shared-network-current"><span>Estado actual</span><strong class="shared-network-status ${status.className}">${status.label}</strong></div>
     <div class="shared-network-buttons">
-      ${!solved ? `<button class="btn action-reviewed" onclick="showSharedNetworkActionForm('${escapeHtml(id)}','${escapeHtml(refreshName)}','reviewed')">Revisado</button><button class="btn action-solved" onclick="completeSharedNetworkDetail('${escapeHtml(id)}','${escapeHtml(refreshName)}')">Solucionado</button><button class="btn action-physical" onclick="showSharedNetworkActionForm('${escapeHtml(id)}','${escapeHtml(refreshName)}','physical')">Detalle físico</button><button class="btn action-same" onclick="showSharedNetworkActionForm('${escapeHtml(id)}','${escapeHtml(refreshName)}','same')">Sigue el mismo tema</button><button class="btn action-resend" onclick="resendSharedNetworkDetail('${escapeHtml(id)}','${escapeHtml(refreshName)}')">Volver a enviar</button>` : ''}
+      ${!solved ? `<button class="btn action-reviewed" onclick="showSharedNetworkActionForm('${escapeHtml(id)}','${escapeHtml(refreshName)}','reviewed')">Revisado</button><button class="btn action-solved" onclick="completeSharedNetworkDetail('${escapeHtml(id)}','${escapeHtml(refreshName)}')">Solucionado</button><button class="btn action-physical" onclick="openInsertPhysicalRecordModal('${escapeHtml(id)}','${escapeHtml(refreshName)}')">Registrar detalle físico</button><button class="btn action-same" onclick="showSharedNetworkActionForm('${escapeHtml(id)}','${escapeHtml(refreshName)}','same')">Sigue el mismo tema</button><button class="btn action-resend" onclick="resendSharedNetworkDetail('${escapeHtml(id)}','${escapeHtml(refreshName)}')">Volver a enviar</button>` : ''}
       <button class="btn action-copy" ${solved ? `onclick="copySharedNetworkDetail('${escapeHtml(id)}')"` : 'disabled'}>Copiar como nuevo</button>
     </div>
     <div id="shared-network-action-form" class="shared-network-action-form" hidden><label><span><b id="shared-network-action-label"></b> <em id="shared-network-action-hint"></em></span><textarea id="shared-network-action-note" rows="3"></textarea></label><div><button class="btn bgh" onclick="hideSharedNetworkActionForm()">Cancelar</button><button class="btn bc" id="shared-network-action-confirm">Guardar</button></div></div>
@@ -2473,15 +2526,584 @@ async function resendSharedNetworkDetail(id,refreshName) {
   await saveSharedNetworkWorkflow(detail,refreshName,'volvió a enviar detalle','Detalle reenviado sin crear otro folio.');
 }
 
+function isOrderCreator(order, user) {
+  if (!order || !user) return false;
+  const uid = user.id ? String(user.id).trim() : '';
+  const uname = user.username ? String(user.username).trim().toLowerCase() : '';
+  const name = user.name ? String(user.name).trim().toLowerCase() : '';
+
+  if (uid && order.createdById && String(order.createdById).trim() === uid) return true;
+  if (uname && order.createdByUsername && String(order.createdByUsername).trim().toLowerCase() === uname) return true;
+  if (name && order.createdByName && String(order.createdByName).trim().toLowerCase() === name) return true;
+  return false;
+}
+
+function resolveOrderRegisteredNode(order) {
+  if (!order) return { nodeId: '', nodeName: 'Pueblo registrado' };
+  let nodeId = order.nodeId ? String(order.nodeId) : '';
+  let nodeName = order.nodeName ? String(order.nodeName).trim() : '';
+
+  // 1. Si tenemos nodeId, buscar el nodo en state.nodes
+  if (nodeId) {
+    const nd = (state.nodes || []).find(n => !n.deletedAt && String(n.id) === nodeId)
+      || (state.nodes || []).find(n => String(n.id) === nodeId);
+    if (nd) {
+      const label = typeof getNodeLabel === 'function' ? getNodeLabel(nd) : (nd.name || nd.id);
+      return { nodeId: String(nd.id), nodeName: label };
+    }
+    if (nodeName) return { nodeId, nodeName };
+  }
+
+  // 2. Si nodeId estaba vacío, buscar por nodeName, town o detailLocation
+  const candidateName = (nodeName || order.town || order.detailLocation || '').trim().toLowerCase();
+  if (candidateName) {
+    const nd = (state.nodes || []).find(n => !n.deletedAt && (
+      (n.name || '').trim().toLowerCase() === candidateName ||
+      (n.town || '').trim().toLowerCase() === candidateName ||
+      candidateName.includes((n.name || '').trim().toLowerCase())
+    ));
+    if (nd) {
+      const label = typeof getNodeLabel === 'function' ? getNodeLabel(nd) : (nd.name || nd.id);
+      return { nodeId: String(nd.id), nodeName: label };
+    }
+  }
+
+  // 3. Si la orden tiene antena vinculada, resolver su pueblo vinculado
+  if (order.equipmentId && typeof getEquipmentLinkedNodeIds === 'function') {
+    const linkedNodeIds = getEquipmentLinkedNodeIds(order.equipmentId);
+    if (linkedNodeIds && linkedNodeIds.length > 0) {
+      const nd = (state.nodes || []).find(n => !n.deletedAt && String(n.id) === String(linkedNodeIds[0]))
+        || (state.nodes || []).find(n => String(n.id) === String(linkedNodeIds[0]));
+      if (nd) {
+        const label = typeof getNodeLabel === 'function' ? getNodeLabel(nd) : (nd.name || nd.id);
+        return { nodeId: String(nd.id), nodeName: label };
+      }
+      return { nodeId: String(linkedNodeIds[0]), nodeName: nodeName || 'Pueblo vinculado' };
+    }
+  }
+
+  return {
+    nodeId: nodeId || '',
+    nodeName: nodeName || order.detailLocation || order.town || 'Pueblo registrado'
+  };
+}
+
+function extractCleanPhysicalDescription(desc) {
+  if (!desc) return '';
+  let str = String(desc).trim();
+  const match = str.match(/Falla:\s*([\s\S]+)$/i);
+  if (match && match[1]) {
+    str = match[1].trim();
+  }
+  return str;
+}
+
+let currentInsertPhysNetworkOrderId = '';
+let insertPhysRefreshCallback = null;
+
+function ensureInsertPhysicalRecordModal() {
+  let modal = document.getElementById('insert-physical-record-mo');
+  if (!modal) {
+    document.body.insertAdjacentHTML('beforeend', `
+      <div class="mo insert-physical-record-mo" id="insert-physical-record-mo" style="z-index:15000 !important;">
+        <div class="md insert-physical-record-card" style="max-width:540px;width:95%;">
+          <div class="modal-head" style="padding:12px 18px 10px;">
+            <div>
+              <h2 id="insert-phys-title" style="font-size:16px;margin:0 0 2px;">Registrar detalle físico en Pueblo</h2>
+              <p id="insert-phys-subtitle" style="font-size:12px;color:#64748b;margin:0;">Registro en pueblo · Requiere acuerdo mutuo</p>
+            </div>
+            <button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('insert-physical-record-mo')">
+              <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+          </div>
+
+          <div class="insert-phys-body" style="padding:12px 18px;display:flex;flex-direction:column;gap:10px;">
+            <div id="insert-phys-origin-info" style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:11.5px;color:#1e40af;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <span>Detalle de red: <strong id="insert-phys-origin-folio"></strong> · <span id="insert-phys-origin-client"></span></span>
+            </div>
+
+            <div id="insert-phys-agreement-notice" style="padding:8px 12px;background:#f5f3ff;border:1px solid #ddd6fe;border-left:3px solid #7c3aed;border-radius:6px;font-size:11.5px;color:#5b21b6;line-height:1.4;">
+              <strong>ℹ️ Acuerdo mutuo:</strong> Ambas partes deben estar de acuerdo. Al registrarse, se guarda en el pueblo registrado y se cierra este reporte de red.
+            </div>
+
+            <!-- Pueblo registrado fijo -->
+            <div class="fi" style="margin-bottom:0;">
+              <div id="insert-phys-node-badge" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px;color:#0f172a;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:16px;line-height:1;">🏘️</span>
+                  <div>
+                    <span style="font-size:11px;color:#64748b;font-weight:600;display:block;">Pueblo registrado</span>
+                    <strong id="insert-phys-node-name" style="font-size:13px;color:#0f172a;"></strong>
+                  </div>
+                </div>
+                <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#e2e8f0;color:#334155;border-radius:4px;font-size:11px;font-weight:700;">🔒 Pueblo fijo</span>
+              </div>
+              <input type="hidden" id="insert-phys-node" value="">
+              <input type="hidden" id="insert-phys-equipment" value="">
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" class="insert-phys-grid">
+              <div class="fi">
+                <label style="font-weight:700;font-size:11.5px;color:#334155;margin-bottom:4px;display:block;">Categoría física</label>
+                <select id="insert-phys-category" class="fi-select" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px;">
+                </select>
+              </div>
+
+              <div class="fi">
+                <label style="font-weight:700;font-size:11.5px;color:#334155;margin-bottom:4px;display:block;">Prioridad</label>
+                <select id="insert-phys-priority" class="fi-select" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px;">
+                  <option value="baja">Baja</option>
+                  <option value="media" selected>Media</option>
+                  <option value="alta">Alta</option>
+                  <option value="muy_alta">Muy alta</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="fi" style="margin-bottom:0;">
+              <label style="font-weight:700;font-size:11.5px;color:#334155;margin-bottom:4px;display:block;">
+                Falla física en sitio <span style="color:#ef4444;">*</span>
+              </label>
+              <textarea id="insert-phys-description" rows="2" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px;resize:vertical;font-family:inherit;box-sizing:border-box;" placeholder="Describe la falla física..."></textarea>
+            </div>
+          </div>
+
+          <div class="card-actions" style="display:flex;justify-content:flex-end;gap:8px;padding:10px 18px;border-top:1px solid #e2e8f0;background:#f8fafc;">
+            <button type="button" class="btn bgh bsm" onclick="CM('insert-physical-record-mo')">Cancelar</button>
+            <button type="button" class="btn net-btn-unresolvable bsm" id="insert-phys-reject-btn" style="display:none;" onclick="rejectPhysicalRecordProposalFromModal()">Rechazar</button>
+            <button type="button" class="btn bc bsm" id="insert-phys-save-btn" style="background:#7c3aed;border-color:#6d28d9;color:#fff;" onclick="saveInsertedPhysicalRecord()">
+              <span id="insert-phys-save-label">📨 Proponer detalle físico</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `);
+    modal = document.getElementById('insert-physical-record-mo');
+  }
+}
+
+async function rejectPhysicalRecordProposalFromModal() {
+  const orderId = currentInsertPhysNetworkOrderId;
+  CM('insert-physical-record-mo');
+  if (typeof rejectSendNetworkToPhysical === 'function') {
+    return rejectSendNetworkToPhysical(orderId);
+  }
+}
+
+function openInsertPhysicalRecordModal(orderId, refreshCallback) {
+  const order = (state.workOrders || []).find(item => item.id === orderId && !item.deletedAt);
+  if (!order) return notify('No se encontró el detalle de red.', 'err');
+
+  currentInsertPhysNetworkOrderId = orderId;
+  insertPhysRefreshCallback = typeof refreshCallback === 'function' ? refreshCallback : null;
+
+  ensureInsertPhysicalRecordModal();
+
+  const folio = typeof getWorkOrderFolio === 'function' ? getWorkOrderFolio(order) : (order.folio || order.id);
+  const folioEl = document.getElementById('insert-phys-origin-folio');
+  if (folioEl) folioEl.textContent = folio;
+
+  const clientEl = document.getElementById('insert-phys-origin-client');
+  if (clientEl) clientEl.textContent = order.clientName || order.title || 'Reporte de red';
+
+  // Forzosamente resolver el pueblo registrado:
+  const registeredNode = resolveOrderRegisteredNode(order);
+  const nodeHidden = document.getElementById('insert-phys-node');
+  if (nodeHidden) nodeHidden.value = registeredNode.nodeId || '';
+  const eqHidden = document.getElementById('insert-phys-equipment');
+  if (eqHidden) eqHidden.value = '';
+
+  const nodeNameEl = document.getElementById('insert-phys-node-name');
+  if (nodeNameEl) nodeNameEl.textContent = registeredNode.nodeName || 'Pueblo registrado';
+
+  // Categorías físicas
+  const catSelect = document.getElementById('insert-phys-category');
+  const categories = (typeof detailCategoriesForKind === 'function' ? detailCategoriesForKind('physical') : null) || [
+    ['alineacion_antena', 'Alineación de antena'],
+    ['antena_desconectada', 'Antena desconectada'],
+    ['antena_quemada', 'Equipo quemado'],
+    ['antena_inalambrica', 'Antena inalámbrica'],
+    ['reubicacion_antena', 'Reubicación de antena'],
+    ['resurtir_antena', 'Resurtir antena'],
+    ['solicitud_respaldo', 'Solicitud de respaldo'],
+    ['instalacion', 'Nueva instalación'],
+    ['otro', 'Otro']
+  ];
+  let catHtml = '';
+  categories.forEach(([catId, catLabel]) => {
+    catHtml += `<option value="${escapeHtml(catId)}">${escapeHtml(catLabel)}</option>`;
+  });
+  if (catSelect) catSelect.innerHTML = catHtml;
+
+  // Determine proposal / derivation status
+  const physStatus = typeof getPhysicalDerivationStatus === 'function' ? getPhysicalDerivationStatus(order) : { pending: false };
+  const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  const isSoporte = typeof userHasRole === 'function' && userHasRole('soporte');
+  const isAtencion = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
+  const isAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+
+  const titleEl = document.getElementById('insert-phys-title');
+  const subtitleEl = document.getElementById('insert-phys-subtitle');
+  const noticeEl = document.getElementById('insert-phys-agreement-notice');
+  const saveBtn = document.getElementById('insert-phys-save-btn');
+  const saveLabel = document.getElementById('insert-phys-save-label');
+  const rejectBtn = document.getElementById('insert-phys-reject-btn');
+  const prioritySelect = document.getElementById('insert-phys-priority');
+  const descText = document.getElementById('insert-phys-description');
+
+  if (physStatus.pending) {
+    const canConfirm = physStatus.proposedBy === 'soporte' ? (isAtencion || isAdmin) : (isSoporte || isAdmin);
+    const prop = order.physicalProposal || {};
+
+    if (catSelect) catSelect.value = prop.category || 'otro';
+    if (prioritySelect) prioritySelect.value = prop.priority || order.priority || 'media';
+    const rawDesc = prop.description || physStatus.note || '';
+    if (descText) descText.value = extractCleanPhysicalDescription(rawDesc);
+
+    if (canConfirm) {
+      if (titleEl) titleEl.textContent = 'Confirmar acuerdo: Detalle físico';
+      if (subtitleEl) subtitleEl.textContent = `Propuesta de ${physStatus.proposedByName || (physStatus.proposedBy === 'soporte' ? 'Soporte técnico' : 'Atención a clientes')}`;
+      if (noticeEl) {
+        noticeEl.style.display = 'block';
+        noticeEl.style.background = '#fef3c7';
+        noticeEl.style.borderColor = '#fde68a';
+        noticeEl.style.borderLeftColor = '#f59e0b';
+        noticeEl.style.color = '#92400e';
+        noticeEl.innerHTML = `<strong>🤝 Acuerdo mutuo:</strong> ${escapeHtml(physStatus.proposedByName || 'La contraparte')} propuso registrar este detalle físico en <strong>${escapeHtml(registeredNode.nodeName)}</strong> y cerrar este reporte de red.`;
+      }
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.style.display = 'inline-flex';
+        saveBtn.style.background = '#059669';
+        saveBtn.style.borderColor = '#047857';
+      }
+      if (saveLabel) saveLabel.textContent = '✅ Confirmar y cerrar reporte';
+      if (rejectBtn) rejectBtn.style.display = 'inline-flex';
+    } else {
+      if (titleEl) titleEl.textContent = 'Propuesta enviada (Espera de acuerdo)';
+      if (subtitleEl) subtitleEl.textContent = `Esperando confirmación de ${physStatus.proposedBy === 'soporte' ? 'Atención a clientes' : 'Soporte técnico'}`;
+      if (noticeEl) {
+        noticeEl.style.display = 'block';
+        noticeEl.style.background = '#eff6ff';
+        noticeEl.style.borderColor = '#bfdbfe';
+        noticeEl.style.borderLeftColor = '#3b82f6';
+        noticeEl.style.color = '#1e40af';
+        noticeEl.innerHTML = `<strong>⏳ Esperando acuerdo:</strong> Propuesta enviada a contraparte para registrar en <strong>${escapeHtml(registeredNode.nodeName)}</strong>.`;
+      }
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.style.display = 'inline-flex';
+        saveBtn.style.background = '#94a3b8';
+        saveBtn.style.borderColor = '#64748b';
+      }
+      if (saveLabel) saveLabel.textContent = '⏳ Esperando acuerdo';
+      if (rejectBtn) rejectBtn.style.display = 'none';
+    }
+  } else {
+    if (prioritySelect) prioritySelect.value = order.priority || 'media';
+    if (descText) descText.value = '';
+
+    if (titleEl) titleEl.textContent = 'Registrar detalle físico en Pueblo';
+    if (subtitleEl) subtitleEl.textContent = 'Registro en pueblo · Requiere acuerdo mutuo';
+    if (noticeEl) {
+      noticeEl.style.display = 'block';
+      noticeEl.style.background = '#f5f3ff';
+      noticeEl.style.borderColor = '#ddd6fe';
+      noticeEl.style.borderLeftColor = '#7c3aed';
+      noticeEl.style.color = '#5b21b6';
+      noticeEl.innerHTML = `<strong>ℹ️ Acuerdo mutuo:</strong> Ambas partes deben estar de acuerdo. Al registrarse, se guarda en el pueblo y se cierra el reporte de red.`;
+    }
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.style.display = 'inline-flex';
+      saveBtn.style.background = '#7c3aed';
+      saveBtn.style.borderColor = '#6d28d9';
+    }
+    if (saveLabel) saveLabel.textContent = isAdmin ? '🔧 Confirmar y registrar' : '📨 Proponer detalle físico';
+    if (rejectBtn) rejectBtn.style.display = 'none';
+  }
+
+  OM('insert-physical-record-mo');
+  setTimeout(() => descText?.focus(), 80);
+}
+
+function onInsertPhysEquipmentChange() {
+  // Compatibilidad: la antena no se selecciona
+}
+
+function onInsertPhysNodeChange() {
+  // Compatibilidad: el pueblo no se selecciona
+}
+
+async function saveInsertedPhysicalRecord() {
+  const orderId = currentInsertPhysNetworkOrderId;
+  const order = (state.workOrders || []).find(item => item.id === orderId && !item.deletedAt);
+
+  // Forzosamente pueblo registrado de la orden
+  const registeredNode = resolveOrderRegisteredNode(order);
+  const nodeId = registeredNode.nodeId || '';
+  const nodeName = registeredNode.nodeName || 'Pueblo registrado';
+  const equipmentId = ''; // FORZOSAMENTE NINGUNA ANTENA
+  const equipmentName = '';
+
+  const category = document.getElementById('insert-phys-category')?.value || 'otro';
+  const priority = document.getElementById('insert-phys-priority')?.value || 'media';
+  const rawDescription = document.getElementById('insert-phys-description')?.value.trim() || '';
+  const description = extractCleanPhysicalDescription(rawDescription);
+
+  if (!description) {
+    notify('Por favor escribe la descripción o falla física del registro.', 'warn');
+    document.getElementById('insert-phys-description')?.focus();
+    return;
+  }
+
+  const nd = (state.nodes || []).find(n => String(n.id) === String(nodeId));
+  const targetPlace = nodeName;
+  const categoryLabel = typeof orderCategoryLabel === 'function' ? orderCategoryLabel(category) : category;
+
+  const physStatus = typeof getPhysicalDerivationStatus === 'function' && order ? getPhysicalDerivationStatus(order) : { pending: false };
+  const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  const isSoporte = typeof userHasRole === 'function' && userHasRole('soporte');
+  const isAtencion = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
+  const isAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+  const now = new Date().toISOString();
+  const orderFolio = order ? (typeof getWorkOrderFolio === 'function' ? getWorkOrderFolio(order) : (order.folio || order.id)) : '';
+
+  // Determinar si es confirmación de acuerdo o propuesta inicial
+  const isAgreementConfirmation = physStatus.pending && (physStatus.proposedBy === 'soporte' ? (isAtencion || isAdmin) : (isSoporte || isAdmin));
+  const isDirectAdminRegistration = !physStatus.pending && isAdmin;
+
+  if (isAgreementConfirmation || isDirectAdminRegistration) {
+    // Confirmación de acuerdo: resumen claro y conciso
+    if (typeof askConfirmation === 'function') {
+      const propBy = physStatus.proposedByName ? `\n• Propuesto por: ${physStatus.proposedByName}` : '';
+      const confirmed = await askConfirmation({
+        title: '¿Confirmar acuerdo y registrar detalle físico?',
+        message: `• Pueblo: ${nodeName}\n• Falla: ${description}${propBy}\n\nSe registrará en el pueblo y se cerrará este reporte de red.`,
+        confirmText: 'Confirmar y cerrar reporte',
+        cancelText: 'Cancelar',
+        tone: 'ok'
+      });
+      if (!confirmed) return;
+    }
+
+    const newPhysical = {
+      id: typeof generateId === 'function' ? generateId() : ('ph_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+      detailKind: 'physical',
+      category: category,
+      title: description.length > 80 ? (description.slice(0, 77) + '...') : description,
+      description: description,
+      priority: priority,
+      visitType: 'comunidad', // Forzosamente en el pueblo
+      equipmentId: '', // NO antena
+      equipmentName: '',
+      nodeId: nodeId || '',
+      nodeName: nodeName,
+      region: nd?.region || (order ? order.region : '') || '',
+      detailLocation: nd?.location || (order ? order.detailLocation : '') || nodeName,
+      lat: nd?.lat || (order ? order.lat : '') || '',
+      lng: nd?.lng || (order ? order.lng : '') || '',
+      clientName: '',
+      clientPhone: '',
+      assignedUserId: '', // No se asigna a nadie para resolver
+      assignedUserName: '',
+      status: 'pendiente',
+      createdById: currentUser.id || '',
+      createdByName: currentUser.name || currentUser.username || 'Personal',
+      createdAt: now,
+      updatedAt: now,
+      originNetworkOrderId: order ? order.id : '',
+      originNetworkFolio: orderFolio,
+      followUps: [
+        {
+          action: 'physical_record_created',
+          user: currentUser.name || currentUser.username || 'Sistema',
+          at: now,
+          note: orderFolio ? `Registro físico creado por acuerdo mutuo en pueblo ${nodeName} desde reporte de red ${orderFolio}` : `Registro físico creado en pueblo ${nodeName}`
+        }
+      ]
+    };
+
+    state.workOrders = state.workOrders || [];
+    state.workOrders.push(newPhysical);
+    if (typeof saveRecord === 'function') {
+      await saveRecord('workOrders', newPhysical);
+    }
+
+    if (order) {
+      order.status = 'completada';
+      order.completedAt = now;
+      order.closedReason = 'physical_registered';
+      order.reviewOpenedAt = '';
+      order.reviewOpenedById = '';
+      order.reviewOpenedByName = '';
+      order.reviewOpenedByUsername = '';
+      order.technicianReport = {
+        ...(order.technicianReport || {}),
+        result: 'completada',
+        solution: `Concluido por pase a detalle físico acordado por ambas partes en pueblo ${nodeName}: ${description}`,
+        completedAt: now
+      };
+      if (typeof appendSharedNetworkFollowUp === 'function') {
+        appendSharedNetworkFollowUp(
+          order,
+          'physical',
+          'Derivado a Detalle Físico por acuerdo mutuo',
+          `Acuerdo mutuo completado. Registrado en pueblo ${nodeName}: "${description}". Reporte de red cerrado.`
+        );
+      }
+      delete order.physicalProposal;
+      order.updatedAt = now;
+      order.updatedById = currentUser.id || '';
+      if (typeof saveRecord === 'function') {
+        await saveRecord('workOrders', order);
+      }
+      if (typeof broadcastNetworkOrderChange === 'function') {
+        broadcastNetworkOrderChange(order, 'sent_to_physical');
+      }
+      if (typeof updateOrderChatLive === 'function') {
+        updateOrderChatLive(order);
+      }
+    }
+
+    CM('insert-physical-record-mo');
+    if (typeof renderWOs === 'function') renderWOs();
+    if (typeof renderAntennaDetailList === 'function') renderAntennaDetailList();
+    if (typeof renderNodeDetailList === 'function') renderNodeDetailList();
+    if (typeof insertPhysRefreshCallback === 'function') {
+      try { insertPhysRefreshCallback(); } catch (e) { }
+    }
+
+    notify(`Acuerdo mutuo completado: Detalle físico registrado en ${nodeName} y reporte de red cerrado.`, 'ok');
+  } else {
+    // Propuesta inicial: resumen conciso
+    if (typeof askConfirmation === 'function') {
+      const confirmed = await askConfirmation({
+        title: '¿Enviar propuesta de detalle físico?',
+        message: `• Pueblo: ${nodeName}\n• Falla: ${description}\n\nSe enviará a la contraparte para su acuerdo mutuo.`,
+        confirmText: 'Enviar propuesta',
+        cancelText: 'Cancelar',
+        tone: 'primary'
+      });
+      if (!confirmed) return;
+    }
+
+    if (order) {
+      const proposedBy = (isSoporte && !isAtencion) ? 'soporte' : (isAtencion ? 'atencion' : (typeof isNetworkSupportToAttention === 'function' && isNetworkSupportToAttention(order) ? 'soporte' : 'atencion'));
+      const roleLabel = proposedBy === 'soporte' ? 'Soporte técnico' : 'Atención a clientes';
+
+      order.physicalProposal = {
+        equipmentId: '',
+        equipmentName: '',
+        nodeId,
+        nodeName,
+        category,
+        priority,
+        description,
+        proposedBy,
+        proposedByName: currentUser.name || currentUser.username || roleLabel,
+        at: now
+      };
+      if (typeof appendSharedNetworkFollowUp === 'function') {
+        appendSharedNetworkFollowUp(
+          order,
+          `physical_proposed_${proposedBy}`,
+          `Pase a Detalles Físicos propuesto por ${roleLabel}`,
+          `Pueblo: ${nodeName} · Categoría: ${categoryLabel} · Falla: ${description}`
+        );
+      }
+      order.updatedAt = now;
+      order.updatedById = currentUser.id || '';
+      if (typeof saveRecord === 'function') {
+        await saveRecord('workOrders', order);
+      }
+      if (typeof broadcastNetworkOrderChange === 'function') {
+        broadcastNetworkOrderChange(order, 'physical_proposed', { proposedBy });
+      }
+      if (typeof updateOrderChatLive === 'function') {
+        updateOrderChatLive(order);
+      }
+    }
+
+    CM('insert-physical-record-mo');
+    if (typeof renderWOs === 'function') renderWOs();
+    if (typeof insertPhysRefreshCallback === 'function') {
+      try { insertPhysRefreshCallback(); } catch (e) { }
+    }
+
+    notify('Propuesta enviada al chat. Se requiere el acuerdo de la contraparte para registrar y cerrar el reporte de red.', 'ok');
+  }
+}
+
 async function sendSharedNetworkToPhysical(id,refreshName) {
   const detail=(state.workOrders||[]).find(item=>item.id===id&&!item.deletedAt); if(!detail)return;
   const note=sharedNetworkActionNote();
   if(!note){notify('Describe el detalle físico que se presentó.','err');document.getElementById('shared-network-action-note')?.focus();return;}
-  const original=detail.description||detail.title||''; const category=detailCategoryLabel(detail.category);
-  Object.assign(detail,{detailKind:'physical',category:'otro',title:note,description:note,status:'pendiente',completedAt:'',reviewOpenedAt:'',reviewOpenedById:'',reviewOpenedByName:'',reviewOpenedByUsername:'',reviewedAt:'',lastResentAt:new Date().toISOString()});
-  resetSharedNetworkReport(detail);
-  appendSharedNetworkFollowUp(detail,'physical','Enviado a detalle físico',`${note} · Origen de red: ${category}${original?` · Reporte original: ${original}`:''}`);
-  await saveSharedNetworkWorkflow(detail,refreshName,'envió detalle a físicos','El mismo folio fue enviado a Detalles físicos.');
+  const now = new Date().toISOString();
+  const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  const orderFolio = typeof getWorkOrderFolio === 'function' ? getWorkOrderFolio(detail) : (detail.folio || detail.id);
+  const registeredNode = typeof resolveOrderRegisteredNode === 'function'
+    ? resolveOrderRegisteredNode(detail)
+    : { nodeId: detail.nodeId || '', nodeName: detail.nodeName || 'Pueblo registrado' };
+  const nodeId = registeredNode.nodeId || detail.nodeId || '';
+  const nodeName = registeredNode.nodeName || detail.nodeName || 'Pueblo registrado';
+  const targetPlace = nodeName;
+
+  const newPhysical = {
+    id: typeof generateId === 'function' ? generateId() : ('ph_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+    detailKind: 'physical',
+    category: 'otro',
+    title: note.length > 80 ? (note.slice(0, 77) + '...') : note,
+    description: note,
+    priority: detail.priority || 'media',
+    visitType: 'comunidad',
+    equipmentId: '',
+    equipmentName: '',
+    nodeId: nodeId,
+    nodeName: nodeName,
+    region: detail.region || '',
+    detailLocation: detail.detailLocation || nodeName,
+    clientName: '',
+    clientPhone: '',
+    assignedUserId: '', // No se asigna a nadie para resolver
+    assignedUserName: '',
+    status: 'pendiente',
+    createdById: currentUser.id || '',
+    createdByName: currentUser.name || currentUser.username || 'Personal',
+    createdAt: now,
+    updatedAt: now,
+    originNetworkOrderId: detail.id,
+    originNetworkFolio: orderFolio,
+    followUps: [
+      {
+        action: 'physical_record_created',
+        user: currentUser.name || currentUser.username || 'Sistema',
+        at: now,
+        note: `Registro físico creado en pueblo ${nodeName} desde el detalle de red ${orderFolio}`
+      }
+    ]
+  };
+
+  state.workOrders = state.workOrders || [];
+  state.workOrders.push(newPhysical);
+  await saveRecord('workOrders', newPhysical);
+
+  hideSharedNetworkActionForm();
+  appendSharedNetworkFollowUp(detail,'physical','Detalle físico registrado',`${note} · Vinculado a pueblo: ${targetPlace}`);
+  await saveSharedNetworkWorkflow(detail,refreshName,'registró detalle físico en pueblo',`Se creó registro físico en ${targetPlace}.`);
+  notify(`Detalle físico registrado exitosamente en ${targetPlace}. El caso de red permanece activo.`,'ok');
+}
+
+if (typeof window !== 'undefined') {
+  window.resolveOrderRegisteredNode = resolveOrderRegisteredNode;
+  window.extractCleanPhysicalDescription = extractCleanPhysicalDescription;
+  window.openInsertPhysicalRecordModal = openInsertPhysicalRecordModal;
+  window.saveInsertedPhysicalRecord = saveInsertedPhysicalRecord;
+  window.onInsertPhysEquipmentChange = onInsertPhysEquipmentChange;
+  window.onInsertPhysNodeChange = onInsertPhysNodeChange;
+  window.rejectPhysicalRecordProposalFromModal = rejectPhysicalRecordProposalFromModal;
+  window.isOrderCreator = isOrderCreator;
 }
 
 function completeSharedNetworkDetail(id,refreshName) {
@@ -2961,6 +3583,12 @@ function showRightScreenNotification({
 }
 
 function requestNotificationPermissionOnce() {
+  const isTecnico = (typeof userHasRole === 'function' && userHasRole('tecnico')) ||
+                    (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
+                    (typeof normalizeRole === 'function' && normalizeRole(typeof getCurrentUser === 'function' ? getCurrentUser()?.role : '') === 'tecnico') ||
+                    (document.documentElement?.dataset?.role === 'tecnico') ||
+                    (document.body && document.body.classList.contains('plan-technician-view'));
+  if (isTecnico) return;
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission === 'default') {
     try {
@@ -2996,6 +3624,12 @@ function initServiceWorker() {
 }
 
 function triggerDesktopNotification({ title, message, url = '', orderId = '', eventId = '' }) {
+  const isTecnico = (typeof userHasRole === 'function' && userHasRole('tecnico')) ||
+                    (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
+                    (typeof normalizeRole === 'function' && normalizeRole(typeof getCurrentUser === 'function' ? getCurrentUser()?.role : '') === 'tecnico') ||
+                    (document.documentElement?.dataset?.role === 'tecnico') ||
+                    (document.body && document.body.classList.contains('plan-technician-view'));
+  if (isTecnico) return;
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission === 'granted') {
     try {
@@ -4716,6 +5350,110 @@ if (typeof window !== 'undefined') {
 let currentTowerMaterialAntennaId = '';
 let pendingTowerMaterialCompletionDetail = null;
 let pendingTowerMaterialPhotos = [];
+let pendingTowerExtraPhotos = [];
+let _lastActiveTowerSlot = '';
+let pendingTowerSlots = {
+  batteries: '',
+  panels: '',
+  controller: '',
+  tower: '',
+  cabinet: '',
+  lightning: '',
+  mikrotik: '',
+  poe: ''
+};
+
+const TOWER_PHOTO_SLOTS = [
+  {
+    id: 'batteries',
+    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="16" height="10" rx="2"/><line x1="20" y1="11" x2="20" y2="13"/></svg>',
+    group: 'energy',
+    groupTitle: '1. Energía y solar',
+    groupSubtitle: 'Pilas · Paneles · Controlador',
+    title: 'Pilas / Baterías',
+    specificPrompt: 'Que se vea el <strong>tipo de pilas</strong> y capacidad',
+    badgeText: 'Tipo visible',
+    required: true
+  },
+  {
+    id: 'panels',
+    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>',
+    group: 'energy',
+    groupTitle: '1. Energía y solar',
+    groupSubtitle: 'Pilas · Paneles · Controlador',
+    title: 'Paneles Solares',
+    specificPrompt: 'Que se vea el <strong>whataje (W)</strong> o etiqueta',
+    badgeText: 'Wattaje visible',
+    required: true
+  },
+  {
+    id: 'controller',
+    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="9" cy="9" r="2"/><circle cx="15" cy="15" r="2"/></svg>',
+    group: 'energy',
+    groupTitle: '1. Energía y solar',
+    groupSubtitle: 'Pilas · Paneles · Controlador',
+    title: 'Controlador de Carga',
+    specificPrompt: 'Vista frontal del <strong>controlador</strong> o pantalla',
+    badgeText: 'Frontal / Display',
+    required: true
+  },
+  {
+    id: 'tower',
+    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="6" y1="17" x2="18" y2="17"/></svg>',
+    group: 'structure',
+    groupTitle: '2. Estructura y cajas',
+    groupSubtitle: 'Torre · Cajas · Pararrayos',
+    title: 'Torre Completa',
+    specificPrompt: 'Panorámica de la <strong>torre completa</strong> desde la base',
+    badgeText: 'Estructura completa',
+    required: true
+  },
+  {
+    id: 'cabinet',
+    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="12" y1="4" x2="12" y2="20"/></svg>',
+    group: 'structure',
+    groupTitle: '2. Estructura y cajas',
+    groupSubtitle: 'Torre · Cajas · Pararrayos',
+    title: 'Cajas (Gabinete)',
+    specificPrompt: 'Interior de las <strong>cajas o gabinete</strong> y sellos',
+    badgeText: 'Acomodo de cajas',
+    required: true
+  },
+  {
+    id: 'lightning',
+    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
+    group: 'structure',
+    groupTitle: '2. Estructura y cajas',
+    groupSubtitle: 'Torre · Cajas · Pararrayos',
+    title: 'Pararrayos',
+    specificPrompt: 'Punta o bajante a tierra (<strong>Opcional</strong>)',
+    badgeText: 'Opcional',
+    required: false
+  },
+  {
+    id: 'mikrotik',
+    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="8" width="20" height="8" rx="2"/><circle cx="6" cy="12" r="1"/><circle cx="10" cy="12" r="1"/><circle cx="14" cy="12" r="1"/></svg>',
+    group: 'network',
+    groupTitle: '3. Red y alimentación',
+    groupSubtitle: 'MikroTik · PoE',
+    title: 'MikroTik',
+    specificPrompt: 'Equipo <strong>MikroTik</strong> con modelo y puertos',
+    badgeText: 'Modelo visible',
+    required: true
+  },
+  {
+    id: 'poe',
+    icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v6M18 3v6M4 9h16v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V9z"/></svg>',
+    group: 'network',
+    groupTitle: '3. Red y alimentación',
+    groupSubtitle: 'MikroTik · PoE',
+    title: 'PoE (Inyector / Switch)',
+    specificPrompt: 'Inyector o switch <strong>PoE</strong> y alimentación',
+    badgeText: 'PoE visible',
+    required: true
+  }
+];
+
 const DEFAULT_BALANCER_PORTS = 9;
 let pendingBalancerPortCount = DEFAULT_BALANCER_PORTS;
 let pendingBalancerPorts = [];
@@ -4778,35 +5516,68 @@ function getBalancerPortsStats(eq) {
   return { count, withAnyPhoto, withBothSides };
 }
 
+function isDetailForAntennaTower(detail, stop = null) {
+  if (!detail) return false;
+  // Si pertenece a un pueblo o nodo, NO es de antena/torre,
+  // no importa que esté relacionado a esa antena.
+  if (detail.nodeId) return false;
+  if (detail.visitType === 'comunidad') return false;
+  if (detail.targetType === 'node' || detail.target === 'node') return false;
+
+  // Si la parada donde se atiende es de pueblo o nodo
+  if (stop && (stop.nodeId || stop.type === 'node')) return false;
+
+  // Si está vinculado en el mapa a una parada que es de pueblo/nodo
+  if (typeof getPlanMapStops === 'function') {
+    const matchedStop = getPlanMapStops().find(s =>
+      ((s.detailIds || []).includes(detail.id) || s.id === detail.stopId)
+    );
+    if (matchedStop && (matchedStop.nodeId || matchedStop.type === 'node')) {
+      return false;
+    }
+  }
+
+  // Para ser de antena/torre, debe tener equipo directo y no pertenecer a pueblo
+  if (detail.equipmentId) return true;
+  if (stop && stop.equipmentId && !stop.nodeId && (stop.type === 'equipment' || !stop.type)) return true;
+  if (detail.equipmentName && !detail.nodeId && detail.visitType !== 'comunidad') return true;
+
+  return false;
+}
+
 function findAntennaForDetail(detail, stop = null) {
   if (!detail) return null;
-  // Si tiene nodo asignado explícitamente y no es antena, no es torre
-  if (detail.nodeId && !detail.equipmentId) return null;
+  // Solo aplica para detalles directos de antena/torre.
+  // Si es de pueblo/nodo (aunque esté relacionado a esa antena), no pedirá material de torre.
+  if (!isDetailForAntennaTower(detail, stop)) return null;
+
   if (detail.equipmentId) {
     const eq = (state.equipment || []).find(e => e.id === detail.equipmentId && !e.deletedAt);
     if (eq) return eq;
   }
-  if (stop && stop.equipmentId && !stop.nodeId && !detail.nodeId) {
+  if (stop && stop.equipmentId && !stop.nodeId && (stop.type === 'equipment' || !stop.type)) {
     const eq = (state.equipment || []).find(e => e.id === stop.equipmentId && !e.deletedAt);
     if (eq) return eq;
   }
   if (typeof getPlanMapStops === 'function') {
     const matchedStop = getPlanMapStops().find(s =>
       ((s.detailIds || []).includes(detail.id) || s.id === detail.stopId) &&
-      s.equipmentId && !s.nodeId && !detail.nodeId
+      s.equipmentId && !s.nodeId && (s.type === 'equipment' || !s.type)
     );
-    if (matchedStop) {
+    if (matchedStop && !matchedStop.nodeId) {
       const eq = (state.equipment || []).find(e => e.id === matchedStop.equipmentId && !e.deletedAt);
       if (eq) return eq;
     }
   }
-  if (detail.equipmentName && !detail.nodeId) {
+  if (detail.equipmentName && !detail.nodeId && detail.visitType !== 'comunidad') {
     const targetName = String(detail.equipmentName).trim().toLowerCase();
     const eq = (state.equipment || []).find(e => !e.deletedAt && String(e.name || '').trim().toLowerCase() === targetName);
     if (eq) return eq;
   }
   return null;
 }
+window.isDetailForAntennaTower = isDetailForAntennaTower;
+window.findAntennaForDetail = findAntennaForDetail;
 
 var currentTowerMaterialIsMandatory = false;
 
@@ -4819,8 +5590,9 @@ function hasTowerMaterial(eq) {
   const hasExtra = Boolean(eq.towerExtraNotes && String(eq.towerExtraNotes).trim());
   const hasNotes = Boolean(eq.towerMaterialNotes && String(eq.towerMaterialNotes).trim());
   const hasPhotos = Array.isArray(eq.towerMaterialPhotos) && eq.towerMaterialPhotos.length > 0;
+  const hasSlots = Boolean(eq.towerMaterialSlots && Object.values(eq.towerMaterialSlots).some(Boolean));
   const hasBalancer = typeof isBalancerEquipment === 'function' && isBalancerEquipment(eq) && Array.isArray(eq.balancerPorts) && eq.balancerPorts.some(p => p.frontPhoto || p.backPhoto || p.label);
-  return Boolean(hasSections || hasRadios || hasBatteries || hasPanels || hasExtra || hasNotes || hasPhotos || hasBalancer);
+  return Boolean(hasSections || hasRadios || hasBatteries || hasPanels || hasExtra || hasNotes || hasPhotos || hasSlots || hasBalancer);
 }
 
 function wasTowerMaterialPromptedRecently(antennaId) {
@@ -4944,62 +5716,95 @@ function ensureTowerMaterialModal() {
 
           <div class="tower-mat-field">
             <label for="tower-mat-sections">
-              <span class="tower-mat-field-title">Número de tramos de torre</span>
-              <span class="tower-mat-field-help">Texto libre (ej. 4 tramos de 3m, 12 metros arriostrada, etc.)</span>
+              <span class="tower-mat-field-title">Tramos de torre</span>
+              <span class="tower-mat-field-help">Tramos o altura (ej. 4 tramos de 3m)</span>
             </label>
-            <input type="text" id="tower-mat-sections" placeholder="Ej. 4 tramos de 3m, torre arriostrada...">
+            <input type="text" id="tower-mat-sections" placeholder="Ej. 4 tramos de 3m...">
           </div>
 
           <div class="tower-mat-field">
             <label for="tower-mat-radios">
               <span class="tower-mat-field-title">Radios instalados</span>
-              <span class="tower-mat-field-help">Texto libre: qué radios hay en la torre (ej. 2 Rocket Prism 5AC, 1 LiteBeam AC, 1 PowerBeam...)</span>
+              <span class="tower-mat-field-help">Modelos en torre (ej. 2 Rocket Prism 5AC)</span>
             </label>
-            <input type="text" id="tower-mat-radios" placeholder="Ej. 2 Rocket Prism 5AC, 1 LiteBeam AC, 1 PowerBeam...">
+            <input type="text" id="tower-mat-radios" placeholder="Ej. 2 Rocket Prism, 1 LiteBeam...">
           </div>
 
           <div class="tower-mat-field">
             <label for="tower-mat-batteries">
-              <span class="tower-mat-field-title">Pilas / Baterías y tipo</span>
-              <span class="tower-mat-field-help">Texto libre: cuántas pilas hay y de qué tipo (ej. 2 pilas de gel 100Ah, 4 LTH 12V...)</span>
+              <span class="tower-mat-field-title">Pilas / Baterías</span>
+              <span class="tower-mat-field-help">Cantidad y tipo de pilas (ej. 2 gel 100Ah)</span>
             </label>
-            <input type="text" id="tower-mat-batteries" placeholder="Ej. 2 pilas de gel 100Ah, 4 pilas LTH 12V...">
+            <input type="text" id="tower-mat-batteries" placeholder="Ej. 2 de gel 100Ah, 4 LTH 12V...">
           </div>
 
           <div class="tower-mat-field">
             <label for="tower-mat-panels">
-              <span class="tower-mat-field-title">Paneles y tipo de panel</span>
-              <span class="tower-mat-field-help">Texto libre: cuántos paneles y de qué tipo (ej. 2 paneles monocristalinos 450W...)</span>
+              <span class="tower-mat-field-title">Paneles solares</span>
+              <span class="tower-mat-field-help">Cantidad y whataje (ej. 2 paneles 450W)</span>
             </label>
-            <input type="text" id="tower-mat-panels" placeholder="Ej. 2 paneles 450W monocristalino, 1 chico...">
+            <input type="text" id="tower-mat-panels" placeholder="Ej. 2 paneles 450W...">
           </div>
 
           <div class="tower-mat-field">
             <label for="tower-mat-extra">
-              <span class="tower-mat-field-title">Otros materiales u observaciones libres</span>
-              <span class="tower-mat-field-help">Escribe lo que quieras: otros equipos, reguladores, cableado, notas adicionales</span>
+              <span class="tower-mat-field-title">Otros materiales u observaciones</span>
+              <span class="tower-mat-field-help">Otros equipos, cableado o notas</span>
             </label>
-            <textarea id="tower-mat-extra" rows="3" placeholder="Ej. Regulador MPPT 40A, gabinete intemperie, cableado duplex en buen estado..."></textarea>
+            <textarea id="tower-mat-extra" rows="2" placeholder="Notas adicionales de la torre..."></textarea>
           </div>
 
           <div class="tower-mat-photos-section">
-            <div class="tower-mat-photos-head">
-              <div>
-                <span class="tower-mat-field-title">Fotografías de la torre y equipo</span>
-                <span class="tower-mat-field-help">Fotos de constancia para verificar lo que hay en la torre</span>
+            <!-- Checklist Progress Card -->
+            <div class="tower-photos-checklist-card">
+              <div class="tower-photos-checklist-head">
+                <div>
+                  <span class="tower-photos-checklist-title">Fotos de la torre</span>
+                  <span class="tower-photos-checklist-subtitle">Fotos del equipo en sitio para constancia técnica.</span>
+                </div>
+                <div class="tower-photos-checklist-actions">
+                  <label class="btn-tower-bulk-upload" title="Selecciona varias fotos de tu galería y se asignarán a las casillas vacías">
+                    Carga rápida (varias fotos)
+                    <input type="file" accept="image/*" multiple onchange="handleTowerBulkPhotoUpload(this.files);this.value=''" hidden>
+                  </label>
+                </div>
               </div>
-              <div class="tower-mat-photo-buttons">
-                <label class="btn bc bsm">
-                  📷 Tomar foto
-                  <input type="file" accept="image/*" capture="environment" onchange="handleTowerMaterialPhotoUpload(this.files);this.value=''" hidden>
-                </label>
-                <label class="btn bgh bsm">
-                  🖼️ Galería
-                  <input type="file" accept="image/*" multiple onchange="handleTowerMaterialPhotoUpload(this.files);this.value=''" hidden>
-                </label>
+
+              <!-- Live Progress Bar -->
+              <div class="tower-photos-progress-bar-wrap">
+                <div class="tower-photos-progress-bar-track">
+                  <div id="tower-photos-progress-fill" class="tower-photos-progress-bar-fill" style="width: 0%;"></div>
+                </div>
+                <div class="tower-photos-progress-stats">
+                  <span id="tower-photos-progress-label">0 de 7 fotos requeridas (0%)</span>
+                  <span class="tower-photos-optional-pill">Pararrayos: opcional</span>
+                </div>
               </div>
             </div>
-            <div id="tower-mat-photo-gallery" class="tower-mat-gallery"></div>
+
+            <!-- Slots Groups Grid -->
+            <div id="tower-photos-slots-container" class="tower-photos-slots-container"></div>
+
+            <!-- Extra Photos Section (Optional) -->
+            <div class="tower-photos-extras-section">
+              <div class="tower-photos-extras-head">
+                <div>
+                  <span class="tower-photos-extras-title">Fotos adicionales <span id="tower-photos-extras-count">(0)</span></span>
+                  <span class="tower-photos-extras-sub">Panorámicas, entorno o adicionales</span>
+                </div>
+                <div class="tower-mat-photo-buttons">
+                  <label class="btn bc bsm">
+                    Cámara
+                    <input type="file" accept="image/*" capture="environment" onchange="handleTowerExtraPhotoUpload(this.files);this.value=''" hidden>
+                  </label>
+                  <label class="btn bgh bsm">
+                    Galería
+                    <input type="file" accept="image/*" multiple onchange="handleTowerExtraPhotoUpload(this.files);this.value=''" hidden>
+                  </label>
+                </div>
+              </div>
+              <div id="tower-mat-photo-gallery" class="tower-mat-gallery"></div>
+            </div>
           </div>
 
           <div class="tower-mat-balancer-section" id="tower-mat-balancer-section" style="display:none;"></div>
@@ -5044,7 +5849,7 @@ function openTowerMaterialModal(antennaId, options = {}) {
   const badgeEl = document.getElementById('tower-mat-badge-text');
   if (badgeEl) {
     badgeEl.textContent = isBalancer
-      ? '⚖️ BALANCEADOR · INVENTARIO DE TORRE Y PUERTOS MIKROTIK'
+      ? 'BALANCEADOR · INVENTARIO Y PUERTOS'
       : 'MATERIAL DE TORRE';
   }
 
@@ -5055,7 +5860,7 @@ function openTowerMaterialModal(antennaId, options = {}) {
   if (subEl) {
     const zoneStr = typeof getZoneLabel === 'function' ? getZoneLabel(antenna.region) : (antenna.region || '');
     subEl.textContent = isBalancer
-      ? `Balanceador ${antenna.name || ''}${zoneStr ? ` · Zona: ${zoneStr}` : ''} · Inventario de torre y módems por puerto MikroTik.`
+      ? `Balanceador ${antenna.name || ''}${zoneStr ? ` · Zona: ${zoneStr}` : ''}`
       : `Torre de ${antenna.name || 'antena'}${zoneStr ? ` · Zona: ${zoneStr}` : ''}`;
   }
 
@@ -5068,14 +5873,14 @@ function openTowerMaterialModal(antennaId, options = {}) {
       notice.style.display = 'flex';
       if (isMandatory) {
         notice.classList.add('is-mandatory');
-        if (noticeIcon) noticeIcon.textContent = '⚠️';
+        if (noticeIcon) noticeIcon.textContent = '•';
         if (noticeTitle) noticeTitle.textContent = 'Registro obligatorio de material de torre';
-        if (noticeDesc) noticeDesc.textContent = 'Esta torre aún no tiene material registrado. Es obligatorio ingresar los datos o fotos antes de continuar.';
+        if (noticeDesc) noticeDesc.textContent = 'Esta torre no tiene material registrado. Ingresa los datos o fotos para continuar.';
       } else {
         notice.classList.remove('is-mandatory');
         if (noticeIcon) noticeIcon.textContent = '✓';
         if (noticeTitle) noticeTitle.textContent = options.detailTitle ? `Detalle terminado: "${options.detailTitle}"` : 'Detalle terminado';
-        if (noticeDesc) noticeDesc.textContent = 'Verifica o actualiza el material instalado en esta torre. Puedes editar los campos o pulsar "Continuar" para mantener los datos actuales.';
+        if (noticeDesc) noticeDesc.textContent = 'Verifica o actualiza el material instalado en esta torre.';
       }
     } else {
       notice.style.display = 'none';
@@ -5116,9 +5921,9 @@ function openTowerMaterialModal(antennaId, options = {}) {
       const d = new Date(antenna.towerMaterialUpdatedAt);
       const dStr = !isNaN(d.getTime()) ? d.toLocaleString('es-MX', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : antenna.towerMaterialUpdatedAt;
       const by = antenna.towerMaterialUpdatedByName ? ` por ${antenna.towerMaterialUpdatedByName}` : '';
-      updatedEl.innerHTML = `<span>🕒 Registro actual: <strong>${escapeHtml(dStr)}${escapeHtml(by)}</strong></span>`;
+      updatedEl.innerHTML = `<span>Registro actual: <strong>${escapeHtml(dStr)}${escapeHtml(by)}</strong></span>`;
     } else {
-      updatedEl.innerHTML = `<span>ℹ️ Esta torre aún no tiene material registrado previamente.</span>`;
+      updatedEl.innerHTML = `<span>Torre sin registro previo de material.</span>`;
     }
   }
 
@@ -5143,8 +5948,29 @@ function openTowerMaterialModal(antennaId, options = {}) {
     );
   }
 
-  pendingTowerMaterialPhotos = Array.isArray(antenna.towerMaterialPhotos) ? antenna.towerMaterialPhotos.slice() : [];
-  renderTowerMaterialPhotos();
+  pendingTowerSlots = {
+    batteries: '',
+    panels: '',
+    controller: '',
+    tower: '',
+    cabinet: '',
+    lightning: '',
+    mikrotik: '',
+    poe: ''
+  };
+  if (antenna.towerMaterialSlots && typeof antenna.towerMaterialSlots === 'object') {
+    Object.keys(pendingTowerSlots).forEach(k => {
+      pendingTowerSlots[k] = String(antenna.towerMaterialSlots[k] || '').trim();
+    });
+  }
+  pendingTowerExtraPhotos = Array.isArray(antenna.towerMaterialExtraPhotos)
+    ? antenna.towerMaterialExtraPhotos.slice()
+    : (Array.isArray(antenna.towerMaterialPhotos) && !antenna.towerMaterialSlots
+        ? antenna.towerMaterialPhotos.slice()
+        : []);
+  pendingTowerMaterialPhotos = Object.values(pendingTowerSlots).filter(Boolean).concat(pendingTowerExtraPhotos);
+  renderTowerMaterialPhotoSlots();
+  renderTowerExtraPhotos();
 
   pendingBalancerPortCount = getBalancerPortCount(antenna);
   pendingBalancerPorts = normalizeBalancerPorts(antenna, pendingBalancerPortCount);
@@ -5386,54 +6212,318 @@ function renderBalancerPortsSection() {
   `;
 }
 
-async function handleTowerMaterialPhotoUpload(files) {
+async function compressOrOptimizeTowerImage(file) {
+  if (!file) return '';
+  if (typeof optimizeImageForUpload === 'function') {
+    return optimizeImageForUpload(file);
+  }
+  if (typeof compressWOEvidenceImage === 'function') {
+    return compressWOEvidenceImage(file);
+  }
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = ev => resolve(ev.target.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function handleSlotPhotoUpload(slotId, files) {
+  const file = files && files[0];
+  if (!file) return;
+  _lastActiveTowerSlot = slotId;
+  const slotDef = TOWER_PHOTO_SLOTS.find(s => s.id === slotId);
+  const slotName = slotDef ? slotDef.title : slotId;
+  if (typeof notify === 'function') notify('Optimizando foto de ' + slotName + '...');
+  try {
+    const dataUrl = await compressOrOptimizeTowerImage(file);
+    if (dataUrl) {
+      pendingTowerSlots[slotId] = dataUrl;
+      renderTowerMaterialPhotoSlots();
+      if (typeof notify === 'function') notify(`✓ Foto de ${slotName} guardada en casilla.`, 'ok');
+    }
+  } catch (err) {
+    console.warn('Error al procesar foto para ' + slotId, err);
+    if (typeof notify === 'function') notify('No se pudo procesar la imagen.', 'err');
+  }
+}
+
+function removeSlotPhoto(slotId) {
+  pendingTowerSlots[slotId] = '';
+  renderTowerMaterialPhotoSlots();
+}
+
+function previewSlotPhoto(slotId) {
+  const photo = pendingTowerSlots[slotId];
+  if (!photo) return;
+  const allPhotos = Object.values(pendingTowerSlots).filter(Boolean).concat(pendingTowerExtraPhotos);
+  const targetIndex = allPhotos.indexOf(photo);
+  if (typeof openEvidenceGallery === 'function') {
+    openEvidenceGallery(allPhotos, targetIndex >= 0 ? targetIndex : 0);
+  }
+}
+
+function handleSlotDragOver(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.classList.add('is-dragover');
+}
+
+async function handleSlotDrop(event, slotId) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.classList.remove('is-dragover');
+  const files = event.dataTransfer?.files;
+  if (files && files.length) {
+    await handleSlotPhotoUpload(slotId, files);
+  }
+}
+
+async function handleTowerBulkPhotoUpload(files) {
   const list = Array.from(files || []);
   if (!list.length) return;
-  if (typeof notify === 'function') notify('Optimizando foto(s)...');
-  for (const file of list) {
+  if (typeof notify === 'function') notify(`⚡ Procesando ${list.length} foto(s)...`, 'ok');
+
+  const slotOrder = ['batteries', 'panels', 'controller', 'tower', 'cabinet', 'mikrotik', 'poe', 'lightning'];
+  const emptySlots = slotOrder.filter(s => !pendingTowerSlots[s]);
+  let assignedCount = 0;
+
+  for (let i = 0; i < list.length; i++) {
+    const file = list[i];
     try {
-      let dataUrl = '';
-      if (typeof optimizeImageForUpload === 'function') {
-        dataUrl = await optimizeImageForUpload(file);
-      } else if (typeof compressWOEvidenceImage === 'function') {
-        dataUrl = await compressWOEvidenceImage(file);
+      const dataUrl = await compressOrOptimizeTowerImage(file);
+      if (!dataUrl) continue;
+      if (emptySlots.length > 0) {
+        const nextSlot = emptySlots.shift();
+        pendingTowerSlots[nextSlot] = dataUrl;
+        assignedCount++;
       } else {
-        dataUrl = await new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = ev => res(ev.target.result);
-          r.onerror = rej;
-          r.readAsDataURL(file);
-        });
+        pendingTowerExtraPhotos.push(dataUrl);
       }
-      if (dataUrl) {
-        pendingTowerMaterialPhotos.push(dataUrl);
-      }
-    } catch (err) {
-      console.warn('Error al procesar foto de torre:', err);
-      if (typeof notify === 'function') notify('No se pudo procesar una imagen.', 'err');
+    } catch (e) {
+      console.warn('Error en carga múltiple:', e);
     }
   }
-  renderTowerMaterialPhotos();
+
+  renderTowerMaterialPhotoSlots();
+  renderTowerExtraPhotos();
+  if (typeof notify === 'function') {
+    if (assignedCount > 0) {
+      notify(`⚡ ¡${assignedCount} foto(s) asignadas automáticamente a las casillas! Puedes revisarlas o cambiarlas si lo deseas.`, 'ok');
+    } else {
+      notify(`Fotos agregadas a la galería adicional.`, 'ok');
+    }
+  }
+}
+
+async function handleTowerExtraPhotoUpload(files) {
+  const list = Array.from(files || []);
+  if (!list.length) return;
+  if (typeof notify === 'function') notify('Optimizando foto(s) extra...');
+  for (const file of list) {
+    try {
+      const dataUrl = await compressOrOptimizeTowerImage(file);
+      if (dataUrl) pendingTowerExtraPhotos.push(dataUrl);
+    } catch (err) {
+      console.warn('Error al procesar foto extra:', err);
+      if (typeof notify === 'function') notify('No se pudo procesar una imagen extra.', 'err');
+    }
+  }
+  renderTowerExtraPhotos();
+}
+
+function removeTowerExtraPhoto(index) {
+  pendingTowerExtraPhotos.splice(index, 1);
+  renderTowerExtraPhotos();
+}
+
+function previewTowerExtraPhoto(index) {
+  const allPhotos = Object.values(pendingTowerSlots).filter(Boolean).concat(pendingTowerExtraPhotos);
+  const targetIndex = Object.values(pendingTowerSlots).filter(Boolean).length + index;
+  if (typeof openEvidenceGallery === 'function') {
+    openEvidenceGallery(allPhotos, targetIndex);
+  }
+}
+
+function renderTowerMaterialPhotoSlots() {
+  const container = document.getElementById('tower-photos-slots-container');
+  if (!container) return;
+
+  // Calculate progress
+  const requiredSlots = TOWER_PHOTO_SLOTS.filter(s => s.required);
+  const capturedRequired = requiredSlots.filter(s => Boolean(pendingTowerSlots[s.id])).length;
+  const totalRequired = requiredSlots.length; // 7
+  const pct = Math.round((capturedRequired / totalRequired) * 100);
+
+  const fillBar = document.getElementById('tower-photos-progress-fill');
+  if (fillBar) fillBar.style.width = `${pct}%`;
+
+  const labelEl = document.getElementById('tower-photos-progress-label');
+  if (labelEl) {
+    if (capturedRequired === totalRequired) {
+      labelEl.innerHTML = `<strong>✓ ${capturedRequired} de ${totalRequired} fotos requeridas (100%)</strong> · Todas listas`;
+      labelEl.style.color = '#059669';
+    } else {
+      labelEl.innerHTML = `<strong>${capturedRequired} de ${totalRequired} requeridas</strong> (${pct}%) · Faltan ${totalRequired - capturedRequired}`;
+      labelEl.style.color = '#334155';
+    }
+  }
+
+  // Groups
+  const groups = [
+    {
+      id: 'energy',
+      title: '1. Energía y solar',
+      icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
+      badge: 'Pilas · Paneles · Controlador',
+      slots: TOWER_PHOTO_SLOTS.filter(s => s.group === 'energy')
+    },
+    {
+      id: 'structure',
+      title: '2. Estructura y cajas',
+      icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="6" y1="17" x2="18" y2="17"/></svg>',
+      badge: 'Torre · Cajas · Pararrayos',
+      slots: TOWER_PHOTO_SLOTS.filter(s => s.group === 'structure')
+    },
+    {
+      id: 'network',
+      title: '3. Red y PoE',
+      icon: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="8" width="20" height="8" rx="2"/><circle cx="6" cy="12" r="1"/><circle cx="10" cy="12" r="1"/></svg>',
+      badge: 'MikroTik · PoE',
+      slots: TOWER_PHOTO_SLOTS.filter(s => s.group === 'network')
+    }
+  ];
+
+  container.innerHTML = groups.map(g => `
+    <div class="tower-photo-group">
+      <div class="tower-photo-group-header">
+        <span class="tower-photo-group-icon">${g.icon}</span>
+        <h4>${g.title}</h4>
+        <span class="tower-photo-group-badge">${g.badge}</span>
+      </div>
+      <div class="tower-photo-group-grid">
+        ${g.slots.map(s => {
+          const photoUrl = pendingTowerSlots[s.id];
+          const hasPhoto = Boolean(photoUrl);
+          const reqClass = s.required ? 'is-required' : 'is-optional';
+          const reqText = s.required ? 'Requerida' : 'Opcional';
+
+          if (hasPhoto) {
+            return `
+              <div class="tower-slot-card is-captured" data-slot="${s.id}">
+                <div class="tower-slot-head">
+                  <div class="tower-slot-title-wrap">
+                    <span class="tower-slot-icon">${s.icon}</span>
+                    <strong class="tower-slot-title" title="${escapeHtml(s.title)}">${escapeHtml(s.title)}</strong>
+                  </div>
+                  <span class="tower-slot-req-badge is-done">✓ Lista</span>
+                </div>
+                <div class="tower-slot-preview" onclick="previewSlotPhoto('${s.id}')" title="Clic para ampliar">
+                  <img src="${escapeHtml(photoUrl)}" alt="${escapeHtml(s.title)}">
+                  <div class="tower-slot-preview-overlay">
+                    <span>Ampliar</span>
+                  </div>
+                </div>
+                <div class="tower-slot-prompt-done">
+                  <span>✓ ${escapeHtml(s.badgeText)}</span>
+                </div>
+                <div class="tower-slot-actions is-replace">
+                  <label class="btn-slot-mini" title="Cambiar con cámara">
+                    Cámara
+                    <input type="file" accept="image/*" capture="environment" onchange="handleSlotPhotoUpload('${s.id}', this.files);this.value=''" hidden>
+                  </label>
+                  <label class="btn-slot-mini" title="Cambiar desde galería">
+                    Galería
+                    <input type="file" accept="image/*" onchange="handleSlotPhotoUpload('${s.id}', this.files);this.value=''" hidden>
+                  </label>
+                  <button type="button" class="btn-slot-remove" onclick="removeSlotPhoto('${s.id}')" title="Quitar imagen">✕</button>
+                </div>
+              </div>
+            `;
+          }
+
+          return `
+            <div class="tower-slot-card is-empty" data-slot="${s.id}" ondragover="handleSlotDragOver(event)" ondrop="handleSlotDrop(event, '${s.id}')">
+              <div class="tower-slot-head">
+                <div class="tower-slot-title-wrap">
+                  <span class="tower-slot-icon">${s.icon}</span>
+                  <strong class="tower-slot-title">${escapeHtml(s.title)}</strong>
+                </div>
+                <span class="tower-slot-req-badge ${reqClass}">${reqText}</span>
+              </div>
+              <div class="tower-slot-prompt">
+                <span class="prompt-icon"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+                <span>${s.specificPrompt}</span>
+              </div>
+              <div class="tower-slot-actions">
+                <label class="btn-slot-action primary" title="Tomar foto con la cámara del celular">
+                  Cámara
+                  <input type="file" accept="image/*" capture="environment" onchange="handleSlotPhotoUpload('${s.id}', this.files);this.value=''" hidden>
+                </label>
+                <label class="btn-slot-action secondary" title="Elegir foto de la galería">
+                  Galería
+                  <input type="file" accept="image/*" onchange="handleSlotPhotoUpload('${s.id}', this.files);this.value=''" hidden>
+                </label>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderTowerExtraPhotos() {
+  const gallery = document.getElementById('tower-mat-photo-gallery');
+  const countEl = document.getElementById('tower-photos-extras-count');
+  if (countEl) countEl.textContent = `(${pendingTowerExtraPhotos.length})`;
+  if (!gallery) return;
+
+  if (!pendingTowerExtraPhotos.length) {
+    gallery.innerHTML = '<div class="tower-mat-no-photos">Sin fotos adicionales libres. Puedes agregar vistas panorámicas o mediciones extras si lo requieres.</div>';
+    return;
+  }
+  gallery.innerHTML = pendingTowerExtraPhotos.map((photo, idx) => `
+    <div class="tower-mat-thumb-wrap">
+      <img src="${escapeHtml(photo)}" alt="Foto extra ${idx + 1}" onclick="previewTowerExtraPhoto(${idx})" title="Clic para ampliar y hacer zoom">
+      <button type="button" class="tower-mat-thumb-del" onclick="removeTowerExtraPhoto(${idx})" title="Eliminar foto">✕</button>
+    </div>
+  `).join('');
+}
+
+// Aliases para compatibilidad
+function handleTowerMaterialPhotoUpload(files) {
+  return handleTowerExtraPhotoUpload(files);
 }
 
 function removeTowerMaterialPhoto(index) {
-  pendingTowerMaterialPhotos.splice(index, 1);
-  renderTowerMaterialPhotos();
+  return removeTowerExtraPhoto(index);
 }
 
 function renderTowerMaterialPhotos() {
-  const gallery = document.getElementById('tower-mat-photo-gallery');
-  if (!gallery) return;
-  if (!pendingTowerMaterialPhotos.length) {
-    gallery.innerHTML = '<div class="tower-mat-no-photos">No hay fotografías registradas aún. Toca "Tomar foto" o "Galería" para agregar constancia visual.</div>';
-    return;
-  }
-  gallery.innerHTML = pendingTowerMaterialPhotos.map((photo, idx) => `
-    <div class="tower-mat-thumb-wrap">
-      <img src="${escapeHtml(photo)}" alt="Foto torre ${idx + 1}" onclick="openEvidenceGallery(pendingTowerMaterialPhotos, ${idx})" title="Clic para ampliar y hacer zoom">
-      <button type="button" class="tower-mat-thumb-del" onclick="removeTowerMaterialPhoto(${idx})" title="Eliminar foto">✕</button>
-    </div>
-  `).join('');
+  renderTowerMaterialPhotoSlots();
+  renderTowerExtraPhotos();
+}
+
+// Escuchar portapapeles (Ctrl+V) cuando el modal de torre está abierto
+if (typeof document !== 'undefined' && !document._towerMaterialPasteBound) {
+  document._towerMaterialPasteBound = true;
+  document.addEventListener('paste', async (event) => {
+    const modal = document.getElementById('tower-material-mo');
+    if (!modal || !modal.classList.contains('open')) return;
+    const items = event.clipboardData?.items || [];
+    for (const item of items) {
+      if (item.type && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (!file) continue;
+        event.preventDefault();
+        const slotOrder = ['batteries', 'panels', 'controller', 'tower', 'cabinet', 'mikrotik', 'poe', 'lightning'];
+        const targetSlot = _lastActiveTowerSlot || slotOrder.find(s => s !== 'lightning' && !pendingTowerSlots[s]) || 'batteries';
+        await handleSlotPhotoUpload(targetSlot, [file]);
+        break;
+      }
+    }
+  });
 }
 
 async function submitTowerMaterial() {
@@ -5453,7 +6543,11 @@ async function saveTowerMaterial(antennaId) {
   const batteries = (document.getElementById('tower-mat-batteries')?.value || '').trim();
   const panels = (document.getElementById('tower-mat-panels')?.value || '').trim();
   const extra = (document.getElementById('tower-mat-extra')?.value || '').trim();
-  const hasPhotos = Array.isArray(pendingTowerMaterialPhotos) && pendingTowerMaterialPhotos.length > 0;
+
+  // Combinar fotos de casillas específicas + fotos adicionales
+  const slotPhotos = Object.values(pendingTowerSlots).filter(Boolean);
+  pendingTowerMaterialPhotos = slotPhotos.concat(pendingTowerExtraPhotos);
+  const hasPhotos = pendingTowerMaterialPhotos.length > 0;
   const hasBalancerPorts = typeof isBalancerEquipment === 'function' && isBalancerEquipment(antenna) && Array.isArray(pendingBalancerPorts) && pendingBalancerPorts.some(p => p.frontPhoto || p.backPhoto || p.label);
 
   const hasAnyInput = Boolean(sections || radios || batteries || panels || extra || hasPhotos || hasBalancerPorts);
@@ -5482,6 +6576,8 @@ async function saveTowerMaterial(antennaId) {
   antenna.towerPanels = panels;
   antenna.towerExtraNotes = extra;
   antenna.towerMaterialNotes = combinedNotes;
+  antenna.towerMaterialSlots = { ...pendingTowerSlots };
+  antenna.towerMaterialExtraPhotos = pendingTowerExtraPhotos.slice();
   antenna.towerMaterialPhotos = pendingTowerMaterialPhotos.slice();
   if (isBalancerEquipment(antenna)) {
     syncBalancerPortLabelsFromDom();
@@ -5545,4 +6641,151 @@ if (typeof window !== 'undefined') {
   if (typeof openTowerMaterialModal === 'function') window.openTowerMaterialModal = openTowerMaterialModal;
   if (typeof continueTowerMaterialModal === 'function') window.continueTowerMaterialModal = continueTowerMaterialModal;
   if (typeof closeTowerMaterialModal === 'function') window.closeTowerMaterialModal = closeTowerMaterialModal;
+  if (typeof handleSlotPhotoUpload === 'function') window.handleSlotPhotoUpload = handleSlotPhotoUpload;
+  if (typeof removeSlotPhoto === 'function') window.removeSlotPhoto = removeSlotPhoto;
+  if (typeof previewSlotPhoto === 'function') window.previewSlotPhoto = previewSlotPhoto;
+  if (typeof handleTowerBulkPhotoUpload === 'function') window.handleTowerBulkPhotoUpload = handleTowerBulkPhotoUpload;
+  if (typeof handleTowerExtraPhotoUpload === 'function') window.handleTowerExtraPhotoUpload = handleTowerExtraPhotoUpload;
+  if (typeof removeTowerExtraPhoto === 'function') window.removeTowerExtraPhoto = removeTowerExtraPhoto;
+  if (typeof renderTowerMaterialPhotoSlots === 'function') window.renderTowerMaterialPhotoSlots = renderTowerMaterialPhotoSlots;
+  if (typeof renderTowerExtraPhotos === 'function') window.renderTowerExtraPhotos = renderTowerExtraPhotos;
+  if (typeof TOWER_PHOTO_SLOTS !== 'undefined') window.TOWER_PHOTO_SLOTS = TOWER_PHOTO_SLOTS;
+  if (typeof findOrFetchWorkOrder === 'function') window.findOrFetchWorkOrder = findOrFetchWorkOrder;
+}
+
+const GLOBAL_WORK_ORDERS_CACHE_KEY = 'netops_global_work_orders_cache_v1';
+
+function getGlobalWorkOrdersCache() {
+  try {
+    const raw = localStorage.getItem(GLOBAL_WORK_ORDERS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveWorkOrdersToGlobalCache(orders) {
+  if (!Array.isArray(orders) || !orders.length) return;
+  try {
+    const cache = getGlobalWorkOrdersCache();
+    let changed = false;
+    orders.forEach(order => {
+      if (order && order.id && !order.deletedAt) {
+        cache[order.id] = { ...(cache[order.id] || {}), ...order };
+        changed = true;
+      }
+    });
+    if (changed) {
+      const keys = Object.keys(cache);
+      if (keys.length > 800) {
+        keys.slice(0, keys.length - 800).forEach(k => delete cache[k]);
+      }
+      localStorage.setItem(GLOBAL_WORK_ORDERS_CACHE_KEY, JSON.stringify(cache));
+    }
+  } catch (e) {
+    console.warn('saveWorkOrdersToGlobalCache warning:', e);
+  }
+}
+
+async function findOrFetchWorkOrder(detailId) {
+  if (!detailId) return null;
+  const rawId = String(detailId).trim();
+  const cleanId = rawId.replace(/^(DET|RED|NEW)-/i, '');
+
+  // 1. Memoria local en state.workOrders
+  const list = Array.isArray(state?.workOrders) ? state.workOrders : [];
+  let found = list.find(w => !w.deletedAt && (
+    w.id === rawId ||
+    w.id === cleanId ||
+    (w.folio && (w.folio === rawId || w.folio.endsWith(`-${cleanId}`))) ||
+    (typeof getDetailFolio === 'function' && (getDetailFolio(w) === rawId || getDetailFolio(w).endsWith(`-${cleanId}`)))
+  ));
+  if (found) {
+    saveWorkOrdersToGlobalCache([found]);
+    return found;
+  }
+
+  // 2. Paradas activas del plan si están cargadas
+  try {
+    if (typeof getPlanStopsForView === 'function') {
+      const stops = getPlanStopsForView('general') || [];
+      for (const stop of stops) {
+        if (typeof getStopDetails === 'function') {
+          const stopDetails = getStopDetails(stop) || [];
+          found = stopDetails.find(w => !w.deletedAt && (
+            w.id === rawId ||
+            w.id === cleanId ||
+            (w.folio && (w.folio === rawId || w.folio.endsWith(`-${cleanId}`))) ||
+            (typeof getDetailFolio === 'function' && (getDetailFolio(w) === rawId || getDetailFolio(w).endsWith(`-${cleanId}`)))
+          ));
+          if (found) break;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('findOrFetchWorkOrder plan check warning:', e);
+  }
+  if (found) {
+    if (!list.some(w => w.id === found.id)) list.push(found);
+    saveWorkOrdersToGlobalCache([found]);
+    return found;
+  }
+
+  // 2.5. Caché global persistente en localStorage
+  try {
+    const globalCache = getGlobalWorkOrdersCache();
+    const cachedMatch = Object.values(globalCache).find(w => !w.deletedAt && (
+      w.id === rawId ||
+      w.id === cleanId ||
+      (w.folio && (w.folio === rawId || w.folio.endsWith(`-${cleanId}`))) ||
+      (typeof getDetailFolio === 'function' && (getDetailFolio(w) === rawId || getDetailFolio(w).endsWith(`-${cleanId}`)))
+    ));
+    if (cachedMatch) {
+      if (!Array.isArray(state.workOrders)) state.workOrders = [];
+      if (!state.workOrders.some(w => w.id === cachedMatch.id)) state.workOrders.push(cachedMatch);
+      return cachedMatch;
+    }
+  } catch (cacheErr) {
+    console.warn('findOrFetchWorkOrder globalCache lookup warning:', cacheErr);
+  }
+
+  // 3. Fallback de red: consultar al servidor directamente
+  try {
+    const apiBase = (typeof API !== 'undefined' && API) ? API : (window.API || '');
+    const url = `${apiBase}/api/data?part=operations&id=${encodeURIComponent(rawId)}&limit=5`;
+    const res = await fetch(url, {
+      headers: typeof getAuthHeaders === 'function' ? getAuthHeaders() : {}
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const fetchedOrders = Array.isArray(data?.workOrders) ? data.workOrders : [];
+      const match = fetchedOrders.find(w => !w.deletedAt && (
+        w.id === rawId ||
+        w.id === cleanId ||
+        (w.folio && (w.folio === rawId || w.folio.endsWith(`-${cleanId}`))) ||
+        (typeof getDetailFolio === 'function' && (getDetailFolio(w) === rawId || getDetailFolio(w).endsWith(`-${cleanId}`)))
+      )) || fetchedOrders[0];
+
+      if (match) {
+        if (!Array.isArray(state.workOrders)) state.workOrders = [];
+        const existingIdx = state.workOrders.findIndex(w => w.id === match.id);
+        if (existingIdx >= 0) {
+          state.workOrders[existingIdx] = match;
+        } else {
+          state.workOrders.push(match);
+        }
+        saveWorkOrdersToGlobalCache([match]);
+        return match;
+      }
+    }
+  } catch (fetchErr) {
+    console.warn('findOrFetchWorkOrder server fallback failed:', fetchErr);
+  }
+
+  return null;
+}
+if (typeof window !== 'undefined') {
+  window.findOrFetchWorkOrder = findOrFetchWorkOrder;
+  window.getGlobalWorkOrdersCache = getGlobalWorkOrdersCache;
+  window.saveWorkOrdersToGlobalCache = saveWorkOrdersToGlobalCache;
 }

@@ -274,7 +274,7 @@ export default {
         }
         if (part === 'planning') {
           page.viewerRole = String(session.role||'').trim().toLowerCase()==='admin'?'administrador':String(session.role||'').trim().toLowerCase();
-          page.viewerId = session.sub;
+          page.viewerId = [session.sub, session.username, session.name].filter(Boolean).join(',');
         }
         const data = sanitizeDataForSession(await loadStatePart(env,part,page),session);
         if (url.searchParams.get('includeSyncMeta') === '1' && !data.syncMeta) {

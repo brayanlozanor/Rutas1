@@ -129,7 +129,7 @@
             <!-- Clima en la Zona del Sitio Activo -->
             <div id="plan-weather-box" class="plan-weather-box">
               <div class="weather-box-head">
-                <span id="weather-icon" class="weather-icon">⛅</span>
+                <span id="weather-icon" class="weather-icon"></span>
                 <div>
                   <strong id="weather-temp">--°C</strong>
                   <small id="weather-town">Clima en el sitio</small>
@@ -138,8 +138,8 @@
               <div class="weather-body">
                 <div id="weather-desc" class="weather-desc">Consultando pronóstico...</div>
                 <div class="weather-details-row">
-                  <span id="weather-rain">🌧️ --% lluvia</span>
-                  <span id="weather-wind">💨 -- km/h</span>
+                  <span id="weather-rain">Lluvia: --%</span>
+                  <span id="weather-wind">Viento: -- km/h</span>
                 </div>
                 <div id="weather-road-alert" class="weather-road-alert">Caminos transitables</div>
               </div>
@@ -156,7 +156,7 @@
             <div class="plan-command-bar">
               <input id="plan-stop-search" class="search-input" placeholder="Buscar cliente, nodo o antena..." oninput="renderPlanDays()">
               <button class="btn bgh" onclick="togglePlanMapSize()">Vista mapa</button>
-              <button class="btn bgh" onclick="openPresetRoutesModal()" title="Ver catálogo de rutas y recorridos preestablecidos">📋 Rutas recomendadas</button>
+              <button class="btn bgh" onclick="openPresetRoutesModal()" title="Ver catálogo de rutas y recorridos preestablecidos">Rutas recomendadas</button>
               <button class="btn bc" data-admin-only onclick="openPlanStopModal()">+ Agregar parada</button>
             </div>
             <div id="plan-continuity-recommendations-banner" style="display:none"></div>
@@ -421,9 +421,17 @@
         <button class="btn bsm bgh" type="button" onclick="closeAdminWeekPlanner()">Cerrar</button>
       </div>
       <div class="plan-week-nav">
-        <button class="plan-week-nav-button" type="button" onclick="shiftAdminPlannerWeek(-1)" aria-label="Semana anterior"><b>&#8249;</b><span>Anterior</span></button>
-        <div class="plan-week-nav-range"><small>Semana seleccionada</small><strong id="plan-week-range"></strong></div>
-        <button class="plan-week-nav-button next" type="button" onclick="shiftAdminPlannerWeek(1)" aria-label="Semana siguiente"><span>Siguiente</span><b>&#8250;</b></button>
+        <button class="plan-week-nav-button" type="button" onclick="shiftAdminPlannerWeek(-1)" aria-label="Semana anterior"><b>&#8249;</b><span>Semana anterior</span></button>
+        <div class="plan-week-nav-range">
+          <small>Semana seleccionada</small>
+          <strong id="plan-week-range"></strong>
+          <div class="plan-week-board-scroll-controls">
+            <button type="button" class="plan-week-board-scroll-btn" onclick="scrollWeekBoard(-280)" title="Desplazar días a la izquierda">◀ Días anteriores</button>
+            <span class="plan-week-board-scroll-hint">Desplaza horizontalmente con la rueda</span>
+            <button type="button" class="plan-week-board-scroll-btn" onclick="scrollWeekBoard(280)" title="Desplazar días a la derecha">Días siguientes ▶</button>
+          </div>
+        </div>
+        <button class="plan-week-nav-button next" type="button" onclick="shiftAdminPlannerWeek(1)" aria-label="Semana siguiente"><span>Semana siguiente</span><b>&#8250;</b></button>
       </div>
       <div class="plan-week-workspace">
         <div id="plan-week-board" class="plan-week-board"></div>
@@ -454,8 +462,8 @@
 
         <div class="plan-create-preset-suggestions">
           <div class="plan-create-preset-head">
-            <span>💡 O selecciona una ruta previamente hecha:</span>
-            <button type="button" class="btn bsm bgh" style="font-size:11px;padding:2px 8px;" onclick="closeCreateGeneralPlanModal();openPresetRoutesModal();">Ver catálogo completo (52) ➔</button>
+            <span>Rutas previamente hechas:</span>
+            <button type="button" class="btn bsm bgh" style="font-size:11px;padding:2px 8px;" onclick="closeCreateGeneralPlanModal();openPresetRoutesModal();">Ver catálogo (52)</button>
           </div>
           <div class="plan-create-preset-chips" id="plan-create-quick-chips">
             <!-- Chips de rutas recomendadas -->
@@ -538,6 +546,66 @@
     </div>
   </div>
 
+  <div class="mo plan-dialog-overlay" id="register-node-from-stop-mo">
+    <div class="md plan-dialog-card" style="max-width:540px;">
+      <div class="plan-dialog-head">
+        <span class="plan-dialog-icon" style="background:#eff6ff;color:#2563eb;">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+        </span>
+        <div>
+          <h2>Registrar como nuevo pueblo</h2>
+          <p>Se guardará en el catálogo de pueblos para registrar detalles y vincular a rutas.</p>
+        </div>
+        <button type="button" class="plan-dialog-close" aria-label="Cerrar" onclick="CM('register-node-from-stop-mo')">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="plan-dialog-body" style="grid-template-columns:1fr;gap:12px;padding:18px 22px;">
+        <input type="hidden" id="reg-node-stop-id">
+        <label class="plan-dialog-field" for="reg-node-town">
+          <span>Nombre del pueblo o comunidad</span>
+          <input id="reg-node-town" placeholder="Ej. El Palmar, Tecruz, Sasamulco..." required>
+        </label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <label class="plan-dialog-field" for="reg-node-code">
+            <span>Clave del pueblo (nodo)</span>
+            <input id="reg-node-code" placeholder="Ej. R225" required>
+          </label>
+          <label class="plan-dialog-field" for="reg-node-zone">
+            <span>Zona / Región</span>
+            <select id="reg-node-zone" style="height:46px;border-radius:9px;border:1px solid #cfddea;padding:0 10px;font-weight:700;">
+              <option value="centro">Centro</option>
+              <option value="norte">Norte</option>
+              <option value="ayutla">Ayutla</option>
+              <option value="costa_chica">Costa Chica</option>
+              <option value="montana">Montaña</option>
+              <option value="acapulco">Acapulco</option>
+              <option value="heroes">Héroes</option>
+              <option value="general">General</option>
+            </select>
+          </label>
+        </div>
+        <label class="plan-dialog-field" for="reg-node-coords">
+          <span>Coordenadas GPS (Latitud, Longitud)</span>
+          <input id="reg-node-coords" placeholder="Ej. 17.64904, -99.60340">
+        </label>
+        <label class="plan-dialog-field" for="reg-node-eq">
+          <span>Vincular a antena (opcional)</span>
+          <select id="reg-node-eq" style="height:46px;border-radius:9px;border:1px solid #cfddea;padding:0 10px;font-weight:700;">
+            <option value="">-- Sin antena matriz vinculada --</option>
+          </select>
+        </label>
+      </div>
+      <div class="plan-dialog-actions">
+        <button type="button" class="btn bgh" onclick="CM('register-node-from-stop-mo')">Cancelar</button>
+        <button type="button" class="btn bc plan-action-button" onclick="saveNewNodeFromStop()">
+          <span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span>
+          <span>Registrar y Vincular Pueblo</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="mo" id="plan-tech-qr-mo">
     <div class="md" style="max-width:520px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px">
@@ -573,7 +641,7 @@
       </div>
       <div id="tech-pending-prompt-content" class="tech-pending-dispatches-list"></div>
       <div style="display:flex;gap:10px;margin-top:14px">
-        <button type="button" class="btn bgh bfu" onclick="CM('tech-pending-material-prompt-mo')" style="min-height:46px;font-size:13px">Ver más tarde</button>
+        <button type="button" class="btn bgh bfu" onclick="dismissTechnicianMaterialPrompt()" style="min-height:46px;font-size:13px">Ver más tarde</button>
       </div>
     </div>
   </div>

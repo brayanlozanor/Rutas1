@@ -1088,11 +1088,20 @@
   }
 }
 
-/* Reporte técnico completado. */
+/* Reporte técnico y detalle de red */
 .order-tech-report-mo {
+  z-index: 10000 !important;
   padding: 24px !important;
   background: rgba(23, 39, 63, .72) !important;
-  backdrop-filter: blur(7px) !important
+  backdrop-filter: blur(7px) !important;
+}
+
+#order-chat-close-decision-mo {
+  z-index: 16000 !important;
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(15, 23, 42, 0.65) !important;
+  backdrop-filter: blur(4px) !important;
 }
 
 .order-tech-report-card {
@@ -4218,17 +4227,29 @@ body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero
 @media (max-width: 1250px) {
   body.orders-page .hero-panel.compact-hero.orders-hero,
   body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero.orders-hero,
+  body[data-module] .hero-panel.compact-hero.orders-hero,
+  body[data-module="orders"] .hero-panel.compact-hero.orders-hero,
   .orders-page .orders-hero {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
     flex-wrap: wrap !important;
     height: auto !important;
     min-height: 0 !important;
-    gap: 8px !important;
-    padding: 8px 12px !important;
+    gap: 10px !important;
+    padding: 10px 14px !important;
   }
   body.orders-page .orders-hero-main,
   .orders-page .orders-hero-main {
     width: 100% !important;
     flex: 1 1 100% !important;
+    max-width: 100% !important;
+    margin-bottom: 2px !important;
+  }
+  body.orders-page .orders-hero-copy,
+  .orders-page .orders-hero-copy {
+    width: 100% !important;
     max-width: 100% !important;
   }
   body.orders-page .compact-stats.orders-stats,
@@ -4237,26 +4258,30 @@ body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero
     width: 100% !important;
     flex: 1 1 100% !important;
     justify-content: flex-start !important;
+    align-items: center !important;
     flex-wrap: wrap !important;
     gap: 6px !important;
+    margin-top: 4px !important;
   }
 }
 
-/* Fila única horizontal de contadores compactos alineada a la derecha */
-body.orders-page .compact-stats.orders-stats,
-body.orders-page:not(.tech-route-body):not(.login-page) .compact-stats.orders-stats,
-.orders-page .orders-stats {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-  flex-wrap: nowrap !important;
-  gap: 7px !important;
-  width: auto !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  grid-template-columns: none !important;
-  flex: 0 0 auto !important;
+/* Fila única horizontal de contadores compactos alineada a la derecha en pantallas amplias */
+@media (min-width: 1251px) {
+  body.orders-page .compact-stats.orders-stats,
+  body.orders-page:not(.tech-route-body):not(.login-page) .compact-stats.orders-stats,
+  .orders-page .orders-stats {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex-wrap: nowrap !important;
+    gap: 7px !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    grid-template-columns: none !important;
+    flex: 0 0 auto !important;
+  }
 }
 
 /* Tarjetas individuales de estadísticas convertidas en chips compactos de 32px */
@@ -6294,4 +6319,44 @@ body.orders-page[data-detail-kind="physical"] .stat-my-done {
   transform: scale(1.03) !important;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16) !important;
 }
+
+/* 12. Modal para registrar detalles físicos en antena / pueblo desde detalle de red */
+.insert-physical-record-mo {
+  z-index: 15000 !important;
+  background: rgba(15, 23, 42, 0.72) !important;
+  backdrop-filter: blur(8px) !important;
+  padding: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.insert-physical-record-card {
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.28), 0 0 0 1px rgba(124, 58, 237, 0.15) !important;
+  border-radius: 14px !important;
+  overflow: hidden !important;
+  background: #ffffff !important;
+  max-height: min(92vh, 560px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.insert-phys-body {
+  overflow-y: auto !important;
+  flex: 1 1 auto !important;
+}
+
+.insert-physical-record-card .card-actions {
+  flex-shrink: 0 !important;
+}
+
+@media (max-width: 640px) {
+  .insert-phys-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .insert-physical-record-mo {
+    padding: 8px !important;
+  }
+}
+
 

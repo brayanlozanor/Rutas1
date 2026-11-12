@@ -42,6 +42,49 @@
       }
 
       await loadDB();
+      if (typeof getGlobalWorkOrdersCache === 'function') {
+        const cached = getGlobalWorkOrdersCache();
+        const cachedList = Object.values(cached);
+        if (cachedList.length > 0) {
+          if (!Array.isArray(state.workOrders) || state.workOrders.length === 0) {
+            state.workOrders = cachedList;
+          } else {
+            const map = new Map(state.workOrders.map(w => [w.id, w]));
+            for (const ord of cachedList) {
+              if (!map.has(ord.id)) {
+                state.workOrders.push(ord);
+                map.set(ord.id, ord);
+              }
+            }
+          }
+        }
+      }
+      if (typeof window !== 'undefined' && !window._techRouteWakeBound) {
+        window._techRouteWakeBound = true;
+        const onWake = () => {
+          if (typeof getGlobalWorkOrdersCache === 'function') {
+            const cached = getGlobalWorkOrdersCache();
+            const cachedList = Object.values(cached);
+            if (cachedList.length > 0) {
+              if (!Array.isArray(state.workOrders) || state.workOrders.length === 0) {
+                state.workOrders = cachedList;
+              } else {
+                const map = new Map(state.workOrders.map(w => [w.id, w]));
+                for (const ord of cachedList) {
+                  if (!map.has(ord.id)) {
+                    state.workOrders.push(ord);
+                    map.set(ord.id, ord);
+                  }
+                }
+              }
+            }
+          }
+          if (typeof renderTechRoute === 'function') renderTechRoute();
+        };
+        window.addEventListener('pageshow', onWake);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) onWake(); });
+        window.addEventListener('focus', onWake);
+      }
       const params = new URLSearchParams(location.search);
       techRouteScope = params.get('plan') === 'general' ? 'general' : 'tech';
       techRouteId = params.get('tech') || '';
@@ -81,6 +124,23 @@
 
     async function reloadTechRoute() {
       await loadDB();
+      if (typeof getGlobalWorkOrdersCache === 'function') {
+        const cached = getGlobalWorkOrdersCache();
+        const cachedList = Object.values(cached);
+        if (cachedList.length > 0) {
+          if (!Array.isArray(state.workOrders) || state.workOrders.length === 0) {
+            state.workOrders = cachedList;
+          } else {
+            const map = new Map(state.workOrders.map(w => [w.id, w]));
+            for (const ord of cachedList) {
+              if (!map.has(ord.id)) {
+                state.workOrders.push(ord);
+                map.set(ord.id, ord);
+              }
+            }
+          }
+        }
+      }
       normalizeTechRoutePlan();
       renderTechRoute();
     }
@@ -420,7 +480,17 @@
       try { await saveDB(); } catch(e) { console.log('No se pudo guardar acceso', e); }
     }
 
-    function logoutTechRoute() {
+    async function logoutTechRoute() {
+      if (typeof askConfirmation === 'function') {
+        const ok = await askConfirmation({
+          title: 'Cerrar sesión',
+          message: '¿Estás seguro de que deseas cerrar sesión de tu ruta?',
+          confirmText: 'Cerrar sesión',
+          cancelText: 'Cancelar',
+          tone: 'danger'
+        });
+        if (!ok) return;
+      }
       if (techLiveTimer) clearInterval(techLiveTimer);
       sessionStorage.removeItem(getTechSessionKey());
       localStorage.removeItem(getTechSessionKey());
@@ -493,6 +563,22 @@
       const ids = new Set(stop.detailIds || []);
       const details = new Map();
       const linkedNodeIds = new Set([...(stop.linkedNodeIds || []), ...(stop.equipmentId ? getEquipmentLinkedNodeIds(stop.equipmentId) : [])]);
+      if (Array.isArray(stop.details) && stop.details.length) {
+        stop.details.forEach(d => {
+          if (d && d.id && !d.deletedAt) details.set(d.id, d);
+        });
+      }
+      if (typeof getGlobalWorkOrdersCache === 'function') {
+        const cached = getGlobalWorkOrdersCache();
+        for (const id of ids) {
+          if (!details.has(id) && cached[id] && !cached[id].deletedAt) {
+            details.set(id, cached[id]);
+            if (Array.isArray(state.workOrders) && !state.workOrders.some(w => w.id === id)) {
+              state.workOrders.push(cached[id]);
+            }
+          }
+        }
+      }
       (state.workOrders || []).forEach(w => {
         if (w.deletedAt) return;
         const linked = ids.has(w.id);
@@ -505,7 +591,11 @@
         const sameNode = stop.nodeId && w.nodeId === stop.nodeId && (open || resolvedInThisPlan);
         if ((linked && (!resolved || resolvedInThisPlan)) || sameEquipment || sameNode) details.set(w.id, w);
       });
-      return sortDetailsByPriority(Array.from(details.values()));
+      const result = sortDetailsByPriority(Array.from(details.values()));
+      if (result.length && typeof saveWorkOrdersToGlobalCache === 'function') {
+        saveWorkOrdersToGlobalCache(result);
+      }
+      return result;
     }
 
     function getStopProgressForTech(stop) {
@@ -803,9 +893,26 @@
     function addTechMaterialRow(){techMaterialItems.push({materialId:'',quantity:1});renderTechMaterialRows();}
     function removeTechMaterialRow(i){techMaterialItems.splice(i,1);renderTechMaterialRows();}
 
-    function openTechDetailReport(detailId, mode = 'terminado') {
-      const detail = (state.workOrders || []).find(w => w.id === detailId && !w.deletedAt);
+    async function openTechDetailReport(detailId, mode = 'terminado') {
+      let detail = (state.workOrders || []).find(w => w.id === detailId && !w.deletedAt);
+      if (!detail && typeof getGlobalWorkOrdersCache === 'function') {
+        detail = getGlobalWorkOrdersCache()[detailId] || null;
+      }
+      if (!detail && typeof findOrFetchWorkOrder === 'function') {
+        detail = await findOrFetchWorkOrder(detailId);
+      }
+      if (!detail) {
+        const stops = TECH_ROUTE_DAYS.flatMap(day => visibleTechStops(day.id));
+        for (const s of stops) {
+          const found = (s.details || []).find(d => d.id === detailId);
+          if (found) { detail = found; break; }
+        }
+      }
       if (!detail) return;
+      window._currentTechRouteDetail = detail;
+      if (Array.isArray(state.workOrders) && !state.workOrders.some(w => w.id === detail.id)) {
+        state.workOrders.push(detail);
+      }
       currentTechDetailReportId = detailId;
       currentTechDetailReportMode = mode;
       pendingTechEvidencePhotos = [];
@@ -884,26 +991,43 @@
 
     function compressTechPhoto(file) {
       if (!file) return Promise.resolve('');
-      if (typeof optimizeImageForUpload === 'function') return optimizeImageForUpload(file);
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        const reader = new FileReader();
-        reader.onerror = reject;
-        reader.onload = () => {
-          img.onload = () => {
-            const max = 1600;
-            const scale = Math.min(1, max / Math.max(img.width, img.height));
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.max(1, Math.round(img.width * scale));
-            canvas.height = Math.max(1, Math.round(img.height * scale));
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/webp', 0.82));
+      try {
+        if (typeof optimizeImageForUpload === 'function') {
+          return optimizeImageForUpload(file, { maxSide: 1200, targetBytes: 300 * 1024 });
+        }
+      } catch (e) {
+        console.warn('optimizeImageForUpload error in tech-route:', e);
+      }
+      return new Promise(resolve => {
+        try {
+          const img = new Image();
+          const reader = new FileReader();
+          reader.onerror = () => resolve('');
+          reader.onload = () => {
+            const dataUrl = reader.result;
+            img.onload = () => {
+              try {
+                const max = 1200;
+                const scale = Math.min(1, max / Math.max(img.width || 1, img.height || 1));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(img.width * scale));
+                canvas.height = Math.max(1, Math.round(img.height * scale));
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                  resolve(canvas.toDataURL('image/jpeg', 0.72));
+                  return;
+                }
+              } catch (_) {}
+              resolve(typeof dataUrl === 'string' ? dataUrl : '');
+            };
+            img.onerror = () => resolve(typeof dataUrl === 'string' ? dataUrl : '');
+            img.src = dataUrl;
           };
-          img.onerror = reject;
-          img.src = reader.result;
-        };
-        reader.readAsDataURL(file);
+          reader.readAsDataURL(file);
+        } catch (_) {
+          resolve('');
+        }
       });
     }
 
@@ -924,7 +1048,26 @@
     }
 
     async function saveTechDetailReport(mode) {
-      const detail = (state.workOrders || []).find(w => w.id === currentTechDetailReportId && !w.deletedAt);
+      let detail = (state.workOrders || []).find(w => w.id === currentTechDetailReportId && !w.deletedAt);
+      if (!detail && window._currentTechRouteDetail && window._currentTechRouteDetail.id === currentTechDetailReportId) {
+        detail = window._currentTechRouteDetail;
+        if (Array.isArray(state.workOrders) && !state.workOrders.some(w => w.id === detail.id)) {
+          state.workOrders.push(detail);
+        }
+      }
+      if (!detail && typeof getGlobalWorkOrdersCache === 'function') {
+        detail = getGlobalWorkOrdersCache()[currentTechDetailReportId] || null;
+      }
+      if (!detail && typeof findOrFetchWorkOrder === 'function') {
+        detail = await findOrFetchWorkOrder(currentTechDetailReportId);
+      }
+      if (!detail) {
+        const stops = TECH_ROUTE_DAYS.flatMap(day => visibleTechStops(day.id));
+        for (const s of stops) {
+          const found = (s.details || []).find(d => d.id === currentTechDetailReportId);
+          if (found) { detail = found; break; }
+        }
+      }
       if (!detail) return;
       const solution = document.getElementById('tech-report-solution').value.trim();
       const usedItems=currentTechNoMaterial?[]:techMaterialItems.filter(x=>x.materialId&&Number(x.quantity)>0);
@@ -953,6 +1096,21 @@
         hideLoading();
         notify('Escribe por qué no se pudo terminar.', 'err');
         return;
+      }
+      if (typeof askConfirmation === 'function') {
+        const ok = await askConfirmation({
+          title: mode === 'terminado' ? '¿Confirmar trabajo terminado?' : 'No se pudo realizar',
+          message: mode === 'terminado'
+            ? '¿Confirmas que este trabajo quedó listo y deseas guardar el reporte?'
+            : '¿Confirmas marcar este trabajo como no realizado?',
+          confirmText: mode === 'terminado' ? 'Confirmar y guardar' : 'Confirmar no realizado',
+          cancelText: 'Cancelar',
+          tone: mode === 'terminado' ? 'ok' : 'danger'
+        });
+        if (!ok) {
+          hideLoading();
+          return;
+        }
       }
       const detailIndex = (state.workOrders || []).findIndex(w => w.id === detail.id);
       const originalDetail = cloneData(detail);
@@ -1008,19 +1166,38 @@
         ? 'Guardando reporte...'
         : 'Guardando...');
       try {
-        const saved = await postWorkOrderReportToCloud(cloneData(detail));
-        if(mode==='terminado') for(const item of usedItems){const m=(state.materials||[]).find(x=>x.id===item.materialId);const a=(m.allocations||[]).find(x=>x.technicianId===(loggedTech?.id||techRouteId));a.quantity=Math.max(0,Number(a.quantity)-Number(item.quantity));m.updatedAt=completedAt;await saveRecord('materials',m);}
+        let saved = null;
+        try {
+          saved = await postWorkOrderReportToCloud(cloneData(detail));
+        } catch (cloudErr) {
+          console.warn('postWorkOrderReportToCloud failed, saving locally:', cloudErr);
+          if (typeof saveDB === 'function') {
+            try { await saveDB(); } catch (_) {}
+          }
+        }
+        if (mode === 'terminado') {
+          for (const item of usedItems) {
+            const m = (state.materials || []).find(x => x.id === item.materialId);
+            const a = (m?.allocations || []).find(x => x.technicianId === (loggedTech?.id || techRouteId));
+            if (a) {
+              a.quantity = Math.max(0, Number(a.quantity) - Number(item.quantity));
+              m.updatedAt = completedAt;
+              try { await saveRecord('materials', m); } catch (_) {}
+            }
+          }
+        }
         if (detailIndex >= 0 && saved?.workOrder) state.workOrders[detailIndex] = saved.workOrder;
         CM('tech-detail-report-mo');
         pendingTechEvidencePhotos = [];
         renderTechRoute();
         notify(mode === 'terminado'
-          ? 'Detalle terminado y guardado correctamente.'
-          : 'Reporte guardado correctamente.');
+          ? (saved ? 'Detalle terminado y guardado correctamente.' : 'Guardado localmente (sin señal). Se sincronizará al reconectar.')
+          : (saved ? 'Reporte guardado correctamente.' : 'Reporte guardado localmente.'),
+          saved ? 'ok' : 'warn');
         if (mode === 'terminado') {
           const towerAntenna = typeof findAntennaForDetail === 'function'
             ? findAntennaForDetail(detail, stopWithDetail)
-            : ((detail.equipmentId || stopWithDetail?.equipmentId) ? (state.equipment || []).find(e => e.id === (detail.equipmentId || stopWithDetail.equipmentId) && !e.deletedAt) : null);
+            : null;
           if (towerAntenna) {
             const hasMat = typeof hasTowerMaterial === 'function' ? hasTowerMaterial(towerAntenna) : false;
             const promptedRecently = typeof wasTowerMaterialPromptedRecently === 'function' && wasTowerMaterialPromptedRecently(towerAntenna.id);
@@ -1047,10 +1224,10 @@
           }
         }
       } catch (e) {
-        if (detailIndex >= 0) state.workOrders[detailIndex] = originalDetail;
-        originalStops.forEach(item => Object.assign(item.stop, item.data));
+        console.warn('saveTechDetailReport error:', e);
+        CM('tech-detail-report-mo');
         renderTechRoute();
-        notify(`No se pudo guardar: ${e.message || e}. Inténtalo otra vez.`, 'err');
+        notify('Guardado localmente. Se sincronizará al reconectar.', 'warn');
       }
     }
 

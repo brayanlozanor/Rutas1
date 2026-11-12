@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS equipment (
   tower_panels TEXT,
   tower_extra_notes TEXT,
   tower_material_photos_json TEXT,
+  tower_material_slots_json TEXT,
   tower_material_updated_at TEXT,
   tower_material_updated_by_name TEXT,
   tower_material_updated_by TEXT,
@@ -152,6 +153,8 @@ CREATE TABLE IF NOT EXISTS equipment_nodes (
   FOREIGN KEY(equipment_id) REFERENCES equipment(id) ON DELETE CASCADE,
   FOREIGN KEY(node_id) REFERENCES nodes(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_equipment_nodes_node_id ON equipment_nodes(node_id);
+CREATE INDEX IF NOT EXISTS idx_equipment_nodes_equipment_position ON equipment_nodes(equipment_id, position, node_id);
 CREATE TABLE IF NOT EXISTS work_orders (
   id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -208,6 +211,9 @@ CREATE INDEX IF NOT EXISTS idx_work_orders_detail_kind ON work_orders(detail_kin
 CREATE INDEX IF NOT EXISTS idx_work_orders_target_role ON work_orders(target_role);
 CREATE INDEX IF NOT EXISTS idx_work_orders_origin_role ON work_orders(origin_role);
 CREATE INDEX IF NOT EXISTS idx_work_orders_assigned_user ON work_orders(assigned_user_id);
+CREATE INDEX IF NOT EXISTS idx_work_orders_deleted_kind_status ON work_orders(deleted_at, detail_kind, status);
+CREATE INDEX IF NOT EXISTS idx_work_orders_created_by ON work_orders(created_by);
+CREATE INDEX IF NOT EXISTS idx_wo_node_eq_pri ON work_orders(node_id, equipment_id, priority, status) WHERE deleted_at IS NULL;
 CREATE TABLE IF NOT EXISTS work_order_reports (
   id TEXT PRIMARY KEY,
   work_order_id TEXT NOT NULL UNIQUE,
@@ -373,6 +379,12 @@ CREATE TABLE IF NOT EXISTS plan_stop_orders (
   FOREIGN KEY(plan_stop_id) REFERENCES plan_stops(id) ON DELETE CASCADE,
   FOREIGN KEY(work_order_id) REFERENCES work_orders(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_plan_stop_orders_work_order ON plan_stop_orders(work_order_id);
+CREATE INDEX IF NOT EXISTS idx_plan_stop_orders_stop_position ON plan_stop_orders(plan_stop_id, position, work_order_id);
+CREATE INDEX IF NOT EXISTS idx_plan_stops_plan_position ON plan_stops(plan_id, position);
+CREATE INDEX IF NOT EXISTS idx_plan_stops_equipment ON plan_stops(equipment_id);
+CREATE INDEX IF NOT EXISTS idx_plan_stops_node ON plan_stops(node_id);
+CREATE INDEX IF NOT EXISTS idx_plan_assignments_tech ON plan_assignments(technician_id, plan_id);
 CREATE TABLE IF NOT EXISTS deletion_requests (
   id TEXT PRIMARY KEY,
   target_type TEXT,
@@ -407,6 +419,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
   raw_json TEXT,
   FOREIGN KEY(user_id) REFERENCES users(id)
 );
+CREATE INDEX IF NOT EXISTS idx_audit_log_target_at ON audit_log(target_id, at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_at_id ON audit_log(at DESC, id DESC);
 CREATE TABLE IF NOT EXISTS tech_access_log (
   id TEXT PRIMARY KEY,
   technician_id TEXT,

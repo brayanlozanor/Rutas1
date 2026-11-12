@@ -43,6 +43,58 @@
   margin-top: -2px
 }
 
+.planificar-page .stop-card-head-actions {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+}
+
+.planificar-page .btn-stop-remove-action {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 7px !important;
+  border: 1px solid #fee2e2 !important;
+  background: #fff5f5 !important;
+  color: #ef4444 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  transition: all 0.15s ease !important;
+}
+
+.planificar-page .btn-stop-remove-action:hover {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border-color: #b91c1c !important;
+  transform: scale(1.08) !important;
+}
+
+.planificar-page .btn-register-pueblo-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 2px 7px !important;
+  border-radius: 6px !important;
+  background: #eff6ff !important;
+  border: 1px solid #bfdbfe !important;
+  color: #1d4ed8 !important;
+  font-size: 10.5px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  margin-left: 6px !important;
+  vertical-align: middle !important;
+  transition: all 0.14s ease !important;
+}
+
+.planificar-page .btn-register-pueblo-chip:hover {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #1d4ed8 !important;
+}
+
 .planificar-page .stop-state-row {
   margin: 10px 0 0 56px !important
 }

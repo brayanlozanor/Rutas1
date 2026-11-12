@@ -343,13 +343,22 @@ async function ensurePlansColumns(env) {
 async function ensurePerformanceIndices(env) {
   const stmts = [
     'CREATE INDEX IF NOT EXISTS idx_audit_log_target_at ON audit_log(target_id, at DESC)',
+    'CREATE INDEX IF NOT EXISTS idx_audit_log_at_id ON audit_log(at DESC, id DESC)',
     'CREATE INDEX IF NOT EXISTS idx_work_order_materials_order ON work_order_materials(work_order_id, id)',
     'CREATE INDEX IF NOT EXISTS idx_work_order_reports_order ON work_order_reports(work_order_id)',
     'CREATE INDEX IF NOT EXISTS idx_work_order_evidence_order_created ON work_order_evidence(work_order_id, created_at, id)',
     'CREATE INDEX IF NOT EXISTS idx_equipment_radios_equipment_position ON equipment_radios(equipment_id, position)',
     'CREATE INDEX IF NOT EXISTS idx_equipment_nodes_equipment_position ON equipment_nodes(equipment_id, position, node_id)',
+    'CREATE INDEX IF NOT EXISTS idx_equipment_nodes_node_id ON equipment_nodes(node_id)',
     'CREATE INDEX IF NOT EXISTS idx_plan_stops_plan_position ON plan_stops(plan_id, position)',
-    'CREATE INDEX IF NOT EXISTS idx_plan_stop_orders_stop_position ON plan_stop_orders(plan_stop_id, position, work_order_id)'
+    'CREATE INDEX IF NOT EXISTS idx_plan_stops_equipment ON plan_stops(equipment_id)',
+    'CREATE INDEX IF NOT EXISTS idx_plan_stops_node ON plan_stops(node_id)',
+    'CREATE INDEX IF NOT EXISTS idx_plan_stop_orders_work_order ON plan_stop_orders(work_order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_plan_stop_orders_stop_position ON plan_stop_orders(plan_stop_id, position, work_order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_plan_assignments_tech ON plan_assignments(technician_id, plan_id)',
+    'CREATE INDEX IF NOT EXISTS idx_work_orders_deleted_kind_status ON work_orders(deleted_at, detail_kind, status)',
+    'CREATE INDEX IF NOT EXISTS idx_wo_node_eq_pri ON work_orders(node_id, equipment_id, priority, status) WHERE deleted_at IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_work_orders_created_by ON work_orders(created_by)'
   ];
   for (const sql of stmts) {
     try {
@@ -361,8 +370,7 @@ async function ensurePerformanceIndices(env) {
 }
 
 let schemaEnsuredPromise = null;
-let schemaEnsuredAt = 0;
-const SCHEMA_CHECK_INTERVAL_MS = 60 * 1000;
+let schemaEnsured = false;
 
 let equipmentColumnsEnsured = false;
 async function ensureEquipmentColumns(env) {
@@ -383,6 +391,7 @@ async function ensureEquipmentColumns(env) {
     ['tower_panels', 'TEXT'],
     ['tower_extra_notes', 'TEXT'],
     ['tower_material_photos_json', 'TEXT'],
+    ['tower_material_slots_json', 'TEXT'],
     ['tower_material_updated_at', 'TEXT'],
     ['tower_material_updated_by_name', 'TEXT'],
     ['tower_material_updated_by', 'TEXT'],
@@ -401,10 +410,8 @@ async function ensureEquipmentColumns(env) {
 }
 
 export async function ensureRelationalSchema(env) {
-  const now = Date.now();
-  if (schemaEnsuredPromise && (now - schemaEnsuredAt) < SCHEMA_CHECK_INTERVAL_MS) {
-    return schemaEnsuredPromise;
-  }
+  if (schemaEnsured) return;
+  if (schemaEnsuredPromise) return schemaEnsuredPromise;
   schemaEnsuredPromise = (async () => {
     try {
       await run(env, `CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value_json TEXT, updated_at TEXT)`);
@@ -418,7 +425,7 @@ export async function ensureRelationalSchema(env) {
     await ensurePlansColumns(env).catch(e => console.warn('[ensureRelationalSchema] plans:', e));
     await ensurePerformanceIndices(env).catch(e => console.warn('[ensureRelationalSchema] indices:', e));
     await ensureWorkOrderRelationRecovery(env).catch(e => console.warn('[ensureRelationalSchema] recovery:', e));
-    schemaEnsuredAt = Date.now();
+    schemaEnsured = true;
   })().catch(err => {
     schemaEnsuredPromise = null;
     throw err;
@@ -432,9 +439,15 @@ async function batchChunks(env, statements, size = 80) {
   }
 }
 
+let workOrderRelationRecoveryChecked = false;
+
 async function ensureWorkOrderRelationRecovery(env) {
+  if (workOrderRelationRecoveryChecked) return;
   const migrationKey='work_order_relation_recovery_v1';
-  if(await first(env,'SELECT value_json FROM app_settings WHERE key=?',[migrationKey]))return;
+  if(await first(env,'SELECT value_json FROM app_settings WHERE key=?',[migrationKey])) {
+    workOrderRelationRecoveryChecked = true;
+    return;
+  }
 
   const missingRows=await all(env,`SELECT id,equipment_id,node_id,equipment_name_legacy,node_code_legacy,node_name_legacy,town_legacy
     FROM work_orders
@@ -494,6 +507,7 @@ async function ensureWorkOrderRelationRecovery(env) {
   }
   if(statements.length)await batchChunks(env,statements);
   await run(env,`INSERT INTO app_settings(key,value_json,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO NOTHING`,[migrationKey,JSON.stringify({completed:true,recovered:statements.length}),new Date().toISOString()]);
+  workOrderRelationRecoveryChecked = true;
 }
 
 async function getZoneMaps(env) {
@@ -648,6 +662,7 @@ async function loadEquipment(env, ctx, page = null) {
     if (row.tower_panels !== null && row.tower_panels !== undefined) out.towerPanels = row.tower_panels || '';
     if (row.tower_extra_notes !== null && row.tower_extra_notes !== undefined) out.towerExtraNotes = row.tower_extra_notes || '';
     if (row.tower_material_photos_json) out.towerMaterialPhotos = parseJson(row.tower_material_photos_json, []) || [];
+    if (row.tower_material_slots_json) out.towerMaterialSlots = parseJson(row.tower_material_slots_json, null) || null;
     if (row.tower_material_updated_at) out.towerMaterialUpdatedAt = row.tower_material_updated_at;
     if (row.tower_material_updated_by_name) out.towerMaterialUpdatedByName = row.tower_material_updated_by_name;
     if (row.tower_material_updated_by) out.towerMaterialUpdatedById = row.tower_material_updated_by;
@@ -712,7 +727,7 @@ async function loadPlanningMapCatalog(env) {
   const [equipmentRows,nodeRows,linkRows]=await Promise.all([
     all(env,`SELECT e.id,e.name,e.ip,e.type,e.lat,e.lng,e.status,e.provider,e.notes,e.ssid,
       e.tower_material_notes,e.tower_sections,e.tower_radios,e.tower_batteries,e.tower_panels,e.tower_extra_notes,
-      e.tower_material_photos_json,e.tower_material_updated_at,e.tower_material_updated_by_name,e.tower_material_updated_by,
+      e.tower_material_photos_json,e.tower_material_slots_json,e.tower_material_updated_at,e.tower_material_updated_by_name,e.tower_material_updated_by,
       e.balancer_port_count,e.balancer_ports_json,z.code AS region,
       COALESCE(p.very_high,0) AS map_very_high,COALESCE(p.high_count,0) AS map_high,
       COALESCE(p.medium_count,0) AS map_medium,COALESCE(p.low_count,0) AS map_low,
@@ -761,6 +776,7 @@ async function loadPlanningMapCatalog(env) {
       linkedNodeIds:linksByEquipment.get(row.id)||[],
       towerMaterialNotes:row.tower_material_notes||'',towerSections:row.tower_sections||'',towerRadios:row.tower_radios||'',towerBatteries:row.tower_batteries||'',towerPanels:row.tower_panels||'',towerExtraNotes:row.tower_extra_notes||'',
       towerMaterialPhotos:row.tower_material_photos_json?(parseJson(row.tower_material_photos_json,[])||[]):[],
+      towerMaterialSlots:row.tower_material_slots_json?(parseJson(row.tower_material_slots_json,null)||null):null,
       towerMaterialUpdatedAt:row.tower_material_updated_at||'',towerMaterialUpdatedByName:row.tower_material_updated_by_name||'',towerMaterialUpdatedById:row.tower_material_updated_by||'',
       balancerPortCount:row.balancer_port_count!==null&&row.balancer_port_count!==undefined?(Number(row.balancer_port_count)||9):9,
       balancerPorts:row.balancer_ports_json?(parseJson(row.balancer_ports_json,[])||[]):[],
@@ -1405,7 +1421,7 @@ async function loadAudit(env, page = null) {
   const query=auditQuery(page);
   const binds=[...query.binds];
   if (limit) binds.push(limit,offset);
-  const rows = await all(env, `SELECT * FROM audit_log${query.where} ORDER BY at DESC,rowid DESC${limit ? ' LIMIT ? OFFSET ?' : ''}`, binds);
+  const rows = await all(env, `SELECT * FROM audit_log${query.where} ORDER BY at DESC,id DESC${limit ? ' LIMIT ? OFFSET ?' : ''}`, binds);
   const orderIds = [...new Set(rows.map(row => row.target_id).filter(Boolean))];
   const orders = [];
   for (const idsChunk of chunkValues(orderIds)) {
@@ -1435,9 +1451,21 @@ async function loadDeletionRequests(env) {
 
 async function loadWeekPlan(env,page={}) {
   let plans;
-  const viewerRole=nullableText(page?.viewerRole),viewerId=nullableText(page?.viewerId);
+  const viewerRole=nullableText(page?.viewerRole),rawViewerId=nullableText(page?.viewerId);
+  const viewerIds=csvValues(rawViewerId);
+  const viewerId=viewerIds[0]||'';
   let scopedTechnicianId='';
-  if(viewerRole==='tecnico'&&viewerId){const technician=await first(env,'SELECT id FROM technicians WHERE user_id=? AND deleted_at IS NULL',[viewerId]);scopedTechnicianId=technician?.id||'';plans=scopedTechnicianId?await all(env,"SELECT DISTINCT p.* FROM plans p LEFT JOIN plan_assignments a ON a.plan_id=p.id WHERE COALESCE(p.scope_key,p.technician_id,'') IN (?,'','__shared__') OR a.technician_id=? ORDER BY p.rowid",[scopedTechnicianId,scopedTechnicianId]):[];}else plans=await all(env,'SELECT * FROM plans ORDER BY rowid');
+  if(viewerRole==='tecnico'&&viewerId){
+    let technician=null;
+    for(const vid of viewerIds){
+      technician=await first(env,'SELECT id, name FROM technicians WHERE (user_id=? OR id=? OR username_legacy=? OR username_legacy=(SELECT username FROM users WHERE id=?)) AND deleted_at IS NULL',[vid,vid,vid,vid]);
+      if(technician) break;
+    }
+    scopedTechnicianId=technician?.id||viewerId;
+    const techFirstName = (technician?.name || viewerIds[2] || viewerIds[1] || '').trim().split(/\s+/)[0].toLowerCase();
+    const nameMatch = techFirstName ? `%${techFirstName}%` : '__no_match__';
+    plans=scopedTechnicianId?await all(env,"SELECT DISTINCT p.* FROM plans p LEFT JOIN plan_assignments a ON a.plan_id=p.id WHERE COALESCE(p.scope_key,p.technician_id,'') IN (?,'','__shared__') OR a.technician_id=? OR lower(p.name) LIKE ? ORDER BY p.rowid",[scopedTechnicianId,scopedTechnicianId,nameMatch]):[];
+  }else plans=await all(env,'SELECT * FROM plans ORDER BY rowid');
   const planIds=plans.map(plan=>plan.id);
   const assignments=[];
   const stops=[];
@@ -1718,6 +1746,10 @@ export async function loadStatePart(env, part, page = {}) {
     // los muestre. Los terminados historicos siguen entrando solo por vinculo.
     for(const idsChunk of chunkValues(equipmentIds))appendWorkOrders(await loadAllWorkOrderPages(env,usersMap,{equipmentIds:idsChunk.join(','),openOnly:'1'}));
     for(const idsChunk of chunkValues(nodeIds))appendWorkOrders(await loadAllWorkOrderPages(env,usersMap,{nodeIds:idsChunk.join(','),openOnly:'1'}));
+    const viewerId = nullableText(page?.viewerId);
+    if (viewerId) {
+      appendWorkOrders(await loadAllWorkOrderPages(env,usersMap,{assignee:viewerId}));
+    }
     const workOrders=[...workOrdersById.values()];
     const visibleIds=new Set([...equipmentIds,...nodeIds,...detailIds]);
     const deletionRequests=(await loadDeletionRequests(env)).filter(request=>visibleIds.has(request.targetId)||visibleIds.has(request.nodeId)||visibleIds.has(request.detailId));
@@ -1759,10 +1791,10 @@ async function upsertEquipment(env, rec) {
     ? Number(rec.balancerPortCount)
     : 9;
   const balancerPortsJson = JSON.stringify(Array.isArray(rec.balancerPorts) ? rec.balancerPorts : []);
-  await run(env, `INSERT INTO equipment(id,name,ip,type,lat,lng,status,provider,notes,zone_id,ssid,radio_summary_legacy,radio_models_legacy,radio_names_legacy,station_names_legacy,radio_free_text_legacy,created_at,updated_at,deleted_at,purged_at,created_by,updated_by,tower_material_notes,tower_sections,tower_radios,tower_batteries,tower_panels,tower_extra_notes,tower_material_photos_json,tower_material_updated_at,tower_material_updated_by_name,tower_material_updated_by,balancer_port_count,balancer_ports_json)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET name=excluded.name,ip=excluded.ip,type=excluded.type,lat=excluded.lat,lng=excluded.lng,status=excluded.status,provider=excluded.provider,notes=excluded.notes,zone_id=excluded.zone_id,ssid=excluded.ssid,radio_summary_legacy=excluded.radio_summary_legacy,radio_models_legacy=excluded.radio_models_legacy,radio_names_legacy=excluded.radio_names_legacy,station_names_legacy=excluded.station_names_legacy,radio_free_text_legacy=excluded.radio_free_text_legacy,created_at=COALESCE(equipment.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,purged_at=excluded.purged_at,created_by=COALESCE(equipment.created_by,excluded.created_by),updated_by=excluded.updated_by,tower_material_notes=excluded.tower_material_notes,tower_sections=excluded.tower_sections,tower_radios=excluded.tower_radios,tower_batteries=excluded.tower_batteries,tower_panels=excluded.tower_panels,tower_extra_notes=excluded.tower_extra_notes,tower_material_photos_json=excluded.tower_material_photos_json,tower_material_updated_at=excluded.tower_material_updated_at,tower_material_updated_by_name=excluded.tower_material_updated_by_name,tower_material_updated_by=excluded.tower_material_updated_by,balancer_port_count=excluded.balancer_port_count,balancer_ports_json=excluded.balancer_ports_json`,
-    [rec.id,text(rec.name),text(rec.ip),text(rec.type),nullableNumber(rec.lat),nullableNumber(rec.lng),text(rec.status),text(rec.provider),text(rec.notes),zoneId,rec.ssid??null,rec.radioSummary??null,rec.radioModels??null,rec.radioNames??null,rec.stationNames??null,rec.radioFreeText??null,rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,rec.purgedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById),rec.towerMaterialNotes??null,rec.towerSections??null,rec.towerRadios??null,rec.towerBatteries??null,rec.towerPanels??null,rec.towerExtraNotes??null,JSON.stringify(Array.isArray(rec.towerMaterialPhotos)?rec.towerMaterialPhotos:[]),rec.towerMaterialUpdatedAt??null,rec.towerMaterialUpdatedByName??null,nullableText(rec.towerMaterialUpdatedById),balancerPortCount,balancerPortsJson]);
+  await run(env, `INSERT INTO equipment(id,name,ip,type,lat,lng,status,provider,notes,zone_id,ssid,radio_summary_legacy,radio_models_legacy,radio_names_legacy,station_names_legacy,radio_free_text_legacy,created_at,updated_at,deleted_at,purged_at,created_by,updated_by,tower_material_notes,tower_sections,tower_radios,tower_batteries,tower_panels,tower_extra_notes,tower_material_photos_json,tower_material_slots_json,tower_material_updated_at,tower_material_updated_by_name,tower_material_updated_by,balancer_port_count,balancer_ports_json)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(id) DO UPDATE SET name=excluded.name,ip=excluded.ip,type=excluded.type,lat=excluded.lat,lng=excluded.lng,status=excluded.status,provider=excluded.provider,notes=excluded.notes,zone_id=excluded.zone_id,ssid=excluded.ssid,radio_summary_legacy=excluded.radio_summary_legacy,radio_models_legacy=excluded.radio_models_legacy,radio_names_legacy=excluded.radio_names_legacy,station_names_legacy=excluded.station_names_legacy,radio_free_text_legacy=excluded.radio_free_text_legacy,created_at=COALESCE(equipment.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,purged_at=excluded.purged_at,created_by=COALESCE(equipment.created_by,excluded.created_by),updated_by=excluded.updated_by,tower_material_notes=excluded.tower_material_notes,tower_sections=excluded.tower_sections,tower_radios=excluded.tower_radios,tower_batteries=excluded.tower_batteries,tower_panels=excluded.tower_panels,tower_extra_notes=excluded.tower_extra_notes,tower_material_photos_json=excluded.tower_material_photos_json,tower_material_slots_json=excluded.tower_material_slots_json,tower_material_updated_at=excluded.tower_material_updated_at,tower_material_updated_by_name=excluded.tower_material_updated_by_name,tower_material_updated_by=excluded.tower_material_updated_by,balancer_port_count=excluded.balancer_port_count,balancer_ports_json=excluded.balancer_ports_json`,
+    [rec.id,text(rec.name),text(rec.ip),text(rec.type),nullableNumber(rec.lat),nullableNumber(rec.lng),text(rec.status),text(rec.provider),text(rec.notes),zoneId,rec.ssid??null,rec.radioSummary??null,rec.radioModels??null,rec.radioNames??null,rec.stationNames??null,rec.radioFreeText??null,rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,rec.purgedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById),rec.towerMaterialNotes??null,rec.towerSections??null,rec.towerRadios??null,rec.towerBatteries??null,rec.towerPanels??null,rec.towerExtraNotes??null,JSON.stringify(Array.isArray(rec.towerMaterialPhotos)?rec.towerMaterialPhotos:[]),JSON.stringify(rec.towerMaterialSlots&&typeof rec.towerMaterialSlots==='object'?rec.towerMaterialSlots:{}),rec.towerMaterialUpdatedAt??null,rec.towerMaterialUpdatedByName??null,nullableText(rec.towerMaterialUpdatedById),balancerPortCount,balancerPortsJson]);
   if (Array.isArray(rec.radioLinks)) {
     await run(env,'DELETE FROM equipment_radios WHERE equipment_id=?',[rec.id]);
     const stmts=rec.radioLinks.map((r,i)=>env.DB.prepare(`INSERT INTO equipment_radios(id,equipment_id,position,name,model,antenna_type,sector,port,ip,ssid,gateway,location_raw,lat,lng) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(generatedId('er'),rec.id,i,text(r.name),text(r.model),text(r.antennaType),text(r.sector),text(r.port),text(r.ip),text(r.ssid),text(r.gateway),text(r.location),nullableNumber(r.lat),nullableNumber(r.lng)));

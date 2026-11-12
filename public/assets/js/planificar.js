@@ -46,6 +46,7 @@ const expandedResolvedStops = new Set();
 let planCardDisplayMode = 'all';
 let activePlanCardIndex = 0;
 let expandedPendingStopId = '';
+const collapsedTechnicianStopIds = new Set();
 let expandedCompletedStopId = '';
 const planEvidenceGalleries = new Map();
 let technicianInstallationPhotos = [];
@@ -63,7 +64,7 @@ let technicianCompletionPhotos = [];
 let pendingPlanAssignmentResolver = null;
 
 function isPlanReadOnly() {
-    return typeof userHasRole === 'function' && userHasRole('tecnico');
+    return isTechnicianPlanView();
 }
 
 function canManagePlanStops() {
@@ -71,21 +72,98 @@ function canManagePlanStops() {
 }
 
 function isTechnicianPlanView() {
-    return typeof userHasRole === 'function' && userHasRole('tecnico');
+    if (typeof document !== 'undefined' && document.body && (
+        document.body.classList.contains('plan-technician-view') ||
+        document.body.dataset.techView ||
+        document.querySelector('.tech-mobile-header') ||
+        document.querySelector('.tech-bottom-nav') ||
+        document.querySelector('.tech-calendar-toolbar')
+    )) {
+        return true;
+    }
+    if (typeof userHasRole === 'function' && userHasRole('tecnico')) return true;
+    const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+    const role = typeof normalizeRole === 'function' ? normalizeRole(user?.role) : '';
+    if (role === 'tecnico') return true;
+    const username = (user?.username || '').toLowerCase();
+    const name = (user?.name || '').toLowerCase();
+    const userId = String(user?.id || '');
+    if (Array.isArray(state?.technicians) && state.technicians.some(t =>
+        !t.deletedAt && (
+            (userId && String(t.userId || '') === userId) ||
+            (t.id && String(t.id) === userId) ||
+            (username && (t.usuario || '').toLowerCase() === username) ||
+            (name && (t.nombre || '').toLowerCase() === name)
+        )
+    )) {
+        return true;
+    }
+    return false;
 }
 
 function getLoggedTechnicianId() {
     if (!isTechnicianPlanView()) return '';
     const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
     const username = normalizeName(user?.username || '');
-    const userId = String(user?.id || '');
-    const technician = (state.technicians || []).find(tech =>
+    const userDisplayName = normalizeName(user?.name || '');
+    const userId = String(user?.id || '').trim();
+
+    // 1. Buscar en técnicos registrados
+    let technician = (state.technicians || []).find(tech =>
         !tech.deletedAt && (
             (userId && String(tech.userId || '') === userId) ||
-            (username && normalizeName(tech.usuario || '') === username)
+            (tech.id && String(tech.id) === userId) ||
+            (username && normalizeName(tech.usuario || '') === username) ||
+            (username && normalizeName(tech.nombre || tech.name || '') === username) ||
+            (userDisplayName && normalizeName(tech.nombre || tech.name || '') === userDisplayName) ||
+            (userDisplayName && normalizeName(tech.nombre || tech.name || '').includes(userDisplayName)) ||
+            (userDisplayName && userDisplayName.includes(normalizeName(tech.nombre || tech.name || '')))
         )
     );
-    return technician?.id || '';
+
+    // 2. Si no se encontró en técnicos, buscar en planes generales asignados
+    if (!technician) {
+        const matchingPlan = (state.generalPlans || []).find(plan => {
+            if (!plan || plan.deletedAt) return false;
+            const pAssignedId = String(plan.assignedTechId || '');
+            if (userId && pAssignedId === userId) return true;
+            const pName = normalizeName(plan.name || '');
+            const pTechName = normalizeName(plan.assignedTechName || plan.technician || '');
+            return (username && (pName.includes(username) || pTechName.includes(username))) ||
+                   (userDisplayName && (pName.includes(userDisplayName) || pTechName.includes(userDisplayName)));
+        });
+        if (matchingPlan && matchingPlan.assignedTechId) {
+            technician = (state.technicians || []).find(t => String(t.id) === String(matchingPlan.assignedTechId));
+            if (!technician) {
+                return String(matchingPlan.assignedTechId);
+            }
+        }
+    }
+
+    if (technician && technician.id) return String(technician.id);
+
+    // 3. Fallback seguro: para técnico logueado nunca devolver cadena vacía
+    return userId || user?.username || user?.name || 'tecnico';
+}
+
+function ensureLoggedTechnicianRecord() {
+    if (!isTechnicianPlanView()) return;
+    const myTechId = getLoggedTechnicianId();
+    if (!myTechId) return;
+    if (!Array.isArray(state.technicians)) state.technicians = [];
+    let tech = state.technicians.find(t => !t.deletedAt && (String(t.id) === myTechId || String(t.userId || '') === myTechId));
+    if (!tech) {
+        const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+        tech = {
+            id: myTechId,
+            userId: String(user?.id || myTechId),
+            nombre: user?.name || user?.username || 'Técnico',
+            usuario: user?.username || '',
+            rol: 'tecnico',
+            estado: 'activo'
+        };
+        state.technicians.push(tech);
+    }
 }
 
 function resetPlanMapScrollLock() {
@@ -119,6 +197,26 @@ async function initPlanificarPage() {
     if (stopSearch) stopSearch.placeholder = 'Buscar cliente, pueblo o antena...';
     resetPlanMapScrollLock();
     await loadDB({ showOverlay: false, preferCache: true });
+    if (typeof getGlobalWorkOrdersCache === 'function') {
+        const cached = getGlobalWorkOrdersCache();
+        const cachedList = Object.values(cached);
+        if (cachedList.length > 0) {
+            if (!Array.isArray(state.workOrders) || state.workOrders.length === 0) {
+                state.workOrders = cachedList;
+            } else {
+                const existingMap = new Map(state.workOrders.map(w => [w.id, w]));
+                for (const ord of cachedList) {
+                    if (!existingMap.has(ord.id)) {
+                        state.workOrders.push(ord);
+                        existingMap.set(ord.id, ord);
+                    }
+                }
+            }
+        }
+    }
+    if (isTechnicianPlanView()) {
+        ensureLoggedTechnicianRecord();
+    }
     normalizeWeekPlan();
     initPlanSelectors();
     configureTechnicianDashboard();
@@ -130,34 +228,72 @@ async function initPlanificarPage() {
     setTimeout(initPlanMap, 100);
 }
 
+let _lastPlanWakeTime = 0;
+async function handlePlanWakeRefresh() {
+    const now = Date.now();
+    if (now - _lastPlanWakeTime < 1200) return;
+    _lastPlanWakeTime = now;
 
-function checkTechnicianDailyStopsNotice() {
     try {
-        if (!isTechnicianPlanView()) return;
-        const today = localDateKey();
-        const sessionKey = `tech_daily_notice_${today}`;
-        if (sessionStorage.getItem(sessionKey)) return;
-        const todayStops = getPlanStopsForView('general').filter(stop => stop.scheduledDate === today);
-        if (!todayStops.length) return;
-        sessionStorage.setItem(sessionKey, '1');
-        const totalDetails = todayStops.reduce((sum, s) => sum + getStopDetails(s).length, 0);
-        const msg = `Tienes ${todayStops.length} parada${todayStops.length === 1 ? '' : 's'} asignada${todayStops.length === 1 ? '' : 's'} para hoy con ${totalDetails} detalle${totalDetails === 1 ? '' : 's'}.`;
-        notify(msg);
-        if (typeof triggerDesktopNotification === 'function') {
-            triggerDesktopNotification({
-                title: 'WiFiMex · Ruta de Hoy',
-                message: msg,
-                url: '/planificar.html'
-            });
+        if (typeof getGlobalWorkOrdersCache === 'function') {
+            const cached = getGlobalWorkOrdersCache();
+            const cachedList = Object.values(cached);
+            if (cachedList.length > 0) {
+                if (!Array.isArray(state.workOrders) || state.workOrders.length === 0) {
+                    state.workOrders = cachedList;
+                } else {
+                    const existingMap = new Map(state.workOrders.map(w => [w.id, w]));
+                    for (const ord of cachedList) {
+                        if (!existingMap.has(ord.id)) {
+                            state.workOrders.push(ord);
+                            existingMap.set(ord.id, ord);
+                        }
+                    }
+                }
+            }
+        }
+        if (isTechnicianPlanView()) {
+            ensureLoggedTechnicianRecord();
+            selectedTechId = getLoggedTechnicianId();
+        }
+        initPlanSelectors();
+        renderPlan();
+
+        if (navigator.onLine && typeof loadDB === 'function') {
+            await loadDB({ showOverlay: false, preferCache: false });
+            if (isTechnicianPlanView()) {
+                ensureLoggedTechnicianRecord();
+                selectedTechId = getLoggedTechnicianId();
+            }
+            initPlanSelectors();
+            renderPlan();
         }
     } catch (e) {
-        console.warn('Daily notice check failed:', e);
+        console.warn('Wake refresh quiet sync error:', e);
     }
+}
+
+if (typeof window !== 'undefined' && !window._planWakeRefreshBound) {
+    window._planWakeRefreshBound = true;
+    window.addEventListener('pageshow', () => { handlePlanWakeRefresh(); });
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) handlePlanWakeRefresh();
+    });
+    window.addEventListener('focus', () => { handlePlanWakeRefresh(); });
+}
+
+function checkTechnicianDailyStopsNotice() {
+    return;
 }
 
 function configureTechnicianDashboard() {
     checkTechnicianDailyStopsNotice();
     if (!isTechnicianPlanView()) return;
+    const continuityBanner = document.getElementById('plan-continuity-recommendations-banner');
+    if (continuityBanner) {
+        continuityBanner.style.display = 'none';
+        continuityBanner.innerHTML = '';
+    }
     applyTechnicianViewportLayout();
     if (!document.body.dataset.techView) document.body.dataset.techView = 'details';
     if (!selectedCalendarDate) selectedCalendarDate = localDateKey();
@@ -270,14 +406,16 @@ function configureTechnicianDashboard() {
                 <strong>Hola, ${escapeHtml(firstName)}</strong>
                 <small>${escapeHtml(todayText.charAt(0).toUpperCase() + todayText.slice(1))}</small>
             </div>
-            <button type="button" class="tech-header-bell" onclick="openNotificationPanel()" aria-label="Notificaciones y material" title="Avisos y material">
-                <svg class="tech-bell-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                <span class="tech-header-badge" id="tech-mobile-bell-count" style="display:none">0</span>
-            </button>
+            <div class="tech-header-spacer" style="width:40px;height:40px;" aria-hidden="true"></div>
         </header>`);
+    } else {
+        const existingBell = document.querySelector('.tech-header-bell');
+        if (existingBell) existingBell.remove();
+        const existingBadge = document.getElementById('tech-mobile-bell-count');
+        if (existingBadge) existingBadge.remove();
     }
     if (!document.querySelector('.tech-bottom-nav')) {
-        document.body.insertAdjacentHTML('beforeend', `<nav class="tech-bottom-nav tech-bottom-nav-three" aria-label="Opciones del técnico"><button class="active" type="button" onclick="openTechnicianDetails()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v0Zm0 9h6m-6 4h4"/></svg>Detalles</button><button type="button" onclick="openTechnicianRouteMap()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>Ruta</button><button type="button" onclick="openTechnicianAddMenu()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Agregar</button></nav>`);
+        document.body.insertAdjacentHTML('beforeend', `<nav class="tech-bottom-nav tech-bottom-nav-three" aria-label="Opciones del técnico"><button class="active" type="button" onclick="openTechnicianDetails()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v0Zm0 9h6m-6 4h4"/></svg>Detalles</button><button type="button" onclick="openTechnicianRouteMap()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>Ruta</button><button type="button" onclick="openTechnicianRecommendedRoutes()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7"/></svg>Recomendadas</button></nav>`);
     }
     renderTechnicianRouteOverview();
     updateTechnicianProgressCard();
@@ -378,8 +516,21 @@ function getTechnicianPendingDispatches() {
     return pending;
 }
 
-function checkTechnicianPendingMaterialPrompt() {
+function dismissTechnicianMaterialPrompt() {
+    try {
+        sessionStorage.setItem('dismissed_tech_material_prompt', '1');
+    } catch (_) {}
+    if (typeof CM === 'function') CM('tech-pending-material-prompt-mo');
+}
+window.dismissTechnicianMaterialPrompt = dismissTechnicianMaterialPrompt;
+
+function checkTechnicianPendingMaterialPrompt(force = false) {
     if (!isTechnicianPlanView()) return;
+    if (!force) {
+        try {
+            if (sessionStorage.getItem('dismissed_tech_material_prompt') === '1') return;
+        } catch (_) {}
+    }
     const pending = getTechnicianPendingDispatches();
     const promptMo = document.getElementById('tech-pending-material-prompt-mo');
     const container = document.getElementById('tech-pending-prompt-content');
@@ -854,6 +1005,13 @@ function openTechnicianRouteMap() {
     }, 180);
 }
 
+function openTechnicianRecommendedRoutes() {
+    setTechnicianNavActive(2);
+    if (typeof openPresetRoutesModal === 'function') {
+        openPresetRoutesModal();
+    }
+}
+
 const expandedTechRouteStopIds = new Set();
 
 function getDetailLocationInfo(detail) {
@@ -952,7 +1110,7 @@ function renderTechnicianRouteOverview() {
             <div class="tech-route-stop-expanded-details" id="tech-stop-expanded-${escapeAttr(stop.id)}">
                 <div class="tech-expanded-tabs-bar">
                     <button type="button" class="tech-stop-subtab ${currentSubtab === 'pending' ? 'active' : ''}" onclick="event.stopPropagation();setTechnicianStopSubtab('${escapeAttr(stop.id)}','pending')">
-                        Por resolver (${pendingDetails.length})
+                        Pendientes (${pendingDetails.length})
                     </button>
                     <button type="button" class="tech-stop-subtab ${currentSubtab === 'completed' ? 'active' : ''}" onclick="event.stopPropagation();setTechnicianStopSubtab('${escapeAttr(stop.id)}','completed')">
                         Completados (${completedDetails.length})
@@ -963,7 +1121,8 @@ function renderTechnicianRouteOverview() {
                     const noDone = detail.status === 'no_realizado';
                     const category = getPlanDetailCategory(detail);
                     const folio = getDetailFolio(detail);
-                    const client = detail.clientName || 'Sin cliente registrado';
+                    const hasClient = !!(detail.clientName && String(detail.clientName).trim());
+                    const client = hasClient ? detail.clientName.trim() : '';
                     const rawPhone = String(detail.clientPhone || detail.phone || detail.technicianReport?.phone || '').replace(/\D/g, '');
                     const hasValidPhone = rawPhone.length >= 7 && !/^0+$/.test(rawPhone);
                     const detailText = getWorkOrderRequestedText(detail, 'Sin especificación');
@@ -980,9 +1139,9 @@ function renderTechnicianRouteOverview() {
                         </a>` : '';
 
                     const actionsHtml = `
-                        <button type="button" class="btn bsm bgh" onclick="event.stopPropagation();openPlanDetailReport('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}')">Ver detalle</button>
+                        <button type="button" class="btn bsm bgh" onclick="event.stopPropagation();openPlanDetailReport('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}')">Detalle</button>
                         ${done
-                            ? `<button type="button" class="btn bsm tech-detail-edit" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Editar trabajo</button>`
+                            ? `<button type="button" class="btn bsm tech-detail-edit" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Editar</button>`
                             : (noDone
                                 ? `<button type="button" class="btn bsm bg2 tech-detail-finish tech-detail-finish-later" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Terminar</button>`
                                 : `<button type="button" class="btn bsm bg2 tech-detail-finish" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Terminar</button><button type="button" class="btn bsm ba tech-detail-incomplete" onclick="event.stopPropagation();reportPlanDetailIncomplete('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}')">No realizado</button>`)}`;
@@ -990,13 +1149,8 @@ function renderTechnicianRouteOverview() {
                     const gpsHtml = locInfo.hasLocation ? `
                         <div class="tech-detail-location-badge has-gps">
                             <svg class="tech-gps-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
-                            <strong>Con ubicación GPS:</strong>
-                            <a class="order-location-link" href="${escapeAttr(locInfo.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Abrir Maps (${escapeHtml(locInfo.label)})</a>
-                        </div>` : `
-                        <div class="tech-detail-location-badge no-gps">
-                            <svg class="tech-gps-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
-                            <span class="order-location-muted no-location">Sin ubicación GPS registrada</span>
-                        </div>`;
+                            <a class="order-location-link" href="${escapeAttr(locInfo.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Maps (${escapeHtml(locInfo.label)})</a>
+                        </div>` : '';
 
                     return `
                         <div class="tech-inline-detail-card ${done ? 'is-done' : (noDone ? 'is-nodone' : 'is-pending')}" style="border-left-color:${pc(detail.priority)}">
@@ -1009,12 +1163,8 @@ function renderTechnicianRouteOverview() {
                                 </div>
                             </div>
                             <div class="tech-inline-detail-body">
-                                <div class="tech-inline-detail-client">
-                                    <strong>Cliente:</strong> ${escapeHtml(client)}
-                                </div>
-                                <div class="tech-inline-detail-desc">
-                                    <strong>Trabajo:</strong> ${escapeHtml(detailText)}
-                                </div>
+                                ${client ? `<div class="tech-inline-detail-client"><strong>Cliente:</strong> ${escapeHtml(client)}</div>` : ''}
+                                <div class="tech-inline-detail-desc">${escapeHtml(detailText)}</div>
                                 ${gpsHtml}
                             </div>
                             <div class="tech-inline-detail-actions">
@@ -1029,15 +1179,11 @@ function renderTechnicianRouteOverview() {
         let legTransitHtml = '';
         if (index > 0 && feasibility && feasibility.legs && feasibility.legs[index - 1]) {
             const leg = feasibility.legs[index - 1];
-            const prevStop = stops[index - 1];
-            const prevEq = prevStop.equipmentId ? (state.equipment || []).find(item => item.id === prevStop.equipmentId && !item.deletedAt) : null;
-            const prevNode = prevStop.nodeId ? (state.nodes || []).find(item => item.id === prevStop.nodeId && !item.deletedAt) : null;
-            const prevName = getTechnicianStopName(prevStop, prevEq, prevNode);
             legTransitHtml = `
                 <div class="tech-route-leg-transit">
                     <div class="tech-route-leg-badge" title="Distancia estimada por carretera (38 km/h)">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
-                        <span>Tramo: <b>~${leg.minutes} min</b> (${leg.km} km) de <b>${escapeHtml(prevName)}</b> a <b>${escapeHtml(stopName)}</b></span>
+                        <span><b>~${leg.minutes} min</b> (${leg.km} km)</span>
                     </div>
                 </div>`;
         }
@@ -1076,6 +1222,9 @@ function openTechnicianRouteStop(stopId) {
 
 function selectTechnicianAgendaDate(dateKey) {
     selectedCalendarDate = dateKey;
+    if (dateKey) {
+        sessionStorage.setItem('plan_selected_calendar_date', dateKey);
+    }
     technicianSummaryMode = 'day';
     document.querySelector('.tech-calendar-toolbar')?.remove();
     configureTechnicianDashboard();
@@ -1107,7 +1256,13 @@ function renderTechnicianDayMap() {
     technicianDayMapLayer.clearLayers();
     const date = selectedCalendarDate || localDateKey();
     const points = [];
-    getPlanStopsForView('general').filter(stop => stop.scheduledDate === date).forEach(stop => {
+    const allStops = getPlanStopsForView('general');
+    let targetStops = allStops.filter(stop => stop.scheduledDate === date);
+    if (!targetStops.length && (!selectedCalendarDate || selectedCalendarDate === localDateKey())) {
+        const unscheduled = allStops.filter(stop => !stop.scheduledDate);
+        if (unscheduled.length) targetStops = unscheduled;
+    }
+    targetStops.forEach(stop => {
         if (stop.equipmentId) {
             const equipment = (state.equipment || []).find(item => item.id === stop.equipmentId && !item.deletedAt);
             const lat = safeFloat(equipment?.lat);
@@ -1118,7 +1273,11 @@ function renderTechnicianDayMap() {
             const parsed = typeof parseOptionalLocation === 'function' ? parseOptionalLocation(detail.detailLocation || '') : {};
             const lat = safeFloat(detail.lat ?? parsed.lat);
             const lng = safeFloat(detail.lng ?? parsed.lng);
-            if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng, name: `${getDetailFolio(detail)} · ${detail.clientName || detail.title || 'Detalle'}`, detail, stop });
+            const fallbackLat = safeFloat(parsed.lat);
+            const fallbackLng = safeFloat(parsed.lng);
+            const validPoint = (a, b) => !isNaN(a) && !isNaN(b) && !(a === 0 && b === 0);
+            if (validPoint(lat, lng)) points.push({ lat, lng, name: `${getDetailFolio(detail)} · ${detail.clientName || detail.title || 'Detalle'}`, detail, stop });
+            else if (validPoint(fallbackLat, fallbackLng)) points.push({ lat: fallbackLat, lng: fallbackLng, name: `${getDetailFolio(detail)} · ${detail.clientName || detail.title || 'Detalle'}`, detail, stop });
         });
     });
     points.forEach((point, index) => {
@@ -1151,10 +1310,9 @@ function renderTechnicianDayMap() {
         else technicianDayMap.setView([17.55, -99.50], 8);
     };
 
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(pos => {
-            const userLat = pos.coords.latitude;
-            const userLng = pos.coords.longitude;
+    const drawUserPosition = (userLat, userLng) => {
+        if (!technicianDayMap || !technicianDayMapLayer) return;
+        try {
             const pulseIcon = L.divIcon({
                 className: 'tech-realtime-gps-icon',
                 html: '<div class="gps-pulse-outer"></div><div class="gps-pulse-inner"></div>',
@@ -1199,9 +1357,26 @@ function renderTechnicianDayMap() {
 
             const allCoords = points.map(p => [p.lat, p.lng]).concat([[userLat, userLng]]);
             technicianDayMap.fitBounds(allCoords, { padding: [28, 28], maxZoom: 15 });
-        }, () => {
+        } catch (gpsDrawErr) {
+            console.warn('No se pudo dibujar la ubicación del técnico:', gpsDrawErr);
             applyPointsBounds();
-        }, { enableHighAccuracy: true, timeout: 8000 });
+        }
+    };
+
+    // Reutiliza la última posición GPS (máx. 2 min) para no pedir GPS en cada redibujado.
+    const cachedGps = window._techLastGpsPosition;
+    if (cachedGps && (Date.now() - cachedGps.at) < 120000) {
+        drawUserPosition(cachedGps.lat, cachedGps.lng);
+    } else if (navigator.geolocation && !window._techGpsRequestInFlight) {
+        applyPointsBounds();
+        window._techGpsRequestInFlight = true;
+        navigator.geolocation.getCurrentPosition(pos => {
+            window._techGpsRequestInFlight = false;
+            window._techLastGpsPosition = { lat: pos.coords.latitude, lng: pos.coords.longitude, at: Date.now() };
+            drawUserPosition(pos.coords.latitude, pos.coords.longitude);
+        }, () => {
+            window._techGpsRequestInFlight = false;
+        }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 120000 });
     } else {
         applyPointsBounds();
     }
@@ -1332,8 +1507,57 @@ function getGeneralPlans() {
 
 function isPlanAssignedToTech(plan, techId) {
     if (!plan || !techId) return false;
-    if (plan.assignedTechId === techId) return true;
-    if (Array.isArray(plan.assignedTechIds) && plan.assignedTechIds.includes(techId)) return true;
+    const targetId = String(techId || '').trim();
+    if (String(plan.assignedTechId || '').trim() === targetId) return true;
+    if (Array.isArray(plan.assignedTechIds) && plan.assignedTechIds.map(String).includes(targetId)) return true;
+
+    const tech = (state.technicians || []).find(t => !t.deletedAt && (
+        String(t.id || '') === targetId ||
+        String(t.userId || '') === targetId ||
+        normalizeName(t.usuario || '') === normalizeName(targetId) ||
+        normalizeName(t.nombre || t.name || '') === normalizeName(targetId)
+    ));
+
+    const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+    const isLoggedTech = isTechnicianPlanView();
+
+    const techNames = [
+        tech?.nombre,
+        tech?.name,
+        tech?.usuario,
+        isLoggedTech ? user?.name : null,
+        isLoggedTech ? user?.username : null
+    ].filter(Boolean).map(normalizeName);
+
+    const techIds = [
+        targetId,
+        tech?.id ? String(tech.id) : null,
+        tech?.userId ? String(tech.userId) : null,
+        isLoggedTech && user?.id ? String(user.id) : null,
+        isLoggedTech && user?.username ? String(user.username) : null
+    ].filter(Boolean);
+
+    if (plan.assignedTechId && techIds.includes(String(plan.assignedTechId))) return true;
+    if (Array.isArray(plan.assignedTechIds) && plan.assignedTechIds.some(id => techIds.includes(String(id)))) return true;
+
+    const planAssignedNames = [
+        plan.assignedTechName,
+        plan.assignedTo,
+        plan.technician,
+        plan.techName
+    ].filter(Boolean).map(normalizeName);
+
+    if (planAssignedNames.some(pName => techNames.some(tName => pName === tName || pName.includes(tName) || tName.includes(pName)))) {
+        return true;
+    }
+
+    const planName = normalizeName(plan.name || '');
+    const techName = normalizeName(tech?.nombre || tech?.name || '');
+    if (techName && planName && (planName.includes(techName) || techName.includes(planName))) return true;
+    if (planName && techNames.some(tName => tName && tName.length >= 3 && (planName.includes(tName) || tName.includes(planName)))) {
+        return true;
+    }
+
     return false;
 }
 
@@ -1352,9 +1576,12 @@ function getVisibleGeneralPlansForRole() {
 function getPlanStopsRef(techId = selectedTechId, day = selectedDay) {
     ensureTechPlan(techId);
     if (day === 'general') {
-        const plan = techId === SHARED_PLAN_ID
-            ? getSelectedGeneralPlan()
-            : getGeneralPlans().find(item => !item.deletedAt && isPlanAssignedToTech(item, techId));
+        const activePlan = getSelectedGeneralPlan();
+        const plan = (activePlan && (techId === SHARED_PLAN_ID || isPlanAssignedToTech(activePlan, techId)))
+            ? activePlan
+            : (techId === SHARED_PLAN_ID
+                ? activePlan
+                : (getGeneralPlans().find(item => !item.deletedAt && isPlanAssignedToTech(item, techId)) || activePlan));
         if (plan) {
             if (!Array.isArray(plan.stops)) plan.stops = [];
             return plan.stops;
@@ -1408,7 +1635,13 @@ function getSelectedGeneralPlan() {
     let candidates = plans;
     if (selectedTechId && selectedTechId !== SHARED_PLAN_ID) {
         candidates = plans.filter(plan => isPlanAssignedToTech(plan, selectedTechId));
-        if (!candidates.length) return null;
+        if (!candidates.length) {
+            if (isTechnicianPlanView()) {
+                candidates = plans;
+            } else {
+                return null;
+            }
+        }
     }
     const selected = candidates.find(plan => plan.id === selectedGeneralPlanId) || candidates[0];
     selectedGeneralPlanId = selected?.id || '';
@@ -1433,6 +1666,58 @@ function initPlanSelectors() {
     const activeTechs = (state.technicians || []).filter(t => !t.deletedAt && t.estado !== 'inactivo');
     const visibleGeneralPlans = getVisibleGeneralPlansForRole();
 
+    if (isTechnicianPlanView()) {
+        ensureLoggedTechnicianRecord();
+        const myTechId = getLoggedTechnicianId();
+        selectedTechId = myTechId;
+        selectedDay = 'general';
+
+        const myTech = (state.technicians || []).find(t => !t.deletedAt && (String(t.id) === myTechId || String(t.userId || '') === myTechId)) || {
+            id: myTechId,
+            nombre: getCurrentUser()?.name || getCurrentUser()?.username || 'Técnico'
+        };
+
+        let techPlans = visibleGeneralPlans.filter(plan => !plan.deletedAt && isPlanAssignedToTech(plan, myTechId));
+        if (!techPlans.length) {
+            techPlans = getGeneralPlans().filter(plan => !plan.deletedAt && isPlanAssignedToTech(plan, myTechId));
+        }
+        if (!techPlans.length && getGeneralPlans().length > 0) {
+            techPlans = getGeneralPlans().filter(plan => !plan.deletedAt);
+        }
+
+        const savedPlanId = sessionStorage.getItem('plan_selected_general_plan_id');
+        if (savedPlanId && techPlans.some(plan => plan.id === savedPlanId)) {
+            selectedGeneralPlanId = savedPlanId;
+        } else {
+            selectedGeneralPlanId = techPlans.some(plan => plan.id === selectedGeneralPlanId)
+                ? selectedGeneralPlanId
+                : (techPlans[0]?.id || '');
+        }
+        if (selectedGeneralPlanId) {
+            sessionStorage.setItem('plan_selected_general_plan_id', selectedGeneralPlanId);
+        }
+
+        const savedDate = sessionStorage.getItem('plan_selected_calendar_date');
+        if (savedDate && !selectedCalendarDate) {
+            selectedCalendarDate = savedDate;
+        }
+
+        techSelect.innerHTML = `<option value="${escapeAttr(myTech.id)}" selected>${escapeHtml(myTech.nombre)}</option>`;
+        techSelect.value = myTech.id;
+        techSelect.disabled = true;
+
+        const daySel = document.getElementById('plan-day');
+        if (daySel) daySel.value = 'general';
+
+        generalPlanSelect.innerHTML = techPlans.length
+            ? techPlans.map(plan => `<option value="${plan.id}" ${plan.id === selectedGeneralPlanId ? 'selected' : ''}>${escapeHtml(plan.name)}</option>`).join('')
+            : '<option value="">Sin planes asignados</option>';
+        generalPlanSelect.value = selectedGeneralPlanId;
+        renderGeneralPlanAssigneeSelect();
+        generalTools.style.display = 'none';
+        return;
+    }
+
     if (isPlanReadOnly()) {
         const assignedPlans = visibleGeneralPlans.filter(plan => plan.assignedTechId || (Array.isArray(plan.assignedTechIds) && plan.assignedTechIds.length));
         const assignedTechIds = [...new Set(assignedPlans.flatMap(plan => [plan.assignedTechId, ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])].filter(Boolean)))];
@@ -1442,14 +1727,27 @@ function initPlanSelectors() {
         }
         selectedDay = 'general';
         const techPlans = assignedPlans.filter(plan => isPlanAssignedToTech(plan, selectedTechId));
-        selectedGeneralPlanId = techPlans.some(plan => plan.id === selectedGeneralPlanId)
-            ? selectedGeneralPlanId
-            : (techPlans[0]?.id || '');
+        const savedPlanId = sessionStorage.getItem('plan_selected_general_plan_id');
+        if (savedPlanId && techPlans.some(plan => plan.id === savedPlanId)) {
+            selectedGeneralPlanId = savedPlanId;
+        } else {
+            selectedGeneralPlanId = techPlans.some(plan => plan.id === selectedGeneralPlanId)
+                ? selectedGeneralPlanId
+                : (techPlans[0]?.id || '');
+        }
+        if (selectedGeneralPlanId) {
+            sessionStorage.setItem('plan_selected_general_plan_id', selectedGeneralPlanId);
+        }
+
+        const savedDate = sessionStorage.getItem('plan_selected_calendar_date');
+        if (savedDate && !selectedCalendarDate) {
+            selectedCalendarDate = savedDate;
+        }
         techSelect.innerHTML = assignedTechs.length
             ? assignedTechs.map(tech => `<option value="${escapeAttr(tech.id)}" ${tech.id === selectedTechId ? 'selected' : ''}>${escapeHtml(tech.nombre)}</option>`).join('')
             : '<option value="">Sin técnicos con plan asignado</option>';
         techSelect.value = selectedTechId;
-        techSelect.disabled = isTechnicianPlanView();
+        techSelect.disabled = true;
         document.getElementById('plan-day').value = 'general';
         generalPlanSelect.innerHTML = techPlans.length
             ? techPlans.map(plan => `<option value="${plan.id}" ${plan.id === selectedGeneralPlanId ? 'selected' : ''}>${escapeHtml(plan.name)}</option>`).join('')
@@ -1500,6 +1798,9 @@ function selectPlanTech(id) {
 function selectGeneralPlan(id) {
     if (isPlanReadOnly() && !getVisibleGeneralPlansForRole().some(plan => plan.id === id)) return;
     selectedGeneralPlanId = id;
+    if (id) {
+        sessionStorage.setItem('plan_selected_general_plan_id', id);
+    }
     selectedCalendarDate = '';
     const calBox = document.getElementById('plan-calendar');
     if (calBox) calBox.dataset.unscheduledFilter = '0';
@@ -1663,7 +1964,16 @@ function renderPlan() {
     applyPlanReadOnlyMode();
     configureTechnicianDashboard();
     if (typeof checkPlanContinuityRecommendations === 'function') {
-        checkPlanContinuityRecommendations();
+        const canSeeContinuity = !isTechnicianPlanView() && canManagePlanStops();
+        if (canSeeContinuity) {
+            checkPlanContinuityRecommendations();
+        } else {
+            const banner = document.getElementById('plan-continuity-recommendations-banner');
+            if (banner) {
+                banner.style.display = 'none';
+                banner.innerHTML = '';
+            }
+        }
     }
 }
 
@@ -1680,15 +1990,43 @@ function refreshPlanAfterSync() {
     requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'auto' }));
 }
 
-function updateTechnicianMobileBellBadge() {
-    const rawInbox = typeof getStoredNotificationsInbox === 'function' ? getStoredNotificationsInbox() : [];
-    const techInbox = rawInbox.filter(x => x.isMaterial || x.category === 'material' || x.type === 'material' || x.isProductivity || x.type === 'productivity');
-    const unreadCount = techInbox.filter(x => x.unread).length;
-    const badge = document.getElementById('tech-mobile-bell-count');
-    if (badge) {
-        badge.textContent = unreadCount > 9 ? '+9' : String(unreadCount);
-        badge.style.display = unreadCount > 0 ? 'grid' : 'none';
+function getTechnicianAssignedDetailsCount() {
+    if (!isTechnicianPlanView()) return 0;
+    const todayKey = selectedCalendarDate || localDateKey();
+    const allStops = getPlanStopsForView('general');
+    let targetStops = allStops.filter(s => (s.scheduledDate || '') === todayKey);
+    if (!targetStops.length) {
+        targetStops = allStops;
     }
+    const detailsMap = new Map();
+    targetStops.forEach(s => {
+        getStopDetails(s).forEach(d => {
+            if (d && d.id && !['completada', 'no_realizado'].includes(d.status || '')) {
+                detailsMap.set(d.id, d);
+            }
+        });
+    });
+    const techId = getLoggedTechnicianId();
+    const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+    const username = normalizeName(user?.username || '');
+    const userDisplayName = normalizeName(user?.name || '');
+    (state.workOrders || []).forEach(w => {
+        if (!w || w.deletedAt || ['completada', 'no_realizado'].includes(w.status || '')) return;
+        const matchesTech = (techId && (w.technicianId === techId || w.assignedTechId === techId)) ||
+            (username && (normalizeName(w.technician || '') === username || normalizeName(w.assignedTechName || '') === username)) ||
+            (userDisplayName && (normalizeName(w.technician || '') === userDisplayName || normalizeName(w.assignedTechName || '') === userDisplayName));
+        if (matchesTech) {
+            detailsMap.set(w.id, w);
+        }
+    });
+    return detailsMap.size;
+}
+
+function updateTechnicianMobileBellBadge() {
+    const bell = document.querySelector('.tech-header-bell');
+    if (bell) bell.remove();
+    const badge = document.getElementById('tech-mobile-bell-count');
+    if (badge) badge.remove();
 }
 
 function updateTechnicianProgressCard() {
@@ -1882,75 +2220,7 @@ function openTechnicianProductivitySummary() {
 }
 
 function checkAndTriggerTechnicianProductivityBriefings() {
-    if (!isTechnicianPlanView()) return;
-    const todayKey = localDateKey();
-    const allStops = getPlanStopsForView('general');
-    const dayStops = allStops.filter(s => (s.scheduledDate || '') === todayKey);
-    const dayDetails = [];
-    dayStops.forEach(s => {
-        getStopDetails(s).forEach(d => dayDetails.push(d));
-        getStopResolvedHistory(s).forEach(d => dayDetails.push(d));
-    });
-    const uniqueDetailsMap = new Map();
-    dayDetails.forEach(d => uniqueDetailsMap.set(d.id, d));
-    const uniqueDetails = Array.from(uniqueDetailsMap.values());
-
-    const isDone = d => ['completada', 'no_realizado'].includes(d.status || '');
-    const completedDetails = uniqueDetails.filter(isDone).length;
-    const totalDetails = uniqueDetails.length;
-    const completedStops = dayStops.filter(s => {
-        const prog = getStopProgress(s);
-        return prog.complete || s.adminReleasedAt;
-    }).length;
-    const totalStops = dayStops.length;
-    const highPriorityCount = uniqueDetails.filter(d => !isDone(d) && (
-        String(d.priority || '').toLowerCase() === 'alta' ||
-        String(d.priority || '').toLowerCase() === 'urgente'
-    )).length;
-    const pct = totalDetails > 0 ? Math.round((completedDetails / totalDetails) * 100) : (totalStops > 0 ? (completedStops === totalStops ? 100 : Math.round((completedStops / totalStops) * 100)) : 100);
-
-    const now = new Date();
-    const hour = now.getHours();
-
-    // 1. Resumen Matutino (8:00 AM en adelante)
-    const morningKey = `tech_brief_morning_${todayKey}`;
-    if (hour >= 8 && !localStorage.getItem(morningKey)) {
-        if (totalStops > 0 || totalDetails > 0) {
-            if (typeof addNotificationToInbox === 'function') {
-                addNotificationToInbox({
-                    id: `morning_brief_${todayKey}`,
-                    title: 'Resumen matutino de ruta',
-                    message: `Buen día. Tienes asignados ${totalStops} pueblo(s) con ${totalDetails} detalle(s) programados para hoy${highPriorityCount > 0 ? ` (${highPriorityCount} con prioridad alta)` : ''}. Consulta el orden en tu agenda.`,
-                    type: 'productivity',
-                    isProductivity: true,
-                    createdAt: new Date().toISOString()
-                });
-            }
-            localStorage.setItem(morningKey, '1');
-            if (typeof renderNotificationCenter === 'function') renderNotificationCenter();
-            updateTechnicianMobileBellBadge();
-        }
-    }
-
-    // 2. Cierre de Jornada (6:00 PM / 18:00 en adelante)
-    const eveningKey = `tech_brief_evening_${todayKey}`;
-    if (hour >= 18 && !localStorage.getItem(eveningKey)) {
-        if (totalStops > 0 || totalDetails > 0) {
-            if (typeof addNotificationToInbox === 'function') {
-                addNotificationToInbox({
-                    id: `evening_brief_${todayKey}`,
-                    title: 'Cierre de jornada técnica',
-                    message: `Resumen de actividades: Has concluido ${completedDetails} de ${totalDetails} detalle(s) (${pct}%) en ${totalStops} pueblo(s). Tu avance registrado hoy es del ${pct}%.`,
-                    type: 'productivity',
-                    isProductivity: true,
-                    createdAt: new Date().toISOString()
-                });
-            }
-            localStorage.setItem(eveningKey, '1');
-            if (typeof renderNotificationCenter === 'function') renderNotificationCenter();
-            updateTechnicianMobileBellBadge();
-        }
-    }
+    return;
 }
 
 function renderPlanKpis() {
@@ -2196,15 +2466,15 @@ function calculateDayRouteFeasibility(stops, activeIndex = 0) {
 let lastWeatherFetchCoords = null;
 
 function getWmoWeatherInfo(code) {
-    if (code === 0) return { label: 'Soleado / Despejado', icon: '☀️', condition: 'good' };
-    if (code === 1 || code === 2) return { label: 'Mayormente despejado', icon: '🌤️', condition: 'good' };
-    if (code === 3) return { label: 'Nublado', icon: '☁️', condition: 'fair' };
-    if (code === 45 || code === 48) return { label: 'Niebla / Neblina', icon: '🌫️', condition: 'caution' };
-    if (code >= 51 && code <= 55) return { label: 'Llovizna ligera', icon: '🌦️', condition: 'caution' };
-    if (code >= 61 && code <= 65) return { label: 'Lluvia constante', icon: '🌧️', condition: 'warning' };
-    if (code >= 80 && code <= 82) return { label: 'Chubascos', icon: '🌧️', condition: 'warning' };
-    if (code >= 95) return { label: 'Tormenta eléctrica', icon: '⛈️', condition: 'alert' };
-    return { label: 'Tiempo templado', icon: '⛅', condition: 'good' };
+    if (code === 0) return { label: 'Soleado / Despejado', icon: '', condition: 'good' };
+    if (code === 1 || code === 2) return { label: 'Mayormente despejado', icon: '', condition: 'good' };
+    if (code === 3) return { label: 'Nublado', icon: '', condition: 'fair' };
+    if (code === 45 || code === 48) return { label: 'Niebla / Neblina', icon: '', condition: 'caution' };
+    if (code >= 51 && code <= 55) return { label: 'Llovizna ligera', icon: '', condition: 'caution' };
+    if (code >= 61 && code <= 65) return { label: 'Lluvia constante', icon: '', condition: 'warning' };
+    if (code >= 80 && code <= 82) return { label: 'Chubascos', icon: '', condition: 'warning' };
+    if (code >= 95) return { label: 'Tormenta eléctrica', icon: '', condition: 'alert' };
+    return { label: 'Tiempo templado', icon: '', condition: 'good' };
 }
 
 let lastWeatherWidgetData = null;
@@ -2323,21 +2593,21 @@ function renderWeatherWidget(wx, townName) {
 
     tempEl.textContent = `${wx.temp}°C`;
     townEl.textContent = townName ? `Zona ${townName}` : 'Clima en zona';
-    if (iconEl) iconEl.textContent = wx.icon || '⛅';
+    if (iconEl) iconEl.textContent = wx.icon || '';
     if (descEl) descEl.textContent = wx.label || 'Tiempo favorable';
-    if (rainEl) rainEl.textContent = `🌧️ ${wx.rainProb}% lluvia`;
-    if (windEl) windEl.textContent = `💨 ${wx.wind} km/h`;
+    if (rainEl) rainEl.textContent = `${wx.rainProb}% lluvia`;
+    if (windEl) windEl.textContent = `${wx.wind} km/h`;
 
     if (alertEl) {
         if (wx.rainProb >= 60 || wx.condition === 'warning' || wx.condition === 'alert') {
             alertEl.className = 'weather-road-alert alert-warning';
-            alertEl.textContent = '⚠️ Alerta de lluvia: precaución en terracerías';
+            alertEl.textContent = 'Alerta de lluvia: precaución en terracerías';
         } else if (wx.wind >= 35) {
             alertEl.className = 'weather-road-alert alert-warning';
-            alertEl.textContent = '⚠️ Viento fuerte: precaución al subir torres';
+            alertEl.textContent = 'Viento fuerte: precaución al subir torres';
         } else {
             alertEl.className = 'weather-road-alert';
-            alertEl.textContent = '✓ Condiciones favorables para ruta de campo';
+            alertEl.textContent = 'Condiciones favorables para ruta de campo';
         }
     }
 }
@@ -2490,7 +2760,7 @@ function renderWeatherFallback(townName) {
     if (descEl) descEl.textContent = 'Pronóstico local listo para ruta';
     if (alertEl) {
         alertEl.className = 'weather-road-alert';
-        alertEl.textContent = '✓ Caminos transitables';
+        alertEl.textContent = 'Caminos transitables';
     }
 }
 
@@ -2502,13 +2772,23 @@ function getVisiblePlanStops() {
         const details = getStopDetails(stop);
         return normalizeName([stop.name, ...details.flatMap(detail => [detail.clientName, detail.title, detail.description])].filter(Boolean).join(' ')).includes(query);
     });
-    return isTechnicianPlanView()
-        ? (technicianSummaryMode === 'general' ? allStops : allStops.filter(stop => stop.scheduledDate === (selectedCalendarDate || today)))
-        : (selectedCalendarDate
-            ? allStops.filter(stop => (stop.scheduledDate || '') === selectedCalendarDate)
-            : (document.getElementById('plan-calendar')?.dataset.unscheduledFilter === '1'
-                ? allStops.filter(stop => !stop.scheduledDate)
-                : allStops));
+    if (isTechnicianPlanView()) {
+        if (technicianSummaryMode === 'general') return allStops;
+        const targetDate = selectedCalendarDate || today;
+        const forDay = allStops.filter(stop => stop.scheduledDate === targetDate);
+        if (forDay.length > 0) return forDay;
+        // Si no hay paradas fechadas específicamente para hoy, mostrar las paradas sin fecha asignada de su plan
+        if (!selectedCalendarDate || selectedCalendarDate === today) {
+            const unscheduled = allStops.filter(stop => !stop.scheduledDate);
+            if (unscheduled.length > 0) return unscheduled;
+        }
+        return [];
+    }
+    return (selectedCalendarDate
+        ? allStops.filter(stop => (stop.scheduledDate || '') === selectedCalendarDate)
+        : (document.getElementById('plan-calendar')?.dataset.unscheduledFilter === '1'
+            ? allStops.filter(stop => !stop.scheduledDate)
+            : allStops));
 }
 
 function advancePlanCard(offset) {
@@ -2571,7 +2851,7 @@ function renderActiveStopExtraDetails(stop) {
             ${siteSpecs.length ? `<div style="display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:#284360;margin-bottom:10px;padding:6px 10px;background:#ffffff;border:1px solid #e2ecf5;border-radius:6px;">${siteSpecs.join(' · ')}</div>` : ''}
             ${stop.notes ? `<div style="font-size:11px;color:#475e77;margin-bottom:8px;padding:6px 9px;background:#ffffff;border:1px solid #e4edf5;border-radius:6px;"><strong>Nota del sitio:</strong> ${escapeHtml(stop.notes)}</div>` : ''}
             <div style="padding:8px 10px;background:#f6f9fc;border:1px solid #dce7f2;border-radius:6px;">
-                <strong style="font-size:11px;color:#183a61;">📦 Material de la parada:</strong>
+                <strong style="font-size:11px;color:#183a61;">Material de la parada:</strong>
                 <span style="font-size:11px;color:#45607d;">${plannedMat ? escapeHtml(plannedMat) : 'Sin material específico registrado.'}</span>
             </div>
         </div>
@@ -2593,11 +2873,11 @@ function renderActiveSiteInformation(stop) {
     const assignedNames = assignedTechs.map(t => t.nombre || t.usuario).join(', ');
 
     let tags = [];
-    if (eq?.ip || node?.ip) tags.push(`<span>🌐 <b>IP:</b> ${escapeHtml(eq?.ip || node?.ip)}</span>`);
-    if (eq?.model || node?.modelo) tags.push(`<span>📶 <b>Modelo:</b> ${escapeHtml(eq?.model || node?.modelo)}</span>`);
-    if (node?.town || stop.town) tags.push(`<span>🏘️ <b>Pueblo:</b> ${escapeHtml(node?.town || stop.town)}</span>`);
-    if (hasCoords) tags.push(`<span>📍 <b>GPS:</b> ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}</span>`);
-    if (assignedNames) tags.push(`<span>👥 <b>Equipo:</b> ${escapeHtml(assignedNames)}</span>`);
+    if (eq?.ip || node?.ip) tags.push(`<span><b>IP:</b> ${escapeHtml(eq?.ip || node?.ip)}</span>`);
+    if (eq?.model || node?.modelo) tags.push(`<span><b>Modelo:</b> ${escapeHtml(eq?.model || node?.modelo)}</span>`);
+    if (node?.town || stop.town) tags.push(`<span><b>Pueblo:</b> ${escapeHtml(node?.town || stop.town)}</span>`);
+    if (hasCoords) tags.push(`<span><b>GPS:</b> ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}</span>`);
+    if (assignedNames) tags.push(`<span><b>Equipo:</b> ${escapeHtml(assignedNames)}</span>`);
 
     const noteText = stop.notes || node?.notas || eq?.notas || '';
 
@@ -2605,15 +2885,15 @@ function renderActiveSiteInformation(stop) {
     let towerHtml = '';
     if (eq && !stop.nodeId) {
         const specs = [];
-        if (eq.towerSections) specs.push(`<span class="site-spec-chip">🗼 <b>Tramos:</b> ${escapeHtml(eq.towerSections)}</span>`);
-        if (eq.altura_torre) specs.push(`<span class="site-spec-chip">📏 <b>Altura:</b> ${escapeHtml(eq.altura_torre)} m</span>`);
-        if (eq.towerRadios) specs.push(`<span class="site-spec-chip">📻 <b>Radios:</b> ${escapeHtml(eq.towerRadios)}</span>`);
-        if (eq.towerBatteries) specs.push(`<span class="site-spec-chip">🔋 <b>Baterías:</b> ${escapeHtml(eq.towerBatteries)}</span>`);
-        if (eq.towerPanels) specs.push(`<span class="site-spec-chip">☀️ <b>Paneles:</b> ${escapeHtml(eq.towerPanels)}</span>`);
-        if (eq.frecuencia) specs.push(`<span class="site-spec-chip">📡 <b>Frecuencia:</b> ${escapeHtml(eq.frecuencia)} MHz</span>`);
-        if (eq.canal) specs.push(`<span class="site-spec-chip">📶 <b>Canal:</b> ${escapeHtml(eq.canal)}</span>`);
-        if (eq.ssid) specs.push(`<span class="site-spec-chip">🔑 <b>Red/SSID:</b> ${escapeHtml(eq.ssid)}</span>`);
-        if (eq.mac) specs.push(`<span class="site-spec-chip">⚙️ <b>MAC:</b> ${escapeHtml(eq.mac)}</span>`);
+        if (eq.towerSections) specs.push(`<span class="site-spec-chip"><b>Tramos:</b> ${escapeHtml(eq.towerSections)}</span>`);
+        if (eq.altura_torre) specs.push(`<span class="site-spec-chip"><b>Altura:</b> ${escapeHtml(eq.altura_torre)} m</span>`);
+        if (eq.towerRadios) specs.push(`<span class="site-spec-chip"><b>Radios:</b> ${escapeHtml(eq.towerRadios)}</span>`);
+        if (eq.towerBatteries) specs.push(`<span class="site-spec-chip"><b>Baterías:</b> ${escapeHtml(eq.towerBatteries)}</span>`);
+        if (eq.towerPanels) specs.push(`<span class="site-spec-chip"><b>Paneles:</b> ${escapeHtml(eq.towerPanels)}</span>`);
+        if (eq.frecuencia) specs.push(`<span class="site-spec-chip"><b>Frecuencia:</b> ${escapeHtml(eq.frecuencia)} MHz</span>`);
+        if (eq.canal) specs.push(`<span class="site-spec-chip"><b>Canal:</b> ${escapeHtml(eq.canal)}</span>`);
+        if (eq.ssid) specs.push(`<span class="site-spec-chip"><b>Red/SSID:</b> ${escapeHtml(eq.ssid)}</span>`);
+        if (eq.mac) specs.push(`<span class="site-spec-chip"><b>MAC:</b> ${escapeHtml(eq.mac)}</span>`);
         const extraMat = (eq.towerMaterialNotes || eq.towerExtraNotes || '').trim();
         const photos = Array.isArray(eq.towerMaterialPhotos) ? eq.towerMaterialPhotos.filter(Boolean) : [];
 
@@ -2621,16 +2901,21 @@ function renderActiveSiteInformation(stop) {
             <div class="site-tower-section" style="margin-top:10px;padding:10px 12px;background:#f8fbff;border:1px solid #d4e4f7;border-radius:9px;">
                 <div style="margin-bottom:6px;">
                     <strong style="font-size:11px;font-weight:800;color:#0874e8;display:flex;align-items:center;gap:6px;">
-                        <span>🗼</span> Material en torre
+                        Material en torre
                     </strong>
                 </div>
                 ${specs.length ? `<div class="site-spec-grid" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">${specs.join('')}</div>` : '<div style="font-size:10px;color:#71829a;">Sin material registrado.</div>'}
                 ${extraMat ? `<div style="font-size:10.5px;color:#355171;background:#ffffff;padding:6px 9px;border-radius:6px;border:1px solid #e2edf8;margin-top:6px;"><b>Notas:</b> ${escapeHtml(extraMat)}</div>` : ''}
                 ${photos.length ? `
                     <div style="margin-top:6px;">
-                        <small style="font-size:9.5px;font-weight:700;color:#547192;display:block;margin-bottom:4px;">Fotos (${photos.length}):</small>
+                        <small style="font-size:9.5px;font-weight:700;color:#547192;display:block;margin-bottom:4px;">Fotos de equipo (${photos.length}):</small>
                         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                            ${photos.map((p, i) => `<a href="${escapeAttr(p)}" target="_blank" rel="noopener" style="display:inline-block;border-radius:6px;overflow:hidden;border:1px solid #ccdff2;"><img src="${escapeAttr(p)}" style="width:44px;height:44px;object-fit:cover;display:block;" alt="Torre ${i + 1}"></a>`).join('')}
+                            ${photos.map((p, i) => {
+                                const slotNames = { batteries: 'Pilas', panels: 'Paneles', controller: 'Controlador', tower: 'Torre', cabinet: 'Gabinete', lightning: 'Pararrayos', mikrotik: 'MikroTik', poe: 'PoE' };
+                                const slotKey = (eq.towerMaterialSlots && typeof eq.towerMaterialSlots === 'object') ? Object.keys(eq.towerMaterialSlots).find(k => eq.towerMaterialSlots[k] === p) : null;
+                                const slotLabel = slotKey && slotNames[slotKey] ? slotNames[slotKey] : `Foto ${i + 1}`;
+                                return `<a href="${escapeAttr(p)}" target="_blank" rel="noopener" style="display:inline-block;position:relative;border-radius:6px;overflow:hidden;border:1px solid #ccdff2;" title="${escapeAttr(slotLabel)}"><img src="${escapeAttr(p)}" style="width:44px;height:44px;object-fit:cover;display:block;" alt="${escapeAttr(slotLabel)}">${slotKey ? `<span style="position:absolute;bottom:0;left:0;right:0;background:rgba(15,23,42,0.7);color:#fff;font-size:8px;font-weight:700;text-align:center;padding:1px 0;line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(slotNames[slotKey] || '')}</span>` : ''}</a>`;
+                            }).join('')}
                         </div>
                     </div>` : ''}
             </div>
@@ -2641,17 +2926,17 @@ function renderActiveSiteInformation(stop) {
     let nodeHtml = '';
     if (node) {
         const nodeSpecs = [];
-        if (node.nodeCode || node.code) nodeSpecs.push(`<span class="site-spec-chip">🏷️ <b>Código:</b> ${escapeHtml(node.nodeCode || node.code)}</span>`);
-        if (node.segmento_red) nodeSpecs.push(`<span class="site-spec-chip">🔀 <b>Red:</b> ${escapeHtml(node.segmento_red)}</span>`);
-        if (node.tipo_enlace) nodeSpecs.push(`<span class="site-spec-chip">🔗 <b>Enlace:</b> ${escapeHtml(node.tipo_enlace)}</span>`);
-        if (node.routerOS) nodeSpecs.push(`<span class="site-spec-chip">💻 <b>Router:</b> ${escapeHtml(node.routerOS)}</span>`);
-        if (node.modelo) nodeSpecs.push(`<span class="site-spec-chip">📦 <b>Modelo:</b> ${escapeHtml(node.modelo)}</span>`);
-        if (node.cobertura) nodeSpecs.push(`<span class="site-spec-chip">📶 <b>Cobertura:</b> ${escapeHtml(node.cobertura)}</span>`);
+        if (node.nodeCode || node.code) nodeSpecs.push(`<span class="site-spec-chip"><b>Código:</b> ${escapeHtml(node.nodeCode || node.code)}</span>`);
+        if (node.segmento_red) nodeSpecs.push(`<span class="site-spec-chip"><b>Red:</b> ${escapeHtml(node.segmento_red)}</span>`);
+        if (node.tipo_enlace) nodeSpecs.push(`<span class="site-spec-chip"><b>Enlace:</b> ${escapeHtml(node.tipo_enlace)}</span>`);
+        if (node.routerOS) nodeSpecs.push(`<span class="site-spec-chip"><b>Router:</b> ${escapeHtml(node.routerOS)}</span>`);
+        if (node.modelo) nodeSpecs.push(`<span class="site-spec-chip"><b>Modelo:</b> ${escapeHtml(node.modelo)}</span>`);
+        if (node.cobertura) nodeSpecs.push(`<span class="site-spec-chip"><b>Cobertura:</b> ${escapeHtml(node.cobertura)}</span>`);
 
         nodeHtml = `
             <div class="site-node-section" style="margin-top:10px;padding:10px 12px;background:#f6fbf9;border:1px solid #c9ecdc;border-radius:9px;">
                 <div style="margin-bottom:6px;">
-                    <strong style="font-size:11px;font-weight:800;color:#0e8354;">🏘️ Equipo del nodo</strong>
+                    <strong style="font-size:11px;font-weight:800;color:#0e8354;">Equipo del nodo</strong>
                 </div>
                 ${nodeSpecs.length ? `<div class="site-spec-grid" style="display:flex;flex-wrap:wrap;gap:6px;">${nodeSpecs.join('')}</div>` : '<div style="font-size:10px;color:#71829a;">Sin datos adicionales.</div>'}
             </div>
@@ -2662,7 +2947,7 @@ function renderActiveSiteInformation(stop) {
         <div class="site-extra-info-panel">
             <div class="site-info-header">
                 <div class="site-info-title-group">
-                    <span class="site-info-icon">📡</span>
+                    <span class="site-info-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg></span>
                     <div>
                         <h3>Datos del sitio</h3>
                         <small>${escapeHtml(stop.name || eq?.name || node?.name || 'Sitio seleccionado')}</small>
@@ -2670,7 +2955,7 @@ function renderActiveSiteInformation(stop) {
                 </div>
                 ${mapsUrl ? `
                     <a class="btn bc site-maps-btn" href="${escapeAttr(mapsUrl)}" target="_blank" rel="noopener" title="Abrir en Google Maps">
-                        <span>📍 Abrir Maps</span>
+                        <span>Abrir Maps</span>
                     </a>
                 ` : ''}
             </div>
@@ -2763,39 +3048,39 @@ function renderSidebarPlanSummary(stops) {
             <!-- Resumen de ruta simplificado -->
             <div class="sidebar-plan-stats-box" style="margin-top:8px;border-top:1px solid #e1ecf6;padding-top:7px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-                    <span style="font-size:9.5px;font-weight:800;color:#203c5c;text-transform:uppercase;letter-spacing:.02em;">📊 Resumen de ruta</span>
+                    <span style="font-size:9.5px;font-weight:800;color:#203c5c;text-transform:uppercase;letter-spacing:.02em;">Resumen de ruta</span>
                     <span style="font-size:8.5px;color:#0874e8;font-weight:700;">${validStops.length} lugar(es)</span>
                 </div>
                 <div style="display:flex;flex-direction:column;gap:5px;">
                     <div class="sidebar-stat-row" style="display:flex;align-items:center;justify-content:space-between;padding:4px 7px;background:#ffffff;border:1px solid #e6eef6;border-radius:6px;font-size:10.5px;">
-                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">🗼 Antenas</span>
+                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">Antenas</span>
                         <b style="color:#102b50;">${antennasCount}</b>
                     </div>
                     <div class="sidebar-stat-row" style="display:flex;align-items:center;justify-content:space-between;padding:4px 7px;background:#ffffff;border:1px solid #e6eef6;border-radius:6px;font-size:10.5px;">
-                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">🏘️ Nodos</span>
+                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">Nodos</span>
                         <b style="color:#102b50;">${nodesCount}</b>
                     </div>
                     ${manualCount > 0 ? `
                     <div class="sidebar-stat-row" style="display:flex;align-items:center;justify-content:space-between;padding:4px 7px;background:#ffffff;border:1px solid #e6eef6;border-radius:6px;font-size:10.5px;">
-                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">📍 Otros puntos</span>
+                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">Otros puntos</span>
                         <b style="color:#102b50;">${manualCount}</b>
                     </div>` : ''}
                     <div class="sidebar-stat-row" style="display:flex;align-items:center;justify-content:space-between;padding:4px 7px;background:#ffffff;border:1px solid #e6eef6;border-radius:6px;font-size:10.5px;">
-                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">⏱️ Tiempo de viaje</span>
+                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">Tiempo de viaje</span>
                         <b style="color:#102b50;">~${metrics.travelFormatted}</b>
                     </div>
                     <div class="sidebar-stat-row" style="display:flex;align-items:center;justify-content:space-between;padding:4px 7px;background:#ffffff;border:1px solid #e6eef6;border-radius:6px;font-size:10.5px;">
-                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">⚡ Distancia promedio</span>
+                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">Distancia promedio</span>
                         <b style="color:#102b50;">~${avgLegKm} km</b>
                     </div>
                     ${antennasCount > 0 ? `
                     <div class="sidebar-stat-row" style="display:flex;align-items:center;justify-content:space-between;padding:4px 7px;background:#ffffff;border:1px solid #e6eef6;border-radius:6px;font-size:10.5px;">
-                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">🗼 Torres con material</span>
+                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">Torres con material</span>
                         <b style="color:#102b50;">${withMaterialCount} / ${antennasCount}</b>
                     </div>` : ''}
                     ${coveredTownsCount > 0 ? `
                     <div class="sidebar-stat-row" style="display:flex;align-items:center;justify-content:space-between;padding:4px 7px;background:#ffffff;border:1px solid #e6eef6;border-radius:6px;font-size:10.5px;">
-                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">🗺️ Pueblos en ruta</span>
+                        <span style="color:#50647c;display:flex;align-items:center;gap:5px;">Pueblos en ruta</span>
                         <b style="color:#102b50;">${coveredTownsCount}</b>
                     </div>` : ''}
                 </div>
@@ -2823,10 +3108,10 @@ function renderPlanPlacesIntelligence(stops) {
             const p1 = getStopCurrentPosition(prev);
             if (hasCoords && !isNaN(p1.lat) && !isNaN(p1.lng)) {
                 const leg = estimateRouteTravel(p1.lat, p1.lng, pos.lat, pos.lng);
-                legText = `🚗 ~${leg.minutes} min (${leg.km} km) desde parada ${idx}`;
+                legText = `~${leg.minutes} min (${leg.km} km) desde parada ${idx}`;
             }
         } else {
-            legText = '🚩 Punto inicial de ruta';
+            legText = 'Punto inicial de ruta';
         }
 
         const chips = [];
@@ -2843,7 +3128,7 @@ function renderPlanPlacesIntelligence(stops) {
                         <strong class="place-name">${escapeHtml(stop.name || eq?.name || node?.name || 'Parada')}</strong>
                         <small class="place-town">${escapeHtml(stop.town || node?.town || (eq ? 'Antena' : 'Sitio'))}</small>
                     </div>
-                    ${mapsUrl ? `<a href="${escapeAttr(mapsUrl)}" target="_blank" rel="noopener" class="place-maps-link" onclick="event.stopPropagation()" title="Ver en Google Maps">🗺️</a>` : ''}
+                    ${mapsUrl ? `<a href="${escapeAttr(mapsUrl)}" target="_blank" rel="noopener" class="place-maps-link" onclick="event.stopPropagation()" title="Ver en Google Maps">Maps</a>` : ''}
                 </div>
                 ${chips.length ? `<div class="place-chips-row">${chips.map(c => `<span>${c}</span>`).join('')}</div>` : ''}
                 <div class="place-intel-foot">
@@ -2857,7 +3142,7 @@ function renderPlanPlacesIntelligence(stops) {
     return `
         <div class="day-col plan-route-places-intel" style="margin-top:14px;background:#ffffff;border:1px solid #d5e3ef;border-radius:12px;overflow:hidden;">
             <div class="day-head" style="background:#eef4fb;color:#102b50;font-weight:800;display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid #d0e0f0;">
-                <span style="display:inline-flex;align-items:center;gap:6px;">📍 <b>Infraestructura y Lugares en la Ruta (${valid.length})</b></span>
+                <span style="display:inline-flex;align-items:center;gap:6px;"><b>Infraestructura y Lugares en la Ruta (${valid.length})</b></span>
                 <span style="font-size:10px;color:#556d88;font-weight:700;">Información técnica y geográfica de campo</span>
             </div>
             <div class="places-summary-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));gap:10px;padding:12px;background:#f7fafe;">
@@ -2931,33 +3216,56 @@ function renderRouteIntelligenceWidget(stops, activeIndex = 0) {
 }
 
 function renderPlanDays() {
-    const board = document.getElementById('plan-days');
-    if (!selectedTechId) {
-        board.innerHTML = '<div class="plan-empty">Selecciona o crea un tecnico para empezar a planificar.</div>';
-        return;
-    }
-    if (isPlanReadOnly() && !getSelectedGeneralPlan()) {
-        board.innerHTML = '<div class="plan-empty">No hay planes asignados a tecnicos todavia.</div>';
-        return;
-    }
-    selectedDay = 'general';
-    const daySelect = document.getElementById('plan-day');
-    if (daySelect) daySelect.value = 'general';
-    const today = localDateKey();
-    const visible = getVisiblePlanStops();
-
-    if (visible.length === 0) {
-        const isFiltered = Boolean(selectedCalendarDate || document.getElementById('plan-calendar')?.dataset.unscheduledFilter === '1');
-        board.innerHTML = `<div class="plan-empty">
-            <p>${isTechnicianPlanView() ? `No tienes paradas asignadas para ${formatCalendarDate(selectedCalendarDate || today)}.` : 'No hay paradas que coincidan con la búsqueda o filtro de fecha.'}</p>
-            ${isFiltered && !isTechnicianPlanView() ? `<button type="button" class="btn bsm bgh" onclick="clearPlanCalendarFilter()" style="margin-top:10px;">Mostrar todas las paradas del plan</button>` : ''}
-        </div>`;
-        if (!isTechnicianPlanView()) {
-            renderRouteIntelligenceWidget([], 0);
-            renderSidebarPlanSummary([]);
+    try {
+        const board = document.getElementById('plan-days');
+        if (!board) return;
+        if (isTechnicianPlanView()) {
+            if (!selectedTechId) {
+                selectedTechId = getLoggedTechnicianId();
+            }
+            if (!selectedTechId) {
+                board.innerHTML = `<div class="plan-empty"><p>No tienes trabajos asignados para hoy.</p></div>`;
+                return;
+            }
         }
-        return;
-    }
+        if (!selectedTechId) {
+            board.innerHTML = `<div class="plan-empty">${isTechnicianPlanView() ? '<p>No tienes trabajos asignados para hoy.</p>' : 'Selecciona o crea un tecnico para empezar a planificar.'}</div>`;
+            return;
+        }
+        if (isPlanReadOnly() && !getSelectedGeneralPlan()) {
+            const myTechId = isTechnicianPlanView() ? getLoggedTechnicianId() : selectedTechId;
+            const candidatePlans = getGeneralPlans().filter(plan => !plan.deletedAt && isPlanAssignedToTech(plan, myTechId));
+            if (candidatePlans.length) {
+                selectedGeneralPlanId = candidatePlans[0].id;
+                sessionStorage.setItem('plan_selected_general_plan_id', selectedGeneralPlanId);
+            } else if (getGeneralPlans().filter(p => !p.deletedAt).length) {
+                selectedGeneralPlanId = getGeneralPlans().filter(p => !p.deletedAt)[0].id;
+                sessionStorage.setItem('plan_selected_general_plan_id', selectedGeneralPlanId);
+            }
+        }
+        if (isPlanReadOnly() && !getSelectedGeneralPlan()) {
+            board.innerHTML = `<div class="plan-empty">${isTechnicianPlanView() ? '<p>No tienes planes de trabajo asignados actualmente.</p>' : 'No hay planes asignados a tecnicos todavia.'}</div>`;
+            return;
+        }
+        selectedDay = 'general';
+        const daySelect = document.getElementById('plan-day');
+        if (daySelect) daySelect.value = 'general';
+        const today = localDateKey();
+        const visible = getVisiblePlanStops();
+
+        if (visible.length === 0) {
+            const isFiltered = Boolean(selectedCalendarDate || document.getElementById('plan-calendar')?.dataset.unscheduledFilter === '1');
+            board.innerHTML = `<div class="plan-empty">
+                <p>${isTechnicianPlanView() ? `No tienes paradas asignadas para ${formatCalendarDate(selectedCalendarDate || today)}.` : 'No hay paradas que coincidan con la búsqueda o filtro de fecha.'}</p>
+                ${isTechnicianPlanView() && technicianSummaryMode !== 'general' ? `<button type="button" class="btn bsm bg2" onclick="toggleTechnicianSummaryMode()" style="margin-top:12px;font-weight:700;">Ver todos los detalles del plan</button>` : ''}
+                ${isFiltered && !isTechnicianPlanView() ? `<button type="button" class="btn bsm bgh" onclick="clearPlanCalendarFilter()" style="margin-top:10px;">Mostrar todas las paradas del plan</button>` : ''}
+            </div>`;
+            if (!isTechnicianPlanView()) {
+                renderRouteIntelligenceWidget([], 0);
+                renderSidebarPlanSummary([]);
+            }
+            return;
+        }
 
     // Desktop view and Card-by-Card mode:
     if (!isTechnicianPlanView() && planCardDisplayMode === 'card') {
@@ -2989,9 +3297,9 @@ function renderPlanDays() {
                     </button>
                 </div>
                 <div class="plan-card-nav-metrics">
-                    <span>📍 <b>${visible.length}</b> sitio${visible.length === 1 ? '' : 's'} en el plan</span>
-                    <span>🚗 <b>~${metrics.totalKm} km</b> carretera total</span>
-                    <span>⏱️ <b>~${metrics.travelFormatted}</b> traslado acumulado</span>
+                    <span><b>${visible.length}</b> sitio${visible.length === 1 ? '' : 's'} en el plan</span>
+                    <span><b>~${metrics.totalKm} km</b> carretera total</span>
+                    <span><b>~${metrics.travelFormatted}</b> traslado acumulado</span>
                 </div>
                 <button type="button" class="plan-view-toggle-btn" onclick="togglePlanDisplayMode()" title="Ver la lista completa de paradas">
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -3072,9 +3380,9 @@ function renderPlanDays() {
     const listModeBanner = !isTechnicianPlanView() ? `
         <div class="plan-card-navigator plan-list-mode-banner" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;padding:8px 12px;background:#ffffff;border:1px solid #dce7f2;border-radius:10px;flex-shrink:0;">
             <div class="plan-card-nav-metrics" style="justify-content:flex-start;">
-                <span>📍 <b>${visible.length}</b> sitio${visible.length === 1 ? '' : 's'} en el plan</span>
-                <span>🚗 <b>~${allMetrics.totalKm} km</b> carretera total</span>
-                <span>⏱️ <b>~${allMetrics.travelFormatted}</b> traslado acumulado</span>
+                <span><b>${visible.length}</b> sitio${visible.length === 1 ? '' : 's'} en el plan</span>
+                <span><b>~${allMetrics.totalKm} km</b> carretera total</span>
+                <span><b>~${allMetrics.travelFormatted}</b> traslado acumulado</span>
             </div>
             <button type="button" class="plan-view-toggle-btn" onclick="togglePlanDisplayMode()" title="Ver las paradas en tarjetas individuales">
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
@@ -3108,7 +3416,7 @@ function renderPlanDays() {
                             <div class="transit-line"></div>
                             <div class="transit-badge" title="Tiempo estimado en carretera (38 km/h)">
                                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
-                                <span><b>~${leg.minutes} min</b> (${leg.km} km) de <b>${escapeHtml(prevName)}</b> a <b>${escapeHtml(currName)}</b></span>
+                                <span><b>~${leg.minutes} min</b> (${leg.km} km)${isTechnicianPlanView() ? '' : ` de <b>${escapeHtml(prevName)}</b> a <b>${escapeHtml(currName)}</b>`}</span>
                             </div>
                         </div>`;
                 }
@@ -3125,6 +3433,18 @@ function renderPlanDays() {
         renderRouteIntelligenceWidget(visible, 0);
         renderSidebarPlanSummary(visible);
     }
+    } catch (err) {
+        console.error('Error rendering plan days:', err);
+        const board = document.getElementById('plan-days');
+        if (board) {
+            board.innerHTML = `
+                <div class="plan-empty" style="padding:24px 16px;text-align:center;">
+                    <p style="font-weight:700;color:#0f172a;margin-bottom:8px;">Hubo un inconveniente al mostrar los detalles.</p>
+                    <p style="font-size:13px;color:#64748b;margin-bottom:14px;">Tus datos están a salvo en la nube. Pulsa el botón para recargar la vista.</p>
+                    <button type="button" class="btn bsm bg2" onclick="renderPlan()" style="padding:8px 18px;font-weight:700;">Reintentar carga</button>
+                </div>`;
+        }
+    }
 }
 
 function stopActionIcon(type) {
@@ -3138,8 +3458,8 @@ function stopActionIcon(type) {
 }
 
 function renderStopCard(stop, day, index) {
-    const eq = stop.equipmentId ? state.equipment.find(e => e.id === stop.equipmentId) : null;
-    const node = stop.nodeId ? (state.nodes || []).find(n => n.id === stop.nodeId && !n.deletedAt) : null;
+    let eq = stop.equipmentId ? (state.equipment || []).find(e => e.id === stop.equipmentId && !e.deletedAt) : null;
+    let node = stop.nodeId ? (state.nodes || []).find(n => n.id === stop.nodeId && !n.deletedAt) : null;
     const details = getStopDetails(stop);
     const pendingDetails = details.filter(detail => !['completada', 'no_realizado'].includes(detail.status || ''));
     const progress = getStopProgress(stop);
@@ -3149,37 +3469,109 @@ function renderStopCard(stop, day, index) {
     const position = getStopCurrentPosition(stop);
     const lat = !isNaN(position.lat) ? position.lat.toFixed(5) : '';
     const lng = !isNaN(position.lng) ? position.lng.toFixed(5) : '';
+
+    // Auto-resolución de paradas por proximidad GPS si dicen "Parada", no tienen nodo/antena o son manuales
+    if (!node && !eq && !isNaN(position.lat) && !isNaN(position.lng)) {
+        let closestNode = null;
+        let minNodeDist = 0.6; // 600 metros
+        (state.nodes || []).forEach(n => {
+            if (n.deletedAt || isNaN(n.lat) || isNaN(n.lng)) return;
+            const dist = calculateHaversineKm(position.lat, position.lng, Number(n.lat), Number(n.lng));
+            if (dist < minNodeDist) {
+                minNodeDist = dist;
+                closestNode = n;
+            }
+        });
+        if (closestNode) {
+            node = closestNode;
+            stop.nodeId = closestNode.id;
+            stop.type = 'node';
+            if (!stop.name || stop.name === 'Parada' || stop.name.toLowerCase().startsWith('parada')) {
+                stop.name = closestNode.town || closestNode.name;
+            }
+        } else {
+            let closestEq = null;
+            let minEqDist = 0.6;
+            (state.equipment || []).forEach(e => {
+                if (e.deletedAt || isNaN(e.lat) || isNaN(e.lng)) return;
+                const dist = calculateHaversineKm(position.lat, position.lng, Number(e.lat), Number(e.lng));
+                if (dist < minEqDist) {
+                    minEqDist = dist;
+                    closestEq = e;
+                }
+            });
+            if (closestEq) {
+                eq = closestEq;
+                stop.equipmentId = closestEq.id;
+                stop.type = 'equipment';
+                if (!stop.name || stop.name === 'Parada' || stop.name.toLowerCase().startsWith('parada')) {
+                    stop.name = closestEq.name;
+                }
+            }
+        }
+    }
+
     const doneClass = progress.complete || stop.adminReleasedAt ? 'done' : '';
     const resolved = getStopResolvedHistory(stop);
     const resolvedOpen = expandedResolvedStops.has(stop.id);
     const compactStop = !isTechnicianPlanView();
-    const stopExpanded = expandedPendingStopId === stop.id || resolvedOpen || expandedCompletedStopId === stop.id;
+    const isTech = isTechnicianPlanView();
+    const isCollapsed = collapsedTechnicianStopIds.has(stop.id);
+    const pendingOpen = isTech ? !isCollapsed : (expandedPendingStopId === stop.id);
+    const stopExpanded = isTech ? (pendingOpen || expandedCompletedStopId === stop.id) : (expandedPendingStopId === stop.id || resolvedOpen || expandedCompletedStopId === stop.id);
     const history = getStopHistorySummary(stop);
+    const isCorruptText = text => !text || /^Ver\s+(detalles|pendientes|completados)/i.test(String(text).trim());
+    const validEqName = eq && !isCorruptText(eq.name) ? eq.name : '';
+    const validNodeName = node && !isCorruptText(node.town || node.name) ? (node.nodeCode ? `${node.nodeCode} · ${node.town || node.name}` : (node.town || node.name)) : '';
+    const validStopName = !isCorruptText(stop?.name) && String(stop?.name).trim().toLowerCase() !== 'parada' ? stop.name : '';
     const technicianStopName = getTechnicianStopName(stop, eq, node);
+    const cleanStopTitle = isTechnicianPlanView()
+        ? technicianStopName
+        : (validNodeName || validEqName || validStopName || (stop?.type === 'equipment' ? 'Torre o antena' : (stop?.type === 'node' ? 'Pueblo' : 'Parada')));
     const antennaLocationUrl = eq && !isNaN(safeFloat(eq.lat)) && !isNaN(safeFloat(eq.lng)) ? `https://www.google.com/maps?q=${safeFloat(eq.lat)},${safeFloat(eq.lng)}` : '';
     const puebloNavUrl = (lat && lng) ? `https://www.google.com/maps?q=${lat},${lng}` : '';
     const towerAnt = (eq && !stop.nodeId) ? eq : null;
     const hasTowerMat = towerAnt ? !!(towerAnt.towerSections || towerAnt.towerRadios || towerAnt.towerBatteries || towerAnt.towerPanels || towerAnt.towerExtraNotes || towerAnt.towerMaterialNotes || (Array.isArray(towerAnt.towerMaterialPhotos) && towerAnt.towerMaterialPhotos.length)) : false;
-    const towerHeaderBtn = towerAnt ? `<button type="button" class="btn bsm btn-tower-callout btn-tower-header ${hasTowerMat ? 'is-registered' : 'is-pending'}" onclick="event.stopPropagation(); openTowerMaterialModal(\'${escapeAttr(towerAnt.id)}\')" title="Material e infraestructura de la torre ${escapeAttr(towerAnt.name)}"><span class="tower-btn-icon">🗼</span> <span class="tower-btn-label">Material torre</span><span class="tower-btn-tag">${hasTowerMat ? '✓' : 'Registrar'}</span></button>` : '';
+    const towerHeaderBtn = towerAnt ? `<button type="button" class="btn bsm btn-tower-callout btn-tower-header ${hasTowerMat ? 'is-registered' : 'is-pending'}" onclick="event.stopPropagation(); openTowerMaterialModal(\'${escapeAttr(towerAnt.id)}\')" title="Torre ${escapeAttr(towerAnt.name)}"><span class="tower-btn-label">Torre</span><span class="tower-btn-tag">${hasTowerMat ? '✓' : 'Registrar'}</span></button>` : '';
+
+    const canRegisterAsNodeBtn = (!node && !eq && canManagePlanStops())
+        ? `<button type="button" class="btn-register-pueblo-chip" onclick="event.stopPropagation(); openRegisterStopAsNodeModal('${escapeAttr(stop.id)}')" title="Registrar este sitio como nuevo pueblo en el catálogo">+ Pueblo</button>`
+        : '';
+
+    const removeBtnHtml = canManagePlanStops()
+        ? `<button type="button" class="btn-stop-remove-action" title="Eliminar parada de la ruta" aria-label="Eliminar ${escapeAttr(cleanStopTitle)} de la ruta" onclick="event.stopPropagation(); deleteStop('${escapeAttr(day)}', '${escapeAttr(stop.id)}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg></button>`
+        : '';
 
     return `
         <div class="stop-card ${compactStop ? 'plan-stop-compact' : ''} ${stopExpanded ? 'is-expanded' : ''} ${stop.type === 'manual' ? 'manual' : ''} ${doneClass}" data-stop-id="${escapeAttr(stop.id)}" data-stop-day="${escapeAttr(day)}" ondragover="allowPlanStopDrop(event)" ondragleave="clearPlanStopDrop(event)" ondrop="dropPlanStop(event,'${escapeAttr(day)}','${escapeAttr(stop.id)}')">
-            <div class="stop-card-heading"><div class="stop-heading-copy"><div class="stop-title clickable-stop-title" role="button" tabindex="0" aria-controls="plan-stop-details-${escapeAttr(stop.id)}" aria-expanded="${expandedPendingStopId === stop.id}" onkeydown="if(event.key === 'Enter' || event.key === ' '){event.preventDefault();this.click()}" title="${escapeAttr(technicianStopName)}" onclick="togglePlanStopDetails('${escapeAttr(stop.id)}')"><span class="stop-title-text">${escapeHtml(isTechnicianPlanView() ? technicianStopName : (stop.name || eq?.name || node?.name || 'Parada'))}</span><span class="tech-stop-weather-chip" id="tech-stop-weather-${escapeAttr(stop.id)}"></span>${towerHeaderBtn}</div><div class="stop-meta">${isTechnicianPlanView() ? (stop.type === 'equipment' ? 'Torre o antena' : 'Pueblo') : (stop.type === 'manual' ? 'Comunidad / punto manual' : (stop.type === 'node' ? 'Nodo vinculado' : 'Antena registrada'))}${lat && lng ? ` · ${lat}, ${lng}` : ''}</div></div>${isPlanReadOnly() ? '' : `<span class="stop-drag-handle" draggable="true" role="button" tabindex="0" title="Arrastra para cambiar el orden" aria-label="Arrastra para cambiar el orden" ondragstart="startPlanStopDrag(event,'${escapeAttr(day)}','${escapeAttr(stop.id)}')" ondragend="endPlanStopDrag()">&#8942;</span>`}</div>
+            <div class="stop-card-heading">
+                <div class="stop-heading-copy">
+                    <div class="stop-title clickable-stop-title" role="button" tabindex="0" aria-controls="plan-stop-details-${escapeAttr(stop.id)}" aria-expanded="${pendingOpen}" onkeydown="if(event.key === 'Enter' || event.key === ' '){event.preventDefault();this.click()}" title="${escapeAttr(cleanStopTitle)}" onclick="togglePlanStopDetails('${escapeAttr(stop.id)}')">
+                        <span class="stop-title-text">${escapeHtml(cleanStopTitle)}</span>
+                        <span class="tech-stop-weather-chip" id="tech-stop-weather-${escapeAttr(stop.id)}"></span>
+                        ${towerHeaderBtn}
+                    </div>
+                    <div class="stop-meta">
+                        ${isTechnicianPlanView() ? (stop.type === 'equipment' ? 'Antena' : 'Pueblo') : (stop.type === 'manual' ? 'Comunidad / punto manual' : (stop.type === 'node' ? 'Nodo vinculado' : 'Antena registrada'))}${lat && lng ? ` · ${lat}, ${lng}` : ''}
+                        ${canRegisterAsNodeBtn}
+                    </div>
+                </div>
+                <div class="stop-card-head-actions">
+                    ${removeBtnHtml}
+                    ${isPlanReadOnly() ? '' : `<span class="stop-drag-handle" draggable="true" role="button" tabindex="0" title="Arrastra para cambiar el orden" aria-label="Arrastra para cambiar el orden" ondragstart="startPlanStopDrag(event,'${escapeAttr(day)}','${escapeAttr(stop.id)}')" ondragend="endPlanStopDrag()">&#8942;</span>`}
+                </div>
+            </div>
             ${isTechnicianPlanView() && (puebloNavUrl || antennaLocationUrl) ? `
                 <div class="tech-stop-actions-row">
-                    <a class="tech-nav-direction-btn" href="${escapeAttr(antennaLocationUrl || puebloNavUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg> Navegar al pueblo</a>
+                    <a class="tech-nav-direction-btn" href="${escapeAttr(antennaLocationUrl || puebloNavUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"><svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg> Navegar</a>
                 </div>` : ''}
             <div class="stop-state-row">
                 <span class="badge ${adminStatus.cls}">${adminStatus.text}</span>
                 <span class="badge bty">${isTechnicianPlanView() ? `${progress.done}/${progress.total} listos` : `${progress.done}/${progress.total} detalles hechos`}</span>
             </div>
-            ${isTechnicianPlanView() ? '' : `
-            <div class="stop-detail-switches" aria-label="Estado de los detalles de la parada">
-                <button type="button" class="stop-detail-switch pending ${expandedPendingStopId === stop.id ? 'active' : ''}" aria-controls="plan-stop-details-${escapeAttr(stop.id)}" aria-expanded="${expandedPendingStopId === stop.id ? 'true' : 'false'}" onclick="togglePlanStopDetails('${escapeAttr(stop.id)}')"><span>Pendientes</span><strong>${pendingDetails.length}</strong></button>
-                <button type="button" class="stop-detail-switch completed ${(resolvedOpen || expandedCompletedStopId === stop.id) ? 'active' : ''}" ${resolved.length ? `aria-controls="${isTechnicianPlanView() ? 'plan-stop-completed' : 'plan-stop-resolved'}-${escapeAttr(stop.id)}" aria-expanded="${(resolvedOpen || expandedCompletedStopId === stop.id) ? 'true' : 'false'}" onclick="${isTechnicianPlanView() ? 'toggleTechnicianCompleted' : 'toggleResolvedStop'}('${escapeAttr(stop.id)}')"` : 'disabled'}><span>Completados</span><strong>${resolved.length}</strong></button>
-            </div>`}
-            ${isPlanReadOnly() ? (stop.scheduledDate ? `<div class="plan-stop-date">Programada: <strong>${escapeHtml(formatCalendarDate(stop.scheduledDate))}</strong></div>` : '') : `<label class="plan-stop-date-editor"><span>Día asignado<strong>${escapeHtml(formatCalendarDate(stop.scheduledDate))}</strong></span><input type="date" value="${escapeAttr(stop.scheduledDate || '')}" onchange="assignStopCalendarDate('${escapeAttr(stop.id)}',this.value)"></label>`}
-            ${history ? `<div class="stop-history-insight"><strong>${history.count} incidencias resueltas</strong><span>Ultima: ${escapeHtml(history.lastDate)}</span></div>` : ''}
+            <!-- El bloque superior de stop-detail-switches se omite para evitar duplicar pendientes y completados con el bloque inferior -->
+            ${isPlanReadOnly() ? (!isTechnicianPlanView() && stop.scheduledDate ? `<div class="plan-stop-date">Programada: <strong>${escapeHtml(formatCalendarDate(stop.scheduledDate))}</strong></div>` : '') : `<label class="plan-stop-date-editor"><span>Día asignado<strong>${escapeHtml(formatCalendarDate(stop.scheduledDate))}</strong></span><input type="date" value="${escapeAttr(stop.scheduledDate || '')}" onchange="assignStopCalendarDate('${escapeAttr(stop.id)}',this.value)"></label>`}
+            ${!isTechnicianPlanView() && history ? `<div class="stop-history-insight"><strong>${history.count} incidencias resueltas</strong><span>Ultima: ${escapeHtml(history.lastDate)}</span></div>` : ''}
             ${(stop.startedAt || stop.adminReleasedAt) ? `
                 <div class="stop-timeline">
                     ${stop.startedAt ? `<span>Inicio tecnico: <strong>${formatPlanDateTime(stop.startedAt)}</strong></span>` : ''}
@@ -3187,17 +3579,17 @@ function renderStopCard(stop, day, index) {
                 </div>` : ''}
             ${materialText ? `<div class="plan-material-chip">Material: ${escapeHtml(materialText)}</div>` : ''}
             ${visibleNotes ? `<div class="stop-notes">${escapeHtml(visibleNotes)}</div>` : ''}
-            <div class="stop-details plan-stop-details-panel" id="plan-stop-details-${escapeAttr(stop.id)}" style="display:${expandedPendingStopId === stop.id ? 'flex' : 'none'}">${renderPlanDetailsGrouped(details, stop, day, 'pending')}</div>
+            <div class="stop-details plan-stop-details-panel" id="plan-stop-details-${escapeAttr(stop.id)}" style="display:${pendingOpen ? 'flex' : 'none'}">${renderPlanDetailsGrouped(details, stop, day, 'pending')}</div>
             ${isTechnicianPlanView() && resolved.length ? `<div class="stop-details plan-stop-details-panel completed-only" id="plan-stop-completed-${escapeAttr(stop.id)}" style="display:${expandedCompletedStopId === stop.id ? 'flex' : 'none'}">${renderPlanDetailsGrouped(resolved, stop, day, 'completed')}</div>` : ''}
             ${!isTechnicianPlanView() && resolved.length ? `<div class="stop-resolved-panel" id="plan-stop-resolved-${escapeAttr(stop.id)}" ${resolvedOpen ? '' : 'hidden'}>${resolved.map(detail => renderPlanDetailRow(detail, stop, day, true)).join('')}</div>` : ''}
             <div class="stop-actions">
                 ${isPlanReadOnly() ? `
-                <button type="button" class="btn bsm bgh stop-action-pending" title="${expandedPendingStopId === stop.id ? 'Ocultar' : `Ver pendientes (${pendingDetails.length})`}" aria-label="${expandedPendingStopId === stop.id ? 'Ocultar' : `Ver pendientes (${pendingDetails.length})`}" aria-controls="plan-stop-details-${escapeAttr(stop.id)}" aria-expanded="${expandedPendingStopId === stop.id ? 'true' : 'false'}" data-pending-count="${pendingDetails.length}" onclick="togglePlanStopDetails('${escapeAttr(stop.id)}')">${expandedPendingStopId === stop.id ? 'Ocultar' : `Ver pendientes (${pendingDetails.length})`}</button>
-                ${isTechnicianPlanView() ? (resolved.length ? `<button type="button" class="btn bsm plan-resolved-toggle stop-action-completed ${expandedCompletedStopId === stop.id ? 'active' : ''}" title="${expandedCompletedStopId === stop.id ? 'Ocultar' : `Ver completados (${resolved.length})`}" aria-label="${expandedCompletedStopId === stop.id ? 'Ocultar' : `Ver completados (${resolved.length})`}" aria-controls="plan-stop-completed-${escapeAttr(stop.id)}" aria-expanded="${expandedCompletedStopId === stop.id ? 'true' : 'false'}" data-completed-count="${resolved.length}" onclick="toggleTechnicianCompleted('${escapeAttr(stop.id)}')">${expandedCompletedStopId === stop.id ? 'Ocultar' : `Ver completados (${resolved.length})`}</button>` : `<button type="button" class="btn bsm plan-resolved-toggle stop-action-completed" title="Sin completados" aria-label="Sin completados" disabled data-completed-count="0">Sin completados</button>`) : ''}
+                <button type="button" class="btn bsm bgh stop-action-pending" title="${pendingOpen ? 'Ocultar' : `Pendientes (${pendingDetails.length})`}" aria-label="${pendingOpen ? 'Ocultar' : `Pendientes (${pendingDetails.length})`}" aria-controls="plan-stop-details-${escapeAttr(stop.id)}" aria-expanded="${pendingOpen ? 'true' : 'false'}" data-pending-count="${pendingDetails.length}" onclick="togglePlanStopDetails('${escapeAttr(stop.id)}')">${pendingOpen ? 'Ocultar' : `Pendientes (${pendingDetails.length})`}</button>
+                ${isTechnicianPlanView() ? (resolved.length ? `<button type="button" class="btn bsm plan-resolved-toggle stop-action-completed ${expandedCompletedStopId === stop.id ? 'active' : ''}" title="${expandedCompletedStopId === stop.id ? 'Ocultar' : `Completados (${resolved.length})`}" aria-label="${expandedCompletedStopId === stop.id ? 'Ocultar' : `Completados (${resolved.length})`}" aria-controls="plan-stop-completed-${escapeAttr(stop.id)}" aria-expanded="${expandedCompletedStopId === stop.id ? 'true' : 'false'}" data-completed-count="${resolved.length}" onclick="toggleTechnicianCompleted('${escapeAttr(stop.id)}')">${expandedCompletedStopId === stop.id ? 'Ocultar' : `Completados (${resolved.length})`}</button>` : `<button type="button" class="btn bsm plan-resolved-toggle stop-action-completed" title="0 completados" aria-label="0 completados" disabled data-completed-count="0">0 completados</button>`) : ''}
                 ` : `
                 ${canManagePlanStops() ? `<button class="btn bsm stop-action-delete" title="Eliminar parada" aria-label="Eliminar parada" onclick="deleteStop('${day}','${stop.id}')">${stopActionIcon('delete')}</button>` : ''}
-                ${resolved.length ? `<button class="btn bsm plan-resolved-toggle stop-action-completed ${resolvedOpen ? 'active' : ''}" title="${resolvedOpen ? 'Ocultar completados' : `Ver completados (${resolved.length})`}" aria-label="${resolvedOpen ? 'Ocultar completados' : `Ver completados (${resolved.length})`}" onclick="toggleResolvedStop('${escapeAttr(stop.id)}')">${stopActionIcon('completed')}</button>` : `<button class="btn bsm stop-action-completed" title="Sin completados" aria-label="Sin detalles completados" disabled>${stopActionIcon('completed')}</button>`}
-                <button class="btn bsm stop-action-pending" title="${expandedPendingStopId === stop.id ? 'Ocultar pendientes' : `Ver pendientes (${pendingDetails.length})`}" aria-label="${expandedPendingStopId === stop.id ? 'Ocultar pendientes' : `Ver pendientes (${pendingDetails.length})`}" onclick="togglePlanStopDetails('${escapeAttr(stop.id)}')">${stopActionIcon('pending')}</button>
+                <button type="button" class="btn bsm bgh stop-action-pending" title="${pendingOpen ? 'Ocultar pendientes' : `Pendientes (${pendingDetails.length})`}" aria-label="${pendingOpen ? 'Ocultar pendientes' : `Pendientes (${pendingDetails.length})`}" aria-controls="plan-stop-details-${escapeAttr(stop.id)}" aria-expanded="${pendingOpen ? 'true' : 'false'}" data-pending-count="${pendingDetails.length}" onclick="togglePlanStopDetails('${escapeAttr(stop.id)}')">${pendingOpen ? 'Ocultar' : `Pendientes (${pendingDetails.length})`}</button>
+                ${resolved.length ? `<button type="button" class="btn bsm plan-resolved-toggle stop-action-completed ${resolvedOpen ? 'active' : ''}" title="${resolvedOpen ? 'Ocultar completados' : `Completados (${resolved.length})`}" aria-label="${resolvedOpen ? 'Ocultar completados' : `Completados (${resolved.length})`}" aria-controls="plan-stop-resolved-${escapeAttr(stop.id)}" aria-expanded="${resolvedOpen ? 'true' : 'false'}" data-completed-count="${resolved.length}" onclick="toggleResolvedStop('${escapeAttr(stop.id)}')">${resolvedOpen ? 'Ocultar' : `Completados (${resolved.length})`}</button>` : `<button type="button" class="btn bsm plan-resolved-toggle stop-action-completed" title="0 completados" aria-label="0 completados" disabled data-completed-count="0">0 completados</button>`}
                 `}
             </div>
         </div>`;
@@ -3260,15 +3652,19 @@ async function dropPlanStop(event, day, targetId) {
 }
 
 function getTechnicianStopName(stop, equipment, node) {
+    const isCorrupt = name => !name || /^Ver\s+(detalles|pendientes|completados)/i.test(String(name).trim());
+    const validEq = equipment && !isCorrupt(equipment.name) ? equipment.name : '';
+    const validNode = node && !isCorrupt(node.town || node.name) ? (node.town || node.name) : '';
+    const validStopName = !isCorrupt(stop?.name) ? stop.name : '';
     if (equipment || stop?.type === 'equipment' || stop?.equipmentId) {
-        return `Antena de "${equipment?.name || stop?.name || 'Sin nombre'}"`;
+        return validEq || validStopName || 'Antena';
     }
     if (node || stop?.type === 'node' || stop?.nodeId) {
-        const raw = node?.town || node?.name || stop?.town || stop?.name || 'Pueblo';
+        const raw = validNode || stop?.town || validStopName || 'Pueblo';
         const clean = String(raw).replace(/^\s*R\s*\d+\s*[·:._-]*\s*/i, '').trim() || String(raw).trim();
-        return `Pueblo ${clean}`;
+        return clean || 'Pueblo';
     }
-    return stop?.name || 'Parada';
+    return validStopName || 'Parada';
 }
 
 function toggleResolvedStop(stopId) {
@@ -3280,6 +3676,15 @@ function toggleResolvedStop(stopId) {
 }
 
 function togglePlanStopDetails(stopId) {
+    if (isTechnicianPlanView()) {
+        if (collapsedTechnicianStopIds.has(stopId)) {
+            collapsedTechnicianStopIds.delete(stopId);
+        } else {
+            collapsedTechnicianStopIds.add(stopId);
+        }
+        renderPlanDays();
+        return;
+    }
     expandedPendingStopId = expandedPendingStopId === stopId ? '' : stopId;
     expandedCompletedStopId = '';
     expandedResolvedStops.clear();
@@ -3438,7 +3843,7 @@ function renderGeneralPlanAssigneeSelect() {
             : (isCurrent ? ' · asignado' : (otherPlan ? ` · asignado a "${otherPlan.name || 'otro plan'}"` : ''));
         return `<option value="${escapeAttr(t.id)}">${escapeHtml(t.nombre || t.usuario || 'Técnico')}${escapeHtml(marker)}</option>`;
     }));
-    options.push('<option value="__team__">👥 Asignar equipo (varios técnicos)...</option>');
+    options.push('<option value="__team__">Asignar equipo (varios técnicos)...</option>');
     sel.innerHTML = options.join('');
 
     if (assignedTechs.length > 1) {
@@ -3451,7 +3856,7 @@ function renderGeneralPlanAssigneeSelect() {
         if (assignedTechs.length > 0) {
             badgesContainer.innerHTML = assignedTechs.map(t => `
                 <span class="plan-team-badge" title="Técnico asignado a este plan">
-                    <span>👤 ${escapeHtml(t.nombre || t.usuario)}</span>
+                    <span>${escapeHtml(t.nombre || t.usuario)}</span>
                     <button type="button" class="plan-team-badge-remove" onclick="removeTechFromPlanTeam('${escapeAttr(t.id)}')" title="Quitar del plan">&times;</button>
                 </span>
             `).join('') + `<button type="button" class="btn bsm bgh" onclick="openTeamAssignmentModal()" style="font-size:10px;padding:2px 8px;border-radius:6px;height:22px;cursor:pointer;">+ Equipo</button>`;
@@ -3757,7 +4162,7 @@ function renderPlanCalendar() {
             box.innerHTML = `
                 <div class="plan-calendar-collapsed-bar" style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:10px;">
                     <div style="display:flex;align-items:center;gap:10px;cursor:pointer;" onclick="togglePlanCalendar(true)">
-                        <span style="font-size:12px;font-weight:800;color:#18385c;">📅 Agenda del plan</span>
+                        <span style="font-size:12px;font-weight:800;color:#18385c;">Agenda del plan</span>
                         ${hasFilter ? `<span class="badge by" style="font-size:10px;padding:3px 8px;">Filtrado: ${escapeHtml(filterLabel)}</span>` : '<span style="font-size:11px;color:#71879d;">(Todas las paradas visibles)</span>'}
                     </div>
                     <div style="display:flex;align-items:center;gap:8px;">
@@ -3906,7 +4311,7 @@ function renderAdminWeekPlanner() {
         }).join('') || '<div class="plan-week-empty-detail">Esta parada no tiene detalles.</div>';
 
         const quickMoveOptions = [
-            '<option value="" disabled selected>📅 Mover a día...</option>',
+            '<option value="" disabled selected>Mover a día...</option>',
             '<option value="">Sin fecha (disponibles)</option>',
             ...dates.map((d, idx) => `<option value="${d}" ${stop.scheduledDate === d ? 'disabled' : ''}>${dayNamesShort[idx]} · ${formatCalendarDate(d)}</option>`)
         ].join('');
@@ -3954,6 +4359,42 @@ function renderAdminWeekPlanner() {
     if (sub) sub.textContent = `${plan?.name || 'Plan general'} · ${stops.length} paradas`;
     renderAdminWeekMapOptions(dates, stops);
     if (adminWeekRouteMap) renderAdminWeekRouteMap();
+    setupWeekBoardWheelScroll();
+}
+
+function scrollWeekBoard(offset) {
+    const board = document.getElementById('plan-week-board');
+    if (board) {
+        board.scrollBy({ left: offset, behavior: 'smooth' });
+    }
+}
+
+function setupWeekBoardWheelScroll() {
+    const board = document.getElementById('plan-week-board');
+    if (!board || board.dataset.wheelListenerAttached) return;
+    board.dataset.wheelListenerAttached = 'true';
+
+    board.addEventListener('wheel', (e) => {
+        // Si el cursor está sobre una zona de tarjetas que tiene scroll vertical interno, permitirlo
+        const dropzone = e.target.closest('.plan-week-dropzone');
+        if (dropzone && dropzone.scrollHeight > dropzone.clientHeight + 4) {
+            const atTop = dropzone.scrollTop <= 1 && e.deltaY < 0;
+            const atBottom = dropzone.scrollTop + dropzone.clientHeight >= dropzone.scrollHeight - 2 && e.deltaY > 0;
+            if (!atTop && !atBottom) {
+                return; // Scroll vertical natural dentro de la columna
+            }
+        }
+
+        // De lo contrario, traducir inmediatamente el scroll de la rueda en desplazamiento horizontal fluido
+        if (e.deltaY !== 0 || e.deltaX !== 0) {
+            e.preventDefault();
+            const delta = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+            board.scrollBy({
+                left: delta * 1.6,
+                behavior: 'auto'
+            });
+        }
+    }, { passive: false });
 }
 
 async function moveAdminWeekStopToDay(stopId, targetDate) {
@@ -4177,10 +4618,32 @@ async function reportPlanDetailIncomplete(detailId, stopId) {
     if (!isTechnicianPlanView()) return;
     const reason = await getIncompleteReason('¿Por qué motivo no se pudo terminar este trabajo?:');
     if (!reason) return;
-    if (!window.confirm('¿Marcar este trabajo como no realizado hoy?')) return;
-    const detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
-    const stop = getPlanStops('general').find(item => item.id === stopId && !item.deletedAt);
-    if (!detail || !stop) return;
+    const ok = await askConfirmation({
+        title: 'No se pudo realizar',
+        message: '¿Confirmas marcar este trabajo como no realizado el día de hoy?',
+        confirmText: 'Confirmar no realizado',
+        cancelText: 'Cancelar',
+        tone: 'danger'
+    });
+    if (!ok) return;
+    let detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
+    if (!detail && window._currentTechnicianCompletionDetail && window._currentTechnicianCompletionDetail.id === detailId) {
+        detail = window._currentTechnicianCompletionDetail;
+    }
+    if (!detail && typeof getGlobalWorkOrdersCache === 'function') {
+        detail = getGlobalWorkOrdersCache()[detailId] || null;
+    }
+    if (!detail && typeof findOrFetchWorkOrder === 'function') {
+        detail = await findOrFetchWorkOrder(detailId);
+    }
+    if (!detail) {
+        const allStops = getPlanStopsForView('general');
+        for (const s of allStops) {
+            const found = (s.details || []).find(d => d.id === detailId);
+            if (found) { detail = found; break; }
+        }
+    }
+    if (!detail) return notify('No se encontró el detalle.', 'err');
     const now = new Date().toISOString();
     const actor = getCurrentUser();
     const attempt = { type:'detalle', reason, at:now, byId:actor.id || '', byName:actor.name || actor.username || '' };
@@ -4193,20 +4656,41 @@ async function reportPlanDetailIncomplete(detailId, stopId) {
     detail.technicianReport = { ...(detail.technicianReport || {}), result:'no_realizado', reason, completedAt:now, completedBy:actor.id || '', completedByName:actor.name || actor.username || '' };
     detail.incompleteHistory = [...(detail.incompleteHistory || []), attempt];
     setUpdatedAudit(detail, 'reportó detalle no terminado');
-    syncStopCompletion(stop);
-    stop.updatedAt = now;
-    const saved = await saveDB();
-    if (!saved) return notify('No se pudo guardar el reporte en la nube.', 'err');
-    renderPlan();
+    const allPlanStops = typeof getPlanMapStops === 'function' ? getPlanMapStops() : getPlanStopsForView('general');
+    const stop = (stopId ? allPlanStops.find(item => item.id === stopId) : null)
+        || allPlanStops.find(item => (item.detailIds || []).includes(detail.id))
+        || null;
+    if (stop) {
+        try { syncStopCompletion(stop); } catch (syncErr) { console.warn('syncStopCompletion failed:', syncErr); }
+        stop.updatedAt = now;
+    }
+    let saved = false;
+    try {
+        saved = await saveDB();
+    } catch (saveErr) {
+        console.warn('saveDB error:', saveErr);
+    }
+    if (!saved) {
+        notify('Guardado localmente (sin señal). Se sincronizará al reconectar.', 'warn');
+    }
+    window._currentTechnicianCompletionDetail = detail;
+    window._lastReportedDetail = detail;
+    try { renderPlan(); } catch (renderErr) { console.warn('renderPlan after incomplete failed:', renderErr); }
     openTechnicianCompletionSummary(detail);
-    notify('Trabajo marcado como no realizado y reporte generado.', 'ok');
 }
 
 async function reportWholeStopIncomplete(stopId) {
     if (!isTechnicianPlanView()) return;
     const reason = await getIncompleteReason('¿Por qué motivo no se pudo terminar esta parada?:');
     if (!reason) return;
-    if (!window.confirm('¿Pasar esta parada completa para el día de mañana?')) return;
+    const ok = await askConfirmation({
+        title: 'Posponer parada completa',
+        message: '¿Confirmas pasar esta parada completa para el día de mañana?',
+        confirmText: 'Pasar para mañana',
+        cancelText: 'Cancelar',
+        tone: 'warning'
+    });
+    if (!ok) return;
     const stop = getPlanStops('general').find(item => item.id === stopId && !item.deletedAt);
     if (!stop) return;
     const now = new Date().toISOString();
@@ -4221,8 +4705,15 @@ async function reportWholeStopIncomplete(stopId) {
         detail.incompleteHistory = [...(detail.incompleteHistory || []), attempt];
         detail.updatedAt = now;
     });
-    const saved = await saveDB();
-    if (!saved) return notify('No se pudo guardar el reporte en la nube.', 'err');
+    let saved = false;
+    try {
+        saved = await saveDB();
+    } catch (saveErr) {
+        console.warn('saveDB error:', saveErr);
+    }
+    if (!saved) {
+        notify('Guardado localmente (sin señal). Se sincronizará al reconectar.', 'warn');
+    }
     renderPlan();
     notify('La parada completa se pasó para el día de mañana.', 'ok');
 }
@@ -4371,7 +4862,8 @@ function renderPlanDetailRow(detail, stop, day, historical = false) {
     const category = getPlanDetailCategory(detail);
     const technicianDetailText = getWorkOrderRequestedText(detail, 'Sin detalle registrado');
     const technicianDescription = '';
-    const visibleClientName = detail.clientName || 'Sin nombre registrado';
+    const hasClient = !!(detail.clientName && String(detail.clientName).trim());
+    const visibleClientName = hasClient ? detail.clientName.trim() : '';
     const technicianLocation = detail.detailLocation
         || detail.technicianReport?.location
         || ((!isNaN(safeFloat(detail.lat)) && !isNaN(safeFloat(detail.lng))) ? `${detail.lat}, ${detail.lng}` : '');
@@ -4381,7 +4873,7 @@ function renderPlanDetailRow(detail, stop, day, historical = false) {
         : '';
     const technicianActions = isTechnicianPlanView()
         ? (done
-            ? `${phoneCallBtn}<button type="button" class="btn bsm tech-detail-edit" onclick="openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Editar trabajo</button>`
+            ? `${phoneCallBtn}<button type="button" class="btn bsm tech-detail-edit" onclick="openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Editar</button>`
             : (noDone
                 ? `${phoneCallBtn}<button type="button" class="btn bsm bg2 tech-detail-finish tech-detail-finish-later" onclick="openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Terminar</button>`
                 : `${phoneCallBtn}<button type="button" class="btn bsm bg2 tech-detail-finish" onclick="openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Terminar</button><button type="button" class="btn bsm ba tech-detail-incomplete" onclick="reportPlanDetailIncomplete('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}')">No realizado</button>`))
@@ -4390,16 +4882,16 @@ function renderPlanDetailRow(detail, stop, day, historical = false) {
         ? `<div class="detail-status-line"><span class="detail-folio">${escapeHtml(getDetailFolio(detail))}</span><span class="plan-category-badge category-${escapeAttr(category)}">${escapeHtml(planCategoryLabel(category))}</span></div>`
         : `<div class="detail-status-line">${noDone ? '<span class="badge ba">No realizado</span>' : `<span class="priority-badge priority-${escapeAttr(detail.priority || 'media')}"><span class="priority-dot"></span>${escapeHtml(pl(detail.priority || 'media'))}</span>`}<span class="detail-folio">${escapeHtml(getDetailFolio(detail))}</span><span class="plan-category-badge category-${escapeAttr(category)}">${escapeHtml(planCategoryLabel(category))}</span></div>`;
     const completedSummary = done ? `
-                <div class="detail-client-line ${detail.clientName ? '' : 'is-empty'}"><b>Cliente:</b> ${escapeHtml(visibleClientName)}</div>
-                <strong class="detail-title-line"><b>${isTechnicianPlanView() ? 'Trabajo' : 'Detalle'}:</b> ${escapeHtml(technicianDetailText)}</strong>
+                ${hasClient ? `<div class="detail-client-line"><b>Cliente:</b> ${escapeHtml(visibleClientName)}</div>` : ''}
+                <strong class="detail-title-line">${isTechnicianPlanView() ? '' : '<b>Detalle:</b> '}${escapeHtml(technicianDetailText)}</strong>
                 ${technicianDescription ? `<small class="detail-description-line"><b>Información:</b> ${escapeHtml(technicianDescription)}</small>` : ''}
                 ${renderDetailLocation(detail.detailLocation || detail.technicianReport?.location)}
                 ${detail.technicianReport?.modifiedAt || detail.modifiedAt ? `<small class="detail-modified-line"><b>Modificado:</b> ${escapeHtml(formatPlanDateTime(detail.technicianReport?.modifiedAt || detail.modifiedAt))}</small>` : ''}` : `
-                <div class="detail-client-line ${detail.clientName ? '' : 'is-empty'}"><b>Cliente:</b> ${escapeHtml(visibleClientName)}</div>
+                ${hasClient ? `<div class="detail-client-line"><b>Cliente:</b> ${escapeHtml(visibleClientName)}</div>` : (!isTechnicianPlanView() ? '<div class="detail-client-line is-empty"><b>Cliente:</b> Sin nombre registrado</div>' : '')}
                 ${isTechnicianPlanView() ? `
-                    <strong class="detail-title-line"><b>Trabajo:</b> ${escapeHtml(technicianDetailText)}</strong>
+                    <strong class="detail-title-line">${escapeHtml(technicianDetailText)}</strong>
                     ${technicianDescription ? `<small class="detail-description-line"><b>Información:</b> ${escapeHtml(technicianDescription)}</small>` : ''}
-                    ${technicianLocation ? renderDetailLocation(technicianLocation) : '<div class="order-location-muted no-location">Sin ubicación registrada</div>'}
+                    ${technicianLocation ? renderDetailLocation(technicianLocation) : ''}
                 ` : `
                     <strong class="detail-title-line"><b>Detalle:</b> ${escapeHtml(technicianDetailText)}</strong>
                     ${technicianDescription ? `<small class="detail-description-line"><b>Información:</b> ${escapeHtml(technicianDescription)}</small>` : ''}
@@ -4413,18 +4905,22 @@ function renderPlanDetailRow(detail, stop, day, historical = false) {
                 ${completedSummary}
             </div>
             <div class="plan-detail-actions">
-                <button class="btn bsm bgh plan-detail-open" title="Ver detalle completo" aria-label="Ver detalle completo" onclick="openPlanDetailReport('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}','${escapeAttr(day)}')"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.3 12s3.5-6 9.7-6 9.7 6 9.7 6-3.5 6-9.7 6-9.7-6-9.7-6Z"/><circle cx="12" cy="12" r="2.8"/></svg><span>Ver detalle</span></button>
+                <button class="btn bsm bgh plan-detail-open" title="Ver detalle completo" aria-label="Ver detalle completo" onclick="openPlanDetailReport('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}','${escapeAttr(day)}')"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M2.3 12s3.5-6 9.7-6 9.7 6 9.7 6-3.5 6-9.7 6-9.7-6-9.7-6Z"/><circle cx="12" cy="12" r="2.8"/></svg><span>${isTechnicianPlanView() ? 'Detalle' : 'Ver detalle'}</span></button>
                 ${technicianActions}
                 ${!historical && !isTechnicianPlanView() && canManagePlanStops() ? `<button class="btn bsm br plan-detail-delete" title="Eliminar detalle" aria-label="Eliminar detalle" onclick="deletePlanDetailFromStop('${escapeAttr(stop.id)}','${escapeAttr(day)}','${escapeAttr(detail.id)}')">${stopActionIcon('delete')}</button>` : ''}
             </div>
         </div>`;
 }
 
-function openPlanDetailReport(detailId, stopId = '', day = selectedDay) {
-    const detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
-    if (!detail) return notify('No se encontro el detalle solicitado.', 'err');
+async function openPlanDetailReport(detailId, stopId = '', day = selectedDay) {
+    let detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
+    if (!detail && typeof findOrFetchWorkOrder === 'function') {
+        detail = await findOrFetchWorkOrder(detailId);
+    }
+    if (!detail) return notify('No se encontró el detalle solicitado.', 'err');
     const candidateStops = visibleStops(getPlanStopsRef(selectedTechId, day));
     const stop = candidateStops.find(item => item.id === stopId)
+        || candidateStops.find(item => Array.isArray(item.detailIds) && item.detailIds.includes(detail.id))
         || candidateStops.find(item => (detail.equipmentId && item.equipmentId === detail.equipmentId) || (detail.nodeId && item.nodeId === detail.nodeId));
     const report = detail.technicianReport || {};
     const resolved = ['completada', 'no_realizado'].includes(detail.status || '') || !!report.completedAt;
@@ -4451,25 +4947,25 @@ function openPlanDetailReport(detailId, stopId = '', day = selectedDay) {
     const card = document.getElementById('plan-detail-report-card');
     card.innerHTML = `
         <header class="plan-detail-report-head">
-            <span class="plan-detail-report-icon">&#128203;</span>
-            <div><h2>${resolved ? 'Reporte del trabajo' : 'Trabajo pendiente'}</h2><p>&#9679; ${escapeHtml(stop?.name || detail.town || 'Detalle del plan')}</p></div>
-            <div class="plan-detail-report-head-actions">${editButton}<button type="button" class="btn bgh" onclick="CM('plan-detail-report-mo')">Cerrar &nbsp; &times;</button></div>
+            <span class="plan-detail-report-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
+            <div><h2>${resolved ? 'Reporte del trabajo' : 'Trabajo pendiente'}</h2><p>${escapeHtml(stop?.name || detail.town || 'Detalle del plan')}</p></div>
+            <div class="plan-detail-report-head-actions">${editButton}<button type="button" class="btn bgh" onclick="CM('plan-detail-report-mo')">Cerrar</button></div>
         </header>
         <div class="plan-detail-report-grid">
-            ${field('&#128100;', 'Cliente', detail.clientName || 'Sin nombre')}
-            ${field('&#9742;', 'Teléfono', report.phone || detail.clientPhone || detail.phone || 'Sin teléfono')}
-            ${field('&#9679;', 'Lugar', detail.nodeName || detail.equipmentName || detail.town || stop?.name || 'Sin lugar')}
-            ${field('&#8982;', 'Ubicación', location)}
-            ${field(resolved && !noDone ? '&#10003;' : '&#9679;', 'Estado', statusText, resolved && !noDone ? 'success' : (noDone ? 'warning' : 'pending'))}
-            ${field('&#128100;', resolved ? 'Técnico' : 'Capturado por', resolved ? (report.completedByName || detail.completedByName || 'Sin técnico') : (detail.createdByName || detail.createdByUsername || 'Sin registro'))}
-            ${field('&#128197;', resolved ? 'Fecha de atención' : 'Fecha programada', dateValue ? formatPlanDateTime(dateValue) : 'Sin fecha')}
-            ${report.modifiedAt || detail.modifiedAt ? field('&#9998;', 'Última modificación', formatPlanDateTime(report.modifiedAt || detail.modifiedAt)) : ''}
-            ${field('&#9881;', 'Tipo de trabajo', typeLabels[detail.visitType] || detail.visitType || 'Sin tipo')}
-            ${field('&#9873;', 'Prioridad', pl(detail.priority || 'media'))}
-            ${field('&#9670;', 'Categoría', planCategoryLabel(getPlanDetailCategory(detail)))}
+            ${field('•', 'Cliente', detail.clientName || 'Sin nombre')}
+            ${field('•', 'Teléfono', report.phone || detail.clientPhone || detail.phone || 'Sin teléfono')}
+            ${field('•', 'Lugar', detail.nodeName || detail.equipmentName || detail.town || stop?.name || 'Sin lugar')}
+            ${field('•', 'Ubicación', location)}
+            ${field(resolved && !noDone ? '✓' : '•', 'Estado', statusText, resolved && !noDone ? 'success' : (noDone ? 'warning' : 'pending'))}
+            ${field('•', resolved ? 'Técnico' : 'Capturado por', resolved ? (report.completedByName || detail.completedByName || 'Sin técnico') : (detail.createdByName || detail.createdByUsername || 'Sin registro'))}
+            ${field('•', resolved ? 'Fecha de atención' : 'Fecha programada', dateValue ? formatPlanDateTime(dateValue) : 'Sin fecha')}
+            ${report.modifiedAt || detail.modifiedAt ? field('•', 'Última modificación', formatPlanDateTime(report.modifiedAt || detail.modifiedAt)) : ''}
+            ${field('•', 'Tipo de trabajo', typeLabels[detail.visitType] || detail.visitType || 'Sin tipo')}
+            ${field('•', 'Prioridad', pl(detail.priority || 'media'))}
+            ${field('•', 'Categoría', planCategoryLabel(getPlanDetailCategory(detail)))}
         </div>
-        <section class="plan-detail-report-wide"><span>&#128203;</span><div><small>Trabajo solicitado</small><strong>${escapeHtml(requested)}</strong></div></section>
-        ${resolved && (noDone || completedWork || report.observations || report.materialUsed) ? `<section class="plan-detail-report-wide ${noDone ? 'warning' : 'success'}"><span>${noDone ? '&#9888;' : '&#10003;'}</span><div>${noDone || completedWork ? `<small>${noDone ? 'Motivo reportado' : 'Trabajo realizado'}</small><strong>${escapeHtml(noDone ? (report.reason || 'No se capturó un motivo') : completedWork)}</strong>` : ''}${report.observations ? `<p><b>Notas:</b> ${escapeHtml(report.observations)}</p>` : ''}${report.materialUsed ? `<p><b>Material usado:</b> ${escapeHtml(report.materialUsed)}</p>` : ''}</div></section>` : (!resolved ? '<div class="plan-detail-report-pending-note">Este trabajo sigue pendiente con los datos registrados.</div>' : '')}
+        <section class="plan-detail-report-wide"><span>•</span><div><small>Trabajo solicitado</small><strong>${escapeHtml(requested)}</strong></div></section>
+        ${resolved && (noDone || completedWork || report.observations || report.materialUsed) ? `<section class="plan-detail-report-wide ${noDone ? 'warning' : 'success'}"><span>${noDone ? '•' : '✓'}</span><div>${noDone || completedWork ? `<small>${noDone ? 'Motivo reportado' : 'Trabajo realizado'}</small><strong>${escapeHtml(noDone ? (report.reason || 'No se capturó un motivo') : completedWork)}</strong>` : ''}${report.observations ? `<p><b>Notas:</b> ${escapeHtml(report.observations)}</p>` : ''}${report.materialUsed ? `<p><b>Material usado:</b> ${escapeHtml(report.materialUsed)}</p>` : ''}</div></section>` : (!resolved ? '<div class="plan-detail-report-pending-note">Este trabajo sigue pendiente con los datos registrados.</div>' : '')}
         ${photos.length ? `<section class="plan-detail-report-evidence"><small>Fotos del trabajo</small><div>${photos.map((photo,index) => `<button type="button" onclick="openPlanEvidenceGallery('${escapeAttr(galleryKey)}',${index})"><img src="${escapeAttr(photo)}" alt="Evidencia ${index + 1}"><span>${index + 1}</span></button>`).join('')}</div></section>` : (resolved ? '<div class="plan-detail-report-no-evidence">Sin fotografías de evidencia.</div>' : '')}
         <footer class="plan-detail-report-footer"><span>Folio: <b>${escapeHtml(getDetailFolio(detail))}</b></span><button type="button" class="btn bgh" onclick="CM('plan-detail-report-mo')">Cerrar</button></footer>`;
     OM('plan-detail-report-mo');
@@ -4642,13 +5138,24 @@ function wasDetailResolvedDuringStop(detail, stop) {
 
 function getStopResolvedHistory(stop) {
     const explicitIds = new Set(stop?.detailIds || []);
-    return (state.workOrders || []).filter(detail => {
-        if (detail.deletedAt || !['completada', 'no_realizado'].includes(detail.status || '')) return false;
+    const resolved = (state.workOrders || []).filter(detail => {
+        if (!detail || detail.deletedAt || !['completada', 'no_realizado'].includes(detail.status || '')) return false;
         if (explicitIds.has(detail.id)) return true;
         if (!wasDetailResolvedDuringStop(detail, stop)) return false;
         if (stop.equipmentId && !detail.nodeId && detail.equipmentId === stop.equipmentId) return true;
         return !!(stop.nodeId && detail.nodeId === stop.nodeId);
-    }).sort((a, b) => new Date(b.completedAt || b.updatedAt || b.createdAt || 0) - new Date(a.completedAt || a.updatedAt || a.createdAt || 0));
+    });
+
+    if (explicitIds.size > 0 && typeof getGlobalWorkOrdersCache === 'function') {
+        const globalCache = getGlobalWorkOrdersCache();
+        explicitIds.forEach(id => {
+            if (!resolved.some(r => r.id === id) && globalCache[id] && !globalCache[id].deletedAt && ['completada', 'no_realizado'].includes(globalCache[id].status || '')) {
+                resolved.push(globalCache[id]);
+            }
+        });
+    }
+
+    return resolved.sort((a, b) => new Date(b.completedAt || b.updatedAt || b.createdAt || 0) - new Date(a.completedAt || a.updatedAt || a.createdAt || 0));
 }
 
 function getAdminTechReportPhotos(report = {}) {
@@ -4710,6 +5217,9 @@ async function openPlanStopModal(day = selectedDay) {
     }
 
     await loadDB({ showOverlay: false, preferCache: true });
+    if (isTechnicianPlanView()) {
+        ensureLoggedTechnicianRecord();
+    }
     normalizeWeekPlan();
     selectedDay = selectedTechId === SHARED_PLAN_ID ? 'general' : day;
     renderPlanStopPicker();
@@ -4807,6 +5317,9 @@ function addSelectedPlanStop() {
 
 async function openLegacyPlanStopModal(day = selectedDay) {
     await loadDB({ showOverlay: false, preferCache: true });
+    if (isTechnicianPlanView()) {
+        ensureLoggedTechnicianRecord();
+    }
     normalizeWeekPlan();
     renderEquipmentDatalist();
     renderMaterialDatalist();
@@ -5050,7 +5563,7 @@ function savePlanStop() {
     let stop;
 
     if (type === 'equipment') {
-        const eq = state.equipment.find(e => e.id === selectedEquipmentId);
+        const eq = (state.equipment || []).find(e => e.id === selectedEquipmentId);
         if (!eq) {
             notify('Selecciona una antena registrada', 'err');
             return;
@@ -5140,7 +5653,7 @@ function savePlanStop() {
     } else {
         getPlanStopsRef(targetTechId, day).push(stop, ...(stop._linkedNodeStops || []));
     }
-    const eqName = stop.type === 'equipment' ? (state.equipment.find(e => e.id === stop.equipmentId)?.name || stop.name) : stop.name;
+    const eqName = stop.type === 'equipment' ? ((state.equipment || []).find(e => e.id === stop.equipmentId)?.name || stop.name) : stop.name;
     delete stop._linkedNodeStops;
     selectedTechId = targetTechId;
     selectedDay = day;
@@ -5287,11 +5800,25 @@ function removeStopFromFullscreen(day, stopId) {
     notify('Parada quitada del plan');
 }
 
+const _pendingDetailFetchIds = new Set();
+
 function getStopDetails(stop) {
+    if (!stop) return [];
     const ids = new Set(stop.detailIds || []);
     const details = new Map();
+
+    // 1. Incorporar detalles embebidos directamente en la parada si existen
+    if (Array.isArray(stop.details)) {
+        stop.details.forEach(d => {
+            if (d && d.id && !d.deletedAt) {
+                details.set(d.id, d);
+            }
+        });
+    }
+
+    // 2. Incorporar desde state.workOrders
     (state.workOrders || []).forEach(w => {
-        if (w.deletedAt) return;
+        if (!w || w.deletedAt) return;
         const explicitLink = ids.has(w.id);
         const matchesEquipment = stop.equipmentId && !w.nodeId && w.equipmentId === stop.equipmentId;
         const matchesNode = stop.nodeId && w.nodeId === stop.nodeId;
@@ -5306,6 +5833,47 @@ function getStopDetails(stop) {
             details.set(w.id, w);
         }
     });
+
+    // 3. Si hay IDs explícitos faltantes, recuperar del caché persistente global de órdenes
+    if (ids.size > 0 && details.size < ids.size && typeof getGlobalWorkOrdersCache === 'function') {
+        const globalCache = getGlobalWorkOrdersCache();
+        ids.forEach(id => {
+            if (!details.has(id) && globalCache[id] && !globalCache[id].deletedAt) {
+                const cachedOrder = globalCache[id];
+                details.set(id, cachedOrder);
+                if (Array.isArray(state.workOrders) && !state.workOrders.some(w => w.id === id)) {
+                    state.workOrders.push(cachedOrder);
+                }
+            }
+        });
+    }
+
+    // 4. Si aún faltan IDs explícitos, solicitar recuperación transparente en segundo plano
+    if (ids.size > 0 && details.size < ids.size && typeof findOrFetchWorkOrder === 'function') {
+        ids.forEach(id => {
+            if (!details.has(id) && !_pendingDetailFetchIds.has(id)) {
+                _pendingDetailFetchIds.add(id);
+                findOrFetchWorkOrder(id).then(fetched => {
+                    _pendingDetailFetchIds.delete(id);
+                    if (fetched) {
+                        if (typeof saveWorkOrdersToGlobalCache === 'function') {
+                            saveWorkOrdersToGlobalCache([fetched]);
+                        }
+                        if (typeof renderPlanDays === 'function') renderPlanDays();
+                        if (typeof updateTechnicianMobileBellBadge === 'function') updateTechnicianMobileBellBadge();
+                    }
+                }).catch(() => {
+                    _pendingDetailFetchIds.delete(id);
+                });
+            }
+        });
+    }
+
+    // Mantener la memoria global actualizada con todos los detalles confirmados
+    if (details.size > 0 && typeof saveWorkOrdersToGlobalCache === 'function') {
+        saveWorkOrdersToGlobalCache(Array.from(details.values()));
+    }
+
     return sortDetailsByPriority(Array.from(details.values()));
 }
 
@@ -5413,22 +5981,227 @@ async function setMapStopOrder(day, stopId, value) {
 }
 
 async function deleteStop(day, id) {
-    if (!canManagePlanStops()) return notify('Solo un administrador puede eliminar paradas', 'err');
-    const stop = getPlanStopsRef(selectedTechId, day).find(s => s.id === id && !s.deletedAt);
-    if (!stop) return;
+    if (!canManagePlanStops()) return notify('Solo un administrador o soporte puede eliminar paradas de la ruta', 'err');
+    
+    const currentPlan = typeof getSelectedGeneralPlan === 'function' ? getSelectedGeneralPlan() : null;
+    let stop = null;
+    let parentPlan = currentPlan;
+
+    // 1. Buscar en el plan general actualmente seleccionado
+    if (currentPlan && Array.isArray(currentPlan.stops)) {
+        stop = currentPlan.stops.find(s => s.id === id && !s.deletedAt);
+    }
+    // 2. Buscar en getPlanStopsRef
+    if (!stop) {
+        const ref = getPlanStopsRef(selectedTechId, day);
+        if (Array.isArray(ref)) {
+            stop = ref.find(s => s.id === id && !s.deletedAt);
+        }
+    }
+    // 3. Buscar en todos los planes generales registrados
+    if (!stop) {
+        (typeof getGeneralPlans === 'function' ? getGeneralPlans() : []).forEach(p => {
+            const found = (p.stops || []).find(s => s.id === id && !s.deletedAt);
+            if (found) {
+                stop = found;
+                parentPlan = p;
+            }
+        });
+    }
+    if (!stop) return notify('No se encontró la parada a eliminar', 'err');
+
+    const stopType = stop.type === 'equipment' ? 'Antena' : (stop.type === 'node' ? 'Pueblo' : 'Parada');
+    const stopName = stop.name || 'esta parada';
+    const planName = parentPlan?.name || currentPlan?.name || 'la ruta';
+
     const ok = await askConfirmation({
-        title: 'Eliminar parada',
-        message: `Vas a quitar “${stop.name || 'esta parada'}” del plan. Los detalles y órdenes no se borrarán.`,
-        confirmText: 'Sí, quitar parada',
-        cancelText: 'Conservar',
+        title: 'Eliminar parada de la ruta',
+        message: `¿Estás seguro de quitar “${stopName}” (${stopType}) de la ruta “${planName}”?\n\nLos reportes, órdenes y detalles registrados para este sitio se conservarán intactos.`,
+        confirmText: 'Sí, eliminar de la ruta',
+        cancelText: 'Cancelar',
         tone: 'danger'
     });
     if (!ok) return;
-    setDeletedAudit(stop, 'eliminó parada del plan');
+
+    setDeletedAudit(stop, `eliminó ${stopType.toLowerCase()} "${stopName}" de la ruta`);
+
+    // Quitar del array activo de paradas del plan
+    if (parentPlan && Array.isArray(parentPlan.stops)) {
+        const idx = parentPlan.stops.findIndex(s => s.id === id);
+        if (idx !== -1) {
+            parentPlan.stops.splice(idx, 1);
+        }
+    }
+    const dayStops = getPlanStopsRef(selectedTechId, day);
+    if (Array.isArray(dayStops)) {
+        const idx = dayStops.findIndex(s => s.id === id);
+        if (idx !== -1) {
+            dayStops.splice(idx, 1);
+        }
+    }
+
     const saved = await saveDB();
     if (!saved) return;
     renderPlan();
-    notify('Parada eliminada');
+    notify(`Se quitó “${stopName}” de la ruta ✓`);
+}
+
+function openRegisterStopAsNodeModal(stopId) {
+    if (!canManagePlanStops()) return notify('Solo un administrador o soporte puede registrar nuevos pueblos', 'err');
+    
+    const currentPlan = typeof getSelectedGeneralPlan === 'function' ? getSelectedGeneralPlan() : null;
+    let stop = null;
+    if (currentPlan && Array.isArray(currentPlan.stops)) {
+        stop = currentPlan.stops.find(s => s.id === stopId && !s.deletedAt);
+    }
+    if (!stop) {
+        (typeof getGeneralPlans === 'function' ? getGeneralPlans() : []).forEach(p => {
+            const found = (p.stops || []).find(s => s.id === stopId && !s.deletedAt);
+            if (found) stop = found;
+        });
+    }
+    if (!stop) return notify('No se encontró la parada para registrar', 'err');
+
+    const modal = document.getElementById('register-node-from-stop-mo');
+    if (!modal) return;
+
+    const stopPos = getStopCurrentPosition(stop);
+    const lat = !isNaN(stopPos.lat) ? stopPos.lat.toFixed(5) : (!isNaN(stop.lat) ? Number(stop.lat).toFixed(5) : '');
+    const lng = !isNaN(stopPos.lng) ? stopPos.lng.toFixed(5) : (!isNaN(stop.lng) ? Number(stop.lng).toFixed(5) : '');
+
+    let initialTown = '';
+    if (stop.name && stop.name.trim().toLowerCase() !== 'parada') {
+        initialTown = stop.name.trim();
+    } else if (stop.notes && !stop.notes.startsWith('Parada')) {
+        initialTown = stop.notes.replace(/^[^:]+:\s*/, '').replace(/\s*\(Pueblo registrado\)/i, '').trim();
+    }
+
+    const existingCodes = (state.nodes || []).map(n => {
+        const m = String(n.nodeCode || '').match(/^R(\d+)$/i);
+        return m ? parseInt(m[1], 10) : 0;
+    });
+    const maxCode = existingCodes.length ? Math.max(...existingCodes) : 0;
+    const nextCode = 'R' + (maxCode + 1);
+
+    const stopIdInput = document.getElementById('reg-node-stop-id');
+    const townInput = document.getElementById('reg-node-town');
+    const codeInput = document.getElementById('reg-node-code');
+    const coordsInput = document.getElementById('reg-node-coords');
+
+    if (stopIdInput) stopIdInput.value = stop.id;
+    if (townInput) townInput.value = initialTown;
+    if (codeInput) codeInput.value = nextCode;
+    if (coordsInput) coordsInput.value = (lat && lng) ? `${lat}, ${lng}` : '';
+
+    const eqSelect = document.getElementById('reg-node-eq');
+    if (eqSelect) {
+        eqSelect.innerHTML = '<option value="">-- Sin antena matriz vinculada --</option>' +
+            (state.equipment || []).filter(e => !e.deletedAt).map(e => `<option value="${escapeAttr(e.id)}">${escapeHtml(e.name)}</option>`).join('');
+        if (stop.equipmentId) eqSelect.value = stop.equipmentId;
+    }
+
+    OM('register-node-from-stop-mo');
+    setTimeout(() => document.getElementById('reg-node-town')?.focus(), 80);
+}
+
+async function saveNewNodeFromStop() {
+    if (!canManagePlanStops()) return notify('Solo un administrador o soporte puede registrar nuevos pueblos', 'err');
+    const stopId = document.getElementById('reg-node-stop-id')?.value;
+    const town = document.getElementById('reg-node-town')?.value?.trim();
+    const nodeCode = document.getElementById('reg-node-code')?.value?.trim();
+    const zone = document.getElementById('reg-node-zone')?.value || 'general';
+    const coordsRaw = document.getElementById('reg-node-coords')?.value?.trim();
+    const eqId = document.getElementById('reg-node-eq')?.value || null;
+
+    if (!town) return notify('Por favor escribe el nombre del pueblo o comunidad', 'err');
+    if (!nodeCode) return notify('Por favor ingresa la clave del pueblo (ej. R225)', 'err');
+
+    let lat = 17.55;
+    let lng = -99.50;
+    if (coordsRaw) {
+        const parts = coordsRaw.split(/[,;\s]+/).map(Number);
+        if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            lat = parts[0];
+            lng = parts[1];
+        }
+    }
+
+    // Verificar si ya existe pueblo con ese nombre o clave
+    const duplicate = (state.nodes || []).find(n => !n.deletedAt && (normalizeName(n.nodeCode) === normalizeName(nodeCode) || normalizeName(n.town) === normalizeName(town)));
+    if (duplicate) {
+        const ok = await askConfirmation({
+            title: 'Pueblo ya registrado',
+            message: `Ya existe el pueblo “${duplicate.town}” con clave ${duplicate.nodeCode}. ¿Deseas vincular esta parada a dicho pueblo?`,
+            confirmText: 'Vincular a existente',
+            cancelText: 'Corregir datos'
+        });
+        if (!ok) return;
+
+        const currentPlan = typeof getSelectedGeneralPlan === 'function' ? getSelectedGeneralPlan() : null;
+        let targetStop = null;
+        if (currentPlan && Array.isArray(currentPlan.stops)) {
+            targetStop = currentPlan.stops.find(s => s.id === stopId);
+        }
+        if (targetStop) {
+            targetStop.nodeId = duplicate.id;
+            targetStop.type = 'node';
+            targetStop.name = duplicate.town || duplicate.name;
+            await saveDB();
+            CM('register-node-from-stop-mo');
+            renderPlan();
+            return notify(`Parada vinculada al pueblo existente “${duplicate.town}” ✓`);
+        }
+    }
+
+    const newNode = {
+        id: (typeof gid === 'function' ? gid('nd') : 'nd_' + Date.now()),
+        nodeCode: nodeCode.toUpperCase(),
+        town,
+        name: town,
+        zone,
+        lat,
+        lng,
+        equipmentId: eqId || '',
+        status: 'activo',
+        notes: 'Registrado desde la planificación de ruta',
+        createdAt: new Date().toISOString()
+    };
+
+    if (!Array.isArray(state.nodes)) state.nodes = [];
+    state.nodes.push(newNode);
+
+    if (typeof setCreatedAudit === 'function') {
+        setCreatedAudit(newNode, 'registró nuevo pueblo desde ruta');
+    }
+
+    if (typeof saveRecord === 'function') {
+        await saveRecord('nodes', newNode).catch(() => {});
+    }
+
+    // Vincular parada
+    const currentPlan = typeof getSelectedGeneralPlan === 'function' ? getSelectedGeneralPlan() : null;
+    let targetStop = null;
+    if (currentPlan && Array.isArray(currentPlan.stops)) {
+        targetStop = currentPlan.stops.find(s => s.id === stopId);
+    }
+    if (!targetStop) {
+        (typeof getGeneralPlans === 'function' ? getGeneralPlans() : []).forEach(p => {
+            const found = (p.stops || []).find(s => s.id === stopId);
+            if (found) targetStop = found;
+        });
+    }
+    if (targetStop) {
+        targetStop.nodeId = newNode.id;
+        targetStop.type = 'node';
+        targetStop.name = newNode.town;
+        targetStop.lat = lat;
+        targetStop.lng = lng;
+    }
+
+    await saveDB();
+    CM('register-node-from-stop-mo');
+    renderPlan();
+    notify(`Pueblo “${town}” registrado con clave ${newNode.nodeCode} y vinculado a la ruta ✓`);
 }
 
 async function clearAllPlanningContext() {
@@ -5648,8 +6421,8 @@ function renderWeeklyRouteView() {
     const statsEl = document.getElementById('plan-route-day-stats');
     if (statsEl) {
         statsEl.innerHTML = `
-            <span>🚗 ~${feasibility.totalKm} km</span> · 
-            <span>⏱️ ~${feasibility.travelFormatted} traslado</span> · 
+            <span>~${feasibility.totalKm} km</span> · 
+            <span>~${feasibility.travelFormatted} traslado</span> · 
             <span>Jornada: <b>~${feasibility.workdayFormatted}</b></span> · 
             <span class="badge ${feasibility.statusClass}">${feasibility.statusLabel}</span>
         `;
@@ -7051,7 +7824,7 @@ function pickBestAssignmentForStop(stop, buckets, techs, targetDays) {
 function getStopRegion(stop) {
     if (stop.region) return stop.region;
     if (stop.equipmentId) {
-        const eq = state.equipment.find(e => e.id === stop.equipmentId);
+        const eq = (state.equipment || []).find(e => e.id === stop.equipmentId);
         const pos = getStopCurrentPosition(stop);
         return eq?.region || getNearestRegion(pos.lat, pos.lng) || 'general';
     }
@@ -7127,16 +7900,36 @@ function setTechnicianInstallNoPhone() {
     if (el) el.value = '0000000000';
 }
 
-function openTechnicianCompletionForm(detailId) {
+async function openTechnicianCompletionForm(detailId) {
     if (!isTechnicianPlanView()) return;
-    const detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
+    let detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
+    if (!detail && typeof getGlobalWorkOrdersCache === 'function') {
+        detail = getGlobalWorkOrdersCache()[detailId] || null;
+    }
+    if (!detail && typeof findOrFetchWorkOrder === 'function') {
+        detail = await findOrFetchWorkOrder(detailId);
+    }
+    if (!detail) {
+        const allStops = getPlanStopsForView('general');
+        for (const s of allStops) {
+            const found = (s.details || []).find(d => d.id === detailId);
+            if (found) { detail = found; break; }
+        }
+    }
     if (!detail) return notify('No se encontró el detalle.', 'err');
+    window._currentTechnicianCompletionDetail = detail;
+    if (Array.isArray(state.workOrders) && !state.workOrders.some(w => w.id === detail.id)) {
+        state.workOrders.push(detail);
+    }
+    if (typeof saveWorkOrdersToGlobalCache === 'function') {
+        saveWorkOrdersToGlobalCache([detail]);
+    }
     const editingCompleted = detail.status === 'completada';
-    technicianCompletionDetailId = detailId;
+    technicianCompletionDetailId = detail.id;
     technicianCompletionPhotos = getAdminTechReportPhotos(detail.technicianReport || {}).slice(0, 6);
     let modal = document.getElementById('tech-completion-mo');
     if (!modal) {
-        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-completion-mo"><div class="md tech-installation-modal tech-completion-modal"><div class="tech-installation-head"><div><div class="mt2">Terminar trabajo</div><small>Anota lo que hiciste y toma foto de evidencia.</small></div><button class="btn bsm bgh" type="button" onclick="CM('tech-completion-mo')">Cerrar</button></div><div class="row2"><div class="fi"><label>Cliente</label><input id="tech-completion-client" placeholder="Nombre completo"></div><div class="fi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><label style="margin:0;">Teléfono</label><button type="button" class="btn bsm bgh" style="font-size:11px;padding:2px 8px;height:24px;min-height:24px;cursor:pointer;" onclick="setTechnicianNoPhone()">No tiene número</button></div><input id="tech-completion-phone" type="tel" inputmode="tel" placeholder="10 dígitos (o 'No tiene número')"></div></div><div class="fi"><label>Ubicación (coordenadas)</label><div class="tech-coordinate-row"><input id="tech-completion-location" class="mono" placeholder="18.09563, -99.19604"><button class="btn bgh" type="button" onclick="useCurrentTechnicianCoordinates()">Mi ubicación actual</button></div></div><div class="fi"><label>¿Qué trabajo hiciste?</label><textarea id="tech-completion-work" rows="4" placeholder="Describe brevemente qué se reparó o instaló..."></textarea></div><div class="fi"><label>Notas extras <span class="optional-label">Opcional</span></label><textarea id="tech-completion-notes" rows="3" placeholder="Comentarios adicionales (opcional)..."></textarea></div><div class="tech-evidence-box"><strong>Fotos del trabajo</strong><small>Toma o sube al menos 1 foto (máx. 6).</small><div class="tech-evidence-actions"><label class="btn bc">Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">De galería<input type="file" accept="image/*" multiple onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label></div><div id="tech-completion-evidence-preview" class="tech-install-evidence-preview"></div></div><div class="tech-completion-actions-row" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;"><button class="btn bc bfu" type="button" style="flex:1 1 200px;" onclick="saveTechnicianCompletion()">Guardar y terminar</button><button class="btn ba tech-modal-btn-incomplete" type="button" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:800;padding:0 18px;min-height:50px;border-radius:14px;cursor:pointer;" onclick="markCurrentDetailIncompleteFromModal()">No se pudo realizar</button></div></div></div>`);
+        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-completion-mo"><div class="md tech-installation-modal tech-completion-modal"><div class="tech-installation-head"><div><div class="mt2">Terminar trabajo</div><small>Anota lo que hiciste y toma foto de evidencia.</small></div><button class="btn bsm bgh" type="button" onclick="closeTechnicianCompletionForm()">Cerrar</button></div><div class="row2"><div class="fi"><label>Cliente</label><input id="tech-completion-client" placeholder="Nombre completo"></div><div class="fi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><label style="margin:0;">Teléfono</label><button type="button" class="btn bsm bgh" style="font-size:11px;padding:2px 8px;height:24px;min-height:24px;cursor:pointer;" onclick="setTechnicianNoPhone()">No tiene número</button></div><input id="tech-completion-phone" type="tel" inputmode="tel" placeholder="10 dígitos (o 'No tiene número')"></div></div><div class="fi"><label>Ubicación (coordenadas)</label><div class="tech-coordinate-row"><input id="tech-completion-location" class="mono" placeholder="18.09563, -99.19604"><button class="btn bgh" type="button" onclick="useCurrentTechnicianCoordinates()">Mi ubicación actual</button></div></div><div class="fi"><label>¿Qué trabajo hiciste?</label><textarea id="tech-completion-work" rows="4" placeholder="Describe brevemente qué se reparó o instaló..."></textarea></div><div class="fi"><label>Notas extras <span class="optional-label">Opcional</span></label><textarea id="tech-completion-notes" rows="3" placeholder="Comentarios adicionales (opcional)..."></textarea></div><div class="tech-evidence-box"><strong>Fotos del trabajo</strong><small>Toma o sube al menos 1 foto (máx. 6).</small><div class="tech-evidence-actions"><label class="btn bc">Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">De galería<input type="file" accept="image/*" multiple onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label></div><div id="tech-completion-evidence-preview" class="tech-install-evidence-preview"></div></div><div class="tech-completion-actions-row" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;"><button class="btn bc bfu" type="button" style="flex:1 1 200px;" onclick="saveTechnicianCompletion()">Guardar y terminar</button><button class="btn ba tech-modal-btn-incomplete" type="button" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:800;padding:0 18px;min-height:50px;border-radius:14px;cursor:pointer;" onclick="markCurrentDetailIncompleteFromModal()">No se pudo realizar</button></div></div></div>`);
         modal = document.getElementById('tech-completion-mo');
     }
     const completionPhone = document.getElementById('tech-completion-phone');
@@ -7170,12 +7963,62 @@ function markCurrentDetailIncompleteFromModal() {
     reportPlanDetailIncomplete(detailId, stop?.id || '');
 }
 
+async function closeTechnicianCompletionForm() {
+    const work = document.getElementById('tech-completion-work')?.value.trim() || '';
+    const notes = document.getElementById('tech-completion-notes')?.value.trim() || '';
+    const hasPhotos = technicianCompletionPhotos && technicianCompletionPhotos.length > 0;
+    if (work || notes || hasPhotos) {
+        const ok = await askConfirmation({
+            title: 'Descartar cambios',
+            message: 'Tienes información o fotos sin guardar. ¿Deseas salir sin terminar?',
+            confirmText: 'Salir sin guardar',
+            cancelText: 'Continuar editando',
+            tone: 'danger'
+        });
+        if (!ok) return;
+    }
+    technicianCompletionPhotos = [];
+    technicianCompletionDetailId = '';
+    CM('tech-completion-mo');
+}
+
 function useCurrentTechnicianCoordinates() {
-    if (!navigator.geolocation) return notify('Este dispositivo no permite obtener la ubicación.', 'err');
+    const input = document.getElementById('tech-completion-location');
+    const detail = (state.workOrders || []).find(item => item.id === technicianCompletionDetailId && !item.deletedAt);
+    const stop = (typeof getPlanMapStops === 'function' ? getPlanMapStops().find(s => (s.detailIds || []).includes(technicianCompletionDetailId) || s.id === detail?.stopId) : null);
+
+    if (!navigator.geolocation) {
+        if (input && !input.value) {
+            if (stop && stop.lat && stop.lng) {
+                input.value = `${Number(stop.lat).toFixed(6)}, ${Number(stop.lng).toFixed(6)}`;
+                notify('Ubicación del sitio asignada.', 'ok');
+                return;
+            } else if (detail && detail.lat && detail.lng) {
+                input.value = `${Number(detail.lat).toFixed(6)}, ${Number(detail.lng).toFixed(6)}`;
+                notify('Ubicación previa asignada.', 'ok');
+                return;
+            }
+        }
+        return notify('Este dispositivo no permite GPS. Puedes escribir las coordenadas manualmente.', 'warn');
+    }
+
     navigator.geolocation.getCurrentPosition(position => {
-        const input = document.getElementById('tech-completion-location');
         if (input) input.value = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
-    }, () => notify('No se pudo obtener la ubicación. Activa el GPS.', 'err'), { enableHighAccuracy:true, timeout:12000 });
+        notify('Ubicación GPS obtenida.', 'ok');
+    }, () => {
+        if (input && !input.value) {
+            if (stop && stop.lat && stop.lng) {
+                input.value = `${Number(stop.lat).toFixed(6)}, ${Number(stop.lng).toFixed(6)}`;
+                notify('GPS no disponible. Se asignó la ubicación del sitio.', 'warn');
+                return;
+            } else if (detail && detail.lat && detail.lng) {
+                input.value = `${Number(detail.lat).toFixed(6)}, ${Number(detail.lng).toFixed(6)}`;
+                notify('GPS no disponible. Se asignó la ubicación previa.', 'warn');
+                return;
+            }
+        }
+        notify('GPS no disponible en este momento.', 'warn');
+    }, { enableHighAccuracy: false, timeout: 7000, maximumAge: 60000 });
 }
 
 async function addTechnicianCompletionPhotos(fileList) {
@@ -7183,8 +8026,12 @@ async function addTechnicianCompletionPhotos(fileList) {
     const available = Math.max(0, 6 - technicianCompletionPhotos.length);
     if (!available) return notify('Puedes agregar máximo 6 fotos.', 'err');
     for (const file of files.slice(0, available)) {
-        try { technicianCompletionPhotos.push(await compressTechnicianPhoto(file)); }
-        catch (error) { notify(`No se pudo leer ${file.name || 'una foto'}.`, 'err'); }
+        try {
+            const photo = await compressTechnicianPhoto(file);
+            if (photo) technicianCompletionPhotos.push(photo);
+        } catch (error) {
+            console.warn('Error reading photo:', error);
+        }
     }
     if (files.length > available) notify('Sólo se agregaron las primeras 6 fotos.', 'err');
     renderTechnicianCompletionPhotos();
@@ -7198,44 +8045,103 @@ function renderTechnicianCompletionPhotos() {
         : '<span>Agrega al menos una foto del trabajo.</span>';
 }
 
-function removeTechnicianCompletionPhoto(index) {
+async function removeTechnicianCompletionPhoto(index) {
+    const ok = (typeof askConfirmation === 'function')
+        ? await askConfirmation({
+            title: 'Quitar foto',
+            message: '¿Deseas quitar esta foto de evidencia?',
+            confirmText: 'Quitar foto',
+            cancelText: 'Cancelar',
+            tone: 'danger'
+        })
+        : true;
+    if (!ok) return;
     technicianCompletionPhotos.splice(index, 1);
     renderTechnicianCompletionPhotos();
 }
 
 async function saveTechnicianCompletion() {
-    const detail = (state.workOrders || []).find(item => item.id === technicianCompletionDetailId && !item.deletedAt);
+    let detail = (state.workOrders || []).find(item => item.id === technicianCompletionDetailId && !item.deletedAt);
+    if (!detail && window._currentTechnicianCompletionDetail && window._currentTechnicianCompletionDetail.id === technicianCompletionDetailId) {
+        detail = window._currentTechnicianCompletionDetail;
+        if (Array.isArray(state.workOrders) && !state.workOrders.some(w => w.id === detail.id)) {
+            state.workOrders.push(detail);
+        }
+    }
+    if (!detail && typeof getGlobalWorkOrdersCache === 'function') {
+        detail = getGlobalWorkOrdersCache()[technicianCompletionDetailId] || null;
+    }
+    if (!detail && typeof findOrFetchWorkOrder === 'function') {
+        detail = await findOrFetchWorkOrder(technicianCompletionDetailId);
+    }
+    if (!detail) {
+        const allStops = getPlanStopsForView('general');
+        for (const s of allStops) {
+            const found = (s.details || []).find(d => d.id === technicianCompletionDetailId);
+            if (found) { detail = found; break; }
+        }
+    }
     if (!detail) return notify('No se encontró el detalle.', 'err');
     const editingCompleted = detail.status === 'completada';
     const previousReport = detail.technicianReport || {};
     const originalCompletedAt = detail.completedAt || previousReport.completedAt || '';
-    const clientName = document.getElementById('tech-completion-client')?.value.trim() || '';
+    const rawClientName = document.getElementById('tech-completion-client')?.value.trim() || '';
     const phone = document.getElementById('tech-completion-phone')?.value.trim() || '';
     const location = document.getElementById('tech-completion-location')?.value.trim() || '';
     const workDone = document.getElementById('tech-completion-work')?.value.trim() || '';
     const observations = document.getElementById('tech-completion-notes')?.value.trim() || '';
-    const coordinates = location.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
-    if (!clientName) return notify('Escribe el nombre del cliente.', 'err');
+
+    const clientName = rawClientName || detail.clientName || detail.title || 'Cliente';
+
     const rawPhoneDigits = phone.replace(/\D/g, '');
-    if (!rawPhoneDigits || (rawPhoneDigits.length < 10 && rawPhoneDigits !== '0000000000')) {
-        return notify('El número telefónico es obligatorio (10 dígitos). Si no tiene número, pulsa "No tiene número".', 'err');
+    const finalPhone = (!phone || !rawPhoneDigits || (rawPhoneDigits.length < 10 && rawPhoneDigits !== '0000000000'))
+        ? (phone || 'No tiene número')
+        : phone;
+
+    const associatedStop = (typeof getPlanMapStops === 'function'
+        ? getPlanMapStops().find(s => (s.detailIds || []).includes(detail.id) || s.id === detail.stopId)
+        : null) || null;
+
+    const coordinates = location.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/);
+    let finalLat = 0;
+    let finalLng = 0;
+    let finalLocation = location;
+    if (coordinates && Math.abs(Number(coordinates[1])) <= 90 && Math.abs(Number(coordinates[2])) <= 180) {
+        finalLat = Number(coordinates[1]);
+        finalLng = Number(coordinates[2]);
+        finalLocation = `${finalLat.toFixed(6)}, ${finalLng.toFixed(6)}`;
+    } else if (!isNaN(safeFloat(detail.lat)) && !isNaN(safeFloat(detail.lng)) && (safeFloat(detail.lat) !== 0 || safeFloat(detail.lng) !== 0)) {
+        finalLat = safeFloat(detail.lat);
+        finalLng = safeFloat(detail.lng);
+        finalLocation = `${finalLat.toFixed(6)}, ${finalLng.toFixed(6)}`;
+    } else if (associatedStop && !isNaN(safeFloat(associatedStop.lat)) && !isNaN(safeFloat(associatedStop.lng))) {
+        finalLat = safeFloat(associatedStop.lat);
+        finalLng = safeFloat(associatedStop.lng);
+        finalLocation = `${finalLat.toFixed(6)}, ${finalLng.toFixed(6)}`;
     }
-    if (!coordinates || Math.abs(Number(coordinates[1])) > 90 || Math.abs(Number(coordinates[2])) > 180) return notify('Escribe coordenadas válidas usando "Mi ubicación actual".', 'err');
-    if (!workDone) return notify('Escribe qué trabajo hiciste.', 'err');
-    if (!technicianCompletionPhotos.length) return notify('Agrega al menos una foto del trabajo.', 'err');
+
+    if (!workDone) return notify('Escribe qué trabajo hiciste.', 'warn');
+    if (!technicianCompletionPhotos.length) return notify('Agrega al menos una foto del trabajo.', 'warn');
 
     const confirmMsg = editingCompleted
-        ? '¿Guardar los cambios en este trabajo?'
-        : '¿Confirmas que este trabajo quedó listo?';
-    if (!window.confirm(confirmMsg)) return;
+        ? '¿Deseas guardar los cambios realizados en este reporte?'
+        : '¿Confirmas que este trabajo quedó listo y deseas terminarlo?';
+    const confirmed = await askConfirmation({
+        title: editingCompleted ? 'Guardar cambios' : '¿Confirmar trabajo terminado?',
+        message: confirmMsg,
+        confirmText: editingCompleted ? 'Guardar cambios' : 'Confirmar y terminar',
+        cancelText: 'Revisar',
+        tone: 'ok'
+    });
+    if (!confirmed) return;
 
     const now = new Date().toISOString();
     const actor = getCurrentUser();
     detail.clientName = clientName;
-    detail.clientPhone = phone;
-    detail.detailLocation = `${Number(coordinates[1]).toFixed(6)}, ${Number(coordinates[2]).toFixed(6)}`;
-    detail.lat = Number(coordinates[1]);
-    detail.lng = Number(coordinates[2]);
+    detail.clientPhone = finalPhone;
+    detail.detailLocation = finalLocation || 'Sin coordenadas registradas';
+    detail.lat = finalLat;
+    detail.lng = finalLng;
     detail.status = 'completada';
     detail.detailKind = 'physical';
     detail.folio = getDetailFolio(detail);
@@ -7248,7 +8154,7 @@ async function saveTechnicianCompletion() {
         solution:workDone,
         observations,
         reason:'',
-        phone,
+        phone:finalPhone,
         location:detail.detailLocation,
         evidencePhotos:technicianCompletionPhotos.slice(),
         completedAt:detail.completedAt,
@@ -7263,15 +8169,24 @@ async function saveTechnicianCompletion() {
             stop.updatedAt = now;
         }
     });
-    const saved = await saveDB();
-    if (!saved) return notify('No se pudo guardar el reporte en la nube.', 'err');
+    let saved = false;
+    try {
+        saved = await saveDB();
+    } catch (saveErr) {
+        console.warn('saveDB failed:', saveErr);
+    }
+    if (!saved) {
+        notify('Guardado localmente (sin señal). Se sincronizará al tener conexión.', 'warn');
+    }
     CM('tech-completion-mo');
     technicianCompletionPhotos = [];
     technicianCompletionDetailId = '';
-    renderPlan();
+    window._currentTechnicianCompletionDetail = detail;
+    window._lastReportedDetail = detail;
+    try { renderPlan(); } catch (renderErr) { console.warn('renderPlan after completion failed:', renderErr); }
 
     const isTech = isTechnicianPlanView() || (typeof userHasRole === 'function' && userHasRole('tecnico'));
-    const towerAntenna = (isTech && typeof findAntennaForDetail === 'function') ? findAntennaForDetail(detail) : null;
+    const towerAntenna = (isTech && typeof findAntennaForDetail === 'function') ? findAntennaForDetail(detail, associatedStop) : null;
     let promptedTowerModal = false;
 
     if (towerAntenna && !editingCompleted) {
@@ -7305,12 +8220,15 @@ async function saveTechnicianCompletion() {
     }
 
     if (!promptedTowerModal) {
-        notify(editingCompleted ? 'Reporte actualizado correctamente.' : '✓ Trabajo guardado y concluido.', 'ok');
         openTechnicianCompletionSummary(detail);
     }
 }
 
 function openTechnicianCompletionSummary(detail) {
+    if (!detail) detail = window._currentTechnicianCompletionDetail || window._lastReportedDetail;
+    if (!detail) return;
+    window._currentTechnicianCompletionDetail = detail;
+    window._lastReportedDetail = detail;
     const date = selectedCalendarDate || localDateKey();
     const dayStops = getPlanStopsForView('general').filter(stop => stop.scheduledDate === date);
     const detailsById = new Map();
@@ -7351,7 +8269,7 @@ function openTechnicianCompletionSummary(detail) {
             return `
                 <div class="tech-summary-tower-reminder">
                     <div class="tower-reminder-head">
-                        <span class="tower-reminder-icon">🗼</span>
+                        <span class="tower-reminder-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="6" y1="17" x2="18" y2="17"/><circle cx="12" cy="2" r="1"/></svg></span>
                         <div class="tower-reminder-text-wrap">
                             <span class="tower-reminder-kicker">TORRE: ${escapeHtml(towerAnt.name || 'Antena')}</span>
                             <strong>${hasMat ? '¿Se cambió material en esta torre?' : '¿Revisaste el material de la torre?'}</strong>
@@ -7359,7 +8277,7 @@ function openTechnicianCompletionSummary(detail) {
                         </div>
                     </div>
                     <button type="button" class="btn btn-tower-featured" onclick="openTowerMaterialModal('${escapeAttr(towerAnt.id)}')">
-                        <span class="tower-btn-icon">🗼</span>
+                        <span class="tower-btn-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="6" y1="17" x2="18" y2="17"/></svg></span>
                         <span>${hasMat ? 'Ver / editar material de torre' : 'Anotar material de torre'}</span>
                     </button>
                 </div>
@@ -7388,7 +8306,7 @@ function openTechnicianCompletionSummary(detail) {
     const antId = towerAnt?.id || detail.equipmentId;
     if (!antId) return '';
     const hasMat = towerAnt ? !!(towerAnt.towerSections || towerAnt.towerRadios || towerAnt.towerBatteries || towerAnt.towerPanels || towerAnt.towerExtraNotes || towerAnt.towerMaterialNotes || (Array.isArray(towerAnt.towerMaterialPhotos) && towerAnt.towerMaterialPhotos.length)) : false;
-    return `<button type="button" class="btn btn-tower-callout ${hasMat ? 'is-registered' : 'is-pending'}" onclick="openTowerMaterialModal('${escapeAttr(antId)}')"><span class="tower-btn-icon">🗼</span> <span>Material torre</span></button>`;
+    return `<button type="button" class="btn btn-tower-callout ${hasMat ? 'is-registered' : 'is-pending'}" onclick="openTowerMaterialModal('${escapeAttr(antId)}')"><span class="tower-btn-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="6" y1="17" x2="18" y2="17"/></svg></span> <span>Material torre</span></button>`;
 })()}<button type="button" class="btn bgh" onclick="CM('tech-completion-summary-mo')">Cerrar</button></div></div>`;
     OM('tech-completion-summary-mo');
 }
@@ -7546,67 +8464,218 @@ async function createTechnicianSummaryImage(detail) {
     return canvas;
 }
 
-async function copyTechnicianOrderNumber(detailId, announce = true) {
-    const detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
-    if (!detail) return false;
-    const text = `Número de orden: ${getDetailFolio(detail)}`;
+function getTechnicianDayProgressSummary(dateKey) {
     try {
-        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
-        else {
-            const input = document.createElement('textarea');
-            input.value = text;
-            input.setAttribute('readonly', '');
-            input.style.position = 'fixed';
-            input.style.opacity = '0';
-            document.body.appendChild(input);
-            input.select();
-            document.execCommand('copy');
-            input.remove();
+        const date = dateKey || selectedCalendarDate || (typeof localDateKey === 'function' ? localDateKey() : new Date().toISOString().slice(0, 10));
+        const allStops = typeof getPlanStopsForView === 'function' ? getPlanStopsForView('general') : [];
+        const dayStops = allStops.filter(s => (s.scheduledDate || '') === date);
+        const detailsMap = new Map();
+        dayStops.forEach(s => {
+            if (typeof getStopDetails === 'function') getStopDetails(s).forEach(d => detailsMap.set(d.id, d));
+            if (typeof getStopResolvedHistory === 'function') getStopResolvedHistory(s).forEach(d => detailsMap.set(d.id, d));
+        });
+        const list = Array.from(detailsMap.values());
+        if (!list.length) return null;
+        const completed = list.filter(d => ['completada', 'no_realizado'].includes(d.status || '')).length;
+        const pending = Math.max(0, list.length - completed);
+        return { completed, total: list.length, pending };
+    } catch (_) {
+        return null;
+    }
+}
+
+function findTechnicianCompletionDetail(detailId) {
+    if (detailId && typeof detailId === 'object') return detailId;
+    if (window._currentTechnicianCompletionDetail && (!detailId || window._currentTechnicianCompletionDetail.id === detailId)) {
+        return window._currentTechnicianCompletionDetail;
+    }
+    if (window._lastReportedDetail && (!detailId || window._lastReportedDetail.id === detailId)) {
+        return window._lastReportedDetail;
+    }
+    if (detailId) {
+        const found = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
+        if (found) return found;
+        if (typeof getGlobalWorkOrdersCache === 'function') {
+            const cache = getGlobalWorkOrdersCache() || {};
+            const cached = Array.isArray(cache)
+                ? cache.find(item => item && item.id === detailId)
+                : cache[detailId];
+            if (cached && !cached.deletedAt) return cached;
         }
-        if (announce) notify(`${text} copiado.`);
-        return true;
-    } catch (error) {
-        if (announce) notify('No se pudo copiar el número de orden.', 'err');
+        const stops = typeof getPlanStopsForView === 'function' ? getPlanStopsForView('general') : [];
+        for (const stop of stops) {
+            const details = typeof getStopDetails === 'function' ? getStopDetails(stop) : (stop.details || []);
+            const inStop = details.find(d => d.id === detailId);
+            if (inStop) return inStop;
+            const resolved = typeof getStopResolvedHistory === 'function' ? getStopResolvedHistory(stop) : [];
+            const inResolved = resolved.find(d => d.id === detailId);
+            if (inResolved) return inResolved;
+        }
+    }
+    return window._currentTechnicianCompletionDetail || window._lastReportedDetail || null;
+}
+
+function buildTechnicianWhatsAppMessage(detail) {
+    if (!detail) return '';
+    const folio = getDetailFolio(detail);
+    const report = detail.technicianReport || {};
+    const isNoDone = detail.status === 'no_realizado' || report.result === 'no_realizado';
+    const isInstallation = detail.category === 'instalacion';
+    const requested = typeof getTechnicianReportRequestedText === 'function'
+        ? getTechnicianReportRequestedText(detail)
+        : (detail.title || detail.description || 'Detalle');
+    const completedWork = typeof getTechnicianReportCompletedWork === 'function'
+        ? getTechnicianReportCompletedWork(detail, requested)
+        : (report.solution || '');
+    const town = typeof getTechnicianReportTown === 'function'
+        ? getTechnicianReportTown(detail)
+        : (detail.town || '');
+    const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+    const techName = report.completedByName || user?.name || user?.nombre || user?.username || 'Técnico';
+    const clientName = detail.clientName || 'Sin cliente';
+    const rawPhone = String(detail.clientPhone || detail.phone || report.phone || '').trim();
+    const dateObj = new Date(report.completedAt || detail.completedAt || detail.createdAt || Date.now());
+    const dateStr = !isNaN(dateObj.getTime())
+        ? dateObj.toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
+        : '';
+    const locationRaw = String(detail.detailLocation || report.location || '').trim();
+
+    let locLabel = locationRaw;
+    let mapsUrl = '';
+    if (locationRaw) {
+        if (typeof getLocationDisplay === 'function') {
+            const parsed = getLocationDisplay(locationRaw);
+            locLabel = parsed.label || locationRaw;
+            if (parsed.url) mapsUrl = parsed.url;
+        }
+        if (!mapsUrl && typeof parseOptionalLocation === 'function') {
+            const parsed = parseOptionalLocation(locationRaw);
+            if (parsed?.url) mapsUrl = parsed.url;
+            else if (parsed?.lat && parsed?.lng) {
+                mapsUrl = `https://www.google.com/maps?q=${parsed.lat},${parsed.lng}`;
+            }
+        }
+        if (!mapsUrl) {
+            const m = locationRaw.match(/([-+]?\d{1,3}(?:\.\d+)?)\s*(?:,|\s+)\s*([-+]?\d{1,3}(?:\.\d+)?)/);
+            if (m) mapsUrl = `https://www.google.com/maps?q=${m[1]},${m[2]}`;
+        }
+    }
+
+    const titleHeader = isNoDone
+        ? '⚠️ *WiFiMex · Reporte de Incidencia*'
+        : (isInstallation ? '🚀 *WiFiMex · Nueva Instalación*' : '✅ *WiFiMex · Reporte de Trabajo Terminado*');
+
+    const lines = [titleHeader, ''];
+    lines.push(`*Folio:* ${folio}`);
+    lines.push(`*Técnico:* ${techName}`);
+    if (dateStr) lines.push(`*Fecha y hora:* ${dateStr}`);
+    lines.push(`*Cliente:* ${clientName}`);
+    if (rawPhone && rawPhone !== 'Sin teléfono' && rawPhone !== 'No tiene número') {
+        lines.push(`*Teléfono:* ${rawPhone}`);
+    }
+    if (town && town !== 'Sin pueblo' && town !== 'Sin pueblo registrado') {
+        lines.push(`*Pueblo:* ${town}`);
+    }
+    if (locLabel && locLabel !== 'Sin ubicación') {
+        lines.push(`*Ubicación:* ${locLabel}`);
+    }
+    if (mapsUrl) {
+        lines.push(`*Google Maps:* ${mapsUrl}`);
+    }
+
+    if (isNoDone) {
+        if (requested) lines.push(`*Trabajo solicitado:* ${requested}`);
+        lines.push(`*Motivo no realizado:* ${report.reason || 'Sin motivo especificado'}`);
+    } else if (isInstallation) {
+        const installNotes = report.solution || requested || 'Nueva instalación realizada';
+        lines.push(`*Equipo / Notas:* ${installNotes}`);
+    } else {
+        if (requested) lines.push(`*Trabajo solicitado:* ${requested}`);
+        if (completedWork) lines.push(`*Trabajo realizado:* ${completedWork}`);
+    }
+
+    if (report.observations) {
+        lines.push(`*Notas extras:* ${report.observations}`);
+    }
+
+    const progress = getTechnicianDayProgressSummary();
+    if (progress && progress.total > 0) {
+        lines.push(`*Avance de hoy:* ${progress.completed} de ${progress.total} trabajos listos (${progress.pending} pendientes)`);
+    }
+
+    return lines.join('\n');
+}
+
+async function copyTextToClipboard(text) {
+    if (!text) return false;
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (_) {}
+    try {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.top = '-9999px';
+        textarea.style.left = '-9999px';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        const ok = document.execCommand('copy');
+        textarea.remove();
+        return ok;
+    } catch (_) {
         return false;
     }
 }
 
-async function shareTechnicianCompletion(detailId) {
-    const detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
-    if (!detail) return;
+async function copyTechnicianOrderNumber(detailId, announce = true) {
+    const detail = findTechnicianCompletionDetail(detailId);
+    if (!detail) {
+        if (announce) notify('No se encontró el detalle para copiar el folio.', 'err');
+        return false;
+    }
     const folio = getDetailFolio(detail);
-    const isNoDone = detail.status === 'no_realizado' || detail.technicianReport?.result === 'no_realizado';
-    const reason = detail.technicianReport?.reason || '';
-    const shareText = `Folio: ${folio}`;
-    let canvas;
-    let blob;
-    try {
-        canvas = await createTechnicianSummaryImage(detail);
-        blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
-    } catch (error) {
-        return notify('No se pudo crear la imagen del resumen.', 'err');
+    const copied = await copyTextToClipboard(folio);
+    if (announce) {
+        if (copied) notify(`Folio copiado: ${folio}`);
+        else notify('No se pudo copiar el folio.', 'err');
     }
-    if (!blob) return notify('No se pudo crear la imagen del resumen.', 'err');
-    const file = new File([blob], `${folio}.png`, { type:'image/png' });
-    const copied = await copyTechnicianOrderNumber(detailId, false);
-    if (navigator.share && (!navigator.canShare || navigator.canShare({ files:[file] }))) {
-        try {
-            await navigator.share({ title: isNoDone ? `Incidencia ${folio}` : `Detalle ${folio}`, text:shareText, files:[file] });
-            if (copied) notify('Evidencia compartida. El número de orden también quedó copiado.');
-            return;
-        }
-        catch (error) { if (error?.name === 'AbortError') return; }
+    return copied;
+}
+
+async function shareTechnicianCompletion(detailId) {
+    const detail = findTechnicianCompletionDetail(detailId);
+    if (!detail) {
+        notify('No se encontró el detalle para compartir.', 'err');
+        return;
     }
+    const fullText = buildTechnicianWhatsAppMessage(detail);
+    if (!fullText) return;
+
+    // 1. Guardar de respaldo en el portapapeles siempre
+    await copyTextToClipboard(fullText);
+
+    // 2. Abrir WhatsApp inmediatamente sin bloquearse por popups móviles
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(fullText)}`;
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = file.name;
+    link.href = waUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
     link.click();
-    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`;
-    window.open(waUrl, '_blank');
-    notify(copied
-        ? 'Reporte copiado y WhatsApp abierto para enviar la información.'
-        : 'Reporte generado. Abriendo WhatsApp...');
+    setTimeout(() => {
+        try { link.remove(); } catch (_) {}
+    }, 400);
+
+    const isTech = (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
+                   (typeof userHasRole === 'function' && userHasRole('tecnico'));
+    if (!isTech) {
+        notify('Reporte copiado y WhatsApp abierto.');
+    }
 }
 
 function openTechnicianAddMenu() {
@@ -7695,17 +8764,18 @@ function configureTechnicianInstallationFields() {
 }
 
 function useCurrentInstallationCoordinates() {
-    if (!navigator.geolocation) return notify('Este celular no permite obtener la ubicación.', 'err');
+    if (!navigator.geolocation) return notify('Este celular no permite obtener la ubicación por GPS.', 'warn');
     const button = document.getElementById('tech-install-use-location');
     if (button) { button.disabled = true; button.textContent = 'Obteniendo ubicación...'; }
     navigator.geolocation.getCurrentPosition(position => {
         const field = document.getElementById('tech-install-location');
         if (field) field.value = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
         if (button) { button.disabled = false; button.textContent = 'Ubicación agregada'; }
+        notify('Ubicación GPS agregada.', 'ok');
     }, () => {
         if (button) { button.disabled = false; button.textContent = 'Usar mi ubicación'; }
-        notify('No se pudo obtener la ubicación. Revisa el permiso del navegador.', 'err');
-    }, { enableHighAccuracy:true, timeout:12000, maximumAge:30000 });
+        notify('No se pudo obtener GPS en este momento.', 'warn');
+    }, { enableHighAccuracy: false, timeout: 7000, maximumAge: 60000 });
 }
 
 function getTechnicianRouteTowns() {
@@ -7785,26 +8855,49 @@ async function addTechnicianInstallationPhotos(fileList) {
     renderTechnicianInstallationPhotos();
 }
 
-function compressTechnicianPhoto(file) {
-    if (typeof optimizeImageForUpload === 'function') return optimizeImageForUpload(file);
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = reject;
-        reader.onload = () => {
-            const image = new Image();
-            image.onerror = reject;
-            image.onload = () => {
-                const max = 1600;
-                const scale = Math.min(1, max / Math.max(image.width, image.height));
-                const canvas = document.createElement('canvas');
-                canvas.width = Math.max(1, Math.round(image.width * scale));
-                canvas.height = Math.max(1, Math.round(image.height * scale));
-                canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL('image/jpeg', .78));
+async function compressTechnicianPhoto(file) {
+    if (!file) return '';
+    try {
+        if (typeof optimizeImageForUpload === 'function') {
+            const opt = await optimizeImageForUpload(file, { maxSide: 1200, targetBytes: 300 * 1024 });
+            if (opt) return opt;
+        }
+    } catch (e) {
+        console.warn('optimizeImageForUpload error:', e);
+    }
+    return new Promise(resolve => {
+        try {
+            const reader = new FileReader();
+            reader.onerror = () => resolve('');
+            reader.onload = () => {
+                const dataUrl = reader.result;
+                const image = new Image();
+                image.onerror = () => resolve(typeof dataUrl === 'string' ? dataUrl : '');
+                image.onload = () => {
+                    try {
+                        const max = 1200;
+                        const scale = Math.min(1, max / Math.max(image.width || 1, image.height || 1));
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.max(1, Math.round(image.width * scale));
+                        canvas.height = Math.max(1, Math.round(image.height * scale));
+                        const ctx = canvas.getContext('2d');
+                        if (ctx) {
+                            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                            resolve(canvas.toDataURL('image/jpeg', 0.72));
+                            return;
+                        }
+                    } catch (canvasErr) {
+                        console.warn('Canvas draw error:', canvasErr);
+                    }
+                    resolve(typeof dataUrl === 'string' ? dataUrl : '');
+                };
+                image.src = dataUrl;
             };
-            image.src = reader.result;
-        };
-        reader.readAsDataURL(file);
+            reader.readAsDataURL(file);
+        } catch (readErr) {
+            console.warn('FileReader error:', readErr);
+            resolve('');
+        }
     });
 }
 
@@ -7816,7 +8909,17 @@ function renderTechnicianInstallationPhotos() {
         : '<span>Sin fotografías agregadas.</span>';
 }
 
-function removeTechnicianInstallationPhoto(index) {
+async function removeTechnicianInstallationPhoto(index) {
+    const ok = (typeof askConfirmation === 'function')
+        ? await askConfirmation({
+            title: 'Quitar foto',
+            message: '¿Deseas quitar esta foto de evidencia?',
+            confirmText: 'Quitar foto',
+            cancelText: 'Cancelar',
+            tone: 'danger'
+        })
+        : true;
+    if (!ok) return;
     technicianInstallationPhotos.splice(index, 1);
     renderTechnicianInstallationPhotos();
 }
@@ -7827,22 +8930,42 @@ async function saveTechnicianInstallation() {
     const selectedStop = isDetail ? getPlanStopsForView('general').find(stop => stop.id === stopId) : null;
     const clientName = document.getElementById('tech-install-client')?.value.trim() || '';
     const phone = document.getElementById('tech-install-phone')?.value.trim() || '';
-    const detailLocation = document.getElementById('tech-install-location')?.value.trim() || '';
+    let detailLocation = document.getElementById('tech-install-location')?.value.trim() || '';
     const enteredTown = document.getElementById('tech-install-town')?.value.trim() || '';
     const description = document.getElementById('tech-install-detail')?.value.trim() || '';
-    const parsedLocation = typeof parseOptionalLocation === 'function' ? parseOptionalLocation(detailLocation) : {};
     const selectedNode = selectedStop?.nodeId ? (state.nodes || []).find(item => item.id === selectedStop.nodeId && !item.deletedAt) : null;
     const town = enteredTown || selectedNode?.town || selectedStop?.town || selectedStop?.name || '';
     if (isDetail && !selectedStop) return notify('Elige el pueblo donde hiciste el trabajo.', 'err');
     if (isDetail && !description) return notify('Escribe qué trabajo hiciste.', 'err');
     const rawInstallPhone = phone.replace(/\D/g, '');
-    if (!rawInstallPhone || (rawInstallPhone.length < 10 && rawInstallPhone !== '0000000000')) {
-        return notify('Ingresa un teléfono de 10 dígitos o pulsa "No tiene número".', 'err');
+    const finalInstallPhone = (!phone || !rawInstallPhone || (rawInstallPhone.length < 10 && rawInstallPhone !== '0000000000'))
+        ? (phone || 'No tiene número')
+        : phone;
+
+    if (!detailLocation && selectedStop && selectedStop.lat && selectedStop.lng) {
+        detailLocation = `${Number(selectedStop.lat).toFixed(6)}, ${Number(selectedStop.lng).toFixed(6)}`;
     }
-    if (!clientName || !detailLocation || !town || !technicianInstallationPhotos.length) {
-        notify('Completa nombre, ubicación, pueblo y agrega al menos una foto.', 'err');
+    const parsedLocation = typeof parseOptionalLocation === 'function' ? parseOptionalLocation(detailLocation) : {};
+
+    if (!clientName || !town || !technicianInstallationPhotos.length) {
+        notify('Completa nombre, pueblo y agrega al menos una foto.', 'warn');
         return;
     }
+    const confirmTitle = isDetail ? '¿Guardar detalle terminado?' : '¿Registrar nueva instalación?';
+    const confirmMessage = isDetail
+        ? `¿Confirmas registrar y terminar este trabajo en ${town}?`
+        : `¿Confirmas registrar esta nueva instalación para ${clientName} en ${town}?`;
+    const confirmed = (typeof askConfirmation === 'function')
+        ? await askConfirmation({
+            title: confirmTitle,
+            message: confirmMessage,
+            confirmText: isDetail ? 'Guardar y terminar' : 'Registrar instalación',
+            cancelText: 'Revisar',
+            tone: 'ok'
+        })
+        : true;
+    if (!confirmed) return;
+
     const technicianId = getLoggedTechnicianId();
     const createdAt = new Date().toISOString();
     const matchingTownNodes = (state.nodes || []).filter(node => !node.deletedAt && normalizeName(node.town || node.name || '') === normalizeName(town));
@@ -7854,8 +8977,8 @@ async function saveTechnicianInstallation() {
         town,
         title: isDetail ? description : 'Nueva instalación',
         category: isDetail ? 'otro' : 'instalacion',
-        description: `${phone ? `Teléfono: ${phone}` : ''}${phone && description ? '\n' : ''}${description}`,
-        clientPhone: phone,
+        description: `${finalInstallPhone ? `Teléfono: ${finalInstallPhone}` : ''}${finalInstallPhone && description ? '\n' : ''}${description}`,
+        clientPhone: finalInstallPhone,
         visitType: isDetail ? 'detalle' : 'presencial',
         priority: 'media',
         status: 'completada',
@@ -7866,15 +8989,15 @@ async function saveTechnicianInstallation() {
         equipmentName: isDetail && selectedStop?.equipmentId ? ((state.equipment || []).find(item => item.id === selectedStop.equipmentId)?.name || selectedStop.name || '') : '',
         nodeName: isDetail && selectedStop?.nodeId ? (selectedNode?.town || selectedStop.name || '') : (installationNode?.town || installationNode?.name || ''),
         technicianId,
-        lat: parsedLocation.lat || '',
-        lng: parsedLocation.lng || '',
+        lat: parsedLocation.lat || (selectedStop?.lat || ''),
+        lng: parsedLocation.lng || (selectedStop?.lng || ''),
         requestedDate: selectedCalendarDate || localDateKey(),
         createdAt,
         technicianReport: {
             result: isDetail ? 'terminado' : 'solicitud_instalacion',
             solution: description,
-            phone,
-            location: detailLocation,
+            phone: finalInstallPhone,
+            location: detailLocation || 'Sin ubicación registrada',
             town,
             completedByName: getCurrentUser()?.name || getCurrentUser()?.username || 'Técnico',
             completedAt: createdAt,
@@ -7883,22 +9006,25 @@ async function saveTechnicianInstallation() {
     };
     order.folio = getDetailFolio(order);
     setCreatedAudit(order, isDetail ? 'agregó detalle completado en parada' : 'registró nueva instalación');
+    if (!Array.isArray(state.workOrders)) state.workOrders = [];
     state.workOrders.push(order);
     if (isDetail && selectedStop && !(selectedStop.detailIds || []).includes(order.id)) selectedStop.detailIds = [...(selectedStop.detailIds || []), order.id];
-    const saved = isDetail ? await saveDB() : await saveRecord('workOrders', order);
+    let saved = false;
+    try {
+        saved = isDetail ? await saveDB() : await saveRecord('workOrders', order);
+    } catch (saveErr) {
+        console.warn('save error:', saveErr);
+    }
     if (!saved) {
-        state.workOrders = state.workOrders.filter(item => item.id !== order.id);
-        if (selectedStop) selectedStop.detailIds = (selectedStop.detailIds || []).filter(id => id !== order.id);
-        notify('No se pudo guardar la solicitud.', 'err');
-        return;
+        if (typeof saveDB === 'function') {
+            try { await saveDB(); } catch (_) {}
+        }
+        notify('Guardado localmente (sin conexión a internet). Se sincronizará al tener señal.', 'warn');
     }
     CM('tech-installation-mo');
     technicianInstallationPhotos = [];
-    const groupText = isDetail
-        ? `WiFiMex · Detalle Registrado en Campo\nFolio: ${order.folio}\nCliente: ${order.clientName}\nPueblo: ${order.town}\nTrabajo: ${order.title}\nTécnico: ${order.technicianReport?.completedByName || 'Técnico'}`
-        : `WiFiMex · Nueva Instalación\nFolio: ${order.folio}\nCliente: ${order.clientName}\nPueblo: ${order.town}\nUbicación: ${order.detailLocation}\nTeléfono: ${order.clientPhone || 'Sin número'}\nTécnico: ${order.technicianReport?.completedByName || 'Técnico'}`;
-    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(groupText)}`;
-    window.open(waUrl, '_blank');
+    window._currentTechnicianCompletionDetail = order;
+    window._lastReportedDetail = order;
     if (isDetail) {
         renderPlan();
         const isTech = isTechnicianPlanView() || (typeof userHasRole === 'function' && userHasRole('tecnico'));
@@ -7939,6 +9065,10 @@ async function saveTechnicianInstallation() {
 }
 
 function openTechnicianInstallationSummary(order) {
+    if (!order) order = window._currentTechnicianCompletionDetail || window._lastReportedDetail;
+    if (!order) return;
+    window._currentTechnicianCompletionDetail = order;
+    window._lastReportedDetail = order;
     const report = order.technicianReport || {};
     const photos = getAdminTechReportPhotos(report);
     let modal = document.getElementById('tech-installation-summary-mo');
@@ -8009,7 +9139,7 @@ function openEditStopModal(techId, day, stopId) {
 
 function getSelectedTechLabel(techId) {
     if (techId === SHARED_PLAN_ID) return 'Plan general compartido';
-    return state.technicians.find(t => t.id === techId && !t.deletedAt)?.nombre || 'Tecnico';
+    return (state.technicians || []).find(t => t.id === techId && !t.deletedAt)?.nombre || 'Tecnico';
 }
 
 function renderEditableDetails(stop) {
@@ -8057,7 +9187,7 @@ function removeLinkedDetail(detailId) {
     const stop = getEditingStop();
     if (!stop) return;
     stop.detailIds = (stop.detailIds || []).filter(id => id !== detailId);
-    const detail = state.workOrders.find(w => w.id === detailId && !w.deletedAt);
+    const detail = (state.workOrders || []).find(w => w.id === detailId && !w.deletedAt);
     if (detail) {
         detail.deletedAt = new Date().toISOString();
         detail.status = 'eliminada';
@@ -8067,7 +9197,7 @@ function removeLinkedDetail(detailId) {
 }
 
 function toggleLinkedDetailStatus(detailId) {
-    const detail = state.workOrders.find(w => w.id === detailId && !w.deletedAt);
+    const detail = (state.workOrders || []).find(w => w.id === detailId && !w.deletedAt);
     if (!detail) return;
     detail.status = detail.status === 'completada' ? 'pendiente' : 'completada';
     detail.completedAt = detail.status === 'completada' ? new Date().toISOString() : '';
@@ -8080,7 +9210,7 @@ function toggleLinkedDetailStatus(detailId) {
 }
 
 async function togglePlanDetailStatus(detailId) {
-    const detail = state.workOrders.find(w => w.id === detailId && !w.deletedAt);
+    const detail = (state.workOrders || []).find(w => w.id === detailId && !w.deletedAt);
     if (!detail) return;
     if (detail.status !== 'completada' && userHasRole('administrador', 'admin', 'soporte', 'atencion_clientes')) {
         openAdminDetailCompletion(detail, async completion => {
@@ -8108,7 +9238,7 @@ async function togglePlanDetailStatus(detailId) {
             notify(completion.withInformation ? 'Información guardada y detalle completado' : 'Detalle marcado como hecho');
             const towerAnt = typeof findAntennaForDetail === 'function' ? findAntennaForDetail(detail) : null;
             if (towerAnt) {
-                notify('🗼 Detalle completado. Recuerda verificar o registrar el material de la torre.', 'ok', 6000);
+                notify('Detalle completado. Recuerda verificar o registrar el material de la torre.', 'ok', 6000);
             }
             return true;
         });
@@ -8133,13 +9263,13 @@ async function togglePlanDetailStatus(detailId) {
     if (detail.status === 'completada') {
         const towerAnt = typeof findAntennaForDetail === 'function' ? findAntennaForDetail(detail) : null;
         if (towerAnt) {
-            notify('🗼 Detalle completado. Recuerda verificar o registrar el material de la torre.', 'ok', 6000);
+            notify('Detalle completado. Recuerda verificar o registrar el material de la torre.', 'ok', 6000);
         }
     }
 }
 
 async function deletePlanDetailFromStop(stopId, day, detailId) {
-    const detail = state.workOrders.find(w => w.id === detailId && !w.deletedAt);
+    const detail = (state.workOrders || []).find(w => w.id === detailId && !w.deletedAt);
     if (!detail) return;
     const confirmed = await askConfirmation({ title:'Eliminar detalle', message:'Este detalle se quitará de la parada.', confirmText:'Eliminar', cancelText:'Cancelar', tone:'danger' });
     if (!confirmed) return;
@@ -8242,7 +9372,7 @@ function saveStopEdits() {
 
     document.querySelectorAll('#edit-stop-details .linked-detail').forEach(node => {
         const detailId = node.getAttribute('data-detail-id');
-        const detail = state.workOrders.find(w => w.id === detailId && !w.deletedAt);
+        const detail = (state.workOrders || []).find(w => w.id === detailId && !w.deletedAt);
         if (!detail) return;
         detail.clientName = node.querySelector('.edit-detail-client')?.value.trim() || '';
         detail.title = node.querySelector('.edit-detail-title').value.trim() || detail.title;
@@ -8338,4 +9468,18 @@ function copyPlanTechRouteLink() {
     input.select();
     document.execCommand('copy');
     notify('Link copiado');
+}
+
+if (typeof window !== 'undefined') {
+    window.scrollWeekBoard = scrollWeekBoard;
+    window.setupWeekBoardWheelScroll = setupWeekBoardWheelScroll;
+    window.openRegisterStopAsNodeModal = openRegisterStopAsNodeModal;
+    window.saveNewNodeFromStop = saveNewNodeFromStop;
+    window.deleteStop = deleteStop;
+    window.buildTechnicianWhatsAppMessage = buildTechnicianWhatsAppMessage;
+    window.shareTechnicianCompletion = shareTechnicianCompletion;
+    window.copyTechnicianOrderNumber = copyTechnicianOrderNumber;
+    window.openTechnicianCompletionSummary = openTechnicianCompletionSummary;
+    window.openTechnicianInstallationSummary = openTechnicianInstallationSummary;
+    window.findTechnicianCompletionDetail = findTechnicianCompletionDetail;
 }

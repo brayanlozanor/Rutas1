@@ -795,11 +795,69 @@
   }
 
   /**
+   * Determina si el usuario actual tiene permisos para crear o editar rutas recomendadas
+   * Exclusivo para administradores y soporte
+   */
+  function canManagePresetRoutes() {
+    return typeof userHasRole === 'function' && userHasRole('administrador', 'admin', 'soporte');
+  }
+  root.canManagePresetRoutes = canManagePresetRoutes;
+
+  const CUSTOM_PRESET_ROUTES_KEY = 'rutas_custom_preset_routes_v1';
+
+  function getCustomPresetRoutes() {
+    const SHARED_ID = typeof SHARED_PLAN_ID !== 'undefined' ? SHARED_PLAN_ID : '__shared_plan__';
+    const sharedPlan = root.state?.weekPlan?.[SHARED_ID];
+    if (sharedPlan && Array.isArray(sharedPlan._customPresetRoutes)) {
+      return sharedPlan._customPresetRoutes;
+    }
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(CUSTOM_PRESET_ROUTES_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (e) {}
+    }
+    return [];
+  }
+  root.getCustomPresetRoutes = getCustomPresetRoutes;
+
+  function saveCustomPresetRoutes(customRoutes) {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(CUSTOM_PRESET_ROUTES_KEY, JSON.stringify(customRoutes));
+      } catch (e) {}
+    }
+    const SHARED_ID = typeof SHARED_PLAN_ID !== 'undefined' ? SHARED_PLAN_ID : '__shared_plan__';
+    if (!root.state) root.state = {};
+    if (!root.state.weekPlan) root.state.weekPlan = {};
+    if (!root.state.weekPlan[SHARED_ID]) root.state.weekPlan[SHARED_ID] = { _generalPlans: [] };
+    root.state.weekPlan[SHARED_ID]._customPresetRoutes = customRoutes;
+    if (typeof saveDB === 'function') {
+      saveDB();
+    }
+  }
+  root.saveCustomPresetRoutes = saveCustomPresetRoutes;
+
+  /**
+   * Retorna todas las rutas recomendadas combinando las base con las personalizadas/editadas
+   */
+  root.getAllPresetRoutes = function () {
+    const custom = getCustomPresetRoutes();
+    const map = new Map();
+    // 1. Rutas base
+    PRESET_ROUTES.forEach(r => map.set(r.id, { ...r }));
+    // 2. Rutas personalizadas o editadas (sobreescriben o agregan)
+    custom.forEach(c => map.set(c.id, { ...c }));
+    return Array.from(map.values());
+  };
+
+  /**
    * Obtiene lista filtrada de rutas
    */
   root.getPresetRoutes = function (categoryFilter = 'all', query = '') {
     const qNorm = normalizeGeoText(query);
-    return PRESET_ROUTES.filter(route => {
+    const allRoutes = root.getAllPresetRoutes();
+    return allRoutes.filter(route => {
       if (categoryFilter !== 'all' && route.category !== categoryFilter) {
         return false;
       }
@@ -814,6 +872,9 @@
     });
   };
 
+  const appliedContinuities = new Set();
+  root.appliedContinuities = appliedContinuities;
+
   /**
    * Busca si una parada o lista de paradas tiene continuidades recomendadas
    */
@@ -822,8 +883,9 @@
     const normExisting = existingStopNames.map(name => normalizeGeoText(name)).filter(Boolean);
 
     const matches = [];
-    PRESET_ROUTES.forEach(route => {
+    root.getAllPresetRoutes().forEach(route => {
       (route.continuations || []).forEach(cont => {
+        if (appliedContinuities.has(cont.name)) return;
         const triggers = cont.triggerStops && cont.triggerStops.length ? cont.triggerStops : route.stops;
         const hasTrigger = triggers.some(t => {
           const tNorm = normalizeGeoText(t);
@@ -897,11 +959,304 @@
     return null;
   }
 
+  const stopDetailsCache = new Map();
+  let stopDetailsCacheTime = 0;
+  let stopDetailsCacheOrderCount = -1;
+
+  root.clearStopDetailsCache = function () {
+    stopDetailsCache.clear();
+    stopDetailsCacheTime = 0;
+    stopDetailsCacheOrderCount = -1;
+  };
+
+  /**
+   * Obtiene los detalles registrados para una parada (antena o pueblo) y sus pueblos/antenas vinculados
+   */
+  root.getStopRegisteredDetails = function (stopName) {
+    if (!stopName) return [];
+    const stateRef = (typeof state !== 'undefined' && state) || (typeof window !== 'undefined' && window.state) || root.state || {};
+    const workOrdersList = Array.isArray(stateRef.workOrders) ? stateRef.workOrders : [];
+    if (!workOrdersList.length) return [];
+
+    const targetNorm = normalizeGeoText(stopName);
+    if (!targetNorm) return [];
+
+    const now = Date.now();
+    // Cache de alto rendimiento para acelerar la carga del catálogo y evitar recálculos repetitivos
+    if (stopDetailsCacheOrderCount !== workOrdersList.length || (now - stopDetailsCacheTime) > 6000) {
+      stopDetailsCache.clear();
+      stopDetailsCacheTime = now;
+      stopDetailsCacheOrderCount = workOrdersList.length;
+    } else if (stopDetailsCache.has(targetNorm)) {
+      return stopDetailsCache.get(targetNorm);
+    }
+
+    const equipmentList = Array.isArray(stateRef.equipment) ? stateRef.equipment : [];
+    const nodesList = Array.isArray(stateRef.nodes) ? stateRef.nodes : [];
+
+    const matchedEqIds = new Set();
+    const matchedNodeIds = new Set();
+    const matchedNames = new Set([targetNorm]);
+
+    // 1. Identificar antenas o nodos directamente por nombre
+    equipmentList.forEach(eq => {
+      if (eq.deletedAt) return;
+      const eqNorm = normalizeGeoText(eq.name);
+      if (eqNorm && (eqNorm.includes(targetNorm) || targetNorm.includes(eqNorm))) {
+        matchedEqIds.add(String(eq.id));
+        matchedNames.add(eqNorm);
+        const linked = typeof getEquipmentLinkedNodeIds === 'function'
+          ? getEquipmentLinkedNodeIds(eq.id)
+          : (Array.isArray(eq.linkedNodeIds) ? eq.linkedNodeIds : []);
+        linked.forEach(nid => {
+          matchedNodeIds.add(String(nid));
+          const nObj = nodesList.find(n => String(n.id) === String(nid));
+          if (nObj) matchedNames.add(normalizeGeoText(nObj.name || nObj.n));
+        });
+      }
+    });
+
+    nodesList.forEach(node => {
+      if (node.deletedAt) return;
+      const nodeNorm = normalizeGeoText(node.name || node.n);
+      if (nodeNorm && (nodeNorm.includes(targetNorm) || targetNorm.includes(nodeNorm))) {
+        matchedNodeIds.add(String(node.id));
+        matchedNames.add(nodeNorm);
+        if (node.equipmentId) matchedEqIds.add(String(node.equipmentId));
+      }
+    });
+
+    // 2. Expandir vínculos bidireccionales
+    if (matchedNodeIds.size > 0) {
+      equipmentList.forEach(eq => {
+        if (eq.deletedAt) return;
+        const linked = typeof getEquipmentLinkedNodeIds === 'function'
+          ? getEquipmentLinkedNodeIds(eq.id)
+          : (Array.isArray(eq.linkedNodeIds) ? eq.linkedNodeIds : []);
+        const linkedStrs = linked.map(String);
+        for (const nid of matchedNodeIds) {
+          if (linkedStrs.includes(nid)) {
+            matchedEqIds.add(String(eq.id));
+            matchedNames.add(normalizeGeoText(eq.name));
+            break;
+          }
+        }
+      });
+    }
+
+    if (matchedEqIds.size > 0) {
+      nodesList.forEach(node => {
+        if (node.deletedAt) return;
+        if (node.equipmentId && matchedEqIds.has(String(node.equipmentId))) {
+          matchedNodeIds.add(String(node.id));
+          matchedNames.add(normalizeGeoText(node.name || node.n));
+        }
+      });
+    }
+
+    // 3. Filtrar detalles registrados asociados
+    const matchedOrders = [];
+    const seenOrderIds = new Set();
+
+    workOrdersList.forEach(order => {
+      if (!order || order.deletedAt) return;
+      if (seenOrderIds.has(order.id)) return;
+
+      let isMatch = false;
+
+      if (order.equipmentId && matchedEqIds.has(String(order.equipmentId))) {
+        isMatch = true;
+      } else if (order.nodeId && matchedNodeIds.has(String(order.nodeId))) {
+        isMatch = true;
+      } else if (order.nodeCode && matchedNodeIds.has(String(order.nodeCode))) {
+        isMatch = true;
+      } else {
+        const orderEqNorm = normalizeGeoText(order.equipmentName);
+        const orderNodeNorm = normalizeGeoText(order.nodeName || order.town);
+        const orderLocNorm = normalizeGeoText(order.detailLocation);
+
+        if (orderEqNorm && matchedNames.has(orderEqNorm)) isMatch = true;
+        else if (orderNodeNorm && matchedNames.has(orderNodeNorm)) isMatch = true;
+        else if (orderLocNorm && (orderLocNorm.includes(targetNorm) || targetNorm.includes(orderLocNorm))) isMatch = true;
+      }
+
+      if (isMatch) {
+        seenOrderIds.add(order.id);
+        matchedOrders.push(order);
+      }
+    });
+
+    stopDetailsCache.set(targetNorm, matchedOrders);
+    return matchedOrders;
+  };
+
+  /**
+   * Obtiene todos los detalles registrados únicos de una ruta o continuidad completa
+   */
+  root.getRouteTotalRegisteredDetails = function (route) {
+    if (!route || !Array.isArray(route.stops)) return [];
+    const seenOrderIds = new Set();
+    const allOrders = [];
+
+    route.stops.forEach(stopName => {
+      const stopDetails = root.getStopRegisteredDetails(stopName);
+      stopDetails.forEach(order => {
+        if (!seenOrderIds.has(order.id)) {
+          seenOrderIds.add(order.id);
+          allOrders.push(order);
+        }
+      });
+    });
+
+    return allOrders;
+  };
+
+  /**
+   * Construye un objeto de parada con coordenadas vinculadas a antenas o nodos
+   */
+  function buildStopObject(stopName, idx = 0, notesPrefix = '') {
+    const match = findSystemLocationMatch(stopName);
+    if (match && match.type === 'equipment') {
+      return {
+        id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
+        type: 'equipment',
+        equipmentId: match.equipmentId,
+        linkedNodeIds: (typeof getEquipmentLinkedNodeIds === 'function' ? getEquipmentLinkedNodeIds(match.equipmentId) : []),
+        includeLinkedNodeDetails: false,
+        name: match.name,
+        lat: match.lat,
+        lng: match.lng,
+        detailIds: [],
+        notes: notesPrefix ? `${notesPrefix}: ${match.name}` : `Parada ${idx + 1}`,
+        materialPlanned: '',
+        assignedTechId: '',
+        siteStatus: 'pendiente',
+        createdAt: new Date().toISOString()
+      };
+    } else if (match && match.type === 'node') {
+      return {
+        id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
+        type: 'node',
+        nodeId: match.nodeId,
+        name: match.name,
+        lat: match.lat,
+        lng: match.lng,
+        region: match.region || '',
+        detailIds: [],
+        notes: notesPrefix ? `${notesPrefix}: ${match.name} (Pueblo registrado)` : `Parada ${idx + 1} (Pueblo registrado)`,
+        materialPlanned: '',
+        assignedTechId: '',
+        siteStatus: 'pendiente',
+        createdAt: new Date().toISOString()
+      };
+    } else {
+      const stateRef = (typeof state !== 'undefined' && state) || (typeof window !== 'undefined' && window.state) || root.state || {};
+      const newTownName = String(stopName || '').trim();
+      let newNodeId = null;
+
+      // Si es un nombre de pueblo no registrado, registrarlo automáticamente como nuevo pueblo en el catálogo de nodos
+      if (newTownName && Array.isArray(stateRef.nodes)) {
+        const nextCodeNum = (stateRef.nodes.length || 0) + 1;
+        const autoCode = 'R' + nextCodeNum;
+        const newNode = {
+          id: (typeof gid === 'function' ? gid('nd') : 'nd_' + Date.now() + '_' + idx),
+          nodeCode: autoCode,
+          town: newTownName,
+          name: newTownName,
+          zone: 'general',
+          lat: 17.5500 + (idx * 0.015),
+          lng: -99.5000 + (idx * 0.015),
+          status: 'activo',
+          notes: 'Registrado automáticamente desde catálogo de rutas',
+          createdAt: new Date().toISOString()
+        };
+        stateRef.nodes.push(newNode);
+        if (typeof saveRecord === 'function') {
+          saveRecord('nodes', newNode).catch(() => {});
+        }
+        newNodeId = newNode.id;
+      }
+
+      return {
+        id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
+        type: 'node',
+        nodeId: newNodeId,
+        name: newTownName || `Pueblo ${idx + 1}`,
+        lat: 17.5500 + (idx * 0.015),
+        lng: -99.5000 + (idx * 0.015),
+        region: '',
+        detailIds: [],
+        notes: notesPrefix ? `${notesPrefix}: ${newTownName}` : `Parada ${idx + 1}`,
+        materialPlanned: '',
+        assignedTechId: '',
+        siteStatus: 'pendiente',
+        createdAt: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
+   * Verifica si una parada candidata ya existe en la lista de paradas por antena, pueblo o nombre
+   */
+  function isStopAlreadyInList(candidateStop, existingStops) {
+    if (!candidateStop || !existingStops || !existingStops.length) return false;
+    const candNorm = normalizeGeoText(candidateStop.name);
+    const candEqId = candidateStop.equipmentId ? String(candidateStop.equipmentId).trim() : '';
+    const candNodeId = candidateStop.nodeId ? String(candidateStop.nodeId).trim() : '';
+
+    return existingStops.some(ex => {
+      if (!ex) return false;
+      const exEqId = ex.equipmentId ? String(ex.equipmentId).trim() : '';
+      const exNodeId = ex.nodeId ? String(ex.nodeId).trim() : '';
+      const exNorm = normalizeGeoText(ex.name);
+
+      // 1. Mismo equipo / antena por ID
+      if (candEqId && exEqId && candEqId === exEqId) return true;
+
+      // 2. Mismo nodo / pueblo por ID
+      if (candNodeId && exNodeId && candNodeId === exNodeId) return true;
+
+      // 3. Comparación por nombre normalizado
+      if (candNorm && exNorm) {
+        if (candNorm === exNorm) return true;
+        if (candEqId && (exNorm.includes(candNorm) || candNorm.includes(exNorm))) return true;
+        if (exEqId && (exNorm.includes(candNorm) || candNorm.includes(exNorm))) return true;
+      }
+      return false;
+    });
+  }
+
+  /**
+   * Helper para renderizar las opciones de asignación rápida de técnicos
+   */
+  function renderQuickTechOptionsHtml(selectedTechIds = []) {
+    const techs = (typeof state !== 'undefined' && Array.isArray(state.technicians))
+      ? state.technicians.filter(t => !t.deletedAt)
+      : [];
+
+    if (!techs.length) {
+      return '<span style="font-size:11.5px;color:#94a3b8;grid-column:1/-1;">Sin técnicos registrados en el sistema</span>';
+    }
+
+    return techs.map(t => {
+      const isChecked = selectedTechIds.includes(t.id);
+      const initials = (t.nombre || 'T').split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+      return `
+        <label class="preset-quick-tech-card">
+          <input type="checkbox" name="preset-quick-tech" value="${escapeAttr(t.id)}" ${isChecked ? 'checked' : ''} style="margin:0;">
+          <span class="preset-quick-tech-avatar">${escapeHtml(initials)}</span>
+          <span class="preset-quick-tech-name" title="${escapeHtml(t.nombre)}">${escapeHtml(t.nombre)}</span>
+        </label>
+      `;
+    }).join('');
+  }
+
   /**
    * Adjunta una ruta del catálogo a un nuevo plan general o al plan actual
    */
-  root.attachPresetRouteToPlan = async function (routeId, asNewPlan = true) {
-    const route = PRESET_ROUTES.find(r => r.id === routeId);
+  root.attachPresetRouteToPlan = async function (routeId, asNewPlan = true, confirmed = false, quickOptions = null) {
+    const allRoutes = root.getAllPresetRoutes();
+    const route = allRoutes.find(r => r.id === routeId) || PRESET_ROUTES.find(r => r.id === routeId);
     if (!route) {
       if (typeof notify === 'function') notify('Ruta no encontrada en el catálogo.', 'err');
       return;
@@ -912,75 +1267,51 @@
       return;
     }
 
+    const isTech = (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
+                   (typeof userHasRole === 'function' && userHasRole('tecnico'));
+    if (isTech) {
+      if (typeof notify === 'function') notify('Los técnicos solo pueden consultar las rutas recomendadas.', 'warn');
+      return;
+    }
+
+    // Si no ha sido confirmado interactivamente y estamos en navegador, mostrar modal de confirmación con resumen y config rápida
+    if (!confirmed && typeof document !== 'undefined' && document.body && typeof OM === 'function') {
+      return root.showPresetRouteConfirmModal(routeId, asNewPlan);
+    }
+
     // Si estamos en la página de rutas.html (Mis Rutas)
     if (typeof document !== 'undefined' && document.body?.classList.contains('routes-page')) {
       return attachPresetRouteToRutasPage(route);
     }
 
-    // Si estamos en planificar.html
-    const targetStops = route.stops;
-    const builtStops = [];
+    // Mapear paradas con nombres personalizados de configuración rápida si existen
+    const targetStops = route.stops.map((s, idx) => {
+      if (quickOptions && Array.isArray(quickOptions.customStops)) {
+        const found = quickOptions.customStops[idx];
+        if (found && found.newName) return found.newName;
+      }
+      return s;
+    });
 
+    const builtStops = [];
     targetStops.forEach((stopName, idx) => {
-      const match = findSystemLocationMatch(stopName);
-      if (match && match.type === 'equipment') {
-        builtStops.push({
-          id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
-          type: 'equipment',
-          equipmentId: match.equipmentId,
-          linkedNodeIds: (typeof getEquipmentLinkedNodeIds === 'function' ? getEquipmentLinkedNodeIds(match.equipmentId) : []),
-          includeLinkedNodeDetails: false,
-          name: match.name,
-          lat: match.lat,
-          lng: match.lng,
-          detailIds: [],
-          notes: `Parada ${idx + 1} de ${route.name}`,
-          materialPlanned: '',
-          assignedTechId: '',
-          siteStatus: 'pendiente',
-          createdAt: new Date().toISOString()
-        });
-      } else if (match && match.type === 'node') {
-        builtStops.push({
-          id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
-          type: 'manual',
-          name: match.name,
-          lat: match.lat,
-          lng: match.lng,
-          region: match.region || '',
-          detailIds: [],
-          notes: `Parada ${idx + 1} de ${route.name} (Pueblo registrado)`,
-          materialPlanned: '',
-          assignedTechId: '',
-          siteStatus: 'pendiente',
-          createdAt: new Date().toISOString()
-        });
-      } else {
-        builtStops.push({
-          id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
-          type: 'manual',
-          name: stopName,
-          lat: 17.5500, // Coordenada base central Guerrero
-          lng: -99.5000,
-          region: '',
-          detailIds: [],
-          notes: `Parada ${idx + 1} de ${route.name}`,
-          materialPlanned: '',
-          assignedTechId: '',
-          siteStatus: 'pendiente',
-          createdAt: new Date().toISOString()
-        });
+      const stopObj = buildStopObject(stopName, idx, `Parada ${idx + 1} de ${route.name}`);
+      // Evitar duplicados internos en la misma ruta preestablecida
+      if (!isStopAlreadyInList(stopObj, builtStops)) {
+        builtStops.push(stopObj);
       }
     });
 
     if (asNewPlan) {
-      // Crear un nuevo plan con el nombre de la ruta
-      const planName = route.name;
+      // Crear un nuevo plan con el nombre de la ruta o el nombre personalizado
+      const planName = (quickOptions && quickOptions.customPlanName) ? quickOptions.customPlanName : route.name;
+      const selectedTechIds = (quickOptions && Array.isArray(quickOptions.selectedTechIds)) ? quickOptions.selectedTechIds : [];
       const plan = {
         id: (typeof gid === 'function' ? gid('gp') : 'gp_' + Date.now()),
         name: planName,
         createdAt: new Date().toISOString(),
-        assignedTechId: '',
+        assignedTechId: selectedTechIds[0] || '',
+        assignedTechIds: selectedTechIds,
         materialSummary: '',
         mapsUrl: route.mapsUrl || '',
         stops: builtStops
@@ -994,17 +1325,37 @@
         root.state.weekPlan[SHARED_ID]._generalPlans = [];
       }
 
-      root.state.weekPlan[SHARED_ID]._generalPlans.push(plan);
-      if (typeof selectedGeneralPlanId !== 'undefined') root.selectedGeneralPlanId = plan.id;
-      if (typeof selectedTechId !== 'undefined') root.selectedTechId = SHARED_ID;
-      if (typeof selectedDay !== 'undefined') root.selectedDay = 'general';
+      // Desasignar técnicos elegidos de cualquier otro plan general para mantener la regla de 1 plan por técnico
+      if (selectedTechIds.length) {
+        const assignedSet = new Set(selectedTechIds);
+        root.state.weekPlan[SHARED_ID]._generalPlans.forEach(gp => {
+          if (gp && gp.id !== plan.id) {
+            if (Array.isArray(gp.assignedTechIds)) {
+              gp.assignedTechIds = gp.assignedTechIds.filter(id => !assignedSet.has(id));
+            }
+            if (assignedSet.has(gp.assignedTechId)) {
+              gp.assignedTechId = gp.assignedTechIds?.[0] || '';
+            }
+          }
+        });
+      }
 
-      const techSelect = document.getElementById('plan-tech');
-      const daySelect = document.getElementById('plan-day');
-      const generalSelect = document.getElementById('general-plan-select');
-      if (techSelect) techSelect.value = SHARED_ID;
-      if (daySelect) daySelect.value = 'general';
-      if (generalSelect) generalSelect.value = plan.id;
+      root.state.weekPlan[SHARED_ID]._generalPlans.push(plan);
+
+      if (typeof selectGeneralPlan === 'function') {
+        selectGeneralPlan(plan.id);
+      } else {
+        if (typeof selectedGeneralPlanId !== 'undefined') root.selectedGeneralPlanId = plan.id;
+        if (typeof selectedTechId !== 'undefined') root.selectedTechId = SHARED_ID;
+        if (typeof selectedDay !== 'undefined') root.selectedDay = 'general';
+
+        const techSelect = document.getElementById('plan-tech');
+        const daySelect = document.getElementById('plan-day');
+        const generalSelect = document.getElementById('general-plan-select');
+        if (techSelect) techSelect.value = SHARED_ID;
+        if (daySelect) daySelect.value = 'general';
+        if (generalSelect) generalSelect.value = plan.id;
+      }
 
       if (typeof saveDB === 'function') await saveDB();
       if (typeof renderPlan === 'function') renderPlan();
@@ -1012,20 +1363,62 @@
       const refreshedSelect = document.getElementById('general-plan-select');
       if (refreshedSelect) refreshedSelect.value = plan.id;
 
-      if (typeof CM === 'function') CM('preset-routes-mo');
+      if (typeof CM === 'function') {
+        CM('preset-route-confirm-mo');
+        CM('preset-routes-mo');
+      }
       if (typeof notify === 'function') {
-        notify(`Nueva ruta "${planName}" creada con ${builtStops.length} paradas ✓`);
+        const techNotice = selectedTechIds.length ? ` y asignada a ${selectedTechIds.length} técnico(s)` : '';
+        notify(`Nueva ruta "${planName}" creada con ${builtStops.length} paradas${techNotice} ✓`);
       }
     } else {
-      // Agregar al plan actual
+      // Agregar al plan actual omitiendo los pueblos y antenas que ya existan
       if (typeof getPlanStopsRef === 'function') {
         const stopsRef = getPlanStopsRef();
-        stopsRef.push(...builtStops);
-        if (typeof saveDB === 'function') await saveDB();
-        if (typeof renderPlan === 'function') renderPlan();
-        if (typeof CM === 'function') CM('preset-routes-mo');
-        if (typeof notify === 'function') {
-          notify(`Se adjuntaron ${builtStops.length} paradas de "${route.name}" al plan actual ✓`);
+        if (stopsRef) {
+          const stopsToAdd = [];
+          const skippedStops = [];
+
+          builtStops.forEach(st => {
+            if (isStopAlreadyInList(st, stopsRef)) {
+              skippedStops.push(st);
+            } else {
+              stopsToAdd.push(st);
+            }
+          });
+
+          if (!stopsToAdd.length) {
+            if (typeof notify === 'function') notify('Todos los pueblos y antenas de esta ruta ya existen en el plan actual.', 'warn');
+            return;
+          }
+
+          stopsRef.push(...stopsToAdd);
+
+          // Si se seleccionaron técnicos adicionales, agregarlos al plan actual si es plan general
+          if (quickOptions && Array.isArray(quickOptions.selectedTechIds) && quickOptions.selectedTechIds.length) {
+            const currentPlan = typeof getSelectedGeneralPlan === 'function' ? getSelectedGeneralPlan() : null;
+            if (currentPlan) {
+              const currentIds = new Set(Array.isArray(currentPlan.assignedTechIds) ? currentPlan.assignedTechIds : (currentPlan.assignedTechId ? [currentPlan.assignedTechId] : []));
+              quickOptions.selectedTechIds.forEach(id => currentIds.add(id));
+              currentPlan.assignedTechIds = Array.from(currentIds);
+              if (!currentPlan.assignedTechId) currentPlan.assignedTechId = currentPlan.assignedTechIds[0];
+            }
+          }
+
+          if (typeof saveDB === 'function') await saveDB();
+          if (typeof renderPlan === 'function') renderPlan();
+
+          if (typeof CM === 'function') {
+            CM('preset-route-confirm-mo');
+            CM('preset-routes-mo');
+          }
+          if (typeof notify === 'function') {
+            if (skippedStops.length > 0) {
+              notify(`Se adjuntaron ${stopsToAdd.length} paradas (${skippedStops.length} omitidas por ya existir en el plan) ✓`);
+            } else {
+              notify(`Se adjuntaron ${stopsToAdd.length} paradas de "${route.name}" al plan actual ✓`);
+            }
+          }
         }
       }
     }
@@ -1088,6 +1481,9 @@
     const searchInput = document.getElementById('preset-routes-search');
     const query = searchInput ? searchInput.value : '';
     const routes = root.getPresetRoutes(currentPresetCategory, query);
+    const isTech = (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
+                   (typeof userHasRole === 'function' && userHasRole('tecnico'));
+    const canManage = canManagePresetRoutes();
 
     if (!routes.length) {
       container.innerHTML = `
@@ -1101,41 +1497,83 @@
     }
 
     const html = routes.map(route => {
-      const stopsHtml = route.stops.map((s, idx) => `
-        <span class="preset-stop-chip" title="Parada ${idx + 1}">
-          <span class="stop-num">${idx + 1}</span>
-          <span class="stop-name">${escapeHtml(s)}</span>
-        </span>
-      `).join('');
+      const routeTotalDetails = root.getRouteTotalRegisteredDetails(route);
 
-      const continuationsHtml = (route.continuations || []).map(cont => `
-        <div class="preset-continuation-box">
-          <div class="continuation-head">
-            <strong>💡 Continuidad: ${escapeHtml(cont.name)}</strong>
-            ${cont.mapsUrl ? `<a href="${cont.mapsUrl}" target="_blank" rel="noopener noreferrer" class="preset-link-btn" title="Abrir en Google Maps">🗺️ Maps</a>` : ''}
+      const stopsHtml = route.stops.map((s, idx) => {
+        const stopDetails = root.getStopRegisteredDetails(s);
+        const stopCount = stopDetails.length;
+        const stopTooltip = `${stopCount} detalle${stopCount === 1 ? '' : 's'} registrado${stopCount === 1 ? '' : 's'} para ${escapeHtml(s)} y pueblos vinculados`;
+
+        return `
+          <span class="preset-stop-chip" title="Parada ${idx + 1}: ${escapeHtml(s)} · ${stopTooltip}">
+            <span class="stop-num">${idx + 1}</span>
+            <span class="stop-name">${escapeHtml(s)}</span>
+            <span class="preset-stop-details-badge ${stopCount > 0 ? 'has-details' : 'zero-details'}" title="${stopTooltip}">
+              ${stopCount}
+            </span>
+          </span>
+        `;
+      }).join('');
+
+      const continuationsHtml = (route.continuations || []).map(cont => {
+        const contTotalDetails = root.getRouteTotalRegisteredDetails(cont);
+
+        return `
+          <div class="preset-continuation-box">
+            <div class="continuation-head">
+              <div class="continuation-title-group">
+                <strong>💡 Continuidad: ${escapeHtml(cont.name)}</strong>
+                <span class="continuation-details-badge ${contTotalDetails.length > 0 ? 'has-details' : 'zero-details'}" title="${contTotalDetails.length} detalles registrados en esta continuidad">
+                  ${contTotalDetails.length} det
+                </span>
+              </div>
+              ${cont.mapsUrl ? `<a href="${cont.mapsUrl}" target="_blank" rel="noopener noreferrer" class="preset-link-btn" title="Abrir en Google Maps">🗺️ Maps</a>` : ''}
+            </div>
+            <div class="continuation-stops">
+              ${cont.stops.map(cs => {
+                const csDetails = root.getStopRegisteredDetails(cs);
+                const csCount = csDetails.length;
+                const csTooltip = `${csCount} detalle${csCount === 1 ? '' : 's'} registrado${csCount === 1 ? '' : 's'} para ${escapeHtml(cs)} y pueblos vinculados`;
+
+                return `
+                  <span class="continuation-stop-pill" title="${escapeHtml(cs)} · ${csTooltip}">
+                    <span class="continuation-stop-name">${escapeHtml(cs)}</span>
+                    <span class="preset-stop-details-badge ${csCount > 0 ? 'has-details' : 'zero-details'}" title="${csTooltip}">${csCount}</span>
+                  </span>
+                `;
+              }).join('')}
+            </div>
           </div>
-          <div class="continuation-stops">
-            ${cont.stops.map(cs => `<span class="continuation-stop-pill">${escapeHtml(cs)}</span>`).join('')}
-          </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
 
       return `
         <div class="preset-route-card">
           <div class="preset-route-card-head">
-            <div>
+            <div class="preset-route-card-toprow">
               <div class="preset-route-badges">
                 <span class="preset-category-badge">${escapeHtml(route.category)}</span>
                 <span class="preset-count-badge">${route.stops.length} paradas</span>
+                <span class="preset-details-badge ${routeTotalDetails.length > 0 ? 'has-details' : 'zero-details'}" title="Total de detalles registrados en las antenas y pueblos vinculados de esta ruta">
+                  ⚡ ${routeTotalDetails.length} detalle${routeTotalDetails.length === 1 ? '' : 's'}
+                </span>
+                ${route.isCustom ? '<span class="preset-confirm-badge badge-node">Personalizada</span>' : ''}
               </div>
-              <h3 class="preset-route-title">${escapeHtml(route.name)}</h3>
+              <div class="preset-route-card-actions-top">
+                ${canManage ? `
+                  <button type="button" class="btn bsm preset-edit-btn" onclick="openEditPresetRouteModal('${escapeAttr(route.id)}')" title="Editar ruta recomendada">
+                    ✏️ Editar
+                  </button>
+                ` : ''}
+                ${route.mapsUrl ? `
+                  <a href="${route.mapsUrl}" target="_blank" rel="noopener noreferrer" class="preset-maps-btn" title="Ver trayecto en Google Maps">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <span>Google Maps</span>
+                  </a>
+                ` : ''}
+              </div>
             </div>
-            ${route.mapsUrl ? `
-              <a href="${route.mapsUrl}" target="_blank" rel="noopener noreferrer" class="preset-maps-btn" title="Ver trayecto en Google Maps">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
-                <span>Google Maps</span>
-              </a>
-            ` : ''}
+            <h3 class="preset-route-title">${escapeHtml(route.name)}</h3>
           </div>
 
           ${route.notes ? `<p class="preset-route-notes">${escapeHtml(route.notes)}</p>` : ''}
@@ -1146,15 +1584,17 @@
 
           ${continuationsHtml}
 
+          ${!isTech ? `
           <div class="preset-card-actions">
             <button type="button" class="btn bc bsm preset-attach-btn" onclick="attachPresetRouteToPlan('${route.id}', true)">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
               <span>Adjuntar a una ruta nueva</span>
             </button>
-            <button type="button" class="btn bgh bsm" onclick="attachPresetRouteToPlan('${route.id}', false)" title="Agregar estas paradas al plan que se encuentra abierto actualmente">
+            <button type="button" class="btn bgh bsm preset-append-btn" onclick="attachPresetRouteToPlan('${route.id}', false)" title="Agregar estas paradas al plan que se encuentra abierto actualmente">
               <span>+ Al plan actual</span>
             </button>
           </div>
+          ` : ''}
         </div>
       `;
     }).join('');
@@ -1163,7 +1603,632 @@
   };
 
   /**
-   * Abre el modal del catálogo de rutas
+   * Muestra el modal de confirmación con el resumen de paradas, destino y configuración rápida antes de agregar la ruta
+   */
+  root.showPresetRouteConfirmModal = function (routeId, asNewPlan = true) {
+    if (typeof document === 'undefined') return;
+    const allRoutes = root.getAllPresetRoutes();
+    const route = allRoutes.find(r => r.id === routeId) || PRESET_ROUTES.find(r => r.id === routeId);
+    if (!route) {
+      if (typeof notify === 'function') notify('Ruta no encontrada.', 'err');
+      return;
+    }
+
+    let modal = document.getElementById('preset-route-confirm-mo');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'preset-route-confirm-mo';
+      modal.className = 'mo preset-confirm-modal-overlay';
+      document.body.appendChild(modal);
+    }
+
+    const existingStops = (!asNewPlan && typeof getPlanStopsRef === 'function')
+      ? (getPlanStopsRef() || [])
+      : [];
+
+    let newCount = 0;
+    let existCount = 0;
+
+    const stopsListHtml = route.stops.map((stopName, idx) => {
+      const stopObj = buildStopObject(stopName, idx);
+      const match = findSystemLocationMatch(stopName);
+      const alreadyExists = !asNewPlan && isStopAlreadyInList(stopObj, existingStops);
+
+      if (alreadyExists) {
+        existCount++;
+      } else {
+        newCount++;
+      }
+
+      let badgeLabel = 'Manual';
+      let badgeClass = 'badge-manual';
+      if (match && match.type === 'equipment') {
+        badgeLabel = 'Antena';
+        badgeClass = 'badge-eq';
+      } else if (match && match.type === 'node') {
+        badgeLabel = 'Pueblo';
+        badgeClass = 'badge-node';
+      }
+
+      const stopDetails = root.getStopRegisteredDetails(stopName);
+      const stopDetCount = stopDetails.length;
+
+      return `
+        <div class="preset-confirm-stop-item ${alreadyExists ? 'stop-already-exists' : ''}">
+          <div class="preset-confirm-stop-num">${idx + 1}</div>
+          <div class="preset-confirm-stop-info">
+            <input type="text" class="preset-confirm-stop-input" data-original-name="${escapeAttr(stopName)}" value="${escapeAttr(stopName)}" placeholder="Nombre de la parada...">
+            ${match && match.lat ? `<div class="preset-confirm-stop-sub">GPS: ${match.lat.toFixed(4)}, ${match.lng.toFixed(4)}</div>` : ''}
+          </div>
+          <div class="preset-confirm-stop-type">
+            ${alreadyExists ? '<span class="preset-confirm-badge badge-exists">Ya en el plan</span>' : ''}
+            <span class="preset-confirm-badge ${badgeClass}">${badgeLabel}</span>
+            <span class="preset-confirm-badge ${stopDetCount > 0 ? 'badge-has-det' : 'badge-zero-det'}" title="${stopDetCount} detalles registrados en ${escapeHtml(stopName)} y pueblos vinculados">${stopDetCount} det</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const destBannerHtml = asNewPlan ? `
+      <div class="preset-confirm-dest-banner dest-new">
+        <span class="dest-badge">Plan Nuevo</span>
+        <span class="dest-text">Se creará una nueva ruta planificada independiente con estas paradas.</span>
+      </div>
+    ` : `
+      <div class="preset-confirm-dest-banner dest-append">
+        <span class="dest-badge">Plan Actual</span>
+        <span class="dest-text">Se incorporarán <strong>${newCount} paradas nuevas</strong> a la cola del plan que tienes abierto actualmente.${existCount > 0 ? ` (${existCount} pueblos/antenas ya están en el plan y se omitirán).` : ''}</span>
+      </div>
+    `;
+
+    const canConfirm = asNewPlan || newCount > 0;
+
+    modal.innerHTML = `
+      <div class="md preset-confirm-dialog-card">
+        <div class="preset-confirm-head">
+          <div class="preset-confirm-head-left">
+            <span class="preset-confirm-head-icon">🚗</span>
+            <div>
+              <h3>¿Confirmar agregar ruta recomendada?</h3>
+              <p>Revisa el resumen de las paradas, personaliza nombres y asigna técnicos antes de incorporar esta ruta.</p>
+            </div>
+          </div>
+          <button type="button" class="preset-dialog-close" onclick="CM('preset-route-confirm-mo')" aria-label="Cerrar">✕</button>
+        </div>
+        <div class="preset-confirm-body">
+          ${destBannerHtml}
+
+          <!-- Configuración Rápida: Nombre de ruta y asignación de técnicos -->
+          <div class="preset-quick-cfg-section">
+            <div class="preset-quick-cfg-field">
+              <label for="preset-confirm-plan-name">Nombre de la ruta / plan compartido:</label>
+              <input type="text" id="preset-confirm-plan-name" class="preset-quick-input" value="${escapeAttr(route.name)}" placeholder="Ej. Ruta Chilpancingo Centro">
+            </div>
+            <div class="preset-quick-cfg-field">
+              <label>Asignar técnico(s) al plan:</label>
+              <div id="preset-quick-techs-list" class="preset-quick-techs-grid">
+                ${renderQuickTechOptionsHtml([])}
+              </div>
+            </div>
+          </div>
+
+          <div class="preset-confirm-summary-card">
+            <div class="preset-confirm-route-header">
+              <div class="preset-confirm-route-name">${escapeHtml(route.name)}</div>
+              ${route.notes ? `<div class="preset-confirm-notes">${escapeHtml(route.notes)}</div>` : ''}
+            </div>
+            <div class="preset-confirm-stops-wrapper">
+              <div class="preset-confirm-stops-header">
+                <span>Paradas de la ruta (${route.stops.length}${!asNewPlan && existCount > 0 ? ` · ${newCount} a agregar` : ''}) - Edita el nombre si es necesario</span>
+              </div>
+              <div class="preset-confirm-stops-list">
+                ${stopsListHtml}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="preset-confirm-footer">
+          <button type="button" class="btn bgh" onclick="CM('preset-route-confirm-mo')">Cancelar</button>
+          <button type="button" class="btn bc preset-confirm-action-btn" ${!canConfirm ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} onclick="confirmAndAttachPresetRoute('${route.id}', ${asNewPlan})">
+            <span>${asNewPlan ? `Confirmar y crear nueva ruta (${route.stops.length} paradas)` : (newCount > 0 ? `Confirmar e incorporar (${newCount} paradas nuevas)` : 'Todos ya existen en el plan')}</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    if (typeof OM === 'function') OM('preset-route-confirm-mo');
+  };
+
+  /**
+   * Ejecuta la incorporación de la ruta una vez confirmada con configuración rápida
+   */
+  root.confirmAndAttachPresetRoute = function (routeId, asNewPlan = true) {
+    const planNameInput = (typeof document !== 'undefined' && typeof document.getElementById === 'function')
+      ? document.getElementById('preset-confirm-plan-name')
+      : null;
+    const customPlanName = planNameInput ? planNameInput.value.trim() : '';
+
+    const stopInputs = (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function')
+      ? document.querySelectorAll('#preset-route-confirm-mo .preset-confirm-stop-input')
+      : [];
+    const customStops = Array.from(stopInputs).map(inp => ({
+      originalName: inp.dataset?.originalName || '',
+      newName: (inp.value ? inp.value.trim() : '') || inp.dataset?.originalName || ''
+    }));
+
+    const checkedTechs = (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function')
+      ? document.querySelectorAll('#preset-quick-techs-list input[name="preset-quick-tech"]:checked')
+      : [];
+    const selectedTechIds = Array.from(checkedTechs).map(cb => cb.value);
+
+    if (typeof CM === 'function') {
+      CM('preset-route-confirm-mo');
+      CM('preset-routes-mo');
+    }
+    return root.attachPresetRouteToPlan(routeId, asNewPlan, true, {
+      customPlanName,
+      customStops,
+      selectedTechIds
+    });
+  };
+
+  /**
+   * Abre modal para crear una nueva ruta recomendada
+   */
+  root.openCreatePresetRouteModal = function () {
+    if (!canManagePresetRoutes()) {
+      if (typeof notify === 'function') notify('Solo administradores y soporte pueden crear rutas recomendadas.', 'warn');
+      return;
+    }
+    const newRoute = {
+      id: 'custom_route_' + Date.now(),
+      name: '',
+      category: 'Chilpancingo / Centro',
+      mapsUrl: '',
+      notes: '',
+      stops: ['', ''],
+      continuations: [],
+      isCustom: true
+    };
+    renderPresetRouteFormModal(newRoute, true);
+  };
+
+  /**
+   * Abre modal para editar una ruta recomendada existente
+   */
+  root.openEditPresetRouteModal = function (routeId) {
+    if (!canManagePresetRoutes()) {
+      if (typeof notify === 'function') notify('Solo administradores y soporte pueden editar rutas recomendadas.', 'warn');
+      return;
+    }
+    const allRoutes = root.getAllPresetRoutes();
+    const route = allRoutes.find(r => r.id === routeId);
+    if (!route) {
+      if (typeof notify === 'function') notify('Ruta no encontrada.', 'err');
+      return;
+    }
+    renderPresetRouteFormModal({ ...route, stops: [...route.stops] }, false);
+  };
+
+  /**
+   * Renderiza el modal de formulario para crear/editar ruta recomendada
+   */
+  function renderPresetRouteFormModal(routeData, isNew = false) {
+    if (typeof document === 'undefined') return;
+    let modal = document.getElementById('preset-route-form-mo');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'preset-route-form-mo';
+      modal.className = 'mo preset-form-modal-overlay';
+      document.body.appendChild(modal);
+    }
+
+    const categories = [
+      'Chilpancingo / Centro',
+      'Iguala / Norte',
+      'Ayutla / Costa Chica',
+      'San Marcos / Costa Chica',
+      'San Marcos / Ometepec',
+      'Acapulco / Coyuca',
+      'Morelos y Puebla',
+      'Recorridos 1..N'
+    ];
+
+    const catOptionsHtml = categories.map(cat => `
+      <option value="${escapeAttr(cat)}" ${routeData.category === cat ? 'selected' : ''}>${escapeHtml(cat)}</option>
+    `).join('');
+
+    const stopsRowsHtml = (routeData.stops && routeData.stops.length ? routeData.stops : ['']).map((stopName, idx) => `
+      <div class="preset-form-stop-row" data-idx="${idx}">
+        <span class="preset-form-stop-num">${idx + 1}</span>
+        <input type="text" class="preset-form-stop-input" value="${escapeAttr(stopName)}" placeholder="Nombre de la antena, pueblo o parada..." list="preset-form-location-datalist">
+        <button type="button" class="btn bsm bgh" onclick="movePresetFormStopRow(this, -1)" title="Subir parada" style="padding:4px 8px;">▲</button>
+        <button type="button" class="btn bsm bgh" onclick="movePresetFormStopRow(this, 1)" title="Bajar parada" style="padding:4px 8px;">▼</button>
+        <button type="button" class="btn bsm" onclick="removePresetFormStopRow(this)" title="Eliminar parada" style="padding:4px 8px;color:#dc2626;">✕</button>
+      </div>
+    `).join('');
+
+    // Datalist con antenas y nodos registrados para autocompletado rápido
+    const datalistOptions = [];
+    if (typeof state !== 'undefined') {
+      (state.equipments || []).forEach(eq => {
+        if (!eq.deletedAt && eq.name) datalistOptions.push(`<option value="${escapeAttr(eq.name)}">Antena: ${escapeHtml(eq.name)}</option>`);
+      });
+      (state.nodes || []).forEach(nd => {
+        if (!nd.deletedAt && (nd.town || nd.name)) {
+          const tName = nd.town || nd.name;
+          datalistOptions.push(`<option value="${escapeAttr(tName)}">Pueblo: ${escapeHtml(tName)}</option>`);
+        }
+      });
+    }
+
+    modal.innerHTML = `
+      <div class="md preset-form-dialog-card">
+        <div class="preset-confirm-head">
+          <div class="preset-confirm-head-left">
+            <span class="preset-confirm-head-icon" style="background:linear-gradient(135deg, #e0f2fe, #bae6fd);color:#0284c7;">✏️</span>
+            <div>
+              <h3>${isNew ? 'Nueva Ruta Recomendada' : 'Editar Ruta Recomendada'}</h3>
+              <p>${isNew ? 'Define las paradas, región y enlace de mapa de la nueva ruta troncal.' : 'Modifica las paradas, nombre o detalles de la ruta seleccionada.'}</p>
+            </div>
+          </div>
+          <button type="button" class="preset-dialog-close" onclick="CM('preset-route-form-mo')" aria-label="Cerrar">✕</button>
+        </div>
+        <div class="preset-form-body">
+          <input type="hidden" id="preset-form-route-id" value="${escapeAttr(routeData.id)}">
+          <input type="hidden" id="preset-form-is-new" value="${isNew ? '1' : '0'}">
+
+          <datalist id="preset-form-location-datalist">
+            ${datalistOptions.slice(0, 100).join('')}
+          </datalist>
+
+          <div class="preset-form-field">
+            <label for="preset-form-name">Nombre de la ruta *</label>
+            <input type="text" id="preset-form-name" value="${escapeAttr(routeData.name)}" placeholder="Ej. Ruta Chilpancingo - Tixtla - Chilapa" required>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="preset-form-field">
+              <label for="preset-form-category">Región / Categoría</label>
+              <select id="preset-form-category">
+                ${catOptionsHtml}
+              </select>
+            </div>
+            <div class="preset-form-field">
+              <label for="preset-form-maps-url">Enlace Google Maps (opcional)</label>
+              <input type="url" id="preset-form-maps-url" value="${escapeAttr(routeData.mapsUrl || '')}" placeholder="https://maps.app.goo.gl/...">
+            </div>
+          </div>
+
+          <div class="preset-form-field">
+            <label for="preset-form-notes">Notas / Descripción descriptiva</label>
+            <textarea id="preset-form-notes" rows="2" placeholder="Notas sobre el corredor, accesos o recomendaciones operativas...">${escapeHtml(routeData.notes || '')}</textarea>
+          </div>
+
+          <div class="preset-form-stops-container">
+            <div class="preset-form-stops-head">
+              <label style="font-size:12.5px;font-weight:800;color:#1e293b;">Paradas en orden geográfico</label>
+              <button type="button" class="btn bsm bc" onclick="addPresetFormStopRow()" style="font-size:11px;padding:4px 10px;">+ Agregar parada</button>
+            </div>
+            <div class="preset-form-stops-list" id="preset-form-stops-list">
+              ${stopsRowsHtml}
+            </div>
+          </div>
+        </div>
+        <div class="preset-confirm-footer">
+          ${!isNew && routeData.isCustom ? `
+            <button type="button" class="btn bgh" style="margin-right:auto;color:#dc2626;border-color:#fca5a5;" onclick="deleteCustomPresetRoute('${escapeAttr(routeData.id)}')">🗑️ Eliminar ruta</button>
+          ` : ''}
+          <button type="button" class="btn bgh" onclick="CM('preset-route-form-mo')">Cancelar</button>
+          <button type="button" class="btn bc preset-confirm-action-btn" onclick="savePresetRouteForm()">
+            <span>Guardar ruta recomendada</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    if (typeof OM === 'function') OM('preset-route-form-mo');
+  }
+
+  root.addPresetFormStopRow = function (stopName = '') {
+    const list = document.getElementById('preset-form-stops-list');
+    if (!list) return;
+    const currentCount = list.querySelectorAll('.preset-form-stop-row').length;
+    const row = document.createElement('div');
+    row.className = 'preset-form-stop-row';
+    row.dataset.idx = currentCount;
+    row.innerHTML = `
+      <span class="preset-form-stop-num">${currentCount + 1}</span>
+      <input type="text" class="preset-form-stop-input" value="${escapeAttr(stopName)}" placeholder="Nombre de la antena, pueblo o parada..." list="preset-form-location-datalist">
+      <button type="button" class="btn bsm bgh" onclick="movePresetFormStopRow(this, -1)" title="Subir parada" style="padding:4px 8px;">▲</button>
+      <button type="button" class="btn bsm bgh" onclick="movePresetFormStopRow(this, 1)" title="Bajar parada" style="padding:4px 8px;">▼</button>
+      <button type="button" class="btn bsm" onclick="removePresetFormStopRow(this)" title="Eliminar parada" style="padding:4px 8px;color:#dc2626;">✕</button>
+    `;
+    list.appendChild(row);
+    row.querySelector('input')?.focus();
+  };
+
+  root.removePresetFormStopRow = function (btn) {
+    const row = btn.closest('.preset-form-stop-row');
+    if (!row) return;
+    const list = row.parentElement;
+    row.remove();
+    // Renumerar
+    list.querySelectorAll('.preset-form-stop-row').forEach((r, idx) => {
+      const numSpan = r.querySelector('.preset-form-stop-num');
+      if (numSpan) numSpan.textContent = idx + 1;
+      r.dataset.idx = idx;
+    });
+  };
+
+  root.movePresetFormStopRow = function (btn, direction) {
+    const row = btn.closest('.preset-form-stop-row');
+    if (!row) return;
+    const list = row.parentElement;
+    if (direction === -1 && row.previousElementSibling) {
+      list.insertBefore(row, row.previousElementSibling);
+    } else if (direction === 1 && row.nextElementSibling) {
+      list.insertBefore(row.nextElementSibling, row);
+    }
+    // Renumerar
+    list.querySelectorAll('.preset-form-stop-row').forEach((r, idx) => {
+      const numSpan = r.querySelector('.preset-form-stop-num');
+      if (numSpan) numSpan.textContent = idx + 1;
+      r.dataset.idx = idx;
+    });
+  };
+
+  root.savePresetRouteForm = function () {
+    const idInput = document.getElementById('preset-form-route-id');
+    const nameInput = document.getElementById('preset-form-name');
+    const catInput = document.getElementById('preset-form-category');
+    const mapsInput = document.getElementById('preset-form-maps-url');
+    const notesInput = document.getElementById('preset-form-notes');
+
+    const routeId = idInput ? idInput.value : ('custom_route_' + Date.now());
+    const name = nameInput ? nameInput.value.trim() : '';
+    const category = catInput ? catInput.value : 'Chilpancingo / Centro';
+    const mapsUrl = mapsInput ? mapsInput.value.trim() : '';
+    const notes = notesInput ? notesInput.value.trim() : '';
+
+    if (!name) {
+      if (typeof notify === 'function') notify('Por favor ingresa un nombre para la ruta.', 'warn');
+      nameInput?.focus();
+      return;
+    }
+
+    const stopInputs = document.querySelectorAll('#preset-form-stops-list .preset-form-stop-input');
+    const stops = Array.from(stopInputs).map(inp => inp.value.trim()).filter(Boolean);
+
+    if (!stops.length) {
+      if (typeof notify === 'function') notify('Debes agregar al menos una parada a la ruta.', 'warn');
+      return;
+    }
+
+    const customRoutes = getCustomPresetRoutes();
+    const existingIdx = customRoutes.findIndex(r => r.id === routeId);
+
+    const savedRoute = {
+      id: routeId,
+      name,
+      category,
+      mapsUrl,
+      notes,
+      stops,
+      continuations: [],
+      isCustom: true,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (existingIdx >= 0) {
+      customRoutes[existingIdx] = savedRoute;
+    } else {
+      customRoutes.push(savedRoute);
+    }
+
+    saveCustomPresetRoutes(customRoutes);
+
+    if (typeof CM === 'function') CM('preset-route-form-mo');
+    root.renderPresetRoutesList();
+
+    if (typeof notify === 'function') {
+      notify(`Ruta recomendada "${name}" guardada correctamente ✓`);
+    }
+  };
+
+  root.deleteCustomPresetRoute = async function (routeId) {
+    if (!canManagePresetRoutes()) return;
+    if (typeof askConfirmation === 'function') {
+      const ok = await askConfirmation({
+        title: 'Eliminar ruta personalizada',
+        message: '¿Estás seguro de eliminar esta ruta personalizada?',
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar',
+        tone: 'danger'
+      });
+      const confirmFn = typeof askConfirmation === 'function' ? askConfirmation : window.askConfirmation;
+      if (typeof confirmFn === 'function') {
+        const ok = await confirmFn({
+          title: 'Eliminar ruta personalizada',
+          message: '¿Estás seguro de eliminar esta ruta personalizada? Esta acción no se puede deshacer.',
+          confirmText: 'Eliminar',
+          cancelText: 'Cancelar',
+          tone: 'danger'
+        });
+        if (!ok) return;
+      }
+    }
+    let customRoutes = getCustomPresetRoutes();
+    customRoutes = customRoutes.filter(r => r.id !== routeId);
+    saveCustomPresetRoutes(customRoutes);
+
+    if (typeof CM === 'function') CM('preset-route-form-mo');
+    root.renderPresetRoutesList();
+
+    if (typeof notify === 'function') {
+      notify('Ruta personalizada eliminada.');
+    }
+  };
+
+  /**
+   * Muestra el modal de confirmación con el resumen de paradas antes de agregar una continuidad
+   */
+  root.showContinuityConfirmModal = function (continuityName) {
+    if (typeof document === 'undefined') return;
+
+    const allRoutes = root.getAllPresetRoutes();
+    let targetCont = null;
+    let parentRoute = null;
+
+    for (const route of allRoutes) {
+      const found = (route.continuations || []).find(c => c.name === continuityName);
+      if (found) {
+        targetCont = found;
+        parentRoute = route;
+        break;
+      }
+    }
+
+    if (!targetCont) {
+      if (typeof notify === 'function') notify('Continuidad no encontrada.', 'err');
+      return;
+    }
+
+    let modal = document.getElementById('preset-route-confirm-mo');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'preset-route-confirm-mo';
+      modal.className = 'mo preset-confirm-modal-overlay';
+      document.body.appendChild(modal);
+    }
+
+    const existingStops = typeof getPlanStopsRef === 'function' ? (getPlanStopsRef() || []) : [];
+    let newCount = 0;
+    let existCount = 0;
+
+    const stopsListHtml = targetCont.stops.map((stopName, idx) => {
+      const stopObj = buildStopObject(stopName, idx, `Continuidad: ${targetCont.name}`);
+      const match = findSystemLocationMatch(stopName);
+      const alreadyExists = isStopAlreadyInList(stopObj, existingStops);
+
+      if (alreadyExists) {
+        existCount++;
+      } else {
+        newCount++;
+      }
+
+      let badgeLabel = 'Manual';
+      let badgeClass = 'badge-manual';
+      if (match && match.type === 'equipment') {
+        badgeLabel = 'Antena';
+        badgeClass = 'badge-eq';
+      } else if (match && match.type === 'node') {
+        badgeLabel = 'Pueblo';
+        badgeClass = 'badge-node';
+      }
+
+      const stopDetails = root.getStopRegisteredDetails(stopName);
+      const stopDetCount = stopDetails.length;
+
+      return `
+        <div class="preset-confirm-stop-item ${alreadyExists ? 'stop-already-exists' : ''}">
+          <div class="preset-confirm-stop-num">${idx + 1}</div>
+          <div class="preset-confirm-stop-info">
+            <input type="text" class="preset-confirm-stop-input" data-original-name="${escapeAttr(stopName)}" value="${escapeAttr(stopName)}" placeholder="Nombre de la parada...">
+            ${match && match.lat ? `<div class="preset-confirm-stop-sub">GPS: ${match.lat.toFixed(4)}, ${match.lng.toFixed(4)}</div>` : ''}
+          </div>
+          <div class="preset-confirm-stop-type">
+            ${alreadyExists ? '<span class="preset-confirm-badge badge-exists">Ya en el plan</span>' : ''}
+            <span class="preset-confirm-badge ${badgeClass}">${badgeLabel}</span>
+            <span class="preset-confirm-badge ${stopDetCount > 0 ? 'badge-has-det' : 'badge-zero-det'}" title="${stopDetCount} detalles registrados en ${escapeHtml(stopName)} y pueblos vinculados">${stopDetCount} det</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const canConfirm = newCount > 0;
+
+    modal.innerHTML = `
+      <div class="md preset-confirm-dialog-card">
+        <div class="preset-confirm-head">
+          <div class="preset-confirm-head-left">
+            <span class="preset-confirm-head-icon">💡</span>
+            <div>
+              <h3>¿Confirmar agregar continuidad al plan?</h3>
+              <p>Revisa las paradas y pueblos sugeridos antes de incorporarlos al plan actual.</p>
+            </div>
+          </div>
+          <button type="button" class="preset-dialog-close" onclick="CM('preset-route-confirm-mo')" aria-label="Cerrar">✕</button>
+        </div>
+        <div class="preset-confirm-body">
+          <div class="preset-confirm-dest-banner dest-append">
+            <span class="dest-badge">Continuidad al Plan Actual</span>
+            <span class="dest-text">Se incorporarán <strong>${newCount} paradas nuevas</strong> al plan actual.${existCount > 0 ? ` (${existCount} pueblos/antenas ya están en el plan y se omitirán).` : ''}</span>
+          </div>
+
+          <!-- Configuración rápida de técnicos para el plan -->
+          <div class="preset-quick-cfg-section">
+            <div class="preset-quick-cfg-field">
+              <label>Asignar técnico(s) al plan:</label>
+              <div id="preset-quick-techs-list" class="preset-quick-techs-grid">
+                ${renderQuickTechOptionsHtml([])}
+              </div>
+            </div>
+          </div>
+
+          <div class="preset-confirm-summary-card">
+            <div class="preset-confirm-route-header">
+              <div class="preset-confirm-route-name">${escapeHtml(targetCont.name)}</div>
+              ${parentRoute ? `<div class="preset-confirm-notes">Continuidad sugerida de: <strong>${escapeHtml(parentRoute.name)}</strong></div>` : ''}
+            </div>
+            <div class="preset-confirm-stops-wrapper">
+              <div class="preset-confirm-stops-header">
+                <span>Paradas de continuidad (${targetCont.stops.length}${existCount > 0 ? ` · ${newCount} nuevas` : ''}) - Edita el nombre si lo deseas</span>
+              </div>
+              <div class="preset-confirm-stops-list">
+                ${stopsListHtml}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="preset-confirm-footer">
+          <button type="button" class="btn bgh" onclick="CM('preset-route-confirm-mo')">Cancelar</button>
+          <button type="button" class="btn bc preset-confirm-action-btn" ${!canConfirm ? 'disabled style="opacity:0.5;cursor:not-allowed;"' : ''} onclick="confirmAndAddContinuity('${escapeHtml(continuityName)}')">
+            <span>${newCount > 0 ? `Confirmar e incorporar (${newCount} paradas nuevas)` : 'Todos ya existen en el plan'}</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    if (typeof OM === 'function') OM('preset-route-confirm-mo');
+  };
+
+  /**
+   * Ejecuta la incorporación de la continuidad una vez confirmada
+   */
+  root.confirmAndAddContinuity = function (continuityName) {
+    const stopInputs = (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function')
+      ? document.querySelectorAll('#preset-route-confirm-mo .preset-confirm-stop-input')
+      : [];
+    const customStops = Array.from(stopInputs).map(inp => ({
+      originalName: inp.dataset?.originalName || '',
+      newName: (inp.value ? inp.value.trim() : '') || inp.dataset?.originalName || ''
+    }));
+
+    const checkedTechs = (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function')
+      ? document.querySelectorAll('#preset-quick-techs-list input[name="preset-quick-tech"]:checked')
+      : [];
+    const selectedTechIds = Array.from(checkedTechs).map(cb => cb.value);
+
+    if (typeof CM === 'function') CM('preset-route-confirm-mo');
+    return root.addContinuityStopsToCurrentPlan(continuityName, true, {
+      customStops,
+      selectedTechIds
+    });
+  };
+
+  /**
+   * Abre el modal del catálogo de rutas mostrando animación de carga inmediata
    */
   root.openPresetRoutesModal = function (options = {}) {
     if (typeof document === 'undefined') return;
@@ -1175,15 +2240,36 @@
 
     const searchInput = document.getElementById('preset-routes-search');
     if (searchInput) searchInput.value = '';
-    currentPresetCategory = 'all';
+    currentPresetCategory = options.category || 'all';
 
     const tabs = document.querySelectorAll('.preset-cat-tab');
     tabs.forEach(tab => {
-      tab.classList.toggle('active', tab.dataset.cat === 'all');
+      tab.classList.toggle('active', tab.dataset.cat === currentPresetCategory);
     });
 
-    root.renderPresetRoutesList();
+    const addNewBtn = document.getElementById('preset-add-new-btn');
+    if (addNewBtn) {
+      addNewBtn.style.display = canManagePresetRoutes() ? 'inline-flex' : 'none';
+    }
+
+    // Mostrar animación de carga inmediata para respuesta instantánea de UI
+    const container = document.getElementById('preset-routes-grid');
+    if (container) {
+      container.innerHTML = `
+        <div class="preset-loading-container">
+          <div class="preset-loading-spinner"></div>
+          <strong style="margin-top:16px; font-size:15px; color:#0f172a; font-weight:800;">Cargando catálogo de rutas...</strong>
+          <span style="margin-top:6px; font-size:12.5px; color:#64748b;">Consultando paradas, continuidades y detalles registrados...</span>
+        </div>
+      `;
+    }
+
     if (typeof OM === 'function') OM('preset-routes-mo');
+
+    // Ceder el hilo para que el navegador renderice la animación de carga antes del cálculo
+    setTimeout(() => {
+      root.renderPresetRoutesList();
+    }, 40);
   };
 
   /**
@@ -1220,7 +2306,10 @@
                 <p>Corredores troncales, enlaces de Google Maps y continuidades geográficas. Da clic en <strong>Adjuntar a una ruta nueva</strong> para cargarla inmediatamente.</p>
               </div>
             </div>
-            <button type="button" class="preset-dialog-close" onclick="CM('preset-routes-mo')" aria-label="Cerrar">✕</button>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <button type="button" id="preset-add-new-btn" class="preset-new-route-btn" style="display:none;" onclick="openCreatePresetRouteModal()">+ Nueva ruta recomendada</button>
+              <button type="button" class="preset-dialog-close" onclick="CM('preset-routes-mo')" aria-label="Cerrar">✕</button>
+            </div>
           </div>
 
           <div class="preset-dialog-filterbar">
@@ -1229,7 +2318,7 @@
               <input type="text" id="preset-routes-search" placeholder="Buscar por nombre de ruta, pueblo, antena o región..." oninput="debounceAction('preset-routes-search', renderPresetRoutesList)">
             </div>
             <div class="preset-cat-tabs" role="tablist">
-              <button type="button" class="preset-cat-tab active" data-cat="all" onclick="selectPresetCategory('all')">Todas (${PRESET_ROUTES.length})</button>
+              <button type="button" class="preset-cat-tab active" data-cat="all" onclick="selectPresetCategory('all')">Todas (${root.getAllPresetRoutes().length})</button>
               <button type="button" class="preset-cat-tab" data-cat="Chilpancingo / Centro" onclick="selectPresetCategory('Chilpancingo / Centro')">Chilpancingo</button>
               <button type="button" class="preset-cat-tab" data-cat="Iguala / Norte" onclick="selectPresetCategory('Iguala / Norte')">Iguala / Norte</button>
               <button type="button" class="preset-cat-tab" data-cat="Ayutla / Costa Chica" onclick="selectPresetCategory('Ayutla / Costa Chica')">Ayutla</button>
@@ -1266,13 +2355,29 @@
       .replace(/'/g, '&#39;');
   }
 
+  function escapeAttr(str) {
+    return escapeHtml(str);
+  }
+
   /**
    * Revisa si el plan actual tiene paradas que activan recomendaciones de continuidad
+   * Exclusivo para administradores y soporte; nunca se muestra a técnicos
    */
   root.checkPlanContinuityRecommendations = function () {
     if (typeof document === 'undefined') return;
     const banner = document.getElementById('plan-continuity-recommendations-banner');
     if (!banner) return;
+
+    // Solo permitido para administradores y soporte; técnicos y otros roles NO deben verlo
+    const isTech = (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
+                   (typeof userHasRole === 'function' && userHasRole('tecnico'));
+    const isSoporteOrAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin', 'soporte');
+
+    if (isTech || !isSoporteOrAdmin) {
+      banner.style.display = 'none';
+      banner.innerHTML = '';
+      return;
+    }
 
     if (typeof getPlanStopsRef !== 'function') {
       banner.style.display = 'none';
@@ -1316,11 +2421,25 @@
   /**
    * Agrega las paradas de una continuidad al plan actual
    */
-  root.addContinuityStopsToCurrentPlan = async function (continuityName) {
+  root.addContinuityStopsToCurrentPlan = async function (continuityName, confirmed = false, quickOptions = null) {
+    const isTech = (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
+                   (typeof userHasRole === 'function' && userHasRole('tecnico'));
+    const isSoporteOrAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin', 'soporte');
+
+    if (isTech || !isSoporteOrAdmin) {
+      if (typeof notify === 'function') notify('Solo administradores y soporte pueden agregar continuidades al plan.', 'warn');
+      return;
+    }
+
+    if (!confirmed && typeof document !== 'undefined' && document.body && typeof OM === 'function') {
+      return root.showContinuityConfirmModal(continuityName);
+    }
+
+    const allRoutes = root.getAllPresetRoutes();
     let targetCont = null;
     let parentRoute = null;
 
-    for (const route of PRESET_ROUTES) {
+    for (const route of allRoutes) {
       const found = (route.continuations || []).find(c => c.name === continuityName);
       if (found) {
         targetCont = found;
@@ -1336,75 +2455,69 @@
 
     if (typeof getPlanStopsRef !== 'function') return;
     const stopsRef = getPlanStopsRef();
-    const existingNorm = stopsRef.map(s => normalizeGeoText(s.name));
+    if (!stopsRef) return;
 
     const newStops = [];
-    targetCont.stops.forEach((stopName, idx) => {
-      const sNorm = normalizeGeoText(stopName);
-      if (existingNorm.includes(sNorm)) return; // Ya existe en el plan
+    const skippedStops = [];
 
-      const match = findSystemLocationMatch(stopName);
-      if (match && match.type === 'equipment') {
-        newStops.push({
-          id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
-          type: 'equipment',
-          equipmentId: match.equipmentId,
-          linkedNodeIds: (typeof getEquipmentLinkedNodeIds === 'function' ? getEquipmentLinkedNodeIds(match.equipmentId) : []),
-          includeLinkedNodeDetails: false,
-          name: match.name,
-          lat: match.lat,
-          lng: match.lng,
-          detailIds: [],
-          notes: `Continuidad: ${targetCont.name}`,
-          materialPlanned: '',
-          assignedTechId: '',
-          siteStatus: 'pendiente',
-          createdAt: new Date().toISOString()
-        });
-      } else if (match && match.type === 'node') {
-        newStops.push({
-          id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
-          type: 'manual',
-          name: match.name,
-          lat: match.lat,
-          lng: match.lng,
-          region: match.region || '',
-          detailIds: [],
-          notes: `Continuidad: ${targetCont.name}`,
-          materialPlanned: '',
-          assignedTechId: '',
-          siteStatus: 'pendiente',
-          createdAt: new Date().toISOString()
-        });
+    targetCont.stops.forEach((stopName, idx) => {
+      let finalName = stopName;
+      if (quickOptions && Array.isArray(quickOptions.customStops)) {
+        const found = quickOptions.customStops[idx];
+        if (found && found.newName) finalName = found.newName;
+      }
+      const stopObj = buildStopObject(finalName, idx, `Continuidad: ${targetCont.name}`);
+      if (isStopAlreadyInList(stopObj, stopsRef)) {
+        skippedStops.push(stopObj);
       } else {
-        newStops.push({
-          id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
-          type: 'manual',
-          name: stopName,
-          lat: 17.5500,
-          lng: -99.5000,
-          region: '',
-          detailIds: [],
-          notes: `Continuidad: ${targetCont.name}`,
-          materialPlanned: '',
-          assignedTechId: '',
-          siteStatus: 'pendiente',
-          createdAt: new Date().toISOString()
-        });
+        newStops.push(stopObj);
       }
     });
 
+    // Registrar continuidad como aplicada para que desaparezca y no vuelva a ofrecerse
+    appliedContinuities.add(continuityName);
+
+    // Ocultar banner de continuidad inmediatamente para que desaparezca
+    if (typeof document !== 'undefined') {
+      const banner = document.getElementById('plan-continuity-recommendations-banner');
+      if (banner) {
+        banner.style.display = 'none';
+        banner.innerHTML = '';
+      }
+    }
+
+    if (typeof CM === 'function') {
+      CM('preset-route-confirm-mo');
+    }
+
     if (!newStops.length) {
-      if (typeof notify === 'function') notify('Todas las paradas de esta continuidad ya están en el plan.', 'warn');
+      if (typeof notify === 'function') notify('Todos los pueblos y antenas de esta continuidad ya existen en el plan actual.', 'warn');
+      if (typeof renderPlan === 'function') renderPlan();
       return;
     }
 
     stopsRef.push(...newStops);
+
+    // Si se asignaron técnicos adicionales en configuración rápida, aplicarlos al plan
+    if (quickOptions && Array.isArray(quickOptions.selectedTechIds) && quickOptions.selectedTechIds.length) {
+      const currentPlan = typeof getSelectedGeneralPlan === 'function' ? getSelectedGeneralPlan() : null;
+      if (currentPlan) {
+        const currentIds = new Set(Array.isArray(currentPlan.assignedTechIds) ? currentPlan.assignedTechIds : (currentPlan.assignedTechId ? [currentPlan.assignedTechId] : []));
+        quickOptions.selectedTechIds.forEach(id => currentIds.add(id));
+        currentPlan.assignedTechIds = Array.from(currentIds);
+        if (!currentPlan.assignedTechId) currentPlan.assignedTechId = currentPlan.assignedTechIds[0];
+      }
+    }
+
     if (typeof saveDB === 'function') await saveDB();
     if (typeof renderPlan === 'function') renderPlan();
 
     if (typeof notify === 'function') {
-      notify(`Se agregaron ${newStops.length} paradas de "${targetCont.name}" al plan ✓`);
+      if (skippedStops.length > 0) {
+        notify(`Se agregaron ${newStops.length} paradas de "${targetCont.name}" (${skippedStops.length} omitidas por ya existir) ✓`);
+      } else {
+        notify(`Se agregaron ${newStops.length} paradas de "${targetCont.name}" al plan ✓`);
+      }
     }
   };
 
@@ -1430,21 +2543,26 @@
       'recorrido-tlayolapa'
     ];
 
-    const popularRoutes = PRESET_ROUTES.filter(r => popularIds.includes(r.id));
-    chipsContainer.innerHTML = popularRoutes.map(r => `
-      <button type="button" class="plan-create-preset-chip" onclick="applyPresetRouteToCreateModal('${r.id}')" title="Cargar ${r.stops.length} paradas de ${escapeHtml(r.name)}">
-        <span>🚗</span>
-        <span>${escapeHtml(r.name.replace(/^Ruta\s+/i, ''))}</span>
-        <small style="opacity:0.7">(${r.stops.length})</small>
-      </button>
-    `).join('');
+    const popularRoutes = root.getAllPresetRoutes().filter(r => popularIds.includes(r.id));
+    chipsContainer.innerHTML = popularRoutes.map(r => {
+      const rDetails = root.getRouteTotalRegisteredDetails(r);
+      const detText = rDetails.length ? ` · ${rDetails.length} det` : '';
+      return `
+        <button type="button" class="plan-create-preset-chip" onclick="applyPresetRouteToCreateModal('${r.id}')" title="Cargar ${r.stops.length} paradas (${rDetails.length} detalles) de ${escapeHtml(r.name)}">
+          <span>🚗</span>
+          <span>${escapeHtml(r.name.replace(/^Ruta\s+/i, ''))}</span>
+          <small style="opacity:0.7">(${r.stops.length}${detText})</small>
+        </button>
+      `;
+    }).join('');
   };
 
   /**
    * Al dar clic en un chip del modal de creación, llena el campo y crea el plan con las paradas
    */
   root.applyPresetRouteToCreateModal = function (routeId) {
-    const route = PRESET_ROUTES.find(r => r.id === routeId);
+    const allRoutes = root.getAllPresetRoutes();
+    const route = allRoutes.find(r => r.id === routeId) || PRESET_ROUTES.find(r => r.id === routeId);
     if (!route) return;
 
     const input = document.getElementById('plan-create-name');
@@ -1454,4 +2572,22 @@
     root.attachPresetRouteToPlan(routeId, true);
     if (typeof CM === 'function') CM('plan-create-mo');
   };
+
+  if (typeof window !== 'undefined') {
+    window.showPresetRouteConfirmModal = root.showPresetRouteConfirmModal;
+    window.confirmAndAttachPresetRoute = root.confirmAndAttachPresetRoute;
+    window.showContinuityConfirmModal = root.showContinuityConfirmModal;
+    window.confirmAndAddContinuity = root.confirmAndAddContinuity;
+    window.attachPresetRouteToPlan = root.attachPresetRouteToPlan;
+    window.addContinuityStopsToCurrentPlan = root.addContinuityStopsToCurrentPlan;
+    window.openCreatePresetRouteModal = root.openCreatePresetRouteModal;
+    window.openEditPresetRouteModal = root.openEditPresetRouteModal;
+    window.addPresetFormStopRow = root.addPresetFormStopRow;
+    window.removePresetFormStopRow = root.removePresetFormStopRow;
+    window.movePresetFormStopRow = root.movePresetFormStopRow;
+    window.savePresetRouteForm = root.savePresetRouteForm;
+    window.deleteCustomPresetRoute = root.deleteCustomPresetRoute;
+    window.getAllPresetRoutes = root.getAllPresetRoutes;
+    window.canManagePresetRoutes = root.canManagePresetRoutes;
+  }
 })();

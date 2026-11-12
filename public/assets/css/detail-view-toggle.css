@@ -4077,17 +4077,29 @@ body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero
 @media (max-width: 1250px) {
   body.orders-page .hero-panel.compact-hero.orders-hero,
   body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero.orders-hero,
+  body[data-module] .hero-panel.compact-hero.orders-hero,
+  body[data-module="orders"] .hero-panel.compact-hero.orders-hero,
   .orders-page .orders-hero {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
     flex-wrap: wrap !important;
     height: auto !important;
     min-height: 0 !important;
-    gap: 8px !important;
-    padding: 8px 12px !important;
+    gap: 10px !important;
+    padding: 10px 14px !important;
   }
   body.orders-page .orders-hero-main,
   .orders-page .orders-hero-main {
     width: 100% !important;
     flex: 1 1 100% !important;
+    max-width: 100% !important;
+    margin-bottom: 2px !important;
+  }
+  body.orders-page .orders-hero-copy,
+  .orders-page .orders-hero-copy {
+    width: 100% !important;
     max-width: 100% !important;
   }
   body.orders-page .compact-stats.orders-stats,
@@ -4096,26 +4108,30 @@ body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero
     width: 100% !important;
     flex: 1 1 100% !important;
     justify-content: flex-start !important;
+    align-items: center !important;
     flex-wrap: wrap !important;
     gap: 6px !important;
+    margin-top: 4px !important;
   }
 }
 
-/* Fila única horizontal de contadores compactos alineada a la derecha */
-body.orders-page .compact-stats.orders-stats,
-body.orders-page:not(.tech-route-body):not(.login-page) .compact-stats.orders-stats,
-.orders-page .orders-stats {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-  flex-wrap: nowrap !important;
-  gap: 7px !important;
-  width: auto !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  grid-template-columns: none !important;
-  flex: 0 0 auto !important;
+/* Fila única horizontal de contadores compactos alineada a la derecha en pantallas amplias */
+@media (min-width: 1251px) {
+  body.orders-page .compact-stats.orders-stats,
+  body.orders-page:not(.tech-route-body):not(.login-page) .compact-stats.orders-stats,
+  .orders-page .orders-stats {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex-wrap: nowrap !important;
+    gap: 7px !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    grid-template-columns: none !important;
+    flex: 0 0 auto !important;
+  }
 }
 
 /* Tarjetas individuales de estadísticas convertidas en chips compactos de 32px */

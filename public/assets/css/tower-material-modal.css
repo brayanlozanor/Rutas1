@@ -220,14 +220,422 @@
 }
 
 .tower-mat-photos-section {
-  border: 1px dashed #cbd5e1;
-  border-radius: 16px;
-  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 18px;
   background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ==========================================================================
+   CHECKLIST DE FOTOS ESPECÍFICAS DE TORRE (UX ÁGIL Y MODERNA)
+   ========================================================================== */
+
+.tower-photos-checklist-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
+
+.tower-photos-checklist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tower-photos-checklist-title {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.tower-photos-checklist-subtitle {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.btn-tower-bulk-upload {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.25) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  cursor: pointer !important;
+  padding: 8px 15px !important;
+  border-radius: 10px !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.btn-tower-bulk-upload:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 10px rgba(2, 132, 199, 0.35) !important;
+}
+
+.tower-photos-progress-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tower-photos-progress-bar-track {
+  width: 100%;
+  height: 10px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.tower-photos-progress-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0284c7 0%, #10b981 100%);
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tower-photos-progress-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.tower-photos-optional-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.tower-photo-group {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tower-photo-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1.5px solid #e2e8f0;
+}
+
+.tower-photo-group-header h4 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.tower-photo-group-badge {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+  margin-left: auto;
+}
+
+.tower-photo-group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.tower-slot-card {
+  background: #ffffff;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.tower-slot-card:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+}
+
+.tower-slot-card.is-captured {
+  border-style: solid;
+  border-color: #10b981;
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.08);
+}
+
+.tower-slot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.tower-slot-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tower-slot-icon {
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.tower-slot-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tower-slot-req-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.tower-slot-req-badge.is-required {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.tower-slot-req-badge.is-optional {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.tower-slot-req-badge.is-done {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.tower-slot-prompt {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-size: 11.5px;
+  color: #475569;
+  line-height: 1.35;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.tower-slot-prompt strong {
+  color: #0f172a;
+}
+
+.tower-slot-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.btn-slot-action {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.btn-slot-action.primary {
+  background: #0284c7;
+  color: #ffffff;
+  border: 1px solid #0369a1;
+}
+
+.btn-slot-action.primary:hover {
+  background: #0369a1;
+}
+
+.btn-slot-action.secondary {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.btn-slot-action.secondary:hover {
+  background: #e2e8f0;
+}
+
+.tower-slot-preview {
+  position: relative;
+  width: 100%;
+  height: 115px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0f172a;
+  cursor: pointer;
+}
+
+.tower-slot-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s ease;
+}
+
+.tower-slot-preview:hover img {
+  transform: scale(1.05);
+}
+
+.tower-slot-preview-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tower-slot-preview:hover .tower-slot-preview-overlay {
+  opacity: 1;
+}
+
+.tower-slot-prompt-done {
+  font-size: 11px;
+  font-weight: 700;
+  color: #059669;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tower-slot-actions.is-replace {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-slot-mini {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.btn-slot-mini:hover {
+  background: #e2e8f0;
+}
+
+.btn-slot-remove {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.btn-slot-remove:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.tower-photos-extras-section {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 14px;
+  margin-top: 6px;
+}
+
+.tower-photos-extras-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.tower-photos-extras-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.tower-photos-extras-sub {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+}
+
+@media (max-width: 640px) {
+  .tower-photo-group-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .tower-slot-card {
+    padding: 10px 12px;
+  }
+}
+
 
 .tower-mat-photos-head {
   display: flex;
@@ -422,7 +830,7 @@
   background: linear-gradient(135deg, #0284c7 0%, #2563eb 55%, #4f46e5 100%) !important;
   border-color: #93c5fd !important;
   box-shadow: 0 2px 10px rgba(37, 99, 235, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.3) inset !important;
-  animation: towerCalloutPulse 3s infinite ease-in-out !important;
+  animation: none !important;
 }
 
 .btn-tower-callout.is-pending:hover,
