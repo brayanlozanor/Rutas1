@@ -148,7 +148,7 @@
 }
 
 .order-tech-report-mo {
-    z-index: 13000 !important;
+    z-index: 10000 !important;
     padding: 18px !important;
     overflow-y: auto !important
 }

@@ -29,7 +29,7 @@ const ROLE_PAGE_ACCESS = {
         'login.html',
         ''
     ]),
-    tecnico: new Set(['planificar.html', 'material.html', 'historial.html', 'login.html', ''])
+    tecnico: new Set(['planificar.html', 'ordenes.html', 'material.html', 'historial.html', 'login.html', ''])
 };
 
 function getCurrentUser() {
@@ -203,15 +203,46 @@ function notify(message, type = 'ok') {
 
 function OM(id) {
     const modal = document.getElementById(id);
-    if (modal) modal.classList.add('open');
+    if (!modal) return;
+    try {
+        if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+            const openModals = Array.from(document.querySelectorAll('.mo.open')).filter(el => el !== modal);
+            let maxZ = 14000;
+            for (const el of openModals) {
+                const zStr = (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function')
+                    ? window.getComputedStyle(el).zIndex
+                    : (el.style?.zIndex || '');
+                const zNum = parseInt(zStr, 10);
+                if (Number.isFinite(zNum) && zNum > maxZ) maxZ = zNum;
+            }
+            const ownZStr = (typeof window !== 'undefined' && typeof window.getComputedStyle === 'function')
+                ? window.getComputedStyle(modal).zIndex
+                : (modal.style?.zIndex || '');
+            const ownZ = parseInt(ownZStr, 10) || 0;
+            const isConfirmOrPrompt = ['action-confirm-mo', 'action-prompt-mo', 'logout-confirm-mo', 'decision-mo', 'preset-route-confirm-mo'].includes(id);
+            const minTargetZ = isConfirmOrPrompt ? 35000 : (id === 'order-chat-close-decision-mo' ? 16000 : 15000);
+            const nextZ = Math.max(ownZ, maxZ + 200, minTargetZ);
+            if (modal.style && typeof modal.style.setProperty === 'function') {
+                modal.style.setProperty('z-index', String(nextZ), 'important');
+            }
+            if (modal.parentElement && typeof document.body.appendChild === 'function') {
+                document.body.appendChild(modal);
+            }
+        }
+    } catch (e) {}
+    modal.classList.add('open');
 }
 
 function CM(id) {
     const modal = document.getElementById(id);
     if (modal) {
         modal.classList.remove('open');
-        modal.style.removeProperty('display');
-        modal.style.removeProperty('z-index');
+        if (modal.style && typeof modal.style.removeProperty === 'function') {
+            modal.style.removeProperty('display');
+            if (id !== 'order-chat-close-decision-mo' && id !== 'insert-physical-record-mo') {
+                modal.style.removeProperty('z-index');
+            }
+        }
     }
 }
 
@@ -1017,10 +1048,10 @@ function askConfirmation({ title = 'Confirmar acción', message = '', confirmTex
         ok.textContent = confirmText;
         ok.className = `btn ${tone === 'ok' ? 'btn-ok-success' : (tone === 'warning' ? 'btn-ok-warning' : 'btn-ok-danger')}`;
     }
-    modal.classList.add('open');
+    OM('action-confirm-mo');
     return new Promise(resolve => {
         const done = value => {
-            modal.classList.remove('open');
+            CM('action-confirm-mo');
             ok?.removeEventListener('click', onOk);
             cancel?.removeEventListener('click', onCancel);
             modal.removeEventListener('click', onOutside);
@@ -1125,8 +1156,7 @@ function askReasonPrompt({
         inputEl.value = initialValue || '';
     }
     if (cancel) cancel.textContent = cancelText;
-
-    modal.classList.add('open');
+    OM('action-prompt-mo');
     setTimeout(() => {
         if (inputEl) {
             inputEl.focus();
@@ -1136,7 +1166,7 @@ function askReasonPrompt({
 
     return new Promise(resolve => {
         const done = val => {
-            modal.classList.remove('open');
+            CM('action-prompt-mo');
             ok?.removeEventListener('click', onOk);
             cancel?.removeEventListener('click', onCancel);
             modal.removeEventListener('click', onOutside);
@@ -1555,16 +1585,16 @@ function hydrateLogoLinks() {
 }
 
 const NAV_ITEMS = [
-    { href: 'dashboard.html', icon: '<svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><path d="m3 8 6-5 6 7 6-5"/></svg>', label: 'Dashboard' },
-    { href: 'mapa.html', icon: '<svg viewBox="0 0 24 24"><path d="m3 6 5-2 8 3 5-2v13l-5 2-8-3-5 2Z"/><path d="M8 4v13M16 7v13"/></svg>', label: 'Mapa Mikrotiks' },
-    { href: 'antenas.html', icon: '<img src="assets/icons/antenna-module-256-v1.png" alt="">', label: 'Antenas' },
-    { href: 'nodos.html', icon: '<svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg>', label: 'Pueblos' },
-    { href: 'planificar.html', icon: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>', label: 'Planificar' },
-    { href: 'ordenes.html?detailKind=network', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><path d="M12 7v4M5 16v-3h14v3"/></svg>', label: 'Detalles de red' },
-    { href: 'ordenes.html?detailKind=physical', icon: '<svg viewBox="0 0 24 24"><path d="M14 6a4 4 0 0 0-5 5L3 17l4 4 6-6a4 4 0 0 0 5-5l-3 3-4-4z"/></svg>', label: 'Detalles físicos' },
-    { href: 'material.html', icon: '<svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="m4 7v10l8 4 8-4V7M12 11v10"/></svg>', label: 'Material' },
-    { href: 'historial.html', icon: '<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>', label: 'Historial' },
-    { href: 'tecnicos.html', adminOnly: true, icon: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>', label: 'Usuarios' }
+    { href: 'dashboard.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>', label: 'Dashboard' },
+    { href: 'mapa.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>', label: 'Mapa Mikrotiks' },
+    { href: 'antenas.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M4 22h16M7 17h10M8 12h8M9 7h6M6 22l6-19 6 19"/></svg>', label: 'Antenas' },
+    { href: 'nodos.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>', label: 'Pueblos' },
+    { href: 'planificar.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="m9 16 2 2 4-4"/></svg>', label: 'Planificar' },
+    { href: 'ordenes.html?detailKind=network', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/><path d="M19 16v2a7 7 0 0 1-7 7m-2 0h-1"/></svg>', label: 'Detalles de red' },
+    { href: 'ordenes.html?detailKind=physical', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>', label: 'Detalles físicos' },
+    { href: 'material.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>', label: 'Material' },
+    { href: 'historial.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>', label: 'Historial' },
+    { href: 'tecnicos.html', adminOnly: true, icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', label: 'Usuarios' }
 ];
 
 function buildNavigationHtml() {
@@ -1631,8 +1661,20 @@ function updateActiveNavLink() {
     const current = getCurrentPageName();
     const currentParams = new URLSearchParams(window.location.search);
     let currentKind = currentParams.get('detailKind');
+    if (current === 'ordenes.html') {
+        const memKind = String(window.activeOrderDetailKind || document.body?.dataset?.detailKind || '').toLowerCase();
+        if (memKind === 'network' || memKind === 'physical') {
+            currentKind = memKind;
+        }
+    }
     if (!currentKind && typeof activeOrderDetailKind !== 'undefined') {
         currentKind = activeOrderDetailKind;
+    }
+    if (!currentKind && typeof window !== 'undefined' && window.activeOrderDetailKind) {
+        currentKind = window.activeOrderDetailKind;
+    }
+    if (!currentKind && typeof document !== 'undefined' && document.body?.dataset?.detailKind) {
+        currentKind = document.body.dataset.detailKind;
     }
     if (!currentKind && current === 'ordenes.html') {
         currentKind = 'network';
@@ -1686,12 +1728,18 @@ function setupResponsiveMenu() {
                 const linkHref = link.getAttribute('href') || '';
                 if (linkHref.includes('detailKind=network')) {
                     e.preventDefault();
+                    if (typeof closeOrderReportModalDirectly === 'function') {
+                        closeOrderReportModalDirectly();
+                    }
                     if (typeof selectOrderDetailKind === 'function') {
                         selectOrderDetailKind('network', true);
                     }
                     updateActiveNavLink();
                 } else if (linkHref.includes('detailKind=physical')) {
                     e.preventDefault();
+                    if (typeof closeOrderReportModalDirectly === 'function') {
+                        closeOrderReportModalDirectly();
+                    }
                     if (typeof selectOrderDetailKind === 'function') {
                         selectOrderDetailKind('physical', true);
                     }
@@ -1828,7 +1876,92 @@ function setStoredNotificationsInbox(items) {
   } catch (e) {}
 }
 
-function addNotificationToInbox({ id, title, message, type, orderId = '', eventId = '', url = '', createdAt = new Date().toISOString() }) {
+function getNotificationRelatedNetworkDetail(notif) {
+  if (!notif) return null;
+  // 1. Explicit properties on notif
+  const explicit = notif.originNetworkFolio || notif.networkOrderFolio || notif.relatedNetworkFolio;
+  if (explicit) {
+    return { folio: String(explicit).trim(), isDirect: !notif.originNetworkFolio };
+  }
+
+  const orderId = notif.orderId || notif.networkOrderId;
+  let order = null;
+  if (orderId && typeof state !== 'undefined' && Array.isArray(state.workOrders)) {
+    order = state.workOrders.find(w => w && (w.id === orderId || w.folio === orderId));
+  }
+
+  if (order) {
+    if (order.originNetworkFolio) {
+      return { folio: String(order.originNetworkFolio).trim(), town: order.town || order.nodeName || '', isDirect: false };
+    }
+    if (order.originNetworkOrderId) {
+      const orig = state.workOrders.find(w => w && w.id === order.originNetworkOrderId);
+      const origFolio = orig ? (orig.folio || (typeof getOrderFolio === 'function' ? getOrderFolio(orig) : '') || orig.id) : order.originNetworkOrderId;
+      if (origFolio) {
+        return { folio: String(origFolio).trim(), town: orig?.town || order.town || '', isDirect: false };
+      }
+    }
+    const isNet = order.detailKind === 'network' ||
+                  (typeof getOrderDetailKind === 'function' && getOrderDetailKind(order) === 'network') ||
+                  /_red$|^red_/.test(String(order.category || '')) ||
+                  String(order.id || '').startsWith('RED-') ||
+                  String(order.folio || '').startsWith('RED-');
+    if (isNet) {
+      const f = order.folio || (typeof getOrderFolio === 'function' ? getOrderFolio(order) : '') || (order.id ? (String(order.id).startsWith('RED-') ? order.id : `RED-${order.id}`) : '');
+      if (f) {
+        return { folio: String(f).trim(), town: order.town || order.nodeName || '', isDirect: true };
+      }
+    }
+  }
+
+  if (orderId && String(orderId).startsWith('RED-')) {
+    return { folio: String(orderId).trim(), isDirect: true };
+  }
+
+  if (notif.url) {
+    try {
+      const origin = (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : 'http://localhost';
+      const u = new URL(notif.url, origin);
+      const paramKind = u.searchParams.get('detailKind');
+      const paramId = u.searchParams.get('orderId') || u.searchParams.get('id');
+      if (paramKind === 'network' && paramId) {
+        const f = String(paramId).startsWith('RED-') ? paramId : `RED-${paramId}`;
+        return { folio: f, isDirect: true };
+      }
+      if (paramId && String(paramId).startsWith('RED-')) {
+        return { folio: paramId, isDirect: true };
+      }
+    } catch (_) {}
+  }
+
+  const text = `${notif.title || ''} ${notif.message || ''}`;
+  const match = text.match(/\b(RED-[A-Za-z0-9_-]+)\b/i);
+  if (match) {
+    return { folio: match[1].toUpperCase(), isDirect: true };
+  }
+
+  if (orderId && notif.type && (notif.type.startsWith('network_') || ['attending', 'resolved', 'returned', 'confirmed', 'review_deferred', 'reopened'].includes(notif.type))) {
+    const folio = String(orderId).startsWith('RED-') ? String(orderId) : `RED-${String(orderId).slice(-6).toUpperCase()}`;
+    return { folio, isDirect: true };
+  }
+
+  return null;
+}
+
+function renderNotificationNetworkRef(notif) {
+  if (!notif) return '';
+  const netInfo = getNotificationRelatedNetworkDetail(notif);
+  if (!netInfo || !netInfo.folio) return '';
+  if (notif.title && notif.title.includes(netInfo.folio)) return '';
+
+  const tooltip = `Detalle de red relacionado: ${escapeHtml(netInfo.folio)}${netInfo.town ? ' · ' + escapeHtml(netInfo.town) : ''}`;
+  return `<span class="notif-network-ref-pill" style="display:inline-flex;align-items:center;gap:3px;font-size:9.5px;font-weight:700;color:#0284c7;background:#f0f9ff;border:1px solid #bae6fd;padding:1px 6px;border-radius:9999px;white-space:nowrap;line-height:1.4;letter-spacing:0.01em;vertical-align:middle;max-width:180px;overflow:hidden;text-overflow:ellipsis;" title="${tooltip}">` +
+    `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.85;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>` +
+    `<span>Red: ${escapeHtml(netInfo.folio)}</span>` +
+  `</span>`;
+}
+
+function addNotificationToInbox({ id, title, message, type, orderId = '', networkOrderId = '', networkOrderFolio = '', originNetworkFolio = '', eventId = '', url = '', createdAt = new Date().toISOString() }) {
   const isTecnico = (typeof userHasRole === 'function' && userHasRole('tecnico')) ||
                     (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
                     (typeof normalizeRole === 'function' && normalizeRole(typeof getCurrentUser === 'function' ? getCurrentUser()?.role : '') === 'tecnico') ||
@@ -1838,6 +1971,19 @@ function addNotificationToInbox({ id, title, message, type, orderId = '', eventI
   const inbox = getStoredNotificationsInbox();
   const isPhysical = type === 'physical' || type === 'sent_to_physical';
   const computedUrl = url || (orderId ? `/ordenes.html?detailKind=${isPhysical ? 'physical' : 'network'}&orderId=${encodeURIComponent(orderId)}` : '');
+  
+  const netInfo = getNotificationRelatedNetworkDetail({
+    orderId,
+    networkOrderId,
+    networkOrderFolio,
+    originNetworkFolio,
+    url: computedUrl,
+    type,
+    title,
+    message
+  });
+  const resolvedNetFolio = networkOrderFolio || originNetworkFolio || (netInfo ? netInfo.folio : '');
+
   // Evitar duplicados idénticos; en mensajes de chat permitir múltiples notificaciones usando eventId único por mensaje
   const existingIdx = inbox.findIndex(x =>
     (id && x.id === id) ||
@@ -1850,6 +1996,9 @@ function addNotificationToInbox({ id, title, message, type, orderId = '', eventI
       message,
       type,
       orderId,
+      networkOrderId: networkOrderId || inbox[existingIdx].networkOrderId || '',
+      networkOrderFolio: resolvedNetFolio || inbox[existingIdx].networkOrderFolio || '',
+      originNetworkFolio: originNetworkFolio || inbox[existingIdx].originNetworkFolio || '',
       eventId,
       url: computedUrl || inbox[existingIdx].url || '',
       unread: true,
@@ -1865,6 +2014,9 @@ function addNotificationToInbox({ id, title, message, type, orderId = '', eventI
     message,
     type,
     orderId,
+    networkOrderId: networkOrderId || '',
+    networkOrderFolio: resolvedNetFolio || '',
+    originNetworkFolio: originNetworkFolio || '',
     eventId,
     url: computedUrl,
     unread: true,
@@ -2140,6 +2292,8 @@ function renderNotificationCenter() {
             const isNetwork = (req.detailKind || order?.detailKind) === 'network';
             const typeLabel = isNetwork ? 'Detalle de red' : (type === 'detail' ? 'Detalle físico' : (type === 'node' ? 'Pueblo' : (type === 'equipment' ? 'Antena' : 'Elemento')));
             const dateStr = req.createdAt ? new Date(req.createdAt).toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
+            const reqNetFolio = req.originNetworkFolio || order?.originNetworkFolio || (isNetwork ? (folio || req.folio || order?.folio) : '');
+            const reqNetBadge = reqNetFolio ? renderNotificationNetworkRef({ originNetworkFolio: reqNetFolio }) : '';
 
             itemsHtml.push(`
                 <div class="notification-item deletion-request-card" style="border-left:4px solid #ef4444;margin-bottom:10px;padding:12px 14px;background:#fff;border-radius:14px;box-shadow:0 4px 14px rgba(15,23,42,0.06);">
@@ -2148,6 +2302,7 @@ function renderNotificationCenter() {
                             <span class="badge" style="background:#fee2e2;color:#991b1b;font-weight:800;font-size:10px;">Solicitud de Eliminación</span>
                             <span class="badge" style="background:#f1f5f9;color:#334155;font-size:10px;font-weight:700;">${escapeHtml(typeLabel)}</span>
                             ${folio ? `<span class="badge" style="background:#e0f2fe;color:#0369a1;font-weight:800;font-size:10.5px;">${escapeHtml(folio)}</span>` : ''}
+                            ${!isNetwork && reqNetBadge ? reqNetBadge : ''}
                         </div>
                         ${dateStr ? `<small style="color:#94a3b8;font-size:10.5px;font-weight:700;white-space:nowrap;">${escapeHtml(dateStr)}</small>` : ''}
                     </div>
@@ -2182,11 +2337,15 @@ function renderNotificationCenter() {
             materialItems.forEach(notif => {
                 const dateStr = notif.createdAt ? new Date(notif.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }) : '';
                 const unreadStyle = notif.unread ? 'background:#f0f9ff;border-color:#bae6fd;' : 'background:#ffffff;opacity:0.85;';
+                const netRefBadge = renderNotificationNetworkRef(notif);
                 itemsHtml.push(`
-                    <div class="notification-item" style="${unreadStyle}border-left:4px solid #0284c7;margin-bottom:8px;cursor:pointer;" onclick="markNotificationAsRead('${notif.id}','${notif.url || ''}');if(typeof checkTechnicianPendingMaterialPrompt==='function')checkTechnicianPendingMaterialPrompt();">
+                    <div class="notification-item" style="${unreadStyle}border-left:4px solid #0284c7;margin-bottom:8px;padding:10px 12px;cursor:pointer;" onclick="markNotificationAsRead('${notif.id}','${notif.url || ''}');if(typeof checkTechnicianPendingMaterialPrompt==='function')checkTechnicianPendingMaterialPrompt();">
                         <div class="notification-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                            <strong style="font-size:13px;color:#0f172a;">${escapeHtml(notif.title)}</strong>
-                            ${notif.unread ? '<span class="badge" style="background:#0284c7;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;">Nuevo</span>' : ''}
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;">
+                                <strong style="font-size:13px;color:#0f172a;">${escapeHtml(notif.title)}</strong>
+                                ${netRefBadge}
+                            </div>
+                            ${notif.unread ? '<span class="badge" style="background:#0284c7;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;flex-shrink:0;">Nuevo</span>' : ''}
                         </div>
                         <div style="font-size:12px;color:#334155;margin:4px 0 6px;line-height:1.4;">${escapeHtml(notif.message)}</div>
                         <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#94a3b8;">
@@ -2207,11 +2366,15 @@ function renderNotificationCenter() {
             prodItems.forEach(notif => {
                 const dateStr = notif.createdAt ? new Date(notif.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }) : '';
                 const unreadStyle = notif.unread ? 'background:#f0fdf4;border-color:#bbf7d0;' : 'background:#ffffff;opacity:0.85;';
+                const netRefBadge = renderNotificationNetworkRef(notif);
                 itemsHtml.push(`
-                    <div class="notification-item" style="${unreadStyle}border-left:4px solid #10b981;margin-bottom:8px;cursor:pointer;" onclick="markNotificationAsRead('${notif.id}');if(typeof openTechnicianProductivitySummary==='function')openTechnicianProductivitySummary();">
+                    <div class="notification-item" style="${unreadStyle}border-left:4px solid #10b981;margin-bottom:8px;padding:10px 12px;cursor:pointer;" onclick="markNotificationAsRead('${notif.id}');if(typeof openTechnicianProductivitySummary==='function')openTechnicianProductivitySummary();">
                         <div class="notification-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                            <strong style="font-size:13px;color:#0f172a;">${escapeHtml(notif.title)}</strong>
-                            ${notif.unread ? '<span class="badge" style="background:#10b981;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;">Nuevo</span>' : ''}
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;">
+                                <strong style="font-size:13px;color:#0f172a;">${escapeHtml(notif.title)}</strong>
+                                ${netRefBadge}
+                            </div>
+                            ${notif.unread ? '<span class="badge" style="background:#10b981;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;flex-shrink:0;">Nuevo</span>' : ''}
                         </div>
                         <div style="font-size:12px;color:#334155;margin:4px 0 6px;line-height:1.4;">${escapeHtml(notif.message)}</div>
                         <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#94a3b8;">
@@ -2234,11 +2397,15 @@ function renderNotificationCenter() {
                 const dateStr = notif.createdAt ? new Date(notif.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }) : '';
                 const unreadStyle = notif.unread ? 'background:#f0f9ff;border-color:#bae6fd;' : 'background:#ffffff;opacity:0.85;';
                 const accentColor = notif.type === 'resolved' ? '#10b981' : (notif.type === 'returned' ? '#f59e0b' : '#3b82f6');
+                const netRefBadge = renderNotificationNetworkRef(notif);
                 itemsHtml.push(`
-                    <div class="notification-item" style="${unreadStyle}border-left:4px solid ${accentColor};margin-bottom:8px;cursor:pointer;transition:transform 0.12s;" onclick="markNotificationAsRead('${notif.id}','${notif.url || ''}')">
+                    <div class="notification-item" style="${unreadStyle}border-left:4px solid ${accentColor};margin-bottom:8px;padding:10px 12px;cursor:pointer;transition:transform 0.12s;" onclick="markNotificationAsRead('${notif.id}','${notif.url || ''}')">
                         <div class="notification-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-                            <strong style="font-size:13px;color:#0f172a;">${escapeHtml(notif.title)}</strong>
-                            ${notif.unread ? '<span class="badge" style="background:#0284c7;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;">Nuevo</span>' : ''}
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;">
+                                <strong style="font-size:13px;color:#0f172a;">${escapeHtml(notif.title)}</strong>
+                                ${netRefBadge}
+                            </div>
+                            ${notif.unread ? '<span class="badge" style="background:#0284c7;color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;flex-shrink:0;">Nuevo</span>' : ''}
                         </div>
                         <div style="font-size:12px;color:#334155;margin:4px 0 6px;line-height:1.4;">${escapeHtml(notif.message)}</div>
                         <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#94a3b8;">
@@ -2680,6 +2847,19 @@ function ensureInsertPhysicalRecordModal() {
       </div>
     `);
     modal = document.getElementById('insert-physical-record-mo');
+    if (modal && typeof modal.addEventListener === 'function') {
+      modal.addEventListener('click', event => {
+        if (event.target === modal) CM('insert-physical-record-mo');
+      });
+    }
+  }
+  if (modal) {
+    if (modal.style && typeof modal.style.setProperty === 'function') {
+      modal.style.setProperty('z-index', '18000', 'important');
+    }
+    if (modal.parentElement && typeof document !== 'undefined' && modal.parentElement === document.body && typeof document.body.appendChild === 'function') {
+      document.body.appendChild(modal);
+    }
   }
 }
 
@@ -3321,7 +3501,7 @@ function _injectNetworkNotificationStyles() {
 }
 
 function getNotificationVolume() {
-  if (typeof window === 'undefined') return 0.45;
+  if (typeof window === 'undefined') return 0.85;
   try {
     const raw = localStorage.getItem('netops_notification_volume');
     if (raw !== null) {
@@ -3331,12 +3511,12 @@ function getNotificationVolume() {
       }
     }
   } catch (e) {}
-  return 0.45; // Nivel suave y discreto predeterminado (45%)
+  return 0.85; // Nivel de volumen predeterminado claro y perceptible (85%)
 }
 
 function setNotificationVolume(val) {
   const num = typeof val === 'number' ? (val > 1 ? val / 100 : val) : (parseFloat(val) / 100);
-  const clamped = Math.min(1, Math.max(0.1, Number.isFinite(num) ? num : 0.45));
+  const clamped = Math.min(1, Math.max(0.1, Number.isFinite(num) ? num : 0.85));
   try {
     localStorage.setItem('netops_notification_volume', String(clamped));
   } catch (e) {}
@@ -3400,54 +3580,54 @@ function playSubtleNotificationTone() {
         const now = ctx.currentTime;
 
         // Tono formal WifiMex: E5 (659.25Hz) -> G#5 (830.61Hz) -> B5 (987.77Hz) con overtone cristalino E6 (1318.51Hz)
-        // Duración ~0.68s, volumen proporcional al ajuste de usuario (mínimo 10%, no desactivable)
+        // Ganancias optimizadas con volumen predeterminado al 85% y control deslizable de 10% a 100%
         const osc1 = ctx.createOscillator();
         const gain1 = ctx.createGain();
         osc1.type = 'sine';
         osc1.frequency.setValueAtTime(659.25, now);
         gain1.gain.setValueAtTime(0.0001, now);
-        gain1.gain.linearRampToValueAtTime(0.18 * vol, now + 0.015);
-        gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+        gain1.gain.linearRampToValueAtTime(0.40 * vol, now + 0.015);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.44);
         osc1.connect(gain1);
         gain1.connect(ctx.destination);
         osc1.start(now);
-        osc1.stop(now + 0.45);
+        osc1.stop(now + 0.46);
 
         const osc2 = ctx.createOscillator();
         const gain2 = ctx.createGain();
         osc2.type = 'sine';
         osc2.frequency.setValueAtTime(830.61, now + 0.10);
         gain2.gain.setValueAtTime(0.0001, now + 0.10);
-        gain2.gain.linearRampToValueAtTime(0.22 * vol, now + 0.12);
-        gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.54);
+        gain2.gain.linearRampToValueAtTime(0.50 * vol, now + 0.12);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.58);
         osc2.connect(gain2);
         gain2.connect(ctx.destination);
         osc2.start(now + 0.10);
-        osc2.stop(now + 0.56);
+        osc2.stop(now + 0.60);
 
         const osc3 = ctx.createOscillator();
         const gain3 = ctx.createGain();
         osc3.type = 'sine';
         osc3.frequency.setValueAtTime(987.77, now + 0.20);
         gain3.gain.setValueAtTime(0.0001, now + 0.20);
-        gain3.gain.linearRampToValueAtTime(0.24 * vol, now + 0.22);
-        gain3.gain.exponentialRampToValueAtTime(0.0001, now + 0.68);
+        gain3.gain.linearRampToValueAtTime(0.55 * vol, now + 0.22);
+        gain3.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
         osc3.connect(gain3);
         gain3.connect(ctx.destination);
         osc3.start(now + 0.20);
-        osc3.stop(now + 0.70);
+        osc3.stop(now + 0.74);
 
         const osc4 = ctx.createOscillator();
         const gain4 = ctx.createGain();
         osc4.type = 'sine';
         osc4.frequency.setValueAtTime(1318.51, now + 0.22);
         gain4.gain.setValueAtTime(0.0001, now + 0.22);
-        gain4.gain.linearRampToValueAtTime(0.11 * vol, now + 0.24);
-        gain4.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
+        gain4.gain.linearRampToValueAtTime(0.25 * vol, now + 0.24);
+        gain4.gain.exponentialRampToValueAtTime(0.0001, now + 0.66);
         osc4.connect(gain4);
         gain4.connect(ctx.destination);
         osc4.start(now + 0.22);
-        osc4.stop(now + 0.64);
+        osc4.stop(now + 0.68);
       } catch (err) {
         console.warn('Audio play error:', err);
       }
@@ -3481,6 +3661,9 @@ function showRightScreenNotification({
   type = 'info',
   url = '',
   orderId = '',
+  networkOrderId = '',
+  networkOrderFolio = '',
+  originNetworkFolio = '',
   duration = 5000
 } = {}) {
   const container = ensureRightNotificationContainer();
@@ -3522,11 +3705,17 @@ function showRightScreenNotification({
 
   const iconSvg = icons[type] || '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>';
   const timeStr = new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  const netRefBadge = typeof renderNotificationNetworkRef === 'function'
+    ? renderNotificationNetworkRef({ orderId, networkOrderId, networkOrderFolio, originNetworkFolio, url, title, message, type })
+    : '';
 
   toast.innerHTML = `
     <div class="netops-toast-icon">${iconSvg}</div>
     <div class="netops-toast-content">
-      <div class="netops-toast-title">${escapeHtml(title)}</div>
+      <div class="netops-toast-title" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        <span>${escapeHtml(title)}</span>
+        ${netRefBadge}
+      </div>
       <div class="netops-toast-msg">${escapeHtml(message)}</div>
       <div class="netops-toast-meta">
         <span>${timeStr}</span>
@@ -3557,10 +3746,12 @@ function showRightScreenNotification({
   });
 
   const closeBtn = toast.querySelector('.netops-toast-close');
-  closeBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    dismiss();
-  });
+  if (closeBtn) {
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dismiss();
+    });
+  }
 
   container.appendChild(toast);
   requestAnimationFrame(() => {
@@ -3623,7 +3814,7 @@ function initServiceWorker() {
   } catch (e) {}
 }
 
-function triggerDesktopNotification({ title, message, url = '', orderId = '', eventId = '' }) {
+function triggerDesktopNotification({ title, message, url = '', orderId = '', networkOrderId = '', networkOrderFolio = '', originNetworkFolio = '', eventId = '' }) {
   const isTecnico = (typeof userHasRole === 'function' && userHasRole('tecnico')) ||
                     (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
                     (typeof normalizeRole === 'function' && normalizeRole(typeof getCurrentUser === 'function' ? getCurrentUser()?.role : '') === 'tecnico') ||
@@ -3633,6 +3824,14 @@ function triggerDesktopNotification({ title, message, url = '', orderId = '', ev
   if (typeof window === 'undefined' || !('Notification' in window)) return;
   if (Notification.permission === 'granted') {
     try {
+      const netInfo = typeof getNotificationRelatedNetworkDetail === 'function'
+        ? getNotificationRelatedNetworkDetail({ orderId, networkOrderId, networkOrderFolio, originNetworkFolio, url, title, message })
+        : null;
+      let desktopTitle = title;
+      if (netInfo?.folio && !desktopTitle.includes(netInfo.folio)) {
+        desktopTitle = `${desktopTitle} · Red: ${netInfo.folio}`;
+      }
+
       const logoUrl = window.location.origin + '/assets/brand/wifimex-logo.jpg';
       const tag = 'netops-network-' + (eventId || orderId || Date.now());
       const options = {
@@ -3647,7 +3846,7 @@ function triggerDesktopNotification({ title, message, url = '', orderId = '', ev
 
       const createWindowNotification = () => {
         try {
-          const notif = new Notification(title, options);
+          const notif = new Notification(desktopTitle, options);
           notif.onclick = () => {
             try { window.focus(); } catch (e) {}
             if (orderId && typeof markNotificationReadByOrderId === 'function') {
@@ -3666,7 +3865,7 @@ function triggerDesktopNotification({ title, message, url = '', orderId = '', ev
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistration().then(reg => {
           if (reg && typeof reg.showNotification === 'function') {
-            reg.showNotification(title, options).catch(createWindowNotification);
+            reg.showNotification(desktopTitle, options).catch(createWindowNotification);
           } else {
             createWindowNotification();
           }
@@ -3829,6 +4028,9 @@ function notifyNetworkDetailEvent({
   message,
   type = 'info',
   orderId = '',
+  networkOrderId = '',
+  networkOrderFolio = '',
+  originNetworkFolio = '',
   eventId = '',
   sound = true,
   desktop = true,
@@ -3861,6 +4063,11 @@ function notifyNetworkDetailEvent({
     } catch (e) {}
   }
 
+  const netInfo = typeof getNotificationRelatedNetworkDetail === 'function'
+    ? getNotificationRelatedNetworkDetail({ orderId, networkOrderId, networkOrderFolio, originNetworkFolio, type, title, message })
+    : null;
+  const resolvedNetFolio = networkOrderFolio || originNetworkFolio || (netInfo ? netInfo.folio : '');
+
   if (type === 'network_summary' || type === 'network_reminder') {
     if (type !== 'network_reminder') {
       addNotificationToInbox({
@@ -3868,6 +4075,9 @@ function notifyNetworkDetailEvent({
         message,
         type,
         orderId,
+        networkOrderId: networkOrderId || orderId,
+        networkOrderFolio: resolvedNetFolio,
+        originNetworkFolio,
         eventId,
         url: orderId ? '/ordenes.html?detailKind=network&orderId=' + encodeURIComponent(orderId) : '/ordenes.html?detailKind=network'
       });
@@ -3887,6 +4097,9 @@ function notifyNetworkDetailEvent({
     message,
     type,
     orderId,
+    networkOrderId: networkOrderId || orderId,
+    networkOrderFolio: resolvedNetFolio,
+    originNetworkFolio,
     eventId,
     url,
     createdAt: new Date().toISOString()
@@ -3909,6 +4122,9 @@ function notifyNetworkDetailEvent({
           message,
           url,
           orderId,
+          networkOrderId: networkOrderId || orderId,
+          networkOrderFolio: resolvedNetFolio,
+          originNetworkFolio,
           eventId: notifKey
         });
       }
@@ -3920,6 +4136,9 @@ function notifyNetworkDetailEvent({
           type,
           url,
           orderId,
+          networkOrderId: networkOrderId || orderId,
+          networkOrderFolio: resolvedNetFolio,
+          originNetworkFolio,
           duration: 5000
         });
       }
@@ -5599,7 +5818,7 @@ function wasTowerMaterialPromptedRecently(antennaId) {
   if (!antennaId) return false;
   let last = null;
   try {
-    last = localStorage.getItem(`tower_mat_prompt_${antennaId}`);
+    last = localStorage.getItem(`tower_mat_prompt_${antennaId}`) || sessionStorage.getItem(`tower_mat_prompt_${antennaId}`);
   } catch (e) {}
   if (!last) {
     const antenna = (state.equipment || []).find(e => e.id === antennaId && !e.deletedAt);
@@ -5617,6 +5836,7 @@ function markTowerMaterialPrompted(antennaId) {
   const nowIso = new Date().toISOString();
   try {
     localStorage.setItem(`tower_mat_prompt_${antennaId}`, nowIso);
+    sessionStorage.setItem(`tower_mat_prompt_${antennaId}`, nowIso);
   } catch (e) {}
   const antenna = (state.equipment || []).find(e => e.id === antennaId && !e.deletedAt);
   if (antenna) {
@@ -5841,6 +6061,11 @@ function openTowerMaterialModal(antennaId, options = {}) {
   }
   currentTowerMaterialAntennaId = antennaId;
   pendingTowerMaterialCompletionDetail = options.completionDetail || null;
+  // Al abrir el modal por completado de detalle, marcar de inmediato que ya se solicitó para esta torre
+  // evitando que si completa varios detalles seguidos de la misma torre vuelva a saltar
+  if (options.fromCompletion && typeof markTowerMaterialPrompted === 'function') {
+    markTowerMaterialPrompted(antennaId);
+  }
   const isBalancer = isBalancerEquipment(antenna);
   const hasMat = hasTowerMaterial(antenna);
   const isMandatory = Boolean(options.mandatory && !hasMat);
@@ -6654,13 +6879,18 @@ if (typeof window !== 'undefined') {
 }
 
 const GLOBAL_WORK_ORDERS_CACHE_KEY = 'netops_global_work_orders_cache_v1';
+let _memoryWorkOrdersCache = null;
+let _saveWorkOrdersCacheTimer = null;
 
 function getGlobalWorkOrdersCache() {
+  if (_memoryWorkOrdersCache) return _memoryWorkOrdersCache;
   try {
     const raw = localStorage.getItem(GLOBAL_WORK_ORDERS_CACHE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    _memoryWorkOrdersCache = raw ? JSON.parse(raw) : {};
+    return _memoryWorkOrdersCache;
   } catch (e) {
-    return {};
+    _memoryWorkOrdersCache = {};
+    return _memoryWorkOrdersCache;
   }
 }
 
@@ -6671,8 +6901,11 @@ function saveWorkOrdersToGlobalCache(orders) {
     let changed = false;
     orders.forEach(order => {
       if (order && order.id && !order.deletedAt) {
-        cache[order.id] = { ...(cache[order.id] || {}), ...order };
-        changed = true;
+        const prev = cache[order.id];
+        if (!prev || prev.updatedAt !== order.updatedAt || prev.status !== order.status || prev !== order) {
+          cache[order.id] = prev ? { ...prev, ...order } : order;
+          changed = true;
+        }
       }
     });
     if (changed) {
@@ -6680,7 +6913,14 @@ function saveWorkOrdersToGlobalCache(orders) {
       if (keys.length > 800) {
         keys.slice(0, keys.length - 800).forEach(k => delete cache[k]);
       }
-      localStorage.setItem(GLOBAL_WORK_ORDERS_CACHE_KEY, JSON.stringify(cache));
+      if (!_saveWorkOrdersCacheTimer) {
+        _saveWorkOrdersCacheTimer = setTimeout(() => {
+          _saveWorkOrdersCacheTimer = null;
+          try {
+            localStorage.setItem(GLOBAL_WORK_ORDERS_CACHE_KEY, JSON.stringify(cache));
+          } catch (_) {}
+        }, 300);
+      }
     }
   } catch (e) {
     console.warn('saveWorkOrdersToGlobalCache warning:', e);

@@ -2581,8 +2581,15 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
 }
 
 @keyframes unread-dot-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.12); }
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.12);
+  }
 }
 
 /* Identificador visual de detalle reabierto */
@@ -2713,14 +2720,44 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
   gap: 3px !important;
 }
 
-.admin-stats-kpi-card.total { border-left: 4px solid #0284c7 !important; }
-.admin-stats-kpi-card.success { border-left: 4px solid #059669 !important; background: #f0fdf4 !important; }
-.admin-stats-kpi-card.warning { border-left: 4px solid #d97706 !important; background: #fffbeb !important; }
-.admin-stats-kpi-card.pending { border-left: 4px solid #dc2626 !important; background: #fef2f2 !important; }
-.admin-stats-kpi-card.info { border-left: 4px solid #0d9488 !important; background: #f0fdfa !important; }
-.admin-stats-kpi-card.danger-soft { border-left: 4px solid #e11d48 !important; background: #fff1f2 !important; }
-.admin-stats-kpi-card.purple { border-left: 4px solid #7c3aed !important; background: #f5f3ff !important; }
-.admin-stats-kpi-card.slate { border-left: 4px solid #334155 !important; background: #f8fafc !important; }
+.admin-stats-kpi-card.total {
+  border-left: 4px solid #0284c7 !important;
+}
+
+.admin-stats-kpi-card.success {
+  border-left: 4px solid #059669 !important;
+  background: #f0fdf4 !important;
+}
+
+.admin-stats-kpi-card.warning {
+  border-left: 4px solid #d97706 !important;
+  background: #fffbeb !important;
+}
+
+.admin-stats-kpi-card.pending {
+  border-left: 4px solid #dc2626 !important;
+  background: #fef2f2 !important;
+}
+
+.admin-stats-kpi-card.info {
+  border-left: 4px solid #0d9488 !important;
+  background: #f0fdfa !important;
+}
+
+.admin-stats-kpi-card.danger-soft {
+  border-left: 4px solid #e11d48 !important;
+  background: #fff1f2 !important;
+}
+
+.admin-stats-kpi-card.purple {
+  border-left: 4px solid #7c3aed !important;
+  background: #f5f3ff !important;
+}
+
+.admin-stats-kpi-card.slate {
+  border-left: 4px solid #334155 !important;
+  background: #f8fafc !important;
+}
 
 .admin-stats-kpi-card small {
   font-size: 10.5px !important;
@@ -2865,10 +2902,21 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
   color: #0f172a !important;
 }
 
-.admin-stats-area-metric.is-emerald strong { color: #047857 !important; }
-.admin-stats-area-metric.is-blue strong { color: #0369a1 !important; }
-.admin-stats-area-metric.is-amber strong { color: #d97706 !important; }
-.admin-stats-area-metric.is-red strong { color: #dc2626 !important; }
+.admin-stats-area-metric.is-emerald strong {
+  color: #047857 !important;
+}
+
+.admin-stats-area-metric.is-blue strong {
+  color: #0369a1 !important;
+}
+
+.admin-stats-area-metric.is-amber strong {
+  color: #d97706 !important;
+}
+
+.admin-stats-area-metric.is-red strong {
+  color: #dc2626 !important;
+}
 
 .admin-stats-area-bars {
   padding: 0 14px 12px 14px !important;
@@ -3116,7 +3164,7 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
   overflow: hidden !important;
 }
 
-.admin-stats-comp-track > div {
+.admin-stats-comp-track>div {
   height: 100% !important;
   border-radius: 999px !important;
 }
@@ -3185,11 +3233,35 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
   border: 1px solid #e2e8f0 !important;
 }
 
-.admin-stats-flow-pills span.is-ok { color: #047857 !important; background: #ecfdf5 !important; border-color: #a7f3d0 !important; }
-.admin-stats-flow-pills span.is-rev { color: #0369a1 !important; background: #f0f9ff !important; border-color: #bae6fd !important; }
-.admin-stats-flow-pills span.is-att { color: #b45309 !important; background: #fffbeb !important; border-color: #fde68a !important; }
-.admin-stats-flow-pills span.is-pend { color: #b91c1c !important; background: #fef2f2 !important; border-color: #fecaca !important; }
-.admin-stats-flow-pills span.is-ret { color: #be123c !important; background: #fff1f2 !important; border-color: #fecdd3 !important; }
+.admin-stats-flow-pills span.is-ok {
+  color: #047857 !important;
+  background: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+}
+
+.admin-stats-flow-pills span.is-rev {
+  color: #0369a1 !important;
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+}
+
+.admin-stats-flow-pills span.is-att {
+  color: #b45309 !important;
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+
+.admin-stats-flow-pills span.is-pend {
+  color: #b91c1c !important;
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+}
+
+.admin-stats-flow-pills span.is-ret {
+  color: #be123c !important;
+  background: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+}
 
 .admin-stats-subhead {
   font-size: 11px !important;
@@ -3336,10 +3408,29 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
   white-space: nowrap !important;
 }
 
-.admin-stats-load-badge.is-high { background: #fef2f2 !important; color: #dc2626 !important; border: 1px solid #fecaca !important; }
-.admin-stats-load-badge.is-medium { background: #fffbeb !important; color: #d97706 !important; border: 1px solid #fde68a !important; }
-.admin-stats-load-badge.is-ok { background: #ecfdf5 !important; color: #059669 !important; border: 1px solid #a7f3d0 !important; }
-.admin-stats-load-badge.is-idle { background: #f1f5f9 !important; color: #64748b !important; border: 1px solid #cbd5e1 !important; }
+.admin-stats-load-badge.is-high {
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+  border: 1px solid #fecaca !important;
+}
+
+.admin-stats-load-badge.is-medium {
+  background: #fffbeb !important;
+  color: #d97706 !important;
+  border: 1px solid #fde68a !important;
+}
+
+.admin-stats-load-badge.is-ok {
+  background: #ecfdf5 !important;
+  color: #059669 !important;
+  border: 1px solid #a7f3d0 !important;
+}
+
+.admin-stats-load-badge.is-idle {
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  border: 1px solid #cbd5e1 !important;
+}
 
 .admin-stats-profile-kpis {
   display: grid !important;
@@ -3351,7 +3442,7 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
   border: 1px solid #e2e8f0 !important;
 }
 
-.admin-stats-profile-kpis > div {
+.admin-stats-profile-kpis>div {
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
@@ -3387,7 +3478,7 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
   display: flex !important;
 }
 
-.admin-stats-stacked-bar > div {
+.admin-stats-stacked-bar>div {
   height: 100% !important;
 }
 
@@ -3524,6 +3615,7 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
   .admin-stats-kpi-grid {
     grid-template-columns: 1fr 1fr !important;
   }
+
   .admin-stats-grid-2 {
     grid-template-columns: 1fr !important;
   }
@@ -3539,6 +3631,7 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
     overflow: visible !important;
     clear: both !important;
   }
+
   .orders-page .orders-table-card .order-table {
     display: flex !important;
     flex-direction: column !important;
@@ -3547,6 +3640,7 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
     min-height: auto !important;
     overflow: visible !important;
   }
+
   .orders-page .orders-table-card .order-table tbody {
     display: grid !important;
     width: 100% !important;
@@ -3554,6 +3648,7 @@ body:has(.topbar.app-sidebar) #antena-mo>.md>.card-actions {
     min-height: auto !important;
     overflow: visible !important;
   }
+
   .orders-page .order-table-footer {
     position: relative !important;
     z-index: 5 !important;
@@ -3967,10 +4062,10 @@ body.orders-page .orders-module-icon:after,
 }
 
 /* Anular padding-left de 108px de style.css para que comience al extremo izquierdo */
-body.orders-page .hero-panel > div:first-child,
-body[data-module] .hero-panel.orders-hero > div:first-child,
-body[data-module="orders"] .hero-panel > div:first-child,
-body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero.orders-hero > div:first-child,
+body.orders-page .hero-panel>div:first-child,
+body[data-module] .hero-panel.orders-hero>div:first-child,
+body[data-module="orders"] .hero-panel>div:first-child,
+body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero.orders-hero>div:first-child,
 body.orders-page .orders-hero-main,
 .orders-page .orders-hero-main {
   position: static !important;
@@ -4029,7 +4124,7 @@ body.orders-page .orders-module-icon svg {
   fill: none !important;
 }
 
-body.orders-page .orders-hero-copy > div {
+body.orders-page .orders-hero-copy>div {
   display: flex !important;
   flex-direction: column !important;
   justify-content: center !important;
@@ -4075,6 +4170,7 @@ body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero
 }
 
 @media (max-width: 1250px) {
+
   body.orders-page .hero-panel.compact-hero.orders-hero,
   body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero.orders-hero,
   body[data-module] .hero-panel.compact-hero.orders-hero,
@@ -4090,6 +4186,7 @@ body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero
     gap: 10px !important;
     padding: 10px 14px !important;
   }
+
   body.orders-page .orders-hero-main,
   .orders-page .orders-hero-main {
     width: 100% !important;
@@ -4097,11 +4194,13 @@ body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero
     max-width: 100% !important;
     margin-bottom: 2px !important;
   }
+
   body.orders-page .orders-hero-copy,
   .orders-page .orders-hero-copy {
     width: 100% !important;
     max-width: 100% !important;
   }
+
   body.orders-page .compact-stats.orders-stats,
   body.orders-page:not(.tech-route-body):not(.login-page) .compact-stats.orders-stats,
   .orders-page .orders-stats {
@@ -4117,6 +4216,7 @@ body.orders-page:not(.tech-route-body):not(.login-page) .hero-panel.compact-hero
 
 /* Fila única horizontal de contadores compactos alineada a la derecha en pantallas amplias */
 @media (min-width: 1251px) {
+
   body.orders-page .compact-stats.orders-stats,
   body.orders-page:not(.tech-route-body):not(.login-page) .compact-stats.orders-stats,
   .orders-page .orders-stats {
@@ -4180,8 +4280,8 @@ body.orders-page .order-stat-icon,
   line-height: 1 !important;
 }
 
-body.orders-page .orders-stats .stat-card > div,
-.orders-page .orders-stats .stat-card > div {
+body.orders-page .orders-stats .stat-card>div,
+.orders-page .orders-stats .stat-card>div {
   display: inline-flex !important;
   flex-direction: row !important;
   align-items: baseline !important;
@@ -4211,67 +4311,109 @@ body.orders-page .orders-stats .stat-pending {
   border-color: #bfdbfe !important;
   background: #eff6ff !important;
 }
+
 body.orders-page .orders-stats .stat-pending .order-stat-icon {
   background: #dbeafe !important;
   color: #2563eb !important;
 }
-body.orders-page .orders-stats .stat-pending .label { color: #1d4ed8 !important; }
-body.orders-page .orders-stats .stat-pending strong { color: #1e40af !important; }
+
+body.orders-page .orders-stats .stat-pending .label {
+  color: #1d4ed8 !important;
+}
+
+body.orders-page .orders-stats .stat-pending strong {
+  color: #1e40af !important;
+}
 
 body.orders-page .orders-stats .stat-critical {
   border-color: #fecaca !important;
   background: #fef2f2 !important;
 }
+
 body.orders-page .orders-stats .stat-critical .order-stat-icon {
   background: #fee2e2 !important;
   color: #dc2626 !important;
 }
-body.orders-page .orders-stats .stat-critical .label { color: #b91c1c !important; }
-body.orders-page .orders-stats .stat-critical strong { color: #991b1b !important; }
+
+body.orders-page .orders-stats .stat-critical .label {
+  color: #b91c1c !important;
+}
+
+body.orders-page .orders-stats .stat-critical strong {
+  color: #991b1b !important;
+}
 
 body.orders-page .orders-stats .stat-done {
   border-color: #bbf7d0 !important;
   background: #f0fdf4 !important;
 }
+
 body.orders-page .orders-stats .stat-done .order-stat-icon {
   background: #dcfce7 !important;
   color: #16a34a !important;
 }
-body.orders-page .orders-stats .stat-done .label { color: #15803d !important; }
-body.orders-page .orders-stats .stat-done strong { color: #166534 !important; }
+
+body.orders-page .orders-stats .stat-done .label {
+  color: #15803d !important;
+}
+
+body.orders-page .orders-stats .stat-done strong {
+  color: #166534 !important;
+}
 
 body.orders-page .orders-stats .stat-total {
   border-color: #e2e8f0 !important;
   background: #f8fafc !important;
 }
+
 body.orders-page .orders-stats .stat-total .order-stat-icon {
   background: #e2e8f0 !important;
   color: #475569 !important;
 }
-body.orders-page .orders-stats .stat-total .label { color: #64748b !important; }
-body.orders-page .orders-stats .stat-total strong { color: #0f172a !important; }
+
+body.orders-page .orders-stats .stat-total .label {
+  color: #64748b !important;
+}
+
+body.orders-page .orders-stats .stat-total strong {
+  color: #0f172a !important;
+}
 
 body.orders-page .orders-stats .stat-my-pending {
   border-color: #e9d5ff !important;
   background: #faf5ff !important;
 }
+
 body.orders-page .orders-stats .stat-my-pending .order-stat-icon {
   background: #f3e8ff !important;
   color: #9333ea !important;
 }
-body.orders-page .orders-stats .stat-my-pending .label { color: #7e22ce !important; }
-body.orders-page .orders-stats .stat-my-pending strong { color: #6b21a8 !important; }
+
+body.orders-page .orders-stats .stat-my-pending .label {
+  color: #7e22ce !important;
+}
+
+body.orders-page .orders-stats .stat-my-pending strong {
+  color: #6b21a8 !important;
+}
 
 body.orders-page .orders-stats .stat-my-done {
   border-color: #fed7aa !important;
   background: #fff7ed !important;
 }
+
 body.orders-page .orders-stats .stat-my-done .order-stat-icon {
   background: #ffedd5 !important;
   color: #ea580c !important;
 }
-body.orders-page .orders-stats .stat-my-done .label { color: #c2410c !important; }
-body.orders-page .orders-stats .stat-my-done strong { color: #9a3412 !important; }
+
+body.orders-page .orders-stats .stat-my-done .label {
+  color: #c2410c !important;
+}
+
+body.orders-page .orders-stats .stat-my-done strong {
+  color: #9a3412 !important;
+}
 
 /* Indicador de carga no invasivo en Detalles de red (no bloquea ni oscurece pantalla) */
 body.orders-page .loading-overlay {
@@ -4294,8 +4436,15 @@ body.orders-page .loading-overlay.show {
 }
 
 @keyframes netopsLoadingFadeIn {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 body.orders-page .loading-card {
@@ -4414,32 +4563,32 @@ body.orders-page .orders-filter-card {
 }
 
 body.orders-page .orders-table-card {
-  flex: 1 1 0% !important;
+  flex: 1 1 auto !important;
   display: flex !important;
   flex-direction: column !important;
-  min-height: 0 !important;
+  min-height: 380px !important;
   height: auto !important;
-  max-height: 100% !important;
+  max-height: none !important;
   margin: 0 !important;
   padding: 0 !important;
   overflow: hidden !important;
 }
 
 body.orders-page .orders-table-card #orders-table {
-  flex: 1 1 0% !important;
+  flex: 1 1 auto !important;
   display: flex !important;
   flex-direction: column !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  max-height: 100% !important;
+  min-height: 380px !important;
+  height: auto !important;
+  max-height: none !important;
   overflow: hidden !important;
 }
 
 body.orders-page .orders-table-card .table-wrap {
-  flex: 1 1 0% !important;
+  flex: 1 1 auto !important;
   height: auto !important;
-  max-height: calc(100% - 56px) !important;
-  min-height: 0 !important;
+  max-height: none !important;
+  min-height: 280px !important;
   overflow-y: auto !important;
 }
 
@@ -4586,10 +4735,58 @@ body.orders-page .orders-table-card .inventory-pagination,
   color: #92400e !important;
 }
 
-/* En detalles físicos ocultar siempre "Mis pendientes" y "Mis resueltos" */
+/* En detalles físicos ocultar todo elemento que no pertenece al registro operativo de infraestructura */
+body.orders-page[data-detail-kind="physical"] .order-subtle-guides-group,
+body.orders-page[data-detail-kind="physical"] #order-filter-wrap-assignee,
+body.orders-page[data-detail-kind="physical"] #order-filter-wrap-date,
+body.orders-page[data-detail-kind="physical"] #wo-filter-my-assignments,
+body.orders-page[data-detail-kind="physical"] #wo-admin-stats-btn,
 body.orders-page[data-detail-kind="physical"] #wo-stat-my-pending-card,
 body.orders-page[data-detail-kind="physical"] #wo-stat-my-done-card,
 body.orders-page[data-detail-kind="physical"] .stat-my-pending,
-body.orders-page[data-detail-kind="physical"] .stat-my-done {
+body.orders-page[data-detail-kind="physical"] .stat-my-done,
+body.orders-page[data-detail-kind="physical"] .order-action-needed-pill,
+body.orders-page[data-detail-kind="physical"] .order-waiting-other-pill,
+body.orders-page[data-detail-kind="physical"] .order-checking-badge,
+body.orders-page[data-detail-kind="physical"] .order-reopened-badge,
+body.orders-page[data-detail-kind="physical"] .net-unread-chat-dot,
+body.orders-page[data-detail-kind="physical"] .net-btn-open,
+body.orders-page[data-detail-kind="physical"] .net-btn-retake,
+body.orders-page[data-detail-kind="physical"] .net-btn-physical,
+body.orders-page[data-detail-kind="physical"] .order-workflow-actions,
+body.orders-page[data-detail-kind="physical"] #wo-target-team-field,
+body.orders-page[data-detail-kind="physical"] #wo-assign-field,
+body.orders-page[data-detail-kind="physical"] #wo-equipment-field,
+body.orders-page[data-detail-kind="physical"] .wo-equipment-field,
+body.orders-page[data-detail-kind="physical"] #wo-zone-field,
+body.orders-page[data-detail-kind="physical"] .wo-zone-field,
+body.orders-page[data-detail-kind="physical"] #wo-relation-info,
+body.orders-page[data-detail-kind="physical"] #wo-priority-interval-box {
   display: none !important;
+}
+
+body.orders-page[data-detail-kind="physical"] #wo-mo .wo-node-equipment-grid {
+  grid-template-columns: 1fr !important;
+}
+
+body.orders-page[data-detail-kind="physical"] #wo-mo #wo-node-field {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+}
+
+body.orders-page[data-detail-kind="physical"] .order-table tr.order-row-action-required,
+body.orders-page[data-detail-kind="physical"] .order-table tr.order-row-waiting-counterparty {
+  background: inherit !important;
+  box-shadow: none !important;
+  border-left-color: transparent !important;
+}
+.orders-page .order-actions .order-complete-action {
+  border-color: #a7f3d0 !important;
+  background: #ecfdf5 !important;
+  color: #059669 !important;
+}
+
+.orders-page .order-actions .order-complete-action:hover {
+  background: #d1fae5 !important;
+  color: #047857 !important;
 }

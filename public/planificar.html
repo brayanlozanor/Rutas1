@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>WiFiMex · Planificar</title>
-    <link rel="icon" type="image/svg+xml" href="assets/brand/wifimex-network-mark.svg?v=20260724">
+  <link rel="icon" type="image/svg+xml" href="assets/brand/wifimex-network-mark.svg?v=20260724">
   <link rel="apple-touch-icon" href="assets/brand/wifimex-network-mark.svg?v=20260724">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Space+Mono:wght@400;700&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css?v=20261104-fullscreen-plan-v3">
   <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3">
   <link rel="stylesheet" href="assets/css/plan-reference.css?v=20261111-places-intel-v2">
@@ -16,27 +19,192 @@
   <link rel="stylesheet" href="assets/css/plan-stop-cards.css?v=20260902-plan-status-v1">
   <link rel="stylesheet" href="assets/css/plan-stop-detail-grid.css?v=20261111-no-overlap-v1">
   <link rel="stylesheet" href="assets/css/plan-stop-card-exact.css?v=20261111-places-intel-v2">
-  <link rel="stylesheet" href="assets/css/technician-dashboard.css?v=20261104-tech-expand-v1">
-  <link rel="stylesheet" href="assets/css/technician-view-modes.css?v=20260824-tech-completed-edit-v11">
-  <link rel="stylesheet" href="assets/css/plan-ui-v2.css?v=20260823-stop-modal-responsive-v4">
-  <link rel="stylesheet" href="assets/css/tower-material-modal.css?v=20261109-tower-mat-v1">
+  <link rel="stylesheet" href="assets/css/technician-dashboard.css?v=20261119-tech-day-map-restored-v1">
+  <link rel="stylesheet" href="assets/css/technician-view-modes.css?v=20261119-tech-day-map-restored-v1">
+  <link rel="stylesheet" href="assets/css/plan-ui-v2.css?v=20261119-tech-day-map-restored-v1">
+  <link rel="stylesheet" href="assets/css/tower-material-modal.css?v=20261116-chat-fluidity-v1">
   <link rel="stylesheet" href="assets/css/material-dispatches.css?v=20261030-v2">
-  <link rel="stylesheet" href="assets/css/preset-routes.css?v=20261111-preset-routes-v1">
-  <script>try{document.documentElement.dataset.role=(JSON.parse(localStorage.getItem('user')||'{}').role||'').toLowerCase()}catch(e){}</script>
+  <link rel="stylesheet" href="assets/css/preset-routes.css?v=20261116-simple-assign-v2">
+  <script>
+    (function () {
+      try {
+        var user = JSON.parse(localStorage.getItem('user') || '{}');
+        var role = (user.role || '').toLowerCase().trim();
+        var isAdmin = role === 'administrador' || role === 'admin' || role === 'soporte' || role === 'atencion_clientes';
+        var isMobile = (window.innerWidth <= 768) || (window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+        var params = new URLSearchParams(window.location.search);
+        var v = (params.get('view') || '').toLowerCase();
+        var isTech = (v === 'tecnico' || v === 'tech' || v === 'mobile' || v === 'celular') ? true :
+          (v === 'admin' || v === 'desktop' || v === 'pc') ? false :
+            (role === 'tecnico') ? true :
+              isAdmin ? isMobile :
+                isMobile;
+        if (isTech) {
+          document.documentElement.classList.add('is-technician-env');
+          document.documentElement.dataset.role = role || 'tecnico';
+        } else {
+          document.documentElement.classList.remove('is-technician-env');
+          if (role) document.documentElement.dataset.role = role;
+        }
+      } catch (e) { }
+    })();
+  </script>
 </head>
+
 <body class="planificar-page" onload="initPlanificarPage()">
-  <script>if(localStorage.getItem('netops_menu_open_v3')==='0')document.body.classList.add('sidebar-collapsed')</script>
-  <div class="topbar">
-    <a href="mapa.html" class="logo-link"><div class="logo">WiFi<span>Mex</span></div></a>
+  <script>
+    (function () {
+      try {
+        if (document.documentElement.classList.contains('is-technician-env')) {
+          document.body.classList.add('plan-technician-view');
+          document.body.dataset.techView = 'details';
+        } else {
+          document.body.classList.remove('plan-technician-view');
+          delete document.body.dataset.techView;
+        }
+      } catch (e) { }
+    })();
+  </script>
+
+  <!-- Pantalla de carga inicial limpia y formal con tarjeta de marca WiFiMex -->
+  <div id="plan-initial-loader" class="plan-initial-loader"
+    style="position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;opacity:1;visibility:visible;"
+    aria-live="polite" aria-label="Cargando plan general">
+    <script>
+      (function () {
+        try {
+          var isMobile = (window.innerWidth <= 768) || (window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+          var isTech = document.documentElement.classList.contains('is-technician-env') || document.body.classList.contains('plan-technician-view') || isMobile;
+          var el = document.getElementById('plan-initial-loader');
+          if (el) {
+            if (isTech) {
+              el.style.background = '#ffffff';
+              el.style.backdropFilter = 'none';
+              el.style.webkitBackdropFilter = 'none';
+            } else {
+              el.style.background = 'rgba(244, 247, 250, 0.55)';
+              el.style.backdropFilter = 'blur(1.5px)';
+              el.style.webkitBackdropFilter = 'blur(1.5px)';
+            }
+          }
+        } catch (_) { }
+
+        // Failsafe absoluto garantizado: NUNCA dejar la pantalla congelada en cargando
+        setTimeout(function () {
+          try {
+            var loader = document.getElementById('plan-initial-loader');
+            if (loader) {
+              loader.classList.add('is-hidden');
+              setTimeout(function () { try { loader.remove(); } catch (_) { } }, 350);
+            }
+            if (typeof hideLoading === 'function') hideLoading();
+          } catch (_) { }
+        }, 5000);
+      })();
+    </script>
+    <div class="loading-card plan-initial-card">
+      <div class="loading-brand"><span class="loading-ring"></span>
+        <div class="logo">WiFi<span>Mex</span></div><img src="assets/brand/wifimex-logo.jpg" alt="WiFiMex"
+          class="loading-brand-logo">
+      </div>
+      <div class="loading-copy"><strong id="plan-initial-loader-title">Cargando datos</strong><span
+          id="plan-initial-loader-desc">Consultando paradas y agenda</span><span style="display:none">Cargando plan general...</span><i class="loading-progress"></i></div>
+    </div>
+  </div>
+
+  <!-- Encabezado móvil del técnico para visualización inmediata en celular -->
+  <header class="tech-mobile-header" id="tech-mobile-header">
+    <button type="button" class="tech-header-logout" onclick="logout()" aria-label="Cerrar sesión"
+      title="Cerrar sesión">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M10 17l5-5-5-5"></path>
+        <path d="M15 12H3"></path>
+        <path d="M14 4h4a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-4"></path>
+      </svg>
+    </button>
+    <div class="tech-header-title">
+      <strong id="tech-header-user-name">Hola, técnico</strong>
+      <small id="tech-header-today-date"></small>
+    </div>
+    <div class="tech-header-spacer" style="width:40px;height:40px;" aria-hidden="true"></div>
+  </header>
+  <script>if (localStorage.getItem('netops_menu_open_v3') === '0') document.body.classList.add('sidebar-collapsed')</script>
+  <div class="topbar app-sidebar">
+    <a href="mapa.html" class="logo-link">
+      <div class="logo">WiFi<span>Mex</span></div>
+    </a>
     <nav class="nav">
-      <a href="mapa.html" class="nb">Mapa Mikrotiks</a>
-      <a href="antenas.html" class="nb">Antenas</a>
-      <a href="nodos.html" class="nb">Pueblos</a>
-      <a href="planificar.html" class="nb active">Planificar</a>
-      <a href="ordenes.html?detailKind=network" class="nb">Detalles de red</a>
-      <a href="ordenes.html?detailKind=physical" class="nb">Detalles físicos</a>
-      <a href="material.html" class="nb">Material</a>
-      <a href="tecnicos.html" class="nb">Usuarios</a>
+      <a href="dashboard.html" class="nb" title="Dashboard"><span class="nav-emoji" aria-hidden="true"><svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="9" rx="1.5" />
+            <rect x="14" y="3" width="7" height="5" rx="1.5" />
+            <rect x="14" y="12" width="7" height="9" rx="1.5" />
+            <rect x="3" y="16" width="7" height="5" rx="1.5" />
+          </svg></span><span class="nav-label">Dashboard</span></a>
+      <a href="mapa.html" class="nb" title="Mapa Mikrotiks"><span class="nav-emoji" aria-hidden="true"><svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
+            <line x1="9" y1="3" x2="9" y2="18" />
+            <line x1="15" y1="6" x2="15" y2="21" />
+          </svg></span><span class="nav-label">Mapa Mikrotiks</span></a>
+      <a href="antenas.html" class="nb" title="Antenas"><span class="nav-emoji" aria-hidden="true"><svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M12 2v20M4 22h16M7 17h10M8 12h8M9 7h6M6 22l6-19 6 19" />
+          </svg></span><span class="nav-label">Antenas</span></a>
+      <a href="nodos.html" class="nb" title="Pueblos"><span class="nav-emoji" aria-hidden="true"><svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            <polyline points="9 22 9 12 15 12 15 22" />
+          </svg></span><span class="nav-label">Pueblos</span></a>
+      <a href="planificar.html" class="nb active" title="Planificar" aria-current="page"><span class="nav-emoji"
+          aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+            <path d="m9 16 2 2 4-4" />
+          </svg></span><span class="nav-label">Planificar</span></a>
+      <a href="ordenes.html?detailKind=network" class="nb" title="Detalles de red"><span class="nav-emoji"
+          aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+            <path
+              d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+            <path d="M19 16v2a7 7 0 0 1-7 7m-2 0h-1" />
+          </svg></span><span class="nav-label">Detalles de red</span></a>
+      <a href="ordenes.html?detailKind=physical" class="nb" title="Detalles físicos"><span class="nav-emoji"
+          aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path
+              d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+          </svg></span><span class="nav-label">Detalles físicos</span></a>
+      <a href="material.html" class="nb" title="Material"><span class="nav-emoji" aria-hidden="true"><svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path
+              d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+            <line x1="12" y1="22.08" x2="12" y2="12" />
+          </svg></span><span class="nav-label">Material</span></a>
+      <a href="historial.html" class="nb" title="Historial"><span class="nav-emoji" aria-hidden="true"><svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg></span><span class="nav-label">Historial</span></a>
+      <a href="tecnicos.html" class="nb" title="Usuarios"><span class="nav-emoji" aria-hidden="true"><svg
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg></span><span class="nav-label">Usuarios</span></a>
     </nav>
     <div class="sbar">
       <div class="user-pill" data-user-name>Sesión activa</div>
@@ -48,46 +216,162 @@
     <div class="ct" style="width:100%">
       <div id="plan-panel" class="panel active">
         <div class="hero-panel compact-hero">
-          <div><div class="section-chip">Planificar / Rutas</div><h1>Planificador de campo</h1><p>Organiza rutas por técnico con mapa, detalles pendientes y plan general.</p></div>
+          <div>
+            <div class="section-chip">Planificar / Rutas</div>
+            <h1>Planificador de campo</h1>
+            <p>Organiza rutas por técnico con mapa, detalles pendientes y plan general.</p>
+          </div>
         </div>
 
         <div class="plan-kpi-bar">
-          <div class="plan-kpi kpi-stops"><span class="plan-kpi-icon">&#9679;</span><span class="plan-kpi-copy"><strong id="plan-kpi-stops">0</strong><small>paradas</small></span></div>
-          <div class="plan-kpi kpi-total"><span class="plan-kpi-icon">&#10003;</span><span class="plan-kpi-copy"><strong id="plan-kpi-total">0</strong><small>detalles totales</small></span></div>
-          <div class="plan-kpi kpi-done"><span class="plan-kpi-icon">&#10003;</span><span class="plan-kpi-copy"><strong id="plan-kpi-done">0</strong><small>completados</small></span></div>
-          <div class="plan-kpi kpi-pending"><span class="plan-kpi-icon">&#9675;</span><span class="plan-kpi-copy"><strong id="plan-kpi-pending">0</strong><small>faltantes</small></span></div>
-          <div class="plan-kpi kpi-progress"><span class="plan-kpi-ring" id="plan-kpi-ring">0%</span><span class="plan-kpi-copy"><strong id="plan-kpi-percent">0%</strong><small id="plan-kpi-progress-label">0 de 0 completados</small></span></div>
+          <div class="plan-kpi kpi-stops"><span class="plan-kpi-icon">&#9679;</span><span class="plan-kpi-copy"><strong
+                id="plan-kpi-stops">0</strong><small>paradas</small></span></div>
+          <div class="plan-kpi kpi-total"><span class="plan-kpi-icon">&#10003;</span><span class="plan-kpi-copy"><strong
+                id="plan-kpi-total">0</strong><small>detalles totales</small></span></div>
+          <div class="plan-kpi kpi-done"><span class="plan-kpi-icon">&#10003;</span><span class="plan-kpi-copy"><strong
+                id="plan-kpi-done">0</strong><small>completados</small></span></div>
+          <div class="plan-kpi kpi-pending"><span class="plan-kpi-icon">&#9675;</span><span
+              class="plan-kpi-copy"><strong id="plan-kpi-pending">0</strong><small>faltantes</small></span></div>
+          <div class="plan-kpi kpi-progress"><span class="plan-kpi-ring" id="plan-kpi-ring">0%</span><span
+              class="plan-kpi-copy"><strong id="plan-kpi-percent">0%</strong><small id="plan-kpi-progress-label">0 de 0
+                completados</small></span></div>
         </div>
 
         <section id="plan-calendar" class="plan-calendar" aria-label="Calendario de planes"></section>
 
         <div class="plan-shell">
+          <!-- Banner de ruta asignada para celular (visible en modo técnico) -->
+          <div class="tech-plan-banner" id="tech-plan-banner" style="display:none;"></div>
+
+          <!-- Barra compacta de progreso del técnico para celular (visible en modo técnico) -->
+          <section class="tech-progress-compact" id="tech-progress-card">
+            <div class="tech-progress-compact-row">
+              <div class="tech-progress-compact-info">
+                <svg class="tech-progress-compact-svg" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M18 20V10M12 20V4M6 20v-6" />
+                </svg>
+                <span class="tech-progress-compact-label">Avance</span>
+                <strong class="tech-progress-compact-pct" id="tech-progress-percent-badge">100%</strong>
+                <span class="tech-progress-compact-sep">·</span>
+                <span class="tech-progress-compact-detail" id="tech-stat-detalles">0 de 0</span>
+                <span class="tech-progress-compact-sep">·</span>
+                <span class="tech-progress-compact-pueblos" id="tech-stat-pueblos">0/0 pueblos</span>
+              </div>
+              <button type="button" class="tech-compact-summary-btn" onclick="openTechnicianProductivitySummary()"
+                title="Ver resumen del día">
+                Resumen
+              </button>
+            </div>
+            <div class="tech-progress-bar-track">
+              <div class="tech-progress-bar-fill" id="tech-progress-bar-fill" style="width: 100%"></div>
+            </div>
+          </section>
+
+          <!-- Agenda y selector de día del técnico para celular (visible en modo técnico) -->
+          <section class="tech-calendar-toolbar" id="tech-calendar-toolbar">
+            <div class="tech-day-label">Elige el día</div>
+            <div class="tech-month-row">
+              <button type="button" onclick="shiftTechnicianAgendaWeek(-1)"
+                aria-label="Semana anterior">&#8249;</button>
+              <strong id="tech-toolbar-month-name">Noviembre de 2026</strong>
+              <button type="button" onclick="shiftTechnicianAgendaWeek(1)"
+                aria-label="Semana siguiente">&#8250;</button>
+            </div>
+            <div class="tech-week-strip" id="tech-toolbar-week-strip"></div>
+          </section>
+
           <aside class="plan-sidebar">
-            <div class="sbt">Tecnico</div>
-            <div class="fi">
+            <!-- Selectores de compatibilidad funcional (ocultos visualmente para usar menú de botones) -->
+            <div style="display:none;">
               <select id="plan-tech" onchange="selectPlanTech(this.value)"></select>
+              <select id="general-plan-select" onchange="selectGeneralPlan(this.value)"></select>
+              <select id="general-plan-assignee" onchange="assignGeneralPlanToTech(this.value)"></select>
+              <div id="general-plan-team-badges"></div>
+              <div id="general-plan-assignee-hint"></div>
             </div>
+
             <div id="general-plan-tools">
-              <div class="sbt">Plan General</div>
-              <div class="fi">
-                <select id="general-plan-select" onchange="selectGeneralPlan(this.value)"></select>
-              </div>
-              <div class="sbt">Asignar este plan a técnico</div>
-              <div class="fi">
-                <select id="general-plan-assignee" onchange="assignGeneralPlanToTech(this.value)"></select>
-              </div>
-              <div id="general-plan-team-badges" class="plan-team-badges-row"></div>
+              <!-- Tarjeta de resumen de plan seleccionado -->
+              <div id="plan-selected-summary-card" class="plan-selected-summary-card"></div>
+
               <div class="plan-sidebar-action-row plan-sidebar-actions-3col">
-                <button type="button" class="btn bc plan-action-button" onclick="createGeneralPlan()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>Nuevo</span></button>
-                <button type="button" class="btn bgh plan-action-button" data-admin-only onclick="openDuplicateGeneralPlanModal()" title="Duplicar este plan para otro técnico"><span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span>Duplicar</span></button>
-                <button type="button" class="btn br plan-action-button" data-admin-only onclick="deleteGeneralPlan()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 10v7M14 10v7"/></svg></span><span>Eliminar</span></button>
+                <button type="button" class="btn bc plan-action-button" onclick="createGeneralPlan()"><span
+                    class="plan-action-icon"><svg viewBox="0 0 24 24">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg></span><span>Nuevo</span></button>
+                <button type="button" class="btn bgh plan-action-button" data-admin-only
+                  onclick="openDuplicateGeneralPlanModal()" title="Duplicar este plan para otro técnico"><span
+                    class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+                      stroke="currentColor" stroke-width="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg></span><span>Duplicar</span></button>
+                <button type="button" class="btn br plan-action-button" data-admin-only
+                  onclick="deleteGeneralPlan()"><span class="plan-action-icon"><svg viewBox="0 0 24 24">
+                      <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 10v7M14 10v7" />
+                    </svg></span><span>Eliminar</span></button>
               </div>
-              <button type="button" class="btn bgh bfu plan-action-button" onclick="openPresetRoutesModal()" style="margin-top:4px;" title="Ver catálogo de rutas y recorridos preestablecidos"><span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></span><span>Rutas recomendadas</span></button>
-              <button class="btn bgh bfu plan-action-button" data-admin-only onclick="deletePastGeneralPlans()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M3 4l2-2M3 2l2 2"/></svg></span><span>Eliminar planes pasados</span></button>
+
+              <!-- Menú interactivo de botones para planes y técnicos -->
+              <div class="plan-assign-menu-box" id="plan-assign-menu-box">
+                <div class="plan-assign-nav" role="tablist" aria-label="Menú de planes y técnicos">
+                  <button type="button" class="plan-assign-nav-btn is-active" id="plan-tab-btn-plans"
+                    onclick="switchPlanAssignTab('plans')" role="tab" aria-selected="true">
+                    <span>🗺️ Planes</span>
+                    <span class="plan-assign-tab-badge badge-plans" id="plan-tab-badge-plans">0</span>
+                  </button>
+                  <button type="button" class="plan-assign-nav-btn" id="plan-tab-btn-team"
+                    onclick="switchPlanAssignTab('team')" role="tab" aria-selected="false">
+                    <span>👥 En este plan</span>
+                    <span class="plan-assign-tab-badge badge-team" id="plan-tab-badge-team">0</span>
+                  </button>
+                  <button type="button" class="plan-assign-nav-btn" id="plan-tab-btn-search"
+                    onclick="switchPlanAssignTab('search')" role="tab" aria-selected="false">
+                    <span>👤 Técnicos</span>
+                    <span class="plan-assign-tab-badge badge-techs" id="plan-tab-badge-total">0</span>
+                  </button>
+                </div>
+                <div class="plan-assign-panel-content is-active" id="plan-assign-tab-plans">
+                  <div id="plan-catalog-management-view"></div>
+                </div>
+                <div class="plan-assign-panel-content" id="plan-assign-tab-team" style="display:none;">
+                  <div id="plan-team-management-view"></div>
+                </div>
+                <div class="plan-assign-panel-content" id="plan-assign-tab-search" style="display:none;">
+                  <div class="tech-assignment-panel" id="tech-assignment-panel">
+                    <div class="sbt tech-assignment-panel-title">
+                      <span>Directorio de técnicos</span>
+                      <span class="tech-assignment-count" id="tech-assignment-count">0/0</span>
+                    </div>
+                    <div class="tech-search-input-wrap">
+                      <span class="tech-search-icon">
+                        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                      </span>
+                      <input type="text" id="tech-plan-search-input" placeholder="Buscar técnico o plan..."
+                        oninput="renderTechPlanSearchList()" class="tech-plan-search-input" autocomplete="off">
+                      <button type="button" id="tech-plan-search-clear" onclick="clearTechPlanSearch()"
+                        class="tech-plan-search-clear" title="Limpiar búsqueda" style="display:none;">&times;</button>
+                    </div>
+                    <div id="tech-plan-search-results" class="tech-plan-search-results"></div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <button class="btn bc bfu plan-action-button" data-admin-only onclick="openPlanStopModal()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M12 21s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12Z"/><path d="M12 6v6M9 9h6"/></svg></span><span>Agregar parada</span></button>
-            <button class="btn bgh bfu plan-action-button" onclick="openWeeklyRouteModal()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M4 6l5-2 6 2 5-2v14l-5 2-6-2-5 2zM9 4v14M15 6v14"/></svg></span><span>Ver ruta semanal</span></button>
-            <button class="btn bc bfu plan-action-button plan-week-action" data-admin-only onclick="openAdminWeekPlanner()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4zM8 3v5M16 3v5M4 10h16M8 14h3M13 14h3"/></svg></span><span>Organizar por semana</span></button>
+
+            <button class="btn bc bfu plan-action-button" data-admin-only
+              onclick="openPlanStopModal()"><span class="plan-action-icon"><svg viewBox="0 0 24 24">
+                  <path d="M12 21s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12Z" />
+                  <path d="M12 6v6M9 9h6" />
+                </svg></span><span>Agregar parada</span></button>
+            <button class="btn bgh bfu plan-action-button" onclick="openWeeklyRouteModal()"><span
+                class="plan-action-icon"><svg viewBox="0 0 24 24">
+                  <path d="M4 6l5-2 6 2 5-2v14l-5 2-6-2-5 2zM9 4v14M15 6v14" />
+                </svg></span><span>Ver ruta semanal</span></button>
+            <button class="btn bc bfu plan-action-button plan-week-action" data-admin-only
+              onclick="openAdminWeekPlanner()"><span class="plan-action-icon"><svg
+                  viewBox="0 0 24 24">
+                  <path d="M4 6h16v14H4zM8 3v5M16 3v5M4 10h16M8 14h3M13 14h3" />
+                </svg></span><span>Organizar por semana</span></button>
             <select id="plan-day" onchange="selectPlanDay(this.value)" hidden aria-hidden="true">
               <option value="general">General</option>
             </select>
@@ -96,7 +380,10 @@
             <div id="plan-route-intel-box" class="plan-route-intel-box">
               <div class="intel-box-head">
                 <span class="intel-box-icon">
-                  <svg viewBox="0 0 24 24"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
                 </span>
                 <div>
                   <strong>Trayecto entre sitios</strong>
@@ -126,8 +413,9 @@
               </div>
             </div>
 
-            <!-- Clima en la Zona del Sitio Activo -->
-            <div id="plan-weather-box" class="plan-weather-box">
+            <!-- Clima en la Zona del Sitio Activo (solo visible en modo tarjetas) -->
+            <div id="plan-weather-box" class="plan-weather-box is-hidden"
+              style="display:none !important;">
               <div class="weather-box-head">
                 <span id="weather-icon" class="weather-icon"></span>
                 <div>
@@ -150,18 +438,133 @@
           </aside>
 
           <section class="plan-board">
-            <div class="sh" style="border-bottom:none">
-              <h2 id="plan-title">Plan semanal</h2>
+            <div class="plan-board-header-banner" id="plan-board-header-banner">
+              <div class="plan-board-header-left">
+                <div class="plan-board-header-pill">
+                  <span class="plan-board-status-dot"></span>
+                  <span id="plan-board-header-type">PLAN GENERAL ACTIVO</span>
+                </div>
+                <h2 id="plan-title" class="plan-board-title">Plan semanal</h2>
+              </div>
+              <div class="plan-board-header-right" id="plan-board-crew-container">
+                <!-- Resaltado prominente de técnicos asignados -->
+              </div>
             </div>
             <div class="plan-command-bar">
-              <input id="plan-stop-search" class="search-input" placeholder="Buscar cliente, nodo o antena..." oninput="renderPlanDays()">
-              <button class="btn bgh" onclick="togglePlanMapSize()">Vista mapa</button>
-              <button class="btn bgh" onclick="openPresetRoutesModal()" title="Ver catálogo de rutas y recorridos preestablecidos">Rutas recomendadas</button>
-              <button class="btn bc" data-admin-only onclick="openPlanStopModal()">+ Agregar parada</button>
+              <input id="plan-stop-search" class="search-input" placeholder="Buscar cliente, pueblo, nodo o antena..."
+                oninput="renderPlanDays()">
+              <button type="button" class="btn btn-plan-map-view" onclick="togglePlanMapSize()"
+                title="Ver mapa general interactivo">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polygon points="1 6 8 2 16 6 23 2 23 18 16 22 8 18 1 22 1 6"></polygon>
+                  <line x1="8" y1="2" x2="8" y2="18"></line>
+                  <line x1="16" y1="6" x2="16" y2="22"></line>
+                </svg>
+                <span>Vista mapa</span>
+              </button>
+              <button type="button" class="btn btn-preset-routes" onclick="openPresetRoutesModal()"
+                title="Ver catálogo de rutas y recorridos preestablecidos">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+                </svg>
+                <span>Rutas recomendadas</span>
+              </button>
+              <button type="button" class="btn btn-towns-coverage" onclick="openTownsCoverageModal()"
+                title="Monitoreo de cobertura de pueblos: >80% resueltos o sin atención">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11m16-11v11M8 14v4m4-4v4m4-4v4" />
+                </svg>
+                <span>Cobertura de pueblos</span>
+              </button>
+              <button type="button" class="btn bc btn-plan-add-stop" data-admin-only onclick="openPlanStopModal()"
+                title="Agregar nueva parada al plan">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4"
+                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>Agregar parada</span>
+              </button>
             </div>
-            <div id="plan-continuity-recommendations-banner" style="display:none"></div>
+            <div id="plan-continuity-recommendations-banner" style="display:none !important;" aria-hidden="true"></div>
             <div id="plan-day-intel-strip" class="plan-day-intel-strip" style="display:none"></div>
-            <div id="plan-days" class="plan-days"></div>
+            <div id="plan-days" class="plan-days">
+              <div class="day-col" id="plan-skeleton-placeholder">
+                <div class="day-head">
+                  <span>Agenda de paradas</span>
+                  <span class="day-travel-badge">Cargando paradas...</span>
+                </div>
+                <div class="day-body">
+                  <div class="stop-card plan-placeholder-card">
+                    <div class="stop-card-main">
+                      <div class="stop-card-title-row">
+                        <strong class="stop-title">Parada en ruta</strong>
+                        <span class="badge bgn">Pendiente</span>
+                        <span class="badge bsm bgh">0/0 detalles</span>
+                      </div>
+                      <div class="stop-meta">Localidad vinculada al plan activo</div>
+                    </div>
+                    <div class="stop-actions">
+                      <span class="btn bsm bgh" style="opacity:0.7;pointer-events:none;font-size:11px;">Día
+                        asignado</span>
+                    </div>
+                  </div>
+                  <div class="plan-transit-step"
+                    style="display:flex;align-items:center;gap:6px;padding:6px 14px;color:#64748b;font-size:11px;font-weight:700;">
+                    <span>~0 min (0 km) de traslado</span>
+                  </div>
+                  <div class="stop-card plan-placeholder-card">
+                    <div class="stop-card-main">
+                      <div class="stop-card-title-row">
+                        <strong class="stop-title">Siguiente localidad</strong>
+                        <span class="badge bgn">Pendiente</span>
+                        <span class="badge bsm bgh">0/0 detalles</span>
+                      </div>
+                      <div class="stop-meta">Localidad vinculada al plan activo</div>
+                    </div>
+                    <div class="stop-actions">
+                      <span class="btn bsm bgh" style="opacity:0.7;pointer-events:none;font-size:11px;">Día
+                        asignado</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Esqueleto para celular (técnico) -->
+              <div class="tech-skeleton-placeholder" id="tech-skeleton-placeholder">
+                <div class="plan-empty tech-skeleton-empty"
+                  style="padding:28px 16px;text-align:center;background:#fff;border-radius:18px;border:1px solid #e2eaf4;margin:8px 0;box-shadow:0 4px 14px rgba(16,38,74,0.04);">
+                  <p style="margin:0 0 12px;font-size:14px;color:#475569;font-weight:600;"
+                    id="tech-skeleton-empty-text">No tienes paradas asignadas para hoy.</p>
+                  <button type="button" class="btn bsm bg2" onclick="toggleTechnicianSummaryMode()"
+                    style="margin-top:4px;font-weight:700;">Ver todos los detalles del plan</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Mapa de hoy para celular -->
+          <section id="tech-day-map-card" class="tech-day-map-card">
+            <div>
+              <strong>Mapa de hoy</strong>
+              <small id="tech-day-map-date"></small>
+            </div>
+            <div class="tech-map-privacy-notice" id="tech-map-privacy-notice"
+              style="margin:0 14px 10px;padding:10px 12px;border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:11px;line-height:1.4;display:flex;align-items:flex-start;gap:8px;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+                style="flex-shrink:0;margin-top:1px;">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+              <span>Tu ubicación solo se utiliza localmente en este dispositivo para calcular la ruta y no se almacena
+                ni se usa para ningún otro fin.</span>
+            </div>
+            <div id="tech-day-map" class="tech-day-map"></div>
+            <div id="tech-locations-sheet" class="tech-map-locations-sheet" style="display:none;"></div>
           </section>
           <aside id="plan-map-box" class="plan-map-panel">
             <div class="plan-map-panel-head"><strong>Vista del plan</strong></div>
@@ -173,6 +576,55 @@
             </div>
           </aside>
         </div>
+
+        <!-- Script de hidratación inmediata del esqueleto móvil técnico -->
+        <script>
+            (function () {
+              try {
+                if (document.documentElement.classList.contains('is-technician-env') || (document.body && document.body.classList.contains('plan-technician-view'))) {
+                  var user = JSON.parse(localStorage.getItem('user') || '{}');
+                  var name = String(user.name || user.username || 'tech').trim().split(/\s+/)[0];
+                  var titleEl = document.getElementById('tech-header-user-name');
+                  if (titleEl && name) titleEl.textContent = 'Hola, ' + name;
+                  var dateEl = document.getElementById('tech-header-today-date');
+                  var now = new Date();
+                  var todayText = now.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                  if (dateEl) dateEl.textContent = todayText.charAt(0).toUpperCase() + todayText.slice(1);
+
+                  var planTitle = document.getElementById('plan-title');
+                  if (planTitle) planTitle.textContent = 'Trabajos de hoy';
+
+                  var todayDay = (now.getDay() + 6) % 7; // 0=Lun .. 6=Dom
+                  var monday = new Date(now);
+                  monday.setDate(now.getDate() - todayDay);
+                  var monthStrong = document.getElementById('tech-toolbar-month-name');
+                  if (monthStrong) {
+                    var monthName = now.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+                    monthStrong.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+                  }
+                  var strip = document.getElementById('tech-toolbar-week-strip');
+                  if (strip) {
+                    var daysHtml = '';
+                    for (var i = 0; i < 7; i++) {
+                      var d = new Date(monday);
+                      d.setDate(monday.getDate() + i);
+                      var dKey = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                      var wShort = d.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', '').toUpperCase();
+                      var isActive = (i === todayDay) ? ' active' : '';
+                      daysHtml += '<button type="button" class="tech-week-day' + isActive + '" onclick="selectTechnicianAgendaDate(\'' + dKey + '\')"><small>' + wShort + '</small><strong>' + d.getDate() + '</strong></button>';
+                    }
+                    strip.innerHTML = daysHtml;
+                  }
+
+                  var emptyText = document.getElementById('tech-skeleton-empty-text');
+                  if (emptyText) {
+                    var dayShort = now.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
+                    emptyText.textContent = 'No tienes paradas asignadas para ' + dayShort + '.';
+                  }
+                }
+              } catch (e) { }
+            })();
+        </script>
       </div>
     </div>
   </div>
@@ -180,18 +632,22 @@
 
   <div class="mo" id="plan-material-mo">
     <div class="md" style="max-width:720px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:1px solid var(--bo);padding-bottom:10px">
+      <div
+        style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:1px solid var(--bo);padding-bottom:10px">
         <div>
           <div class="mt2" style="margin:0">Material del plan</div>
-          <div id="plan-material-modal-sub" style="font-size:12px;color:var(--mu);font-weight:700">Edita el material que debe llevar el técnico.</div>
+          <div id="plan-material-modal-sub" style="font-size:12px;color:var(--mu);font-weight:700">Edita el material que
+            debe llevar el técnico.</div>
         </div>
         <button class="btn bsm bgh" onclick="CM('plan-material-mo')">Cerrar</button>
       </div>
       <div class="fi">
         <label>Material requerido</label>
-        <textarea id="plan-material-summary" rows="7" placeholder="Ej: 2 radios, 4 POE, 1 rollo de cable, conectores..." oninput="markPlanMaterialDirty()"></textarea>
+        <textarea id="plan-material-summary" rows="7" placeholder="Ej: 2 radios, 4 POE, 1 rollo de cable, conectores..."
+          oninput="markPlanMaterialDirty()"></textarea>
       </div>
-      <div class="help-box">Este material se mostrará en el plan y en la interfaz del técnico. Puedes editarlo después desde este mismo botón.</div>
+      <div class="help-box">Este material se mostrará en el plan y en la interfaz del técnico. Puedes editarlo después
+        desde este mismo botón.</div>
       <div class="card-actions" style="margin-top:14px">
         <button class="btn bc" onclick="savePlanMaterialSummary()">Guardar material</button>
         <button class="btn bgh" onclick="CM('plan-material-mo')">Cancelar</button>
@@ -201,7 +657,8 @@
 
   <div class="mo" id="plan-stop-mo">
     <div class="md md-wide">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:1px solid var(--bo);padding-bottom:10px">
+      <div
+        style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:1px solid var(--bo);padding-bottom:10px">
         <div>
           <div class="mt2" style="margin:0">Agregar parada al plan</div>
           <div style="font-size:12px;color:var(--mu);font-weight:700" id="plan-modal-sub"></div>
@@ -239,7 +696,8 @@
       <div id="equipment-fields">
         <div class="fi">
           <label>Buscar antena / torre</label>
-          <input id="stop-equipment-search" list="equipment-list" placeholder="Escribe nombre o IP..." oninput="selectEquipmentFromInput()">
+          <input id="stop-equipment-search" list="equipment-list" placeholder="Escribe nombre o IP..."
+            oninput="selectEquipmentFromInput()">
           <datalist id="equipment-list"></datalist>
         </div>
         <div id="equipment-preview" class="ib" style="display:none"></div>
@@ -261,13 +719,15 @@
 
       <div class="fi">
         <label>Detalle nuevo / notas de trabajo</label>
-        <textarea id="stop-notes" rows="3" placeholder="Ej: Revisar potencia, cambiar POE, preguntar por cliente sin servicio..."></textarea>
+        <textarea id="stop-notes" rows="3"
+          placeholder="Ej: Revisar potencia, cambiar POE, preguntar por cliente sin servicio..."></textarea>
       </div>
       <div class="fi">
         <label>Nombre del cliente (si aplica)</label>
         <input id="stop-detail-client" placeholder="Nombre del cliente">
       </div>
-      <div class="fi"><label>Numero telefonico <span class="optional-label">Opcional</span></label><input id="stop-detail-phone" type="tel" placeholder="Numero de telefono (opcional)"></div>
+      <div class="fi"><label>Numero telefonico <span class="optional-label">Opcional</span></label><input
+          id="stop-detail-phone" type="tel" placeholder="Numero de telefono (opcional)"></div>
       <div class="fi">
         <label>Ubicacion del detalle (opcional)</label>
         <input id="stop-detail-location" class="mono" placeholder="18.09563, -99.19604">
@@ -302,7 +762,8 @@
 
   <div class="mo" id="plan-edit-mo">
     <div class="md md-wide">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:1px solid var(--bo);padding-bottom:10px">
+      <div
+        style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:1px solid var(--bo);padding-bottom:10px">
         <div>
           <div class="mt2" style="margin:0">Editar parada</div>
           <div style="font-size:12px;color:var(--mu);font-weight:700" id="edit-stop-sub"></div>
@@ -339,17 +800,20 @@
       <div class="sbt">Detalles ligados</div>
       <div id="edit-stop-details"></div>
 
-      <div style="margin-top:14px;padding:14px;border:1px dashed var(--bo);border-radius:16px;background:rgba(9,132,227,.04)">
+      <div
+        style="margin-top:14px;padding:14px;border:1px dashed var(--bo);border-radius:16px;background:rgba(9,132,227,.04)">
         <div class="sbt">Agregar detalle nuevo</div>
         <div class="fi">
           <label>Titulo</label>
-          <textarea id="new-detail-title" rows="2" placeholder="Ej: Revisar potencia, cambiar radio, validar cliente..."></textarea>
+          <textarea id="new-detail-title" rows="2"
+            placeholder="Ej: Revisar potencia, cambiar radio, validar cliente..."></textarea>
         </div>
         <div class="fi">
           <label>Nombre del cliente (si aplica)</label>
           <input id="new-detail-client" placeholder="Nombre del cliente">
         </div>
-        <div class="fi"><label>Numero telefonico <span class="optional-label">Opcional</span></label><input id="new-detail-phone" type="tel" placeholder="Numero de telefono (opcional)"></div>
+        <div class="fi"><label>Numero telefonico <span class="optional-label">Opcional</span></label><input
+            id="new-detail-phone" type="tel" placeholder="Numero de telefono (opcional)"></div>
         <div class="fi">
           <label>Ubicacion del detalle (opcional)</label>
           <input id="new-detail-location" class="mono" placeholder="18.09563, -99.19604">
@@ -395,7 +859,9 @@
           <div id="plan-route-sub" class="route-full-sub"></div>
         </div>
         <div class="route-full-actions">
-          <button class="btn bsm bgh route-toggle-list-btn" type="button" onclick="toggleRouteListFullscreen()" id="btn-toggle-route-list" title="Maximizar mapa"><span id="route-toggle-list-text">Maximizar mapa</span></button>
+          <button class="btn bsm bgh route-toggle-list-btn" type="button" onclick="toggleRouteListFullscreen()"
+            id="btn-toggle-route-list" title="Maximizar mapa"><span id="route-toggle-list-text">Maximizar
+              mapa</span></button>
           <button class="btn bsm bg2" onclick="exportWeeklyRouteExcel()">Exportar Excel</button>
           <button class="btn bsm bgh" onclick="closeWeeklyRouteModal()">Cerrar</button>
         </div>
@@ -421,24 +887,29 @@
         <button class="btn bsm bgh" type="button" onclick="closeAdminWeekPlanner()">Cerrar</button>
       </div>
       <div class="plan-week-nav">
-        <button class="plan-week-nav-button" type="button" onclick="shiftAdminPlannerWeek(-1)" aria-label="Semana anterior"><b>&#8249;</b><span>Semana anterior</span></button>
+        <button class="plan-week-nav-button" type="button" onclick="shiftAdminPlannerWeek(-1)"
+          aria-label="Semana anterior"><b>&#8249;</b><span>Semana anterior</span></button>
         <div class="plan-week-nav-range">
           <small>Semana seleccionada</small>
           <strong id="plan-week-range"></strong>
           <div class="plan-week-board-scroll-controls">
-            <button type="button" class="plan-week-board-scroll-btn" onclick="scrollWeekBoard(-280)" title="Desplazar días a la izquierda">◀ Días anteriores</button>
+            <button type="button" class="plan-week-board-scroll-btn" onclick="scrollWeekBoard(-280)"
+              title="Desplazar días a la izquierda">◀ Días anteriores</button>
             <span class="plan-week-board-scroll-hint">Desplaza horizontalmente con la rueda</span>
-            <button type="button" class="plan-week-board-scroll-btn" onclick="scrollWeekBoard(280)" title="Desplazar días a la derecha">Días siguientes ▶</button>
+            <button type="button" class="plan-week-board-scroll-btn" onclick="scrollWeekBoard(280)"
+              title="Desplazar días a la derecha">Días siguientes ▶</button>
           </div>
         </div>
-        <button class="plan-week-nav-button next" type="button" onclick="shiftAdminPlannerWeek(1)" aria-label="Semana siguiente"><span>Semana siguiente</span><b>&#8250;</b></button>
+        <button class="plan-week-nav-button next" type="button" onclick="shiftAdminPlannerWeek(1)"
+          aria-label="Semana siguiente"><span>Semana siguiente</span><b>&#8250;</b></button>
       </div>
       <div class="plan-week-workspace">
         <div id="plan-week-board" class="plan-week-board"></div>
         <aside class="plan-week-map-panel">
           <div class="plan-week-map-head">
             <div><strong>Vista de la ruta</strong><small id="plan-week-map-info">Selecciona una vista</small></div>
-            <div id="plan-week-map-scope" class="plan-week-map-calendar" role="group" aria-label="Ruta que se muestra"></div>
+            <div id="plan-week-map-scope" class="plan-week-map-calendar" role="group" aria-label="Ruta que se muestra">
+            </div>
           </div>
           <div id="plan-week-route-map" class="plan-week-route-map"></div>
         </aside>
@@ -448,11 +919,22 @@
 
   <div class="mo plan-dialog-overlay" id="plan-create-mo">
     <div class="md plan-dialog-card plan-create-card">
-      <div class="plan-dialog-head"><span class="plan-dialog-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM9 2v4M15 2v4M5 8h14M12 12v5M9.5 14.5h5"/></svg></span><div><h2>Crear nuevo plan</h2><p>Registra un nombre claro para identificar la planificación.</p></div><button type="button" class="plan-dialog-close" aria-label="Cerrar" onclick="closeCreateGeneralPlanModal()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <div class="plan-dialog-head"><span class="plan-dialog-icon"><svg viewBox="0 0 24 24">
+            <path d="M5 4h14v16H5zM9 2v4M15 2v4M5 8h14M12 12v5M9.5 14.5h5" />
+          </svg></span>
+        <div>
+          <h2>Crear nuevo plan</h2>
+          <p>Registra un nombre claro para identificar la planificación.</p>
+        </div><button type="button" class="plan-dialog-close" aria-label="Cerrar"
+          onclick="closeCreateGeneralPlanModal()"><svg viewBox="0 0 24 24">
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg></button>
+      </div>
       <div class="plan-dialog-body">
         <label class="plan-dialog-field" for="plan-create-name">
           <span>Nombre del plan</span>
-          <input id="plan-create-name" maxlength="80" autocomplete="off" placeholder="Ej. Ruta Costa - Semana 34" onkeydown="if(event.key==='Enter'){event.preventDefault();saveNewGeneralPlan()}">
+          <input id="plan-create-name" maxlength="80" autocomplete="off" placeholder="Ej. Ruta Costa - Semana 34"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();saveNewGeneralPlan()}">
           <small>La fecha de creación se agregará automáticamente.</small>
         </label>
         <div class="plan-create-preview">
@@ -463,23 +945,50 @@
         <div class="plan-create-preset-suggestions">
           <div class="plan-create-preset-head">
             <span>Rutas previamente hechas:</span>
-            <button type="button" class="btn bsm bgh" style="font-size:11px;padding:2px 8px;" onclick="closeCreateGeneralPlanModal();openPresetRoutesModal();">Ver catálogo (52)</button>
+            <button type="button" class="btn bsm bgh" style="font-size:11px;padding:2px 8px;"
+              onclick="closeCreateGeneralPlanModal();openPresetRoutesModal();">Ver catálogo (52)</button>
           </div>
           <div class="plan-create-preset-chips" id="plan-create-quick-chips">
             <!-- Chips de rutas recomendadas -->
           </div>
         </div>
       </div>
-      <div class="plan-dialog-actions"><button type="button" class="btn bgh" onclick="closeCreateGeneralPlanModal()">Cancelar</button><button type="button" class="btn bc plan-action-button" onclick="saveNewGeneralPlan()"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>Crear plan</span></button></div>
+      <div class="plan-dialog-actions"><button type="button" class="btn bgh"
+          onclick="closeCreateGeneralPlanModal()">Cancelar</button><button type="button"
+          class="btn bc plan-action-button" onclick="saveNewGeneralPlan()"><span class="plan-action-icon"><svg
+              viewBox="0 0 24 24">
+              <path d="M12 5v14M5 12h14" />
+            </svg></span><span>Crear plan</span></button></div>
     </div>
   </div>
 
   <div class="mo plan-dialog-overlay" id="plan-assignment-mo">
     <div class="md plan-dialog-card plan-assignment-card">
-      <div class="plan-dialog-head"><span class="plan-dialog-icon assignment"><svg viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"/><path d="M5 19c0-4 2.5-7 7-7s7 3 7 7M17 11l2 2 3-4"/></svg></span><div><h2 id="plan-assignment-title">Asignar técnico</h2><p id="plan-assignment-message">Confirma la asignación de esta ruta.</p></div><button type="button" class="plan-dialog-close" aria-label="Cerrar" onclick="resolvePlanAssignment(false)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
-      <div class="plan-assignment-summary"><div><small>Plan</small><strong id="plan-assignment-plan"></strong></div><span class="plan-assignment-arrow">→</span><div><small>Técnico</small><strong id="plan-assignment-tech"></strong></div></div>
+      <div class="plan-dialog-head"><span class="plan-dialog-icon assignment" id="plan-assignment-dialog-icon"><svg
+            viewBox="0 0 24 24">
+            <circle cx="12" cy="7" r="3" />
+            <path d="M5 19c0-4 2.5-7 7-7s7 3 7 7M17 11l2 2 3-4" />
+          </svg></span>
+        <div>
+          <h2 id="plan-assignment-title">Asignar técnico</h2>
+          <p id="plan-assignment-message">Confirma la asignación de esta ruta.</p>
+        </div><button type="button" class="plan-dialog-close" aria-label="Cerrar"
+          onclick="resolvePlanAssignment(false)"><svg viewBox="0 0 24 24">
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg></button>
+      </div>
+      <div class="plan-assignment-summary">
+        <div><small>Plan</small><strong id="plan-assignment-plan"></strong></div><span class="plan-assignment-arrow"
+          id="plan-assignment-arrow">→</span>
+        <div><small>Técnico</small><strong id="plan-assignment-tech"></strong></div>
+      </div>
       <div id="plan-assignment-warning" class="plan-assignment-warning" hidden></div>
-      <div class="plan-dialog-actions"><button type="button" class="btn bgh" onclick="resolvePlanAssignment(false)">Cancelar</button><button type="button" id="plan-assignment-confirm" class="btn bc plan-action-button" onclick="resolvePlanAssignment(true)"><span class="plan-action-icon"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></span><span>Confirmar asignación</span></button></div>
+      <div class="plan-dialog-actions"><button type="button" class="btn bgh"
+          onclick="resolvePlanAssignment(false)">Cancelar</button><button type="button" id="plan-assignment-confirm"
+          class="btn bc plan-action-button" onclick="resolvePlanAssignment(true)"><span class="plan-action-icon"><svg
+              viewBox="0 0 24 24">
+              <path d="m5 12 4 4L19 6" />
+            </svg></span><span>Confirmar asignación</span></button></div>
     </div>
   </div>
 
@@ -487,14 +996,19 @@
     <div class="md plan-dialog-card plan-duplicate-card">
       <div class="plan-dialog-head">
         <span class="plan-dialog-icon" style="background:#eef6ff;color:#0874e8;">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+          </svg>
         </span>
         <div>
           <h2>Duplicar Plan General</h2>
           <p id="plan-duplicate-subtitle">Crea una copia exacta del plan actual para asignar a otro técnico.</p>
         </div>
         <button type="button" class="plan-dialog-close" aria-label="Cerrar" onclick="CM('plan-duplicate-mo')">
-          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          <svg viewBox="0 0 24 24">
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg>
         </button>
       </div>
       <div class="plan-dialog-body">
@@ -505,14 +1019,19 @@
         </label>
         <label class="plan-dialog-field" for="plan-duplicate-tech" style="margin-top:12px;">
           <span>Asignar a técnico</span>
-          <select id="plan-duplicate-tech" style="min-height:42px;width:100%;border-radius:8px;border:1px solid #cbd9e6;padding:0 10px;font-weight:700;"></select>
+          <select id="plan-duplicate-tech"
+            style="min-height:42px;width:100%;border-radius:8px;border:1px solid #cbd9e6;padding:0 10px;font-weight:700;"></select>
           <small>El técnico seleccionado recibirá este plan de forma independiente.</small>
         </label>
       </div>
       <div class="plan-dialog-actions">
         <button type="button" class="btn bgh" onclick="CM('plan-duplicate-mo')">Cancelar</button>
         <button type="button" class="btn bc plan-action-button" onclick="confirmDuplicateGeneralPlan()">
-          <span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+          <span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg></span>
           <span>Duplicar y Asignar</span>
         </button>
       </div>
@@ -523,23 +1042,34 @@
     <div class="md plan-dialog-card plan-team-card">
       <div class="plan-dialog-head">
         <span class="plan-dialog-icon" style="background:#f3e8ff;color:#8b5cf6;">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
         </span>
         <div>
           <h2>Asignar Equipo al Plan</h2>
           <p>Selecciona todos los técnicos que trabajarán conjuntamente en esta ruta.</p>
         </div>
         <button type="button" class="plan-dialog-close" aria-label="Cerrar" onclick="CM('plan-team-mo')">
-          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          <svg viewBox="0 0 24 24">
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg>
         </button>
       </div>
       <div class="plan-dialog-body">
-        <div id="plan-team-tech-list" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;padding:4px 0;"></div>
+        <div id="plan-team-tech-list"
+          style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;padding:4px 0;"></div>
       </div>
       <div class="plan-dialog-actions">
         <button type="button" class="btn bgh" onclick="CM('plan-team-mo')">Cancelar</button>
         <button type="button" class="btn bc plan-action-button" onclick="confirmTeamAssignment()">
-          <span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg></span>
+          <span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <path d="m5 12 4 4L19 6" />
+            </svg></span>
           <span>Guardar Equipo</span>
         </button>
       </div>
@@ -550,14 +1080,19 @@
     <div class="md plan-dialog-card" style="max-width:540px;">
       <div class="plan-dialog-head">
         <span class="plan-dialog-icon" style="background:#eff6ff;color:#2563eb;">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z" />
+            <circle cx="12" cy="10" r="3" />
+          </svg>
         </span>
         <div>
           <h2>Registrar como nuevo pueblo</h2>
           <p>Se guardará en el catálogo de pueblos para registrar detalles y vincular a rutas.</p>
         </div>
         <button type="button" class="plan-dialog-close" aria-label="Cerrar" onclick="CM('register-node-from-stop-mo')">
-          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          <svg viewBox="0 0 24 24">
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg>
         </button>
       </div>
       <div class="plan-dialog-body" style="grid-template-columns:1fr;gap:12px;padding:18px 22px;">
@@ -573,7 +1108,8 @@
           </label>
           <label class="plan-dialog-field" for="reg-node-zone">
             <span>Zona / Región</span>
-            <select id="reg-node-zone" style="height:46px;border-radius:9px;border:1px solid #cfddea;padding:0 10px;font-weight:700;">
+            <select id="reg-node-zone"
+              style="height:46px;border-radius:9px;border:1px solid #cfddea;padding:0 10px;font-weight:700;">
               <option value="centro">Centro</option>
               <option value="norte">Norte</option>
               <option value="ayutla">Ayutla</option>
@@ -591,7 +1127,8 @@
         </label>
         <label class="plan-dialog-field" for="reg-node-eq">
           <span>Vincular a antena (opcional)</span>
-          <select id="reg-node-eq" style="height:46px;border-radius:9px;border:1px solid #cfddea;padding:0 10px;font-weight:700;">
+          <select id="reg-node-eq"
+            style="height:46px;border-radius:9px;border:1px solid #cfddea;padding:0 10px;font-weight:700;">
             <option value="">-- Sin antena matriz vinculada --</option>
           </select>
         </label>
@@ -599,7 +1136,12 @@
       <div class="plan-dialog-actions">
         <button type="button" class="btn bgh" onclick="CM('register-node-from-stop-mo')">Cancelar</button>
         <button type="button" class="btn bc plan-action-button" onclick="saveNewNodeFromStop()">
-          <span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></span>
+          <span class="plan-action-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg></span>
           <span>Registrar y Vincular Pueblo</span>
         </button>
       </div>
@@ -618,7 +1160,8 @@
       <div class="tech-qr-grid">
         <img id="plan-tech-qr-img" alt="QR ruta tecnico" class="tech-qr-img">
         <div>
-          <div class="ib">El tecnico escanea el codigo, entra con su usuario y contraseña, y ve la ruta con mapa, detalles e historial. Solo puede mover el orden.</div>
+          <div class="ib">El tecnico escanea el codigo, entra con su usuario y contraseña, y ve la ruta con mapa,
+            detalles e historial. Solo puede mover el orden.</div>
           <input id="plan-tech-route-link" class="mono" readonly style="width:100%;margin:8px 0">
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn bc" onclick="openPlanTechRouteLink()">Abrir</button>
@@ -633,7 +1176,11 @@
   <div class="mo" id="tech-pending-material-prompt-mo">
     <div class="tech-pending-material-card" role="dialog" aria-modal="true">
       <div class="tech-pending-material-head">
-        <div class="tech-pending-material-icon"><svg viewBox="0 0 24 24" style="width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;"><path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="m4 7v10l8 4 8-4V7M12 11v10"/></svg></div>
+        <div class="tech-pending-material-icon"><svg viewBox="0 0 24 24"
+            style="width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:2;">
+            <path d="m4 7 8-4 8 4-8 4-8-4Z" />
+            <path d="m4 7v10l8 4 8-4V7M12 11v10" />
+          </svg></div>
         <div class="tech-pending-material-title">
           <h2 id="tech-pending-prompt-title">Material entregado</h2>
           <p id="tech-pending-prompt-desc">Soporte te asignó material. Confirma lo que recibiste para usarlo hoy.</p>
@@ -641,27 +1188,38 @@
       </div>
       <div id="tech-pending-prompt-content" class="tech-pending-dispatches-list"></div>
       <div style="display:flex;gap:10px;margin-top:14px">
-        <button type="button" class="btn bgh bfu" onclick="dismissTechnicianMaterialPrompt()" style="min-height:46px;font-size:13px">Ver más tarde</button>
+        <button type="button" class="btn bgh bfu" onclick="dismissTechnicianMaterialPrompt()"
+          style="min-height:46px;font-size:13px">Ver más tarde</button>
       </div>
     </div>
   </div>
 
   <!-- Modal de Firma Digital en Planificador (Celular / Móvil y Web) -->
   <div class="mo" id="material-signature-mo" style="z-index: 10600;">
-    <div class="md material-signature-dialog" style="max-width:520px;width:min(520px,calc(100vw - 24px));padding:16px;box-sizing:border-box;border-radius:18px;">
-      <div class="material-modal-head" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;">
+    <div class="md material-signature-dialog"
+      style="max-width:520px;width:min(520px,calc(100vw - 24px));padding:16px;box-sizing:border-box;border-radius:18px;">
+      <div class="material-modal-head"
+        style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:8px;">
         <div>
-          <div class="mt2" id="signature-modal-title" style="font-size:17px;font-weight:800;color:#0f172a;line-height:1.2;">Firma de conformidad</div>
-          <small id="signature-modal-subtitle" style="font-size:12px;color:#64748b;display:block;margin-top:3px;">Firma con tu dedo en el recuadro para confirmar.</small>
+          <div class="mt2" id="signature-modal-title"
+            style="font-size:17px;font-weight:800;color:#0f172a;line-height:1.2;">Firma de conformidad</div>
+          <small id="signature-modal-subtitle" style="font-size:12px;color:#64748b;display:block;margin-top:3px;">Firma
+            con tu dedo en el recuadro para confirmar.</small>
         </div>
-        <button type="button" class="btn bsm bgh" onclick="cancelSignaturePrompt()" style="min-width:32px;height:32px;padding:0;font-size:16px;">✕</button>
+        <button type="button" class="btn bsm bgh" onclick="cancelSignaturePrompt()"
+          style="min-width:32px;height:32px;padding:0;font-size:16px;">✕</button>
       </div>
-      <div id="signature-signer-badge" style="margin:8px 0;padding:8px 12px;background:#f1f5f9;border-radius:8px;font-size:12px;color:#334155;">
-        Firmante: <strong id="signature-modal-signer-name">Usuario</strong> (<span id="signature-modal-signer-role">Responsable</span>)
+      <div id="signature-signer-badge"
+        style="margin:8px 0;padding:8px 12px;background:#f1f5f9;border-radius:8px;font-size:12px;color:#334155;">
+        Firmante: <strong id="signature-modal-signer-name">Usuario</strong> (<span
+          id="signature-modal-signer-role">Responsable</span>)
       </div>
-      <div class="signature-canvas-container" style="margin:12px 0;background:#ffffff;border:2px dashed #94a3b8;border-radius:12px;position:relative;touch-action:none;box-shadow:inset 0 2px 4px rgba(0,0,0,0.02)">
-        <canvas id="material-signature-canvas" width="480" height="190" style="display:block;width:100%;height:190px;cursor:crosshair;touch-action:none;"></canvas>
-        <div class="signature-guideline" style="position:absolute;bottom:35px;left:20px;right:20px;border-bottom:1.5px solid #cbd5e1;pointer-events:none;text-align:right;color:#94a3b8;font-size:11px;">
+      <div class="signature-canvas-container"
+        style="margin:12px 0;background:#ffffff;border:2px dashed #94a3b8;border-radius:12px;position:relative;touch-action:none;box-shadow:inset 0 2px 4px rgba(0,0,0,0.02)">
+        <canvas id="material-signature-canvas" width="480" height="190"
+          style="display:block;width:100%;height:190px;cursor:crosshair;touch-action:none;"></canvas>
+        <div class="signature-guideline"
+          style="position:absolute;bottom:35px;left:20px;right:20px;border-bottom:1.5px solid #cbd5e1;pointer-events:none;text-align:right;color:#94a3b8;font-size:11px;">
           Firma aquí ✕
         </div>
       </div>
@@ -669,32 +1227,43 @@
         <button type="button" class="btn bsm bgh" onclick="clearSignatureCanvas()">Borrar firma</button>
         <div style="display:flex;gap:8px;">
           <button type="button" class="btn bsm bgh" onclick="cancelSignaturePrompt()">Cancelar</button>
-          <button type="button" class="btn bsm bg2" id="signature-confirm-btn" onclick="confirmSignaturePrompt()" style="font-weight:700">✓ Confirmar firma</button>
+          <button type="button" class="btn bsm bg2" id="signature-confirm-btn" onclick="confirmSignaturePrompt()"
+            style="font-weight:700">✓ Confirmar firma</button>
         </div>
       </div>
     </div>
   </div>
 
-  <nav class="tech-bottom-nav tech-bottom-nav-three" id="tech-bottom-nav" aria-label="Opciones del técnico">
+  <nav class="tech-bottom-nav tech-bottom-nav-three" id="tech-bottom-nav" aria-label="Opciones del técnico" style="display:none;">
     <button class="active" type="button" onclick="openTechnicianDetails()" title="Ver agenda y detalles del día">
-      <svg class="tech-nav-svg" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v0Zm0 9h6m-6 4h4"/></svg>
+      <svg class="tech-nav-svg" viewBox="0 0 24 24">
+        <path
+          d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v0Zm0 9h6m-6 4h4" />
+      </svg>
       <span>Detalles</span>
     </button>
     <button type="button" onclick="openTechnicianRouteMap()" title="Ver mapa de la ruta completa">
-      <svg class="tech-nav-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+      <svg class="tech-nav-svg" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" />
+        <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
+      </svg>
       <span>Ruta</span>
     </button>
     <button type="button" onclick="openTechnicianAddMenu()" title="Registrar nueva instalación o detalle">
-      <svg class="tech-nav-svg" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <svg class="tech-nav-svg" viewBox="0 0 24 24">
+        <line x1="12" y1="5" x2="12" y2="19" />
+        <line x1="5" y1="12" x2="19" y2="12" />
+      </svg>
       <span>Agregar</span>
     </button>
   </nav>
 
   <div class="nt" id="nt"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="assets/js/api.js?v=20261109-signatures-v6"></script>
-  <script src="assets/js/common.js?v=20261109-signatures-v6"></script>
-  <script src="assets/js/preset-routes.js?v=20261111-preset-routes-v1"></script>
-  <script src="assets/js/planificar.js?v=20261111-places-intel-v2"></script>
+  <script src="assets/js/api.js?v=20261118-fast-load-and-share-v2"></script>
+  <script src="assets/js/common.js?v=20261118-fast-load-and-share-v2"></script>
+  <script src="assets/js/preset-routes.js?v=20261118-fast-load-and-share-v2"></script>
+  <script src="assets/js/planificar.js?v=20261119-tech-day-map-restored-v1"></script>
 </body>
+
 </html>

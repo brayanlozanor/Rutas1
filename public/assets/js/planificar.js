@@ -72,19 +72,38 @@ function canManagePlanStops() {
 }
 
 function isTechnicianPlanView() {
+    if (typeof window !== 'undefined' && window.location && window.location.search) {
+        const params = new URLSearchParams(window.location.search);
+        const v = (params.get('view') || '').toLowerCase().trim();
+        if (v === 'tecnico' || v === 'tech' || v === 'mobile' || v === 'celular') return true;
+        if (v === 'admin' || v === 'desktop' || v === 'pc') return false;
+    }
+
+    const isMobileScreen = typeof window !== 'undefined' && (
+        (typeof window.innerWidth === 'number' && window.innerWidth > 0 && window.innerWidth <= 768) ||
+        (window.matchMedia && window.matchMedia('(max-width: 768px)').matches)
+    );
+
+    if (typeof userHasRole === 'function' && userHasRole('tecnico')) return true;
+
+    const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+    const role = typeof normalizeRole === 'function' ? normalizeRole(user?.role) : String(user?.role || '').toLowerCase().trim();
+    if (role === 'tecnico') return true;
+
+    const isAdminOrOffice = role === 'administrador' || role === 'admin' || role === 'soporte' || role === 'atencion_clientes' ||
+        (typeof userHasRole === 'function' && userHasRole('administrador', 'admin', 'soporte', 'atencion_clientes'));
+
+    if (isAdminOrOffice) {
+        return Boolean(isMobileScreen);
+    }
+
     if (typeof document !== 'undefined' && document.body && (
         document.body.classList.contains('plan-technician-view') ||
-        document.body.dataset.techView ||
-        document.querySelector('.tech-mobile-header') ||
-        document.querySelector('.tech-bottom-nav') ||
-        document.querySelector('.tech-calendar-toolbar')
+        (document.body.dataset && document.body.dataset.techView)
     )) {
         return true;
     }
-    if (typeof userHasRole === 'function' && userHasRole('tecnico')) return true;
-    const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
-    const role = typeof normalizeRole === 'function' ? normalizeRole(user?.role) : '';
-    if (role === 'tecnico') return true;
+
     const username = (user?.username || '').toLowerCase();
     const name = (user?.name || '').toLowerCase();
     const userId = String(user?.id || '');
@@ -98,7 +117,8 @@ function isTechnicianPlanView() {
     )) {
         return true;
     }
-    return false;
+
+    return Boolean(isMobileScreen);
 }
 
 function getLoggedTechnicianId() {
@@ -130,7 +150,7 @@ function getLoggedTechnicianId() {
             const pName = normalizeName(plan.name || '');
             const pTechName = normalizeName(plan.assignedTechName || plan.technician || '');
             return (username && (pName.includes(username) || pTechName.includes(username))) ||
-                   (userDisplayName && (pName.includes(userDisplayName) || pTechName.includes(userDisplayName)));
+                (userDisplayName && (pName.includes(userDisplayName) || pTechName.includes(userDisplayName)));
         });
         if (matchingPlan && matchingPlan.assignedTechId) {
             technician = (state.technicians || []).find(t => String(t.id) === String(matchingPlan.assignedTechId));
@@ -184,6 +204,19 @@ function resetPlanMapScrollLock() {
     if (oldBox) oldBox.classList.remove('map-expanded');
 }
 
+function dismissPlanInitialLoader() {
+    try {
+        const loader = document.getElementById('plan-initial-loader');
+        if (loader) {
+            loader.classList.add('is-hidden');
+            setTimeout(() => {
+                try { loader.remove(); } catch (_) { }
+            }, 320);
+        }
+        if (typeof hideLoading === 'function') hideLoading();
+    } catch (_) { }
+}
+
 async function initPlanificarPage() {
     if (!checkAuth()) return;
     initCommon();
@@ -192,40 +225,96 @@ async function initPlanificarPage() {
         applyTechnicianViewportLayout();
         const logo = document.querySelector('.logo-link');
         if (logo) logo.href = 'planificar.html';
+        try { configureTechnicianDashboard(); } catch (_) { }
+    } else {
+        applyTechnicianViewportLayout();
     }
     const stopSearch = document.getElementById('plan-stop-search');
     if (stopSearch) stopSearch.placeholder = 'Buscar cliente, pueblo o antena...';
     resetPlanMapScrollLock();
-    await loadDB({ showOverlay: false, preferCache: true });
-    if (typeof getGlobalWorkOrdersCache === 'function') {
-        const cached = getGlobalWorkOrdersCache();
-        const cachedList = Object.values(cached);
-        if (cachedList.length > 0) {
-            if (!Array.isArray(state.workOrders) || state.workOrders.length === 0) {
-                state.workOrders = cachedList;
-            } else {
-                const existingMap = new Map(state.workOrders.map(w => [w.id, w]));
-                for (const ord of cachedList) {
-                    if (!existingMap.has(ord.id)) {
-                        state.workOrders.push(ord);
-                        existingMap.set(ord.id, ord);
+
+    let hydratedFromCache = false;
+    try {
+        if (typeof getLastGoodCloudState === 'function' && typeof applyStateData === 'function') {
+            const cachedState = getLastGoodCloudState();
+            if (cachedState?.data && typeof cachedState.data === 'object') {
+                applyStateData(cachedState.data);
+                if (typeof getGlobalWorkOrdersCache === 'function') {
+                    const cachedWOs = Object.values(getGlobalWorkOrdersCache() || {});
+                    if (cachedWOs.length > 0) {
+                        const existingMap = new Map((state.workOrders || []).map(w => [w.id, w]));
+                        for (const ord of cachedWOs) {
+                            if (ord?.id && !existingMap.has(ord.id)) {
+                                state.workOrders.push(ord);
+                                existingMap.set(ord.id, ord);
+                            }
+                        }
+                    }
+                }
+                if (isTechnicianPlanView()) {
+                    ensureLoggedTechnicianRecord();
+                }
+                normalizeWeekPlan();
+                initPlanSelectors();
+                configureTechnicianDashboard();
+                renderPlan();
+                setTimeout(initPlanMap, 40);
+                dismissPlanInitialLoader();
+                hydratedFromCache = true;
+            }
+        }
+    } catch (cacheErr) {
+        console.warn('Cache hydration warning:', cacheErr);
+    }
+
+    const safetyHideTimer = setTimeout(() => {
+        dismissPlanInitialLoader();
+    }, 3500);
+
+    try {
+        await loadDB({ showOverlay: false, preferCache: true });
+        if (typeof getGlobalWorkOrdersCache === 'function') {
+            const cached = getGlobalWorkOrdersCache();
+            const cachedList = Object.values(cached);
+            if (cachedList.length > 0) {
+                if (!Array.isArray(state.workOrders) || state.workOrders.length === 0) {
+                    state.workOrders = cachedList;
+                } else {
+                    const existingMap = new Map(state.workOrders.map(w => [w.id, w]));
+                    for (const ord of cachedList) {
+                        if (!existingMap.has(ord.id)) {
+                            state.workOrders.push(ord);
+                            existingMap.set(ord.id, ord);
+                        }
                     }
                 }
             }
         }
+        if (isTechnicianPlanView()) {
+            ensureLoggedTechnicianRecord();
+        }
+        normalizeWeekPlan();
+        initPlanSelectors();
+        configureTechnicianDashboard();
+        renderPlan();
+        if (isTechnicianPlanView()) {
+            checkTechnicianPendingMaterialPrompt();
+            setTimeout(checkTechnicianPendingMaterialPrompt, 350);
+        }
+        setTimeout(initPlanMap, 100);
+    } catch (err) {
+        console.warn('Error durante la carga inicial de Planificar:', err);
+        try {
+            normalizeWeekPlan();
+            initPlanSelectors();
+            configureTechnicianDashboard();
+            renderPlan();
+            setTimeout(initPlanMap, 100);
+        } catch (_) { }
+    } finally {
+        clearTimeout(safetyHideTimer);
+        dismissPlanInitialLoader();
     }
-    if (isTechnicianPlanView()) {
-        ensureLoggedTechnicianRecord();
-    }
-    normalizeWeekPlan();
-    initPlanSelectors();
-    configureTechnicianDashboard();
-    renderPlan();
-    if (isTechnicianPlanView()) {
-        checkTechnicianPendingMaterialPrompt();
-        setTimeout(checkTechnicianPendingMaterialPrompt, 350);
-    }
-    setTimeout(initPlanMap, 100);
 }
 
 let _lastPlanWakeTime = 0;
@@ -268,6 +357,9 @@ async function handlePlanWakeRefresh() {
             initPlanSelectors();
             renderPlan();
         }
+        if (planMap) {
+            setTimeout(() => { try { planMap.invalidateSize(); } catch (_) { } }, 100);
+        }
     } catch (e) {
         console.warn('Wake refresh quiet sync error:', e);
     }
@@ -279,7 +371,6 @@ if (typeof window !== 'undefined' && !window._planWakeRefreshBound) {
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) handlePlanWakeRefresh();
     });
-    window.addEventListener('focus', () => { handlePlanWakeRefresh(); });
 }
 
 function checkTechnicianDailyStopsNotice() {
@@ -288,7 +379,10 @@ function checkTechnicianDailyStopsNotice() {
 
 function configureTechnicianDashboard() {
     checkTechnicianDailyStopsNotice();
-    if (!isTechnicianPlanView()) return;
+    if (!isTechnicianPlanView()) {
+        applyTechnicianViewportLayout();
+        return;
+    }
     const continuityBanner = document.getElementById('plan-continuity-recommendations-banner');
     if (continuityBanner) {
         continuityBanner.style.display = 'none';
@@ -299,7 +393,7 @@ function configureTechnicianDashboard() {
     if (!selectedCalendarDate) selectedCalendarDate = localDateKey();
     const user = getCurrentUser();
     const firstName = String(user?.name || user?.username || 'Tecnico').trim().split(/\s+/)[0];
-    const todayText = new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    const todayText = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const hero = document.querySelector('.hero-panel');
     if (hero) {
         hero.classList.add('tech-dashboard-hero');
@@ -310,7 +404,7 @@ function configureTechnicianDashboard() {
     const kpis = document.querySelector('.plan-kpi-bar');
     const mapBox = document.getElementById('plan-map-box');
     const board = document.querySelector('.plan-board');
-    if (shell && !document.querySelector('.tech-calendar-toolbar')) {
+    if (shell) {
         const today = new Date(`${selectedCalendarDate}T12:00:00`);
         const monday = new Date(today);
         monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
@@ -318,13 +412,13 @@ function configureTechnicianDashboard() {
         const days = Array.from({ length: 7 }, (_, index) => {
             const date = new Date(monday);
             date.setDate(monday.getDate() + index);
-            const dateKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+            const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
             const active = dateKey === selectedCalendarDate ? 'active' : '';
             const dayStopsCount = allStops.filter(s => (s.scheduledDate || '') === dateKey).length;
             const hasWork = dayStopsCount > 0 ? 'has-work' : '';
-            return `<button type="button" class="tech-week-day ${active} ${hasWork}" onclick="selectTechnicianAgendaDate('${dateKey}')"><small>${date.toLocaleDateString('es-MX',{weekday:'short'}).replace('.','')}</small><strong>${date.getDate()}</strong>${dayStopsCount > 0 ? '<i class="tech-work-dot" title="Trabajo asignado"></i>' : ''}</button>`;
+            return `<button type="button" class="tech-week-day ${active} ${hasWork}" onclick="selectTechnicianAgendaDate('${dateKey}')"><small>${date.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', '')}</small><strong>${date.getDate()}</strong>${dayStopsCount > 0 ? '<i class="tech-work-dot" title="Trabajo asignado"></i>' : ''}</button>`;
         }).join('');
-        shell.insertAdjacentHTML('afterbegin', `<section class="tech-calendar-toolbar">
+        const toolbarInner = `
             <div class="tech-agenda-title">
                 <h1>Mi agenda</h1>
                 <button type="button" class="tech-today-pill" onclick="selectTechnicianAgendaDate('${localDateKey()}')">Hoy</button>
@@ -332,11 +426,17 @@ function configureTechnicianDashboard() {
             <div class="tech-day-label">Elige el día</div>
             <div class="tech-month-row">
                 <button type="button" onclick="shiftTechnicianAgendaWeek(-1)" aria-label="Semana anterior">&#8249;</button>
-                <strong>${today.toLocaleDateString('es-MX',{month:'long',year:'numeric'})}</strong>
+                <strong>${today.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}</strong>
                 <button type="button" onclick="shiftTechnicianAgendaWeek(1)" aria-label="Semana siguiente">&#8250;</button>
             </div>
             <div class="tech-week-strip">${days}</div>
-        </section>`);
+        `;
+        const existingToolbar = document.querySelector('.tech-calendar-toolbar');
+        if (existingToolbar) {
+            existingToolbar.innerHTML = toolbarInner;
+        } else {
+            shell.insertAdjacentHTML('afterbegin', `<section class="tech-calendar-toolbar">${toolbarInner}</section>`);
+        }
     }
     const toolbar = document.querySelector('.tech-calendar-toolbar');
     toolbar?.querySelector('.tech-summary-toggle')?.remove();
@@ -380,21 +480,54 @@ function configureTechnicianDashboard() {
         }
     }
 
-    if (shell && calendar && calendar.parentElement !== shell) shell.appendChild(calendar);
+    if (shell && calendar && calendar.parentElement !== shell && typeof shell.appendChild === 'function') shell.appendChild(calendar);
     if (mapBox) {
-        mapBox.classList.add('tech-route-map-card');
-        const head = mapBox.querySelector('.plan-map-panel-head');
+        mapBox.classList?.add?.('tech-route-map-card');
+        const head = mapBox.querySelector?.('.plan-map-panel-head');
         if (head) head.innerHTML = `<strong><span class="tech-map-icon">◇</span> Mapa de paradas</strong>`;
-        if (!document.getElementById('tech-route-overview')) {
+        if (!document.getElementById('tech-route-overview') && typeof mapBox.insertAdjacentHTML === 'function') {
             mapBox.insertAdjacentHTML('beforebegin', `<section id="tech-route-overview" class="tech-route-overview"><div class="tech-route-overview-head"><span>Tu ruta</span><h2 id="tech-route-overview-title">Ruta asignada</h2><small id="tech-route-overview-date"></small></div><div id="tech-route-overview-kpis" class="tech-route-overview-kpis"></div><div id="tech-route-travel-summary" class="tech-route-travel-summary"></div><div id="tech-route-stop-names" class="tech-route-stop-names"></div></section>`);
         }
     }
     if (board) {
-        board.classList.add('tech-today-board');
-        const title = board.querySelector('#plan-title');
+        board.classList?.add?.('tech-today-board');
+        const title = board.querySelector?.('#plan-title');
         if (title) title.textContent = 'Trabajos de hoy';
-        if (!document.getElementById('tech-day-map-card')) {
-            board.insertAdjacentHTML('afterend', `<section id="tech-day-map-card" class="tech-day-map-card"><div><strong>Mapa de hoy</strong><small id="tech-day-map-date"></small></div><div id="tech-day-map" class="tech-day-map"></div></section>`);
+        let dayMapCard = document.getElementById('tech-day-map-card');
+        if (!dayMapCard) {
+            if (typeof board.insertAdjacentHTML === 'function') {
+                board.insertAdjacentHTML('afterend', `<section id="tech-day-map-card" class="tech-day-map-card">
+    <div>
+        <strong>Mapa de hoy</strong>
+        <small id="tech-day-map-date"></small>
+    </div>
+    <div class="tech-map-privacy-notice" id="tech-map-privacy-notice" style="margin:0 14px 10px;padding:10px 12px;border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:11px;line-height:1.4;display:flex;align-items:flex-start;gap:8px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Tu ubicación solo se utiliza localmente en este dispositivo para calcular la ruta y no se almacena ni se usa para ningún otro fin.</span>
+    </div>
+    <div id="tech-day-map" class="tech-day-map"></div>
+    <div id="tech-locations-sheet" class="tech-map-locations-sheet" style="display:none;"></div>
+</section>`);
+                dayMapCard = document.getElementById('tech-day-map-card');
+            }
+        } else if (dayMapCard.parentElement === board && typeof board.after === 'function') {
+            board.after(dayMapCard);
+        }
+        if (dayMapCard && typeof dayMapCard.querySelector === 'function' && !dayMapCard.querySelector('#tech-day-map')) {
+            dayMapCard.innerHTML = `
+    <div>
+        <strong>Mapa de hoy</strong>
+        <small id="tech-day-map-date"></small>
+    </div>
+    <div class="tech-map-privacy-notice" id="tech-map-privacy-notice" style="margin:0 14px 10px;padding:10px 12px;border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:11px;line-height:1.4;display:flex;align-items:flex-start;gap:8px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Tu ubicación solo se utiliza localmente en este dispositivo para calcular la ruta y no se almacena ni se usa para ningún otro fin.</span>
+    </div>
+    <div id="tech-day-map" class="tech-day-map"></div>
+    <div id="tech-locations-sheet" class="tech-map-locations-sheet" style="display:none;"></div>`;
+        }
+        if (dayMapCard && (!document.body.dataset.techView || document.body.dataset.techView === 'details')) {
+            dayMapCard.style.display = 'block';
         }
     }
     if (!document.querySelector('.tech-mobile-header')) {
@@ -409,6 +542,11 @@ function configureTechnicianDashboard() {
             <div class="tech-header-spacer" style="width:40px;height:40px;" aria-hidden="true"></div>
         </header>`);
     } else {
+        const headerEl = document.querySelector('.tech-mobile-header');
+        const titleStrong = headerEl?.querySelector('.tech-header-title strong');
+        const titleSmall = headerEl?.querySelector('.tech-header-title small');
+        if (titleStrong) titleStrong.textContent = `Hola, ${firstName}`;
+        if (titleSmall) titleSmall.textContent = todayText.charAt(0).toUpperCase() + todayText.slice(1);
         const existingBell = document.querySelector('.tech-header-bell');
         if (existingBell) existingBell.remove();
         const existingBadge = document.getElementById('tech-mobile-bell-count');
@@ -418,11 +556,94 @@ function configureTechnicianDashboard() {
         document.body.insertAdjacentHTML('beforeend', `<nav class="tech-bottom-nav tech-bottom-nav-three" aria-label="Opciones del técnico"><button class="active" type="button" onclick="openTechnicianDetails()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v0a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v0Zm0 9h6m-6 4h4"/></svg>Detalles</button><button type="button" onclick="openTechnicianRouteMap()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>Ruta</button><button type="button" onclick="openTechnicianRecommendedRoutes()"><svg class="tech-nav-svg" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7"/></svg>Recomendadas</button></nav>`);
     }
     renderTechnicianRouteOverview();
+    renderTechnicianPlanBanner();
     updateTechnicianProgressCard();
     updateTechnicianMobileBellBadge();
     setTimeout(renderTechnicianDayMap, 0);
     requestTechnicianRealtimeWeather();
 }
+
+function renderTechnicianPlanBanner() {
+    if (!isTechnicianPlanView()) {
+        const existing = document.getElementById('tech-plan-banner');
+        if (existing) existing.style.display = 'none';
+        return;
+    }
+    const shell = document.querySelector('.plan-shell');
+    if (!shell) return;
+    const myTechId = getLoggedTechnicianId();
+    const allGeneralPlans = getGeneralPlans().filter(p => !p.deletedAt);
+    let techPlans = allGeneralPlans.filter(p => isPlanAssignedToTech(p, myTechId));
+    if (!techPlans.length && allGeneralPlans.length > 0) {
+        techPlans = allGeneralPlans;
+    }
+    const currentPlan = getSelectedGeneralPlan();
+    let banner = document.getElementById('tech-plan-banner');
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'tech-plan-banner';
+        banner.className = 'tech-plan-banner';
+        const progressCard = document.getElementById('tech-progress-card');
+        if (progressCard && progressCard.parentNode === shell) {
+            shell.insertBefore(banner, progressCard);
+        } else {
+            shell.insertAdjacentElement('afterbegin', banner);
+        }
+    }
+
+    if (!techPlans.length || !currentPlan) {
+        banner.className = 'tech-plan-banner is-empty';
+        banner.innerHTML = `
+            <span class="tech-plan-banner-icon">⚠️</span>
+            <div class="tech-plan-banner-text">
+                <strong style="font-size:13px;color:#92400e;">Sin ruta asignada</strong>
+                <small style="font-size:11px;color:#b45309;">Tu supervisor te asignará un plan de trabajo pronto.</small>
+            </div>
+        `;
+        banner.style.display = 'flex';
+        return;
+    }
+
+    const currentStopsCount = (currentPlan.stops || []).filter(s => !s.deletedAt).length;
+
+    if (techPlans.length <= 1) {
+        banner.className = 'tech-plan-banner';
+        banner.innerHTML = `
+            <div class="tech-plan-banner-pill">
+                <span class="tech-plan-banner-icon">🗺️</span>
+                <div class="tech-plan-banner-text">
+                    <span class="tech-plan-banner-label">Ruta asignada</span>
+                    <strong class="tech-plan-banner-name">${escapeHtml(currentPlan.name)}</strong>
+                </div>
+                <span class="tech-plan-banner-count">${currentStopsCount} parada${currentStopsCount === 1 ? '' : 's'}</span>
+            </div>
+        `;
+        banner.style.display = 'block';
+    } else {
+        banner.className = 'tech-plan-banner';
+        banner.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <span class="tech-plan-banner-label">Tus rutas asignadas (${techPlans.length}):</span>
+                <span class="tech-plan-banner-count">${currentStopsCount} parada${currentStopsCount === 1 ? '' : 's'} en actual</span>
+            </div>
+            <div class="tech-plan-banner-chips">
+                ${techPlans.map(p => {
+                    const isActive = currentPlan && p.id === currentPlan.id;
+                    const stopCount = (p.stops || []).filter(s => !s.deletedAt).length;
+                    return `
+                        <button type="button" class="tech-plan-chip ${isActive ? 'is-active' : ''}" onclick="selectGeneralPlan('${escapeAttr(p.id)}')">
+                            <span>🗺️</span>
+                            <strong>${escapeHtml(p.name)}</strong>
+                            <small>(${stopCount})</small>
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        `;
+        banner.style.display = 'block';
+    }
+}
+window.renderTechnicianPlanBanner = renderTechnicianPlanBanner;
 
 function getTechnicianPendingDispatches() {
     const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
@@ -495,8 +716,8 @@ function getTechnicianPendingDispatches() {
                 const status = mov.status || 'pending_receipt';
                 if (status === 'pending_receipt' || status === 'pending_handover') {
                     seen.add(mov.id);
-                    const items = Array.isArray(mov.items) && mov.items.length 
-                        ? mov.items 
+                    const items = Array.isArray(mov.items) && mov.items.length
+                        ? mov.items
                         : [{ materialId: mov.materialId || m.id, materialName: mov.materialName || m.name, quantity: Number(mov.quantity) || 0, unit: mov.unit || m.unit || 'pieza' }];
                     pending.push({
                         ...mov,
@@ -519,7 +740,7 @@ function getTechnicianPendingDispatches() {
 function dismissTechnicianMaterialPrompt() {
     try {
         sessionStorage.setItem('dismissed_tech_material_prompt', '1');
-    } catch (_) {}
+    } catch (_) { }
     if (typeof CM === 'function') CM('tech-pending-material-prompt-mo');
 }
 window.dismissTechnicianMaterialPrompt = dismissTechnicianMaterialPrompt;
@@ -529,7 +750,7 @@ function checkTechnicianPendingMaterialPrompt(force = false) {
     if (!force) {
         try {
             if (sessionStorage.getItem('dismissed_tech_material_prompt') === '1') return;
-        } catch (_) {}
+        } catch (_) { }
     }
     const pending = getTechnicianPendingDispatches();
     const promptMo = document.getElementById('tech-pending-material-prompt-mo');
@@ -564,7 +785,7 @@ function checkTechnicianPendingMaterialPrompt(force = false) {
         const isHandover = d.status === 'pending_handover';
         const isEdited = !!d.isEdited;
         const items = Array.isArray(d.items) && d.items.length ? d.items : [{ materialName: d.materialName, quantity: d.quantity, unit: d.unit || 'pieza' }];
-        const dateStr = d.at ? new Date(d.at).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' }) : 'Reciente';
+        const dateStr = d.at ? new Date(d.at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : 'Reciente';
 
         // Determinar folios claros ENT-###### y REC-###### con id único compartido
         let numFolioStr = '';
@@ -633,7 +854,7 @@ function checkTechnicianPendingMaterialPrompt(force = false) {
         }
 
         // isHandover (Soporte colocó cantidades y espera confirmación del técnico)
-        const returnDateStr = d.receivedAt ? new Date(d.receivedAt).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' }) : dateStr;
+        const returnDateStr = d.receivedAt ? new Date(d.receivedAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : dateStr;
         const returnAdmin = d.receivedByAdminName || d.returnDetails?.adminReceivedByName || 'Soporte';
         const returnNotes = d.receiveNotes || d.returnDetails?.adminNotes || d.notes || '';
         const returnItems = Array.isArray(d.returnDetails?.items) && d.returnDetails.items.length ? d.returnDetails.items : null;
@@ -988,8 +1209,13 @@ function openTechnicianDetails() {
     document.body.dataset.techView = 'details';
     setTechnicianNavActive(0);
     applyTechnicianViewportLayout();
-    document.querySelector('.tech-calendar-toolbar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    setTimeout(renderTechnicianDayMap, 80);
+    const dayMapCard = document.getElementById('tech-day-map-card');
+    if (dayMapCard) dayMapCard.style.display = 'block';
+    try { document.querySelector('.tech-calendar-toolbar')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }); } catch (_) { }
+    setTimeout(() => {
+        renderTechnicianDayMap();
+        try { technicianDayMap?.invalidateSize(); } catch (_) { }
+    }, 80);
     requestTechnicianRealtimeWeather();
 }
 
@@ -997,11 +1223,15 @@ function openTechnicianRouteMap() {
     document.body.dataset.techView = 'map';
     setTechnicianNavActive(1);
     const box = document.getElementById('plan-map-box');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { }
     setTimeout(() => {
         renderTechnicianRouteOverview();
+        if (typeof initPlanMap === 'function' && !planMap) {
+            initPlanMap();
+        }
         planMap?.invalidateSize();
         renderPlanMap();
+        setTimeout(() => planMap?.invalidateSize(), 120);
     }, 180);
 }
 
@@ -1062,7 +1292,7 @@ function renderTechnicianRouteOverview() {
         result.done += progress.done;
         result.pending += progress.pending;
         return result;
-    }, { details:0, done:0, pending:0 });
+    }, { details: 0, done: 0, pending: 0 });
     const title = document.getElementById('tech-route-overview-title');
     if (title) title.textContent = plan?.name || 'Ruta asignada';
     const dateBox = document.getElementById('tech-route-overview-date');
@@ -1117,18 +1347,18 @@ function renderTechnicianRouteOverview() {
                     </button>
                 </div>
                 ${activeList.length ? activeList.map(detail => {
-                    const done = detail.status === 'completada';
-                    const noDone = detail.status === 'no_realizado';
-                    const category = getPlanDetailCategory(detail);
-                    const folio = getDetailFolio(detail);
-                    const hasClient = !!(detail.clientName && String(detail.clientName).trim());
-                    const client = hasClient ? detail.clientName.trim() : '';
-                    const rawPhone = String(detail.clientPhone || detail.phone || detail.technicianReport?.phone || '').replace(/\D/g, '');
-                    const hasValidPhone = rawPhone.length >= 7 && !/^0+$/.test(rawPhone);
-                    const detailText = getWorkOrderRequestedText(detail, 'Sin especificación');
-                    const locInfo = getDetailLocationInfo(detail);
+            const done = detail.status === 'completada';
+            const noDone = detail.status === 'no_realizado';
+            const category = getPlanDetailCategory(detail);
+            const folio = getDetailFolio(detail);
+            const hasClient = !!(detail.clientName && String(detail.clientName).trim());
+            const client = hasClient ? detail.clientName.trim() : '';
+            const rawPhone = String(detail.clientPhone || detail.phone || detail.technicianReport?.phone || '').replace(/\D/g, '');
+            const hasValidPhone = rawPhone.length >= 7 && !/^0+$/.test(rawPhone);
+            const detailText = getWorkOrderRequestedText(detail, 'Sin especificación');
+            const locInfo = getDetailLocationInfo(detail);
 
-                    const phoneBtn = hasValidPhone ? `
+            const phoneBtn = hasValidPhone ? `
                         <a href="tel:${escapeAttr(rawPhone)}" class="tech-call-btn" title="Llamar al cliente" onclick="event.stopPropagation()">
                             <svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                             Llamar
@@ -1138,21 +1368,21 @@ function renderTechnicianRouteOverview() {
                             WhatsApp
                         </a>` : '';
 
-                    const actionsHtml = `
+            const actionsHtml = `
                         <button type="button" class="btn bsm bgh" onclick="event.stopPropagation();openPlanDetailReport('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}')">Detalle</button>
                         ${done
-                            ? `<button type="button" class="btn bsm tech-detail-edit" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Editar</button>`
-                            : (noDone
-                                ? `<button type="button" class="btn bsm bg2 tech-detail-finish tech-detail-finish-later" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Terminar</button>`
-                                : `<button type="button" class="btn bsm bg2 tech-detail-finish" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Terminar</button><button type="button" class="btn bsm ba tech-detail-incomplete" onclick="event.stopPropagation();reportPlanDetailIncomplete('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}')">No realizado</button>`)}`;
+                    ? `<button type="button" class="btn bsm tech-detail-edit" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Editar</button>`
+                    : (noDone
+                        ? `<button type="button" class="btn bsm bg2 tech-detail-finish tech-detail-finish-later" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Terminar</button>`
+                        : `<button type="button" class="btn bsm bg2 tech-detail-finish" onclick="event.stopPropagation();openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Terminar</button><button type="button" class="btn bsm ba tech-detail-incomplete" onclick="event.stopPropagation();reportPlanDetailIncomplete('${escapeAttr(detail.id)}','${escapeAttr(stop.id)}')">No realizado</button>`)}`;
 
-                    const gpsHtml = locInfo.hasLocation ? `
+            const gpsHtml = locInfo.hasLocation ? `
                         <div class="tech-detail-location-badge has-gps">
                             <svg class="tech-gps-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
                             <a class="order-location-link" href="${escapeAttr(locInfo.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Maps (${escapeHtml(locInfo.label)})</a>
                         </div>` : '';
 
-                    return `
+            return `
                         <div class="tech-inline-detail-card ${done ? 'is-done' : (noDone ? 'is-nodone' : 'is-pending')}" style="border-left-color:${pc(detail.priority)}">
                             <div class="tech-inline-detail-top">
                                 <div class="tech-inline-detail-badges">
@@ -1164,6 +1394,7 @@ function renderTechnicianRouteOverview() {
                             </div>
                             <div class="tech-inline-detail-body">
                                 ${client ? `<div class="tech-inline-detail-client"><strong>Cliente:</strong> ${escapeHtml(client)}</div>` : ''}
+                                ${hasValidPhone ? `<div class="tech-inline-detail-phone"><strong>Teléfono:</strong> <a href="tel:${escapeAttr(rawPhone)}" onclick="event.stopPropagation()">${escapeHtml(detail.clientPhone || detail.phone || detail.technicianReport?.phone || rawPhone)}</a></div>` : ''}
                                 <div class="tech-inline-detail-desc">${escapeHtml(detailText)}</div>
                                 ${gpsHtml}
                             </div>
@@ -1173,7 +1404,7 @@ function renderTechnicianRouteOverview() {
                             </div>
                         </div>
                     `;
-                }).join('') : `<div class="tech-route-detail-empty">${currentSubtab === 'completed' ? 'Sin trabajos completados en esta parada.' : 'Sin trabajos pendientes en esta parada.'}</div>`}
+        }).join('') : `<div class="tech-route-detail-empty">${currentSubtab === 'completed' ? 'Sin trabajos completados en esta parada.' : 'Sin trabajos pendientes en esta parada.'}</div>`}
             </div>` : '';
 
         let legTransitHtml = '';
@@ -1215,9 +1446,9 @@ function openTechnicianRouteStop(stopId) {
     const mapBox = document.getElementById('plan-map-box');
     if (!marker || !planMap) return notify('Esta parada no tiene una ubicación disponible.', 'err');
     const position = marker.getLatLng();
-    planMap.setView(position, Math.max(planMap.getZoom(), 15), { animate:true });
+    planMap.setView(position, Math.max(planMap.getZoom(), 15), { animate: true });
     marker.openPopup();
-    mapBox?.scrollIntoView({ behavior:'smooth', block:'center' });
+    mapBox?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function selectTechnicianAgendaDate(dateKey) {
@@ -1242,18 +1473,54 @@ function toggleTechnicianSummaryMode() {
     if (title) title.textContent = technicianSummaryMode === 'general' ? 'Todos los detalles' : 'Detalles del día';
     renderPlanKpis();
     renderPlanDays();
+    if (isTechnicianPlanView()) {
+        setTimeout(renderTechnicianDayMap, 60);
+    }
+}
+
+function getTechnicianSummaryMode() {
+    return technicianSummaryMode;
 }
 
 function renderTechnicianDayMap() {
     if (!isTechnicianPlanView() || typeof L === 'undefined') return;
     const element = document.getElementById('tech-day-map');
     if (!element) return;
-    if (!technicianDayMap) {
-        technicianDayMap = L.map(element, { scrollWheelZoom: false }).setView([17.55, -99.50], 8);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap', maxZoom:19 }).addTo(technicianDayMap);
-        technicianDayMapLayer = L.layerGroup().addTo(technicianDayMap);
+    if (!selectedTechId && isTechnicianPlanView()) {
+        selectedTechId = getLoggedTechnicianId();
     }
-    technicianDayMapLayer.clearLayers();
+    if (!technicianDayMap || technicianDayMap.getContainer?.() !== element) {
+        if (technicianDayMap) {
+            try { technicianDayMap.remove(); } catch (_) { }
+            technicianDayMap = null;
+        }
+        if (element._leaflet_id) {
+            delete element._leaflet_id;
+            element.innerHTML = '';
+        }
+        try {
+            technicianDayMap = L.map(element, { scrollWheelZoom: false }).setView([17.55, -99.50], 8);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(technicianDayMap);
+            technicianDayMapLayer = L.layerGroup().addTo(technicianDayMap);
+        } catch (mapErr) {
+            console.warn('Error inicializando mapa de hoy del técnico:', mapErr);
+            return;
+        }
+    }
+    if (!technicianDayMapLayer) {
+        technicianDayMapLayer = L.layerGroup().addTo(technicianDayMap);
+    } else {
+        technicianDayMapLayer.clearLayers();
+    }
+    if (typeof ResizeObserver !== 'undefined' && !element._hasTechResizeObserver) {
+        element._hasTechResizeObserver = true;
+        try {
+            const ro = new ResizeObserver(() => {
+                try { technicianDayMap?.invalidateSize(); } catch (_) { }
+            });
+            ro.observe(element);
+        } catch (_) { }
+    }
     const date = selectedCalendarDate || localDateKey();
     const points = [];
     const allStops = getPlanStopsForView('general');
@@ -1261,13 +1528,22 @@ function renderTechnicianDayMap() {
     if (!targetStops.length && (!selectedCalendarDate || selectedCalendarDate === localDateKey())) {
         const unscheduled = allStops.filter(stop => !stop.scheduledDate);
         if (unscheduled.length) targetStops = unscheduled;
+        else if (allStops.length) targetStops = allStops;
+    }
+    if (technicianSummaryMode === 'general') {
+        targetStops = allStops;
     }
     targetStops.forEach(stop => {
         if (stop.equipmentId) {
             const equipment = (state.equipment || []).find(item => item.id === stop.equipmentId && !item.deletedAt);
             const lat = safeFloat(equipment?.lat);
             const lng = safeFloat(equipment?.lng);
-            if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng, name:`Antena de "${equipment?.name || stop.name || 'Sin nombre'}"`, stop, isAntenna:true });
+            if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng, name: `Antena de "${equipment?.name || stop.name || 'Sin nombre'}"`, stop, isAntenna: true });
+        }
+        const stopLat = safeFloat(stop.lat);
+        const stopLng = safeFloat(stop.lng);
+        if (!isNaN(stopLat) && !isNaN(stopLng) && !(stopLat === 0 && stopLng === 0)) {
+            points.push({ lat: stopLat, lng: stopLng, name: `Parada: ${stop.name || 'Sin nombre'}`, stop });
         }
         getStopDetails(stop).forEach(detail => {
             const parsed = typeof parseOptionalLocation === 'function' ? parseOptionalLocation(detail.detailLocation || '') : {};
@@ -1306,7 +1582,7 @@ function renderTechnicianDayMap() {
         }
     });
     const applyPointsBounds = () => {
-        if (points.length) technicianDayMap.fitBounds(points.map(point => [point.lat, point.lng]), { padding:[28,28], maxZoom:15 });
+        if (points.length) technicianDayMap.fitBounds(points.map(point => [point.lat, point.lng]), { padding: [28, 28], maxZoom: 15 });
         else technicianDayMap.setView([17.55, -99.50], 8);
     };
 
@@ -1385,19 +1661,76 @@ function renderTechnicianDayMap() {
     setTimeout(() => technicianDayMap?.invalidateSize(), 50);
 }
 
+function toggleTechLocationsSheet() {
+    const sheet = document.getElementById('tech-locations-sheet');
+    const btn = document.getElementById('tech-toggle-sheet-btn');
+    if (!sheet) return;
+    if (sheet.style.display === 'none' || !sheet.style.display) {
+        renderTechLocationsSheet();
+        sheet.style.display = 'block';
+        if (btn) btn.textContent = 'Ocultar paradas';
+    } else {
+        sheet.style.display = 'none';
+        if (btn) btn.textContent = 'Ver paradas';
+    }
+}
+
+function refreshTechnicianDayMap() {
+    notify('Actualizando mapa y coordenadas...');
+    if (typeof renderTechnicianDayMap === 'function') {
+        renderTechnicianDayMap();
+    }
+    const sheet = document.getElementById('tech-locations-sheet');
+    if (sheet && sheet.style.display !== 'none') {
+        renderTechLocationsSheet();
+    }
+}
+
+function renderTechLocationsSheet() {
+    const sheet = document.getElementById('tech-locations-sheet');
+    if (!sheet) return;
+    const date = selectedCalendarDate || (typeof localDateKey === 'function' ? localDateKey() : new Date().toISOString().slice(0, 10));
+    const allStops = typeof getPlanStopsForView === 'function' ? getPlanStopsForView('general') : [];
+    const dayStops = allStops.filter(s => (s.scheduledDate || '') === date);
+
+    if (!dayStops.length) {
+        sheet.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:12px;">No hay paradas programadas para este día.</div>';
+        return;
+    }
+
+    sheet.innerHTML = dayStops.map((stop, idx) => {
+        const details = getStopDetails(stop);
+        const name = stop.type === 'equipment' ? (stop.nodeName || stop.name) : stop.name;
+        const coords = getStopCoordinates(stop);
+        const hasCoords = coords && coords.lat && coords.lng;
+        return `
+            <div class="tech-location-item" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;">
+                <div>
+                    <strong>${idx + 1}. ${escapeHtml(name)}</strong>
+                    <div style="font-size:11px;color:#64748b;">${details.length} detalle(s)${hasCoords ? ' · Con GPS' : ' · Sin GPS'}</div>
+                </div>
+                ${hasCoords ? `<button type="button" class="btn bsm bgh" onclick="technicianDayMap?.setView([${coords.lat}, ${coords.lng}], 16, { animate: true })" style="padding:4px 8px;font-size:11px;">Ver</button>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
 function shiftTechnicianAgendaWeek(offset) {
     const date = new Date(`${selectedCalendarDate || localDateKey()}T12:00:00`);
     date.setDate(date.getDate() + (Number(offset) || 0) * 7);
-    selectTechnicianAgendaDate(`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`);
+    selectTechnicianAgendaDate(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`);
 }
 
 function applyTechnicianViewportLayout() {
+    if (typeof document === 'undefined' || !document.body) return;
     const isTech = isTechnicianPlanView();
     const body = document.body;
     const main = document.querySelector('.main');
     const topbar = document.querySelector('.topbar');
-    
+    const bottomNav = document.getElementById('tech-bottom-nav') || document.querySelector('.tech-bottom-nav');
+
     if (isTech) {
+        document.documentElement?.classList.add('is-technician-env');
         body.classList.add('plan-technician-view');
         body.style.setProperty('padding-left', '0', 'important');
         body.style.setProperty('width', '100%', 'important');
@@ -1406,9 +1739,14 @@ function applyTechnicianViewportLayout() {
         main?.style.setProperty('padding-left', '0', 'important');
         main?.style.setProperty('transform', 'none', 'important');
         topbar?.style.setProperty('display', 'none', 'important');
+        if (bottomNav) bottomNav.style.setProperty('display', 'grid', 'important');
         const bell = document.getElementById('notification-bell');
         if (bell) bell.remove();
     } else {
+        document.documentElement?.classList.remove('is-technician-env');
+        document.body.classList.remove('plan-technician-view');
+        if (body.dataset) delete body.dataset.techView;
+        if (bottomNav) bottomNav.style.setProperty('display', 'none', 'important');
         const mobile = window.matchMedia('(max-width: 760px)').matches;
         if (mobile) {
             body.style.setProperty('padding-left', '0', 'important');
@@ -1422,6 +1760,7 @@ function applyTechnicianViewportLayout() {
             body.style.removeProperty('width');
             main?.style.removeProperty('width');
             main?.style.removeProperty('margin-left');
+            main?.style.removeProperty('padding-left');
             main?.style.removeProperty('transform');
             topbar?.style.removeProperty('display');
         }
@@ -1449,6 +1788,8 @@ function ensureTechPlan(techId) {
 }
 
 function ensureGeneralPlanSystem() {
+    if (!state.weekPlan || typeof state.weekPlan !== 'object') state.weekPlan = {};
+    if (!state.weekPlan[SHARED_PLAN_ID]) state.weekPlan[SHARED_PLAN_ID] = { _generalPlans: [] };
     const shared = state.weekPlan[SHARED_PLAN_ID];
     if (!Array.isArray(shared._generalPlans)) {
         const legacyStops = Array.isArray(shared.general) ? shared.general : [];
@@ -1459,6 +1800,9 @@ function ensureGeneralPlanSystem() {
             stops: legacyStops
         }];
         shared.general = [];
+    }
+    if (!shared._generalPlans.length && Array.isArray(state.generalPlans) && state.generalPlans.length) {
+        shared._generalPlans = state.generalPlans;
     }
     if (!shared._generalPlans.length) {
         shared._generalPlans.push({
@@ -1617,31 +1961,31 @@ function getPlanningMapStatus(type, entityId) {
     const entity = (collection || []).find(item => item && item.id === entityId);
     if (!entity || !Number.isFinite(Number(entity.mapVeryHigh))) return getEntityPriorityStatus(type, entityId);
     const counts = {
-        muy_alta:Number(entity.mapVeryHigh) || 0,
-        alta:Number(entity.mapHigh) || 0,
-        media:Number(entity.mapMedium) || 0,
-        baja:Number(entity.mapLow) || 0
+        muy_alta: Number(entity.mapVeryHigh) || 0,
+        alta: Number(entity.mapHigh) || 0,
+        media: Number(entity.mapMedium) || 0,
+        baja: Number(entity.mapLow) || 0
     };
     const count = counts.muy_alta + counts.alta + counts.media + counts.baja;
-    if (counts.muy_alta > 0 || counts.alta >= 3) return {key:'critico',label:'Crítico',color:'#ef4444',count,counts};
-    if (counts.alta > 0 || counts.media >= 2 || counts.baja >= 4) return {key:'atencion',label:'Atención',color:'#f59e0b',count,counts};
-    if ((counts.media > 0 || counts.baja > 0) && Number(entity.mapPlannedOpen) > 0) return {key:'pendiente',label:'Pendiente',color:'#3b82f6',count,counts};
-    return {key:'despejado',label:'Despejado',color:'#22c55e',count:0,counts};
+    if (counts.muy_alta > 0 || counts.alta >= 3) return { key: 'critico', label: 'Crítico', color: '#ef4444', count, counts };
+    if (counts.alta > 0 || counts.media >= 2 || counts.baja >= 4) return { key: 'atencion', label: 'Atención', color: '#f59e0b', count, counts };
+    if ((counts.media > 0 || counts.baja > 0) && Number(entity.mapPlannedOpen) > 0) return { key: 'pendiente', label: 'Pendiente', color: '#3b82f6', count, counts };
+    return { key: 'despejado', label: 'Despejado', color: '#22c55e', count: 0, counts };
 }
 
 function getSelectedGeneralPlan() {
     const plans = getVisibleGeneralPlansForRole();
     if (!plans.length) return null;
-    let candidates = plans;
-    if (selectedTechId && selectedTechId !== SHARED_PLAN_ID) {
-        candidates = plans.filter(plan => isPlanAssignedToTech(plan, selectedTechId));
-        if (!candidates.length) {
-            if (isTechnicianPlanView()) {
-                candidates = plans;
-            } else {
-                return null;
-            }
-        }
+    if (!isTechnicianPlanView()) {
+        const found = plans.find(plan => plan.id === selectedGeneralPlanId);
+        const selected = found || plans[0];
+        selectedGeneralPlanId = selected?.id || '';
+        return selected;
+    }
+    const myTechId = getLoggedTechnicianId();
+    let candidates = myTechId ? plans.filter(plan => isPlanAssignedToTech(plan, myTechId)) : [];
+    if (!candidates.length) {
+        candidates = plans;
     }
     const selected = candidates.find(plan => plan.id === selectedGeneralPlanId) || candidates[0];
     selectedGeneralPlanId = selected?.id || '';
@@ -1760,9 +2104,14 @@ function initPlanSelectors() {
 
     techSelect.disabled = false;
 
+    const techLabel = document.getElementById('plan-tech-label');
+    const techField = document.getElementById('plan-tech-field');
+    if (techLabel) techLabel.style.display = 'none';
+    if (techField) techField.style.display = 'none';
+
     if (!selectedTechId) {
-        selectedTechId = getInitialPlanTechId(activeTechs);
-        selectedDay = selectedTechId === SHARED_PLAN_ID ? 'general' : getInitialDayForTech(selectedTechId);
+        selectedTechId = SHARED_PLAN_ID;
+        selectedDay = 'general';
     }
 
     const options = [`<option value="${SHARED_PLAN_ID}" ${selectedTechId === SHARED_PLAN_ID ? 'selected' : ''}>Plan general compartido</option>`];
@@ -1772,15 +2121,13 @@ function initPlanSelectors() {
     ensureTechPlan(selectedTechId);
     ensureGeneralPlanSystem();
     const selectedGeneralPlan = getSelectedGeneralPlan();
-    const selectablePlans = selectedTechId === SHARED_PLAN_ID
-        ? getGeneralPlans()
-        : getGeneralPlans().filter(plan => !plan.deletedAt && isPlanAssignedToTech(plan, selectedTechId));
+    const selectablePlans = getGeneralPlans().filter(plan => !plan.deletedAt);
     generalPlanSelect.innerHTML = selectablePlans.length
         ? selectablePlans.map(plan => `<option value="${plan.id}" ${plan.id === selectedGeneralPlanId ? 'selected' : ''}>${escapeHtml(plan.name)} · ${formatShortDate(plan.createdAt)}</option>`).join('')
         : '<option value="">Sin plan asignado</option>';
     generalPlanSelect.value = selectedGeneralPlan?.id || '';
     renderGeneralPlanAssigneeSelect();
-    generalTools.style.display = selectedTechId === SHARED_PLAN_ID ? 'block' : 'none';
+    if (generalTools) generalTools.style.display = 'block';
 }
 
 function selectPlanTech(id) {
@@ -1806,10 +2153,15 @@ function selectGeneralPlan(id) {
     if (calBox) calBox.dataset.unscheduledFilter = '0';
     activePlanCardIndex = 0;
     selectedDay = 'general';
-    if (!isPlanReadOnly() && selectedTechId === SHARED_PLAN_ID) {
-        document.getElementById('plan-tech').value = SHARED_PLAN_ID;
+    if (!isTechnicianPlanView()) {
+        selectedTechId = SHARED_PLAN_ID;
+        const techInput = document.getElementById('plan-tech');
+        if (techInput) techInput.value = SHARED_PLAN_ID;
     }
-    document.getElementById('plan-day').value = 'general';
+    const dayInput = document.getElementById('plan-day');
+    if (dayInput) dayInput.value = 'general';
+    const genSelect = document.getElementById('general-plan-select');
+    if (genSelect) genSelect.value = id;
     renderPlan();
 }
 
@@ -1818,7 +2170,7 @@ function createGeneralPlan() {
     const input = document.getElementById('plan-create-name');
     const date = document.getElementById('plan-create-date');
     if (input) input.value = '';
-    if (date) date.textContent = new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    if (date) date.textContent = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     if (typeof renderCreatePlanQuickChips === 'function') {
         renderCreatePlanQuickChips();
     }
@@ -1875,7 +2227,7 @@ async function deleteGeneralPlan() {
     }
     const current = getSelectedGeneralPlan();
     if (!current) return;
-    const ok = await askConfirmation({ title:'Eliminar plan', message:`Se quitará “${current.name}” y sus paradas de la planificación. Las órdenes no se borrarán.`, confirmText:'Eliminar plan', cancelText:'Conservar', tone:'danger' });
+    const ok = await askConfirmation({ title: 'Eliminar plan', message: `Se quitará “${current.name}” y sus paradas de la planificación. Las órdenes no se borrarán.`, confirmText: 'Eliminar plan', cancelText: 'Conservar', tone: 'danger' });
     if (!ok) return;
     try {
         await deletePlansFromCloud([current.id]);
@@ -1907,7 +2259,7 @@ async function deletePastGeneralPlans() {
         notify('No hay planes generales pasados para eliminar');
         return;
     }
-    const ok = await askConfirmation({ title:'Eliminar planes anteriores', message:`Se quitarán ${pastPlans.length} plan(es) anteriores. El plan actual se conserva y las órdenes no se borran.`, confirmText:'Eliminar anteriores', cancelText:'Cancelar', tone:'danger' });
+    const ok = await askConfirmation({ title: 'Eliminar planes anteriores', message: `Se quitarán ${pastPlans.length} plan(es) anteriores. El plan actual se conserva y las órdenes no se borran.`, confirmText: 'Eliminar anteriores', cancelText: 'Cancelar', tone: 'danger' });
     if (!ok) return;
 
     try {
@@ -1957,12 +2309,17 @@ function renderPlan() {
     renderMaterialDatalist();
     renderPlanMaterialSummary();
     renderPlanSummary();
+    renderGeneralPlanAssigneeSelect();
     renderPlanKpis();
     renderPlanCalendar();
     renderPlanDays();
     renderPlanMap();
     applyPlanReadOnlyMode();
     configureTechnicianDashboard();
+    renderTechnicianPlanBanner();
+    if (isTechnicianPlanView()) {
+        setTimeout(renderTechnicianDayMap, 60);
+    }
     if (typeof checkPlanContinuityRecommendations === 'function') {
         const canSeeContinuity = !isTechnicianPlanView() && canManagePlanStops();
         if (canSeeContinuity) {
@@ -1987,6 +2344,10 @@ function refreshPlanAfterSync() {
     renderPlanDays();
     applyPlanReadOnlyMode();
     configureTechnicianDashboard();
+    renderTechnicianPlanBanner();
+    if (isTechnicianPlanView()) {
+        setTimeout(renderTechnicianDayMap, 60);
+    }
     requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'auto' }));
 }
 
@@ -2033,7 +2394,12 @@ function updateTechnicianProgressCard() {
     if (!isTechnicianPlanView()) return;
     const todayKey = selectedCalendarDate || localDateKey();
     const allStops = getPlanStopsForView('general');
-    const dayStops = allStops.filter(s => (s.scheduledDate || '') === todayKey);
+    let dayStops = allStops.filter(s => (s.scheduledDate || '') === todayKey);
+    if (!dayStops.length && (!selectedCalendarDate || selectedCalendarDate === localDateKey())) {
+        const unscheduled = allStops.filter(s => !s.scheduledDate);
+        if (unscheduled.length) dayStops = unscheduled;
+        else if (allStops.length) dayStops = allStops;
+    }
     const dayDetails = [];
     dayStops.forEach(s => {
         getStopDetails(s).forEach(d => dayDetails.push(d));
@@ -2224,7 +2590,7 @@ function checkAndTriggerTechnicianProductivityBriefings() {
 }
 
 function renderPlanKpis() {
-    const today = typeof localDateKey === 'function' ? localDateKey() : new Date().toISOString().slice(0,10);
+    const today = typeof localDateKey === 'function' ? localDateKey() : new Date().toISOString().slice(0, 10);
     const allStops = getPlanStops('general');
     const stops = isTechnicianPlanView()
         ? allStops.filter(stop => stop.scheduledDate === (selectedCalendarDate || today))
@@ -2346,7 +2712,359 @@ function renderPlanSummary() {
                 <span class="badge bty">${pending} detalles ligados</span>
             </div>
         </div>`;
+
+    if (typeof renderPlanBoardCrew === 'function') {
+        renderPlanBoardCrew(generalPlan);
+    }
 }
+
+function renderPlanBoardCrew(plan) {
+    const crewContainer = document.getElementById('plan-board-crew-container');
+    if (!crewContainer) return;
+
+    if (isTechnicianPlanView()) {
+        crewContainer.innerHTML = '';
+        return;
+    }
+
+    const assignedTechs = plan ? getGeneralPlanAssignedTechs(plan) : [];
+    if (assignedTechs.length > 0) {
+        crewContainer.innerHTML = `
+            <div class="plan-header-crew-box">
+                <div class="plan-header-crew-meta">
+                    <span class="crew-card-label">Técnico(s) asignado(s) (${assignedTechs.length})</span>
+                </div>
+                <div class="plan-header-chips-row">
+                    ${assignedTechs.map(t => {
+                        const name = (t.nombre || t.usuario || 'Técnico').trim();
+                        const initials = name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'T';
+                        return `
+                            <div class="plan-header-tech-chip" title="Asignado: ${escapeAttr(name)}">
+                                <span class="header-chip-avatar">${escapeHtml(initials)}</span>
+                                <span class="header-chip-name">${escapeHtml(name)}</span>
+                                ${(typeof isPlanReadOnly === 'function' && isPlanReadOnly()) ? '' : `<button type="button" class="header-chip-remove" onclick="unassignTechFromHeader('${escapeAttr(t.id)}', event)" title="Desasignar a ${escapeAttr(name)} de este plan" aria-label="Desasignar de este plan">✕</button>`}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    } else {
+        crewContainer.innerHTML = `
+            <div class="plan-header-crew-card unassigned" title="Este plan no tiene técnicos asignados">
+                <span class="crew-card-icon">⚠️</span>
+                <div class="crew-card-info">
+                    <span class="crew-card-label">Estado de asignación</span>
+                    <strong class="crew-card-names">Sin técnico asignado a esta ruta</strong>
+                </div>
+            </div>
+        `;
+    }
+}
+window.renderPlanBoardCrew = renderPlanBoardCrew;
+
+async function unassignTechFromHeader(techId, event) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    return unassignTechFromCurrentPlan(techId);
+}
+window.unassignTechFromHeader = unassignTechFromHeader;
+
+async function toggleTechInCurrentPlan(techId) {
+    if (isPlanReadOnly()) return;
+    const plan = getSelectedGeneralPlan();
+    if (!plan || !techId) return;
+    const targetTechId = String(techId);
+    const currentSet = new Set([plan.assignedTechId, ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])].filter(Boolean).map(String));
+
+    if (currentSet.has(targetTechId)) {
+        currentSet.delete(targetTechId);
+    } else {
+        unassignTechFromOtherPlans(targetTechId, plan.id);
+        currentSet.add(targetTechId);
+    }
+
+    syncPlanAssignedMetadata(plan, Array.from(currentSet));
+    renderPlan();
+    const saved = await saveDB();
+    if (!saved) {
+        notify('Guardado localmente. Se sincronizará al conectar.', 'warn');
+        return;
+    }
+    const assigned = getGeneralPlanAssignedTechs(plan);
+    notify(assigned.length ? `Plan asignado a: ${assigned.map(t => t.nombre || t.usuario).join(', ')}` : 'Plan sin técnico asignado');
+}
+window.toggleTechInCurrentPlan = toggleTechInCurrentPlan;
+
+async function assignTechToCurrentPlan(techId) {
+    if (isPlanReadOnly()) return;
+    const plan = getSelectedGeneralPlan();
+    if (!plan || !techId) return;
+    const targetTechId = String(techId);
+    const targetTech = (state.technicians || []).find(t => String(t.id) === targetTechId);
+    if (!targetTech) return;
+
+    const currentTechs = getGeneralPlanAssignedTechs(plan);
+    const currentIds = currentTechs.map(t => String(t.id));
+    if (currentIds.includes(targetTechId)) {
+        notify(`${targetTech.nombre || targetTech.usuario} ya está asignado a este plan.`);
+        return;
+    }
+
+    const occupiedPlan = getGeneralPlanAssignedToTech(targetTechId, plan.id);
+    const confirmed = await requestPlanAssignmentConfirmation({
+        plan,
+        tech: targetTech,
+        occupiedPlan,
+        unassign: false
+    });
+
+    if (!confirmed) return;
+
+    unassignTechFromOtherPlans(targetTechId, plan.id);
+
+    const newIds = [...currentIds, targetTechId];
+    syncPlanAssignedMetadata(plan, newIds);
+    renderPlan();
+
+    const saved = await saveDB();
+    if (!saved) {
+        notify('Guardado localmente. Se sincronizará al conectar.', 'warn');
+        return;
+    }
+    notify(`Técnico ${targetTech.nombre || targetTech.usuario} asignado a ${plan.name}`);
+}
+window.assignTechToCurrentPlan = assignTechToCurrentPlan;
+
+async function unassignTechFromCurrentPlan(techId) {
+    if (isPlanReadOnly()) return;
+    const plan = getSelectedGeneralPlan();
+    if (!plan || !techId) return;
+    const targetTechId = String(techId);
+    const targetTech = (state.technicians || []).find(t => String(t.id) === targetTechId);
+
+    const confirmed = await requestPlanAssignmentConfirmation({
+        plan,
+        tech: targetTech,
+        unassign: true
+    });
+
+    if (!confirmed) return;
+
+    const currentTechs = getGeneralPlanAssignedTechs(plan);
+    const newIds = currentTechs.map(t => String(t.id)).filter(id => id !== targetTechId);
+    syncPlanAssignedMetadata(plan, newIds);
+    renderPlan();
+
+    const saved = await saveDB();
+    if (!saved) {
+        notify('Guardado localmente. Se sincronizará al conectar.', 'warn');
+        return;
+    }
+    const techName = targetTech ? (targetTech.nombre || targetTech.usuario) : 'Técnico';
+    notify(`Técnico ${techName} desasignado de ${plan.name}`);
+}
+window.unassignTechFromCurrentPlan = unassignTechFromCurrentPlan;
+
+function switchPlanAssignTab(tabId) {
+    const tabs = ['plans', 'team', 'search'];
+    if (!tabs.includes(tabId)) tabId = 'plans';
+
+    tabs.forEach(t => {
+        const btn = document.getElementById(`plan-tab-btn-${t}`);
+        const panel = document.getElementById(`plan-assign-tab-${t}`);
+        if (btn) {
+            btn.classList.toggle('is-active', t === tabId);
+            btn.setAttribute('aria-selected', t === tabId ? 'true' : 'false');
+        }
+        if (panel) {
+            panel.classList.toggle('is-active', t === tabId);
+            panel.style.display = (t === tabId) ? 'block' : 'none';
+        }
+    });
+
+    if (tabId === 'plans') {
+        renderPlanCatalogManagementView();
+    } else if (tabId === 'team') {
+        renderPlanTeamManagementView();
+    } else if (tabId === 'search') {
+        renderTechPlanSearchList();
+    }
+}
+window.switchPlanAssignTab = switchPlanAssignTab;
+
+function renderPlanTeamManagementView() {
+    const container = document.getElementById('plan-team-management-view');
+    if (!container) return;
+
+    const plan = getSelectedGeneralPlan();
+    const allTechs = (state.technicians || []).filter(t => !t.deletedAt && t.estado !== 'inactivo');
+    const badgeTeam = document.getElementById('plan-tab-badge-team');
+    const badgeTotal = document.getElementById('plan-tab-badge-total');
+
+    if (!plan) {
+        container.innerHTML = '<div class="plan-team-empty-hint">Selecciona o crea un plan general arriba para gestionar su cuadrilla.</div>';
+        if (badgeTeam) badgeTeam.textContent = '0';
+        if (badgeTotal) badgeTotal.textContent = String(allTechs.length);
+        return;
+    }
+
+    const assignedTechs = getGeneralPlanAssignedTechs(plan);
+    const assignedIdsSet = new Set(assignedTechs.map(t => String(t.id)));
+    if (badgeTeam) badgeTeam.textContent = String(assignedTechs.length);
+    if (badgeTotal) badgeTotal.textContent = String(allTechs.length);
+
+    const availableTechs = [];
+    const otherPlanTechs = [];
+
+    allTechs.forEach(t => {
+        if (assignedIdsSet.has(String(t.id))) return;
+        const occupied = getGeneralPlanAssignedToTech(t.id, plan.id);
+        if (occupied) {
+            otherPlanTechs.push({ tech: t, occupiedPlan: occupied });
+        } else {
+            availableTechs.push(t);
+        }
+    });
+
+    let assignedHtml = '';
+    if (assignedTechs.length === 0) {
+        assignedHtml = `<div class="plan-team-empty-hint">Sin técnicos en este plan. Elige uno disponible abajo para agregarlo.</div>`;
+    } else {
+        assignedHtml = `
+            <div class="plan-team-list">
+                ${assignedTechs.map(t => {
+                    const name = (t.nombre || t.usuario || 'Técnico').trim();
+                    const role = (t.rol || t.telefono || 'Técnico de campo').trim();
+                    const initials = name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'T';
+                    return `
+                        <div class="plan-team-card is-assigned">
+                            <div class="plan-team-card-left">
+                                <span class="plan-team-avatar">${escapeHtml(initials)}</span>
+                                <div class="plan-team-info">
+                                    <strong class="plan-team-name" title="${escapeAttr(name)}">${escapeHtml(name)}</strong>
+                                    <small class="plan-team-sub">${escapeHtml(role)}</small>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-team-unassign" onclick="unassignTechFromCurrentPlan('${escapeAttr(t.id)}')" title="Quitar a ${escapeAttr(name)} de este plan">✕ Desasignar</button>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    let availableHtml = '';
+    if (availableTechs.length === 0 && otherPlanTechs.length === 0) {
+        availableHtml = `<div class="plan-team-empty-hint">Todos los técnicos registrados están en este plan.</div>`;
+    } else {
+        let availList = '';
+        if (availableTechs.length > 0) {
+            availList += `
+                <div class="plan-team-section-title">Disponibles (${availableTechs.length})</div>
+                <div class="plan-team-list">
+                    ${availableTechs.map(t => {
+                        const name = (t.nombre || t.usuario || 'Técnico').trim();
+                        const role = (t.rol || t.telefono || 'Técnico de campo').trim();
+                        const initials = name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'T';
+                        return `
+                            <div class="plan-team-card is-available">
+                                <div class="plan-team-card-left">
+                                    <span class="plan-team-avatar">${escapeHtml(initials)}</span>
+                                    <div class="plan-team-info">
+                                        <strong class="plan-team-name" title="${escapeAttr(name)}">${escapeHtml(name)}</strong>
+                                        <small class="plan-team-sub">${escapeHtml(role)}</small>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-team-add" onclick="assignTechToCurrentPlan('${escapeAttr(t.id)}')" title="Asignar a ${escapeAttr(plan.name)}">+ Asignar</button>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+        if (otherPlanTechs.length > 0) {
+            availList += `
+                <div class="plan-team-section-title" style="margin-top:10px;">En otro plan (${otherPlanTechs.length})</div>
+                <div class="plan-team-list">
+                    ${otherPlanTechs.map(({ tech: t, occupiedPlan }) => {
+                        const name = (t.nombre || t.usuario || 'Técnico').trim();
+                        const role = (t.rol || t.telefono || 'Técnico de campo').trim();
+                        const initials = name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'T';
+                        return `
+                            <div class="plan-team-card is-other">
+                                <div class="plan-team-card-left">
+                                    <span class="plan-team-avatar" style="background:#fef3c7;color:#b45309;">${escapeHtml(initials)}</span>
+                                    <div class="plan-team-info">
+                                        <strong class="plan-team-name" title="${escapeAttr(name)}">${escapeHtml(name)}</strong>
+                                        <small class="plan-team-sub" title="En “${escapeAttr(occupiedPlan.name)}”">En: “${escapeHtml(occupiedPlan.name)}”</small>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn-team-transfer" onclick="assignTechToCurrentPlan('${escapeAttr(t.id)}')" title="Mover desde “${escapeAttr(occupiedPlan.name)}” a este plan">Mover</button>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+        availableHtml = availList;
+    }
+
+    container.innerHTML = `
+        <div class="plan-team-view-header">
+            <div class="plan-team-header-info">
+                <span class="plan-team-subtitle">Equipo asignado al plan:</span>
+                <strong class="plan-team-title">${escapeHtml(plan.name)}</strong>
+            </div>
+            <span class="plan-team-count-badge">${assignedTechs.length} técnico(s)</span>
+        </div>
+        <div class="plan-team-section-title">En este plan (${assignedTechs.length})</div>
+        ${assignedHtml}
+        ${availableHtml}
+    `;
+}
+window.renderPlanTeamManagementView = renderPlanTeamManagementView;
+
+function renderPlanCatalogManagementView() {
+    const container = document.getElementById('plan-catalog-management-view');
+    if (!container) return;
+
+    const plans = getGeneralPlans().filter(p => !p.deletedAt);
+    const currentPlan = getSelectedGeneralPlan();
+    const badgePlans = document.getElementById('plan-tab-badge-plans');
+    if (badgePlans) badgePlans.textContent = String(plans.length);
+
+    if (!plans.length) {
+        container.innerHTML = '<div class="plan-team-empty-hint">No hay planes registrados. Presiona "+ Nuevo" para crear uno.</div>';
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="plan-catalog-list">
+            ${plans.map(p => {
+                const isCurrent = currentPlan && String(p.id) === String(currentPlan.id);
+                const assigned = getGeneralPlanAssignedTechs(p);
+                const stopCount = (p.stops || []).length;
+                const crewNames = assigned.length ? assigned.map(t => t.nombre || t.usuario).join(', ') : 'Sin técnico';
+                return `
+                    <div class="plan-catalog-item ${isCurrent ? 'is-active' : ''}" onclick="selectGeneralPlan('${escapeAttr(p.id)}')" title="Abrir plan “${escapeAttr(p.name)}”">
+                        <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1;">
+                            <span style="font-size:14px;line-height:1;">🗺️</span>
+                            <div style="display:flex;flex-direction:column;min-width:0;flex:1;">
+                                <strong style="font-size:11px;color:${isCurrent ? '#1d4ed8' : '#0f172a'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(p.name)}</strong>
+                                <small style="font-size:9px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${stopCount} parada(s) · ${escapeHtml(crewNames)}</small>
+                            </div>
+                        </div>
+                        <span class="plan-catalog-badge ${isCurrent ? 'current' : ''}">${isCurrent ? 'Activo' : 'Abrir'}</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+window.renderPlanCatalogManagementView = renderPlanCatalogManagementView;
 
 // --- Inteligencia de Ruta, Clima y Viabilidad para Vista de Escritorio ---
 
@@ -2355,8 +3073,8 @@ function calculateHaversineKm(lat1, lon1, lat2, lon2) {
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
 }
@@ -2366,7 +3084,7 @@ function estimateRouteTravel(lat1, lon1, lat2, lon2) {
     if (isNaN(directKm) || directKm <= 0.05) return { km: 0.1, minutes: 2, formatted: '~2 min (mismo poblado)' };
     const roadKm = Math.round(directKm * 1.32 * 10) / 10;
     const minutes = Math.max(3, Math.round((roadKm / 38) * 60) + 2);
-    const timeFormatted = minutes >= 60 
+    const timeFormatted = minutes >= 60
         ? `${Math.floor(minutes / 60)}h ${minutes % 60 ? (minutes % 60) + 'm' : ''}`.trim()
         : `${minutes} min`;
     return {
@@ -2399,8 +3117,8 @@ function calculateDayRouteFeasibility(stops, activeIndex = 0) {
 
     const travelHours = Math.floor(totalTravelMinutes / 60);
     const travelRemMinutes = totalTravelMinutes % 60;
-    const travelFormatted = travelHours > 0 
-        ? `${travelHours}h ${travelRemMinutes > 0 ? travelRemMinutes + 'm' : ''}`.trim() 
+    const travelFormatted = travelHours > 0
+        ? `${travelHours}h ${travelRemMinutes > 0 ? travelRemMinutes + 'm' : ''}`.trim()
         : `${totalTravelMinutes} min`;
 
     // Active leg metrics (site to site)
@@ -2507,7 +3225,7 @@ async function fetchTownWeather(lat, lng, townName) {
                 return cached.data;
             }
         }
-    } catch (e) {}
+    } catch (e) { }
 
     lastWeatherFetchCoords = coordKey;
 
@@ -2538,7 +3256,7 @@ async function fetchTownWeather(lat, lng, townName) {
         try {
             weatherMemoryCache.set(coordKey, weatherObj);
             sessionStorage.setItem(cacheKey, JSON.stringify({ timestamp: Date.now(), data: weatherObj }));
-        } catch (e) {}
+        } catch (e) { }
 
         lastWeatherWidgetData = weatherObj;
         renderWeatherWidget(weatherObj, townName);
@@ -2577,7 +3295,7 @@ function updateStopsWeatherBadges(stops) {
                     el.style.display = 'inline-flex';
                 });
             }
-        }).catch(() => {});
+        }).catch(() => { });
     });
 }
 
@@ -2777,10 +3495,13 @@ function getVisiblePlanStops() {
         const targetDate = selectedCalendarDate || today;
         const forDay = allStops.filter(stop => stop.scheduledDate === targetDate);
         if (forDay.length > 0) return forDay;
-        // Si no hay paradas fechadas específicamente para hoy, mostrar las paradas sin fecha asignada de su plan
+        // Si no hay paradas fechadas específicamente para hoy:
+        // 1. Mostrar las paradas sin fecha asignada de su plan
+        // 2. Si todas las paradas tienen otra fecha, mostrarlas para que el técnico no quede bloqueado
         if (!selectedCalendarDate || selectedCalendarDate === today) {
             const unscheduled = allStops.filter(stop => !stop.scheduledDate);
             if (unscheduled.length > 0) return unscheduled;
+            if (allStops.length > 0) return allStops;
         }
         return [];
     }
@@ -2808,6 +3529,12 @@ function selectPlanCardIndex(idx) {
 
 function togglePlanDisplayMode() {
     planCardDisplayMode = planCardDisplayMode === 'card' ? 'all' : 'card';
+    const isCard = planCardDisplayMode === 'card';
+    const weatherBox = document.getElementById('plan-weather-box');
+    if (weatherBox) {
+        weatherBox.classList.toggle('is-hidden', !isCard);
+        weatherBox.style.setProperty('display', isCard ? 'block' : 'none', 'important');
+    }
     renderPlanDays();
 }
 
@@ -2815,13 +3542,13 @@ function panPlanMapToActiveStop(stop) {
     if (!planMap) return;
     try {
         planMap.invalidateSize();
-    } catch (e) {}
+    } catch (e) { }
     if (!stop) return;
     const pos = getStopCurrentPosition(stop);
     if (!isNaN(pos.lat) && !isNaN(pos.lng)) {
         try {
             planMap.panTo([pos.lat, pos.lng], { animate: true, duration: 0.5 });
-        } catch (e) {}
+        } catch (e) { }
     }
 }
 
@@ -2911,11 +3638,11 @@ function renderActiveSiteInformation(stop) {
                         <small style="font-size:9.5px;font-weight:700;color:#547192;display:block;margin-bottom:4px;">Fotos de equipo (${photos.length}):</small>
                         <div style="display:flex;gap:6px;flex-wrap:wrap;">
                             ${photos.map((p, i) => {
-                                const slotNames = { batteries: 'Pilas', panels: 'Paneles', controller: 'Controlador', tower: 'Torre', cabinet: 'Gabinete', lightning: 'Pararrayos', mikrotik: 'MikroTik', poe: 'PoE' };
-                                const slotKey = (eq.towerMaterialSlots && typeof eq.towerMaterialSlots === 'object') ? Object.keys(eq.towerMaterialSlots).find(k => eq.towerMaterialSlots[k] === p) : null;
-                                const slotLabel = slotKey && slotNames[slotKey] ? slotNames[slotKey] : `Foto ${i + 1}`;
-                                return `<a href="${escapeAttr(p)}" target="_blank" rel="noopener" style="display:inline-block;position:relative;border-radius:6px;overflow:hidden;border:1px solid #ccdff2;" title="${escapeAttr(slotLabel)}"><img src="${escapeAttr(p)}" style="width:44px;height:44px;object-fit:cover;display:block;" alt="${escapeAttr(slotLabel)}">${slotKey ? `<span style="position:absolute;bottom:0;left:0;right:0;background:rgba(15,23,42,0.7);color:#fff;font-size:8px;font-weight:700;text-align:center;padding:1px 0;line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(slotNames[slotKey] || '')}</span>` : ''}</a>`;
-                            }).join('')}
+            const slotNames = { batteries: 'Pilas', panels: 'Paneles', controller: 'Controlador', tower: 'Torre', cabinet: 'Gabinete', lightning: 'Pararrayos', mikrotik: 'MikroTik', poe: 'PoE' };
+            const slotKey = (eq.towerMaterialSlots && typeof eq.towerMaterialSlots === 'object') ? Object.keys(eq.towerMaterialSlots).find(k => eq.towerMaterialSlots[k] === p) : null;
+            const slotLabel = slotKey && slotNames[slotKey] ? slotNames[slotKey] : `Foto ${i + 1}`;
+            return `<a href="${escapeAttr(p)}" target="_blank" rel="noopener" style="display:inline-block;position:relative;border-radius:6px;overflow:hidden;border:1px solid #ccdff2;" title="${escapeAttr(slotLabel)}"><img src="${escapeAttr(p)}" style="width:44px;height:44px;object-fit:cover;display:block;" alt="${escapeAttr(slotLabel)}">${slotKey ? `<span style="position:absolute;bottom:0;left:0;right:0;background:rgba(15,23,42,0.7);color:#fff;font-size:8px;font-weight:700;text-align:center;padding:1px 0;line-height:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(slotNames[slotKey] || '')}</span>` : ''}</a>`;
+        }).join('')}
                         </div>
                     </div>` : ''}
             </div>
@@ -3267,21 +3994,21 @@ function renderPlanDays() {
             return;
         }
 
-    // Desktop view and Card-by-Card mode:
-    if (!isTechnicianPlanView() && planCardDisplayMode === 'card') {
-        if (activePlanCardIndex >= visible.length) activePlanCardIndex = Math.max(0, visible.length - 1);
-        if (activePlanCardIndex < 0) activePlanCardIndex = 0;
+        // Desktop view and Card-by-Card mode:
+        if (!isTechnicianPlanView() && planCardDisplayMode === 'card') {
+            if (activePlanCardIndex >= visible.length) activePlanCardIndex = Math.max(0, visible.length - 1);
+            if (activePlanCardIndex < 0) activePlanCardIndex = 0;
 
-        const activeStop = visible[activePlanCardIndex];
-        const isFirst = activePlanCardIndex === 0;
-        const isLast = activePlanCardIndex === visible.length - 1;
-        const key = activeStop.scheduledDate || '';
-        const groupLabel = !key ? 'Sin fecha asignada' : (key < today ? `Pendientes anteriores · ${formatCalendarDate(key)}` : (key === today ? `Trabajo de hoy · ${formatCalendarDate(key)}` : formatCalendarDate(key)));
+            const activeStop = visible[activePlanCardIndex];
+            const isFirst = activePlanCardIndex === 0;
+            const isLast = activePlanCardIndex === visible.length - 1;
+            const key = activeStop.scheduledDate || '';
+            const groupLabel = !key ? 'Sin fecha asignada' : (key < today ? `Pendientes anteriores · ${formatCalendarDate(key)}` : (key === today ? `Trabajo de hoy · ${formatCalendarDate(key)}` : formatCalendarDate(key)));
 
-        const metrics = calculateDayRouteFeasibility(visible, activePlanCardIndex);
+            const metrics = calculateDayRouteFeasibility(visible, activePlanCardIndex);
 
-        // 1. Navigation controls (Anterior / Siguiente / Counter + Metrics + Ver todo el plan)
-        const navigatorHtml = `
+            // 1. Navigation controls (Anterior / Siguiente / Counter + Metrics + Ver todo el plan)
+            const navigatorHtml = `
             <div class="plan-card-navigator">
                 <div class="plan-card-nav-controls">
                     <button type="button" class="plan-card-nav-btn" onclick="advancePlanCard(-1)" ${isFirst ? 'disabled' : ''} title="Ver parada anterior">
@@ -3308,46 +4035,46 @@ function renderPlanDays() {
             </div>
         `;
 
-        // 2. Horizontal pills strip to jump to any site directly
-        const pillsHtml = `
+            // 2. Horizontal pills strip to jump to any site directly
+            const pillsHtml = `
             <div class="plan-site-pills-row" title="Selecciona directamente cualquier sitio del plan">
                 ${visible.map((s, idx) => {
-                    const isActive = idx === activePlanCardIndex ? 'active' : '';
-                    const label = escapeHtml(s.name || `Sitio ${idx + 1}`);
-                    return `<button type="button" class="plan-site-pill ${isActive}" onclick="selectPlanCardIndex(${idx})"><small>${idx + 1}.</small> <span>${label}</span></button>`;
-                }).join('')}
+                const isActive = idx === activePlanCardIndex ? 'active' : '';
+                const label = escapeHtml(s.name || `Sitio ${idx + 1}`);
+                return `<button type="button" class="plan-site-pill ${isActive}" onclick="selectPlanCardIndex(${idx})"><small>${idx + 1}.</small> <span>${label}</span></button>`;
+            }).join('')}
             </div>
         `;
 
-        // 3. Card HTML
-        const cardHtml = renderStopCard(activeStop, 'general', activePlanCardIndex);
+            // 3. Card HTML
+            const cardHtml = renderStopCard(activeStop, 'general', activePlanCardIndex);
 
-        // 4. Transit connector to next site (matches user image!)
-        let transitConnectorHtml = '';
-        if (!isLast) {
-            const nextStop = visible[activePlanCardIndex + 1];
-            const p1 = getStopCurrentPosition(activeStop);
-            const p2 = getStopCurrentPosition(nextStop);
-            let transitText = 'Próximo sitio';
-            if (!isNaN(p1.lat) && !isNaN(p1.lng) && !isNaN(p2.lat) && !isNaN(p2.lng)) {
-                const leg = estimateRouteTravel(p1.lat, p1.lng, p2.lat, p2.lng);
-                transitText = `~${leg.minutes} min (${leg.km} km) de ${escapeHtml(activeStop.name || 'Sitio actual')} a ${escapeHtml(nextStop.name || 'Siguiente sitio')}`;
-            } else {
-                transitText = `Siguiente: ${escapeHtml(nextStop.name || 'Próximo sitio')}`;
-            }
-            transitConnectorHtml = `
+            // 4. Transit connector to next site (matches user image!)
+            let transitConnectorHtml = '';
+            if (!isLast) {
+                const nextStop = visible[activePlanCardIndex + 1];
+                const p1 = getStopCurrentPosition(activeStop);
+                const p2 = getStopCurrentPosition(nextStop);
+                let transitText = 'Próximo sitio';
+                if (!isNaN(p1.lat) && !isNaN(p1.lng) && !isNaN(p2.lat) && !isNaN(p2.lng)) {
+                    const leg = estimateRouteTravel(p1.lat, p1.lng, p2.lat, p2.lng);
+                    transitText = `~${leg.minutes} min (${leg.km} km) de ${escapeHtml(activeStop.name || 'Sitio actual')} a ${escapeHtml(nextStop.name || 'Siguiente sitio')}`;
+                } else {
+                    transitText = `Siguiente: ${escapeHtml(nextStop.name || 'Próximo sitio')}`;
+                }
+                transitConnectorHtml = `
                 <div class="plan-card-transit-box" title="Estimación de recorrido hacia ${escapeAttr(nextStop.name || 'siguiente sitio')}">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
                     <span>${transitText}</span>
                 </div>
             `;
-        }
+            }
 
-        // 5. Rich site details
-        const extraDetailsHtml = renderActiveStopExtraDetails(activeStop);
-        const siteInfoHtml = renderActiveSiteInformation(activeStop);
+            // 5. Rich site details
+            const extraDetailsHtml = renderActiveStopExtraDetails(activeStop);
+            const siteInfoHtml = renderActiveSiteInformation(activeStop);
 
-        board.innerHTML = `
+            board.innerHTML = `
             ${navigatorHtml}
             ${pillsHtml}
             <div class="day-col ${key && key < today ? 'plan-overdue-group' : ''}">
@@ -3360,24 +4087,24 @@ function renderPlanDays() {
             </div>
         `;
 
-        renderRouteIntelligenceWidget(visible, activePlanCardIndex);
-        renderSidebarPlanSummary(visible);
-        panPlanMapToActiveStop(activeStop);
-        updateStopsWeatherBadges([activeStop]);
-        return;
-    }
+            renderRouteIntelligenceWidget(visible, activePlanCardIndex);
+            renderSidebarPlanSummary(visible);
+            panPlanMapToActiveStop(activeStop);
+            updateStopsWeatherBadges([activeStop]);
+            return;
+        }
 
-    // Default Full List / Technician View
-    const groups = new Map();
-    visible.forEach(stop => {
-        const key = stop.scheduledDate || '';
-        const list = groups.get(key) || [];
-        list.push(stop);
-        groups.set(key, list);
-    });
-    const keys = [...groups.keys()].sort((a,b) => String(a || '9999').localeCompare(String(b || '9999')));
-    const allMetrics = calculateDayRouteFeasibility(visible, 0);
-    const listModeBanner = !isTechnicianPlanView() ? `
+        // Default Full List / Technician View
+        const groups = new Map();
+        visible.forEach(stop => {
+            const key = stop.scheduledDate || '';
+            const list = groups.get(key) || [];
+            list.push(stop);
+            groups.set(key, list);
+        });
+        const keys = [...groups.keys()].sort((a, b) => String(a || '9999').localeCompare(String(b || '9999')));
+        const allMetrics = calculateDayRouteFeasibility(visible, 0);
+        const listModeBanner = !isTechnicianPlanView() ? `
         <div class="plan-card-navigator plan-list-mode-banner" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;padding:8px 12px;background:#ffffff;border:1px solid #dce7f2;border-radius:10px;flex-shrink:0;">
             <div class="plan-card-nav-metrics" style="justify-content:flex-start;">
                 <span><b>${visible.length}</b> sitio${visible.length === 1 ? '' : 's'} en el plan</span>
@@ -3390,28 +4117,28 @@ function renderPlanDays() {
             </button>
         </div>` : '';
 
-    const daysHtml = keys.map(key => {
-        const stops = groups.get(key) || [];
-        const label = !key ? 'Sin fecha asignada' : (key < today ? `Pendientes anteriores · ${formatCalendarDate(key)}` : (key === today ? `Trabajo de hoy · ${formatCalendarDate(key)}` : formatCalendarDate(key)));
-        const dayMetrics = calculateDayRouteFeasibility(stops);
-        const dayTravelBadge = isTechnicianPlanView() && stops.length > 1 && dayMetrics.totalKm > 0
-            ? `<span class="tech-day-travel-badge" title="Distancia total por carretera para este día"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>~${dayMetrics.totalKm} km (${dayMetrics.travelFormatted})</span>`
-            : '';
-        const stopsHtml = stops.map((stop, index) => {
-            let transitHtml = '';
-            if (index > 0) {
-                const prevStop = stops[index - 1];
-                const p1 = getStopCurrentPosition(prevStop);
-                const p2 = getStopCurrentPosition(stop);
-                if (!isNaN(p1.lat) && !isNaN(p1.lng) && !isNaN(p2.lat) && !isNaN(p2.lng)) {
-                    const leg = estimateRouteTravel(p1.lat, p1.lng, p2.lat, p2.lng);
-                    const prevEq = prevStop.equipmentId ? (state.equipment || []).find(item => item.id === prevStop.equipmentId && !item.deletedAt) : null;
-                    const prevNode = prevStop.nodeId ? (state.nodes || []).find(item => item.id === prevStop.nodeId && !item.deletedAt) : null;
-                    const currEq = stop.equipmentId ? (state.equipment || []).find(item => item.id === stop.equipmentId && !item.deletedAt) : null;
-                    const currNode = stop.nodeId ? (state.nodes || []).find(item => item.id === stop.nodeId && !item.deletedAt) : null;
-                    const prevName = isTechnicianPlanView() ? getTechnicianStopName(prevStop, prevEq, prevNode) : (prevStop.name || 'Parada anterior');
-                    const currName = isTechnicianPlanView() ? getTechnicianStopName(stop, currEq, currNode) : (stop.name || 'Siguiente parada');
-                    transitHtml = `
+        const daysHtml = keys.map(key => {
+            const stops = groups.get(key) || [];
+            const label = !key ? 'Sin fecha asignada' : (key < today ? `Pendientes anteriores · ${formatCalendarDate(key)}` : (key === today ? `Trabajo de hoy · ${formatCalendarDate(key)}` : formatCalendarDate(key)));
+            const dayMetrics = calculateDayRouteFeasibility(stops);
+            const dayTravelBadge = isTechnicianPlanView() && stops.length > 1 && dayMetrics.totalKm > 0
+                ? `<span class="tech-day-travel-badge" title="Distancia total por carretera para este día"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1 .4-1 1v7c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>~${dayMetrics.totalKm} km (${dayMetrics.travelFormatted})</span>`
+                : '';
+            const stopsHtml = stops.map((stop, index) => {
+                let transitHtml = '';
+                if (index > 0) {
+                    const prevStop = stops[index - 1];
+                    const p1 = getStopCurrentPosition(prevStop);
+                    const p2 = getStopCurrentPosition(stop);
+                    if (!isNaN(p1.lat) && !isNaN(p1.lng) && !isNaN(p2.lat) && !isNaN(p2.lng)) {
+                        const leg = estimateRouteTravel(p1.lat, p1.lng, p2.lat, p2.lng);
+                        const prevEq = prevStop.equipmentId ? (state.equipment || []).find(item => item.id === prevStop.equipmentId && !item.deletedAt) : null;
+                        const prevNode = prevStop.nodeId ? (state.nodes || []).find(item => item.id === prevStop.nodeId && !item.deletedAt) : null;
+                        const currEq = stop.equipmentId ? (state.equipment || []).find(item => item.id === stop.equipmentId && !item.deletedAt) : null;
+                        const currNode = stop.nodeId ? (state.nodes || []).find(item => item.id === stop.nodeId && !item.deletedAt) : null;
+                        const prevName = isTechnicianPlanView() ? getTechnicianStopName(prevStop, prevEq, prevNode) : (prevStop.name || 'Parada anterior');
+                        const currName = isTechnicianPlanView() ? getTechnicianStopName(stop, currEq, currNode) : (stop.name || 'Siguiente parada');
+                        transitHtml = `
                         <div class="plan-inter-stop-transit">
                             <div class="transit-line"></div>
                             <div class="transit-badge" title="Tiempo estimado en carretera (38 km/h)">
@@ -3419,20 +4146,20 @@ function renderPlanDays() {
                                 <span><b>~${leg.minutes} min</b> (${leg.km} km)${isTechnicianPlanView() ? '' : ` de <b>${escapeHtml(prevName)}</b> a <b>${escapeHtml(currName)}</b>`}</span>
                             </div>
                         </div>`;
+                    }
                 }
-            }
-            return transitHtml + renderStopCard(stop, 'general', index);
+                return transitHtml + renderStopCard(stop, 'general', index);
+            }).join('');
+            return `<div class="day-col ${key && key < today ? 'plan-overdue-group' : ''}"><div class="day-head"><span>${escapeHtml(label)}</span>${dayTravelBadge}</div><div class="day-body">${stopsHtml}</div></div>`;
         }).join('');
-        return `<div class="day-col ${key && key < today ? 'plan-overdue-group' : ''}"><div class="day-head"><span>${escapeHtml(label)}</span>${dayTravelBadge}</div><div class="day-body">${stopsHtml}</div></div>`;
-    }).join('');
-    const placesIntelligenceHtml = !isTechnicianPlanView() ? renderPlanPlacesIntelligence(visible) : '';
-    board.innerHTML = listModeBanner + (daysHtml ? (daysHtml + placesIntelligenceHtml) : `<div class="plan-empty">${isTechnicianPlanView() ? `No tienes paradas asignadas para ${formatCalendarDate(selectedCalendarDate || today)}.` : 'No hay paradas en esta fecha.'}</div>`);
-    updateStopsWeatherBadges(visible);
+        const placesIntelligenceHtml = !isTechnicianPlanView() ? renderPlanPlacesIntelligence(visible) : '';
+        board.innerHTML = listModeBanner + (daysHtml ? (daysHtml + placesIntelligenceHtml) : `<div class="plan-empty">${isTechnicianPlanView() ? `No tienes paradas asignadas para ${formatCalendarDate(selectedCalendarDate || today)}.` : 'No hay paradas en esta fecha.'}</div>`);
+        updateStopsWeatherBadges(visible);
 
-    if (!isTechnicianPlanView()) {
-        renderRouteIntelligenceWidget(visible, 0);
-        renderSidebarPlanSummary(visible);
-    }
+        if (!isTechnicianPlanView()) {
+            renderRouteIntelligenceWidget(visible, 0);
+            renderSidebarPlanSummary(visible);
+        }
     } catch (err) {
         console.error('Error rendering plan days:', err);
         const board = document.getElementById('plan-days');
@@ -3824,32 +4551,118 @@ function getGeneralPlanAssignedToTech(techId, ignorePlanId = '') {
     ) || null;
 }
 
+function syncPlanAssignedMetadata(plan, selectedIds) {
+    if (!plan) return;
+    const cleanIds = [...new Set((Array.isArray(selectedIds) ? selectedIds : []).filter(Boolean).map(String))];
+    plan.assignedTechIds = cleanIds;
+    plan.assignedTechId = cleanIds[0] || '';
+    const assignedObjs = (state.technicians || []).filter(t => !t.deletedAt && (cleanIds.includes(String(t.id)) || (t.userId && cleanIds.includes(String(t.userId)))));
+    plan.assignedTechName = assignedObjs.map(t => t.nombre || t.usuario).filter(Boolean).join(', ');
+    plan.assignedAt = cleanIds.length ? (plan.assignedAt || new Date().toISOString()) : '';
+    plan.updatedAt = new Date().toISOString();
+}
+
+function unassignTechFromOtherPlans(techId, keepInPlanId = '') {
+    if (!techId) return false;
+    const targetTechId = String(techId);
+    const techObj = (state.technicians || []).find(t => String(t.id) === targetTechId || (t.userId && String(t.userId) === targetTechId));
+    const targetIds = new Set([targetTechId]);
+    if (techObj?.id) targetIds.add(String(techObj.id));
+    if (techObj?.userId) targetIds.add(String(techObj.userId));
+
+    const allPlans = getGeneralPlans();
+    let anyChanged = false;
+    allPlans.forEach(otherPlan => {
+        if (!otherPlan || otherPlan.deletedAt || (keepInPlanId && String(otherPlan.id) === String(keepInPlanId))) return;
+        const otherTechs = [...new Set([
+            otherPlan.assignedTechId,
+            ...(Array.isArray(otherPlan.assignedTechIds) ? otherPlan.assignedTechIds : [])
+        ].filter(Boolean).map(String))];
+
+        const filtered = otherTechs.filter(id => !targetIds.has(id));
+        if (filtered.length !== otherTechs.length) {
+            syncPlanAssignedMetadata(otherPlan, filtered);
+            anyChanged = true;
+        }
+    });
+    return anyChanged;
+}
+
+function enforceSinglePlanPerTechInvariant() {
+    const plans = getGeneralPlans();
+    if (!Array.isArray(plans) || !plans.length) return false;
+    const claimedTechs = new Map();
+    let anyChanged = false;
+
+    plans.forEach(plan => {
+        if (!plan || plan.deletedAt) return;
+        const currentIds = [...new Set([
+            plan.assignedTechId,
+            ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])
+        ].filter(Boolean).map(String))];
+
+        const validIds = [];
+        for (const tid of currentIds) {
+            const tObj = (state.technicians || []).find(t => String(t.id) === tid || (t.userId && String(t.userId) === tid));
+            const idKey = tObj?.id ? String(tObj.id) : tid;
+            const userKey = tObj?.userId ? String(tObj.userId) : null;
+
+            if (claimedTechs.has(idKey) || (userKey && claimedTechs.has(userKey))) {
+                anyChanged = true;
+                continue;
+            }
+            claimedTechs.set(idKey, plan.id);
+            if (userKey) claimedTechs.set(userKey, plan.id);
+            validIds.push(tid);
+        }
+
+        if (validIds.length !== currentIds.length || plan.assignedTechId !== (validIds[0] || '')) {
+            syncPlanAssignedMetadata(plan, validIds);
+            anyChanged = true;
+        }
+    });
+    return anyChanged;
+}
+
 function renderGeneralPlanAssigneeSelect() {
     const sel = document.getElementById('general-plan-assignee');
     const badgesContainer = document.getElementById('general-plan-team-badges');
-    if (!sel) return;
     const plan = getSelectedGeneralPlan();
-    const currentAssigned = plan?.assignedTechId || '';
     const assignedTechs = getGeneralPlanAssignedTechs(plan);
+    const assignedIdsSet = new Set(assignedTechs.map(t => String(t.id)));
+    const currentAssigned = assignedTechs[0]?.id || plan?.assignedTechId || '';
     const techs = (state.technicians || []).filter(t => !t.deletedAt && t.estado !== 'inactivo');
 
-    const options = ['<option value="">Sin técnico asignado</option>'];
-    options.push(...techs.map(t => {
-        const isCurrent = t.id === currentAssigned;
-        const inTeam = assignedTechs.some(at => at.id === t.id);
-        const otherPlan = getGeneralPlanAssignedToTech(t.id, plan?.id || '');
-        const marker = inTeam
-            ? ' · en equipo'
-            : (isCurrent ? ' · asignado' : (otherPlan ? ` · asignado a "${otherPlan.name || 'otro plan'}"` : ''));
-        return `<option value="${escapeAttr(t.id)}">${escapeHtml(t.nombre || t.usuario || 'Técnico')}${escapeHtml(marker)}</option>`;
-    }));
-    options.push('<option value="__team__">Asignar equipo (varios técnicos)...</option>');
-    sel.innerHTML = options.join('');
+    if (sel) {
+        const options = [];
+        if (assignedTechs.length === 0) {
+            options.push('<option value="" selected>👤 Sin técnico asignado (elegir para asignar)</option>');
+        } else if (assignedTechs.length === 1) {
+            options.push('<option value="__unassign__" class="opt-unassign" style="color:#b91c1c;background:#fff1f2;font-weight:800;">✕ Quitar técnico asignado</option>');
+        } else {
+            options.push(`<option value="__team__" selected>👥 Equipo asignado (${assignedTechs.length} técnicos)</option>`);
+            options.push('<option value="__unassign__" class="opt-unassign" style="color:#b91c1c;background:#fff1f2;font-weight:800;">✕ Desasignar todos los técnicos</option>');
+        }
 
-    if (assignedTechs.length > 1) {
-        sel.value = '__team__';
-    } else {
-        sel.value = currentAssigned;
+        options.push(...techs.map(t => {
+            const inTeam = assignedIdsSet.has(String(t.id));
+            const otherPlan = getGeneralPlanAssignedToTech(t.id, plan?.id || '');
+            const marker = inTeam
+                ? '  ✓ (Asignado a este plan)'
+                : (otherPlan ? `  ⚠️ (en "${otherPlan.name || 'otro plan'}")` : '');
+            const isSel = assignedTechs.length === 1 && String(t.id) === String(currentAssigned);
+            return `<option value="${escapeAttr(t.id)}" ${isSel ? 'selected' : ''}>👤 ${escapeHtml(t.nombre || t.usuario || 'Técnico')}${escapeHtml(marker)}</option>`;
+        }));
+        options.push('<option value="__team__">👥 Asignar varios técnicos...</option>');
+        sel.innerHTML = options.join('');
+
+        if (assignedTechs.length > 1) {
+            sel.value = '__team__';
+        } else if (assignedTechs.length === 1) {
+            sel.value = String(assignedTechs[0].id);
+        } else {
+            sel.value = '';
+        }
     }
 
     if (badgesContainer) {
@@ -3857,33 +4670,167 @@ function renderGeneralPlanAssigneeSelect() {
             badgesContainer.innerHTML = assignedTechs.map(t => `
                 <span class="plan-team-badge" title="Técnico asignado a este plan">
                     <span>${escapeHtml(t.nombre || t.usuario)}</span>
-                    <button type="button" class="plan-team-badge-remove" onclick="removeTechFromPlanTeam('${escapeAttr(t.id)}')" title="Quitar del plan">&times;</button>
+                    <button type="button" class="plan-team-badge-remove" onclick="unassignTechFromCurrentPlan('${escapeAttr(t.id)}')" title="Quitar del plan">&times;</button>
                 </span>
-            `).join('') + `<button type="button" class="btn bsm bgh" onclick="openTeamAssignmentModal()" style="font-size:10px;padding:2px 8px;border-radius:6px;height:22px;cursor:pointer;">+ Equipo</button>`;
+            `).join('');
         } else {
             badgesContainer.innerHTML = '';
         }
     }
 
-    const hintId = 'general-plan-assignee-hint';
-    let hint = document.getElementById(hintId);
-    if (!hint && sel.parentElement) {
-        hint = document.createElement('div');
-        hint.id = hintId;
-        hint.className = 'mini-help';
-        sel.parentElement.appendChild(hint);
-    }
-    const blocked = techs.filter(t => t.id !== currentAssigned && getGeneralPlanAssignedToTech(t.id, plan?.id || ''));
-    if (hint) {
-        if (assignedTechs.length > 1) {
-            hint.textContent = `Plan asignado a un equipo de ${assignedTechs.length} técnicos en conjunto.`;
+    // Actualizar tarjeta resumen en la barra lateral
+    const summaryCard = document.getElementById('plan-selected-summary-card');
+    if (summaryCard) {
+        if (plan) {
+            const stopCount = (plan.stops || []).length;
+            const techHtml = assignedTechs.length
+                ? `<div class="plan-summary-crew-chips">${assignedTechs.map(t => `<span class="plan-sidebar-tech-badge"><span>👤</span><strong>${escapeHtml(t.nombre || t.usuario)}</strong></span>`).join('')}</div>`
+                : `<span class="plan-sidebar-tech-badge unassigned"><span>⚠️</span><strong>Sin técnico</strong></span>`;
+            summaryCard.innerHTML = `
+                <div class="plan-summary-header-row">
+                    <div class="plan-summary-title-group">
+                        <span class="plan-summary-status-pill">🗺️ Plan Activo</span>
+                        <strong class="plan-summary-title-text" title="${escapeAttr(plan.name)}">${escapeHtml(plan.name)}</strong>
+                    </div>
+                    <span class="plan-summary-stops-counter">${stopCount} parada${stopCount === 1 ? '' : 's'}</span>
+                </div>
+                <div class="plan-summary-crew-row">
+                    <span class="plan-summary-crew-tag-label">Técnicos:</span>
+                    ${techHtml}
+                </div>
+            `;
+            summaryCard.style.display = 'block';
         } else {
-            hint.textContent = blocked.length
-                ? `${blocked.length} técnico(s) ya tienen otro plan; si eliges uno se moverá a este plan.`
-                : 'Puedes dejarlo sin técnico, asignarlo a uno, o armar un equipo.';
+            summaryCard.style.display = 'none';
         }
     }
+
+    const hintId = 'general-plan-assignee-hint';
+    let hint = document.getElementById(hintId);
+    if (hint) {
+        hint.textContent = assignedTechs.length > 0
+            ? `Asignado a: ${assignedTechs.map(t => t.nombre || t.usuario).join(', ')}.`
+            : 'Elige un técnico arriba para asignarlo a este plan.';
+    }
+
+    if (typeof renderPlanTeamManagementView === 'function') renderPlanTeamManagementView();
+    if (typeof renderTechPlanSearchList === 'function') renderTechPlanSearchList();
+    if (typeof renderPlanCatalogManagementView === 'function') renderPlanCatalogManagementView();
 }
+
+function renderTechPlanSearchList() {
+    const listEl = document.getElementById('tech-plan-search-results');
+    const inputEl = document.getElementById('tech-plan-search-input');
+    const clearBtn = document.getElementById('tech-plan-search-clear');
+    const countEl = document.getElementById('tech-assignment-count');
+    if (!listEl) return;
+
+    const query = (inputEl?.value || '').trim().toLowerCase();
+    if (clearBtn) {
+        clearBtn.style.display = query ? 'block' : 'none';
+    }
+
+    const currentPlan = getSelectedGeneralPlan();
+    const currentPlanId = currentPlan?.id || '';
+    const allTechs = (state.technicians || []).filter(t => !t.deletedAt && t.estado !== 'inactivo');
+
+    let assignedCount = 0;
+    const techDataList = allTechs.map(t => {
+        const assignedPlan = getGeneralPlanAssignedToTech(t.id);
+        if (assignedPlan) assignedCount++;
+        const name = (t.nombre || t.usuario || 'Técnico').trim();
+        const role = (t.rol || t.telefono || 'Técnico de campo').trim();
+        const initials = name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'T';
+        return {
+            tech: t,
+            name,
+            role,
+            initials,
+            assignedPlan
+        };
+    });
+
+    if (countEl) {
+        countEl.textContent = `${assignedCount}/${allTechs.length}`;
+    }
+
+    const filtered = techDataList.filter(item => {
+        if (!query) return true;
+        const matchName = item.name.toLowerCase().includes(query);
+        const matchRole = item.role.toLowerCase().includes(query);
+        const matchPlan = item.assignedPlan ? (item.assignedPlan.name || '').toLowerCase().includes(query) : false;
+        return matchName || matchRole || matchPlan;
+    });
+
+    if (!filtered.length) {
+        listEl.innerHTML = query
+            ? `<div class="tech-plan-search-empty">Sin resultados para "${escapeHtml(query)}"</div>`
+            : '<div class="tech-plan-search-empty">No hay técnicos registrados</div>';
+        return;
+    }
+
+    listEl.innerHTML = filtered.map(item => {
+        const { tech, name, role, initials, assignedPlan } = item;
+        const isCurrentPlan = assignedPlan && String(assignedPlan.id) === String(currentPlanId);
+        const isJumpable = !!assignedPlan && !isCurrentPlan;
+
+        let statusHtml = '';
+        if (isCurrentPlan) {
+            statusHtml = `
+                <span class="tech-plan-badge-current" title="Este técnico está en el plan que estás editando actualmente">
+                    ✓ En este plan
+                </span>
+            `;
+        } else if (!assignedPlan) {
+            statusHtml = `
+                <span class="tech-plan-badge-unassigned" title="Técnico sin plan general asignado">Sin plan</span>
+            `;
+        }
+
+        return `
+            <div class="tech-plan-search-item ${isCurrentPlan ? 'is-current-plan' : ''} ${isJumpable ? 'is-jumpable' : ''}" ${isJumpable ? `onclick="jumpToGeneralPlan('${escapeAttr(assignedPlan.id)}')" style="cursor:pointer;" title="Clic para abrir el plan “${escapeAttr(assignedPlan.name)}”` : ''}>
+                <div class="tech-plan-item-left">
+                    <span class="tech-avatar-mini-circle">${escapeHtml(initials)}</span>
+                    <div class="tech-plan-name-wrap">
+                        <strong class="${isJumpable ? 'tech-name-clickable' : ''}" title="${isJumpable ? `Clic para abrir el plan “${escapeAttr(assignedPlan.name)}”` : escapeAttr(name)}">${escapeHtml(name)}</strong>
+                        <small title="${escapeAttr(role)}${assignedPlan && !isCurrentPlan ? ` · Plan: ${escapeAttr(assignedPlan.name)}` : ''}">${escapeHtml(role)}${assignedPlan && !isCurrentPlan ? ` · <span class="tech-plan-assigned-tag">Plan: <b>${escapeHtml(assignedPlan.name)}</b></span>` : ''}</small>
+                    </div>
+                </div>
+                ${statusHtml ? `
+                <div class="tech-plan-item-right">
+                    ${statusHtml}
+                </div>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+window.renderTechPlanSearchList = renderTechPlanSearchList;
+
+function jumpToGeneralPlan(planId) {
+    if (!planId) return;
+    const plan = getGeneralPlans().find(p => p.id === planId && !p.deletedAt);
+    if (!plan) {
+        notify('El plan no existe o fue eliminado.', 'err');
+        return;
+    }
+    selectGeneralPlan(planId);
+    notify(`Plan abierto: ${plan.name}`);
+    const sel = document.getElementById('general-plan-select');
+    if (sel) {
+        sel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+window.jumpToGeneralPlan = jumpToGeneralPlan;
+
+function clearTechPlanSearch() {
+    const input = document.getElementById('tech-plan-search-input');
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+    renderTechPlanSearchList();
+}
+window.clearTechPlanSearch = clearTechPlanSearch;
 
 function openTeamAssignmentModal() {
     const plan = getSelectedGeneralPlan();
@@ -4145,7 +5092,7 @@ function localDateKey(offset = 0) {
 function formatCalendarDate(value) {
     if (!value) return 'Sin fecha';
     const date = new Date(`${value}T12:00:00`);
-    return Number.isNaN(date.getTime()) ? 'Sin fecha' : date.toLocaleDateString('es-MX', { weekday:'short', day:'numeric', month:'short' });
+    return Number.isNaN(date.getTime()) ? 'Sin fecha' : date.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 function renderPlanCalendar() {
@@ -4175,7 +5122,7 @@ function renderPlanCalendar() {
         box.classList.remove('is-collapsed');
         const mondayKey = getAdminPlannerMonday(today);
         const monday = new Date(`${mondayKey}T12:00:00`);
-        const weekDates = Array.from({ length:7 }, (_, index) => {
+        const weekDates = Array.from({ length: 7 }, (_, index) => {
             const date = new Date(monday);
             date.setDate(monday.getDate() + index);
             return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -4188,7 +5135,7 @@ function renderPlanCalendar() {
                 totals.done += progress.done;
                 totals.pending += progress.pending;
                 return totals;
-            }, { total:0, done:0, pending:0 });
+            }, { total: 0, done: 0, pending: 0 });
             const dateClass = date === today ? 'today' : (date < today ? 'past' : 'future');
             return `<button type="button" class="plan-calendar-item plan-calendar-dashboard-card ${dateClass} ${selectedCalendarDate === date ? 'active' : ''}" onclick="setPlanCalendarFilter('${date}')" aria-pressed="${selectedCalendarDate === date}">
                 <span class="plan-calendar-date">${escapeHtml(formatCalendarDate(date))}</span>
@@ -4208,7 +5155,7 @@ function renderPlanCalendar() {
     stops.forEach(stop => counts.set(stop.scheduledDate || '', (counts.get(stop.scheduledDate || '') || 0) + 1));
     const dates = [...counts.keys()]
         .filter(date => !isTechnicianPlanView() || (!!date && date <= today))
-        .sort((a,b) => String(a || '9999').localeCompare(String(b || '9999')));
+        .sort((a, b) => String(a || '9999').localeCompare(String(b || '9999')));
     const title = isTechnicianPlanView() ? 'Mi calendario de trabajo' : `Calendario del plan: ${plan?.name || 'Plan'}`;
     const items = dates.map(date => {
         const dateClass = !date ? 'unscheduled' : (date < today ? 'past' : (date === today ? 'today' : 'future'));
@@ -4330,7 +5277,7 @@ function renderAdminWeekPlanner() {
     </article>`;
     };
 
-    const columns = [{ date:'', label:'Paradas disponibles', source:true }, ...dates.map(date => ({ date, label:formatCalendarDate(date), source:false }))];
+    const columns = [{ date: '', label: 'Paradas disponibles', source: true }, ...dates.map(date => ({ date, label: formatCalendarDate(date), source: false }))];
     board.innerHTML = columns.map((column, columnIndex) => {
         const columnStops = column.source
             ? stops.filter(stop => !dates.includes(stop.scheduledDate))
@@ -4349,7 +5296,7 @@ function renderAdminWeekPlanner() {
                     <b>${columnStops.length}</b>
                 </div>
             </header>
-            <div class="plan-week-dropzone">${columnStops.map((stop,index) => renderCard(stop, `${columnIndex}-${index}`)).join('') || `<div class="plan-week-empty">${column.source ? 'No hay paradas disponibles' : 'Suelta una parada aquí'}</div>`}</div>
+            <div class="plan-week-dropzone">${columnStops.map((stop, index) => renderCard(stop, `${columnIndex}-${index}`)).join('') || `<div class="plan-week-empty">${column.source ? 'No hay paradas disponibles' : 'Suelta una parada aquí'}</div>`}</div>
         </section>`;
     }).join('');
 
@@ -4435,7 +5382,7 @@ function initAdminWeekRouteMap() {
     const element = document.getElementById('plan-week-route-map');
     if (!element || typeof L === 'undefined') return;
     if (!adminWeekRouteMap) {
-        adminWeekRouteMap = L.map(element, { scrollWheelZoom:true }).setView([17.55, -99.50], 8);
+        adminWeekRouteMap = L.map(element, { scrollWheelZoom: true }).setView([17.55, -99.50], 8);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap',
             maxZoom: 19
@@ -4447,12 +5394,12 @@ function initAdminWeekRouteMap() {
 function getAdminWeekMapStops() {
     const dates = getAdminPlannerWeekDates();
     const stops = visibleStops(getSelectedGeneralPlan()?.stops)
-        .map((stop, index) => ({ ...stop, _planIndex:index, lat:safeFloat(stop.lat), lng:safeFloat(stop.lng) }))
+        .map((stop, index) => ({ ...stop, _planIndex: index, lat: safeFloat(stop.lat), lng: safeFloat(stop.lng) }))
         .filter(stop => !isNaN(stop.lat) && !isNaN(stop.lng));
     const selected = adminWeekMapScope === 'general'
-        ? stops.filter(stop => dates.includes(stop.scheduledDate)).sort((a,b) => String(a.scheduledDate).localeCompare(String(b.scheduledDate)) || a._planIndex - b._planIndex)
+        ? stops.filter(stop => dates.includes(stop.scheduledDate)).sort((a, b) => String(a.scheduledDate).localeCompare(String(b.scheduledDate)) || a._planIndex - b._planIndex)
         : stops.filter(stop => stop.scheduledDate === adminWeekMapScope);
-    return selected.map((stop, index) => ({ ...stop, order:index + 1 }));
+    return selected.map((stop, index) => ({ ...stop, order: index + 1 }));
 }
 
 async function renderAdminWeekRouteMap() {
@@ -4471,18 +5418,18 @@ async function renderAdminWeekRouteMap() {
     }
     const latLngs = stops.map(stop => [stop.lat, stop.lng]);
     if (latLngs.length > 1) {
-        L.polyline(latLngs, { color:'#fff', weight:8, opacity:.96, interactive:false }).addTo(adminWeekRouteLayer);
-        L.polyline(latLngs, { color:'#f59e0b', weight:4, opacity:.95, dashArray:'8 6', interactive:false }).addTo(adminWeekRouteLayer);
+        L.polyline(latLngs, { color: '#fff', weight: 8, opacity: .96, interactive: false }).addTo(adminWeekRouteLayer);
+        L.polyline(latLngs, { color: '#f59e0b', weight: 4, opacity: .95, dashArray: '8 6', interactive: false }).addTo(adminWeekRouteLayer);
     }
     stops.forEach(stop => {
         const progress = getStopProgress(stop);
         const marker = L.marker([stop.lat, stop.lng], {
-            icon:L.divIcon({ html:`<div class="route-map-marker">${stop.order}</div>`, className:'', iconSize:[28,28], iconAnchor:[14,14] })
+            icon: L.divIcon({ html: `<div class="route-map-marker">${stop.order}</div>`, className: '', iconSize: [28, 28], iconAnchor: [14, 14] })
         }).addTo(adminWeekRouteLayer);
-        marker.bindTooltip(`${stop.order}. ${escapeHtml(stop.name || 'Parada')}`, { direction:'top', offset:[0,-12] });
+        marker.bindTooltip(`${stop.order}. ${escapeHtml(stop.name || 'Parada')}`, { direction: 'top', offset: [0, -12] });
         marker.bindPopup(`<div style="min-width:190px"><strong>${stop.order}. ${escapeHtml(stop.name || 'Parada')}</strong><div class="map-detail-stats"><strong>${progress.total}<small>detalles</small></strong><span class="pending">${progress.pending} pendientes</span><span class="resolved">${progress.done} resueltos</span></div></div>`);
     });
-    adminWeekRouteMap.fitBounds(latLngs, { padding:[28,28], maxZoom:15 });
+    adminWeekRouteMap.fitBounds(latLngs, { padding: [28, 28], maxZoom: 15 });
     setTimeout(() => adminWeekRouteMap?.invalidateSize(), 80);
     if (stops.length < 2) return;
     try {
@@ -4491,8 +5438,8 @@ async function renderAdminWeekRouteMap() {
         adminWeekRouteLayer.eachLayer(layer => {
             if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) adminWeekRouteLayer.removeLayer(layer);
         });
-        L.geoJSON(route.geometry, { style:{ color:'#fff', weight:9, opacity:.98, interactive:false } }).addTo(adminWeekRouteLayer);
-        L.geoJSON(route.geometry, { style:{ color:'#0b63ce', weight:5, opacity:.97, interactive:false } }).addTo(adminWeekRouteLayer);
+        L.geoJSON(route.geometry, { style: { color: '#fff', weight: 9, opacity: .98, interactive: false } }).addTo(adminWeekRouteLayer);
+        L.geoJSON(route.geometry, { style: { color: '#0b63ce', weight: 5, opacity: .97, interactive: false } }).addTo(adminWeekRouteLayer);
         if (info) info.textContent = `${label} · ${stops.length} paradas · ${(Number(route.distance || 0) / 1000).toFixed(1)} km`;
     } catch (error) {
         if (renderId === adminWeekRouteRenderId && info) info.textContent = `${label} · ruta directa · ${stops.length} paradas`;
@@ -4503,7 +5450,7 @@ function startAdminWeekDrag(event, stopId) {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', stopId);
     event.currentTarget.classList.add('dragging');
-    event.currentTarget.addEventListener('dragend', () => event.currentTarget.classList.remove('dragging'), { once:true });
+    event.currentTarget.addEventListener('dragend', () => event.currentTarget.classList.remove('dragging'), { once: true });
 }
 
 function toggleAdminWeekStopDetails(event, panelId) {
@@ -4573,12 +5520,12 @@ async function assignStopCalendarDate(stopId, value) {
     stop.scheduledDate = value || '';
     stop.updatedAt = new Date().toISOString();
     let saved = await saveDB();
-    if (!saved && ['localhost','127.0.0.1','::1'].includes(location.hostname)) {
+    if (!saved && ['localhost', '127.0.0.1', '::1'].includes(location.hostname)) {
         try {
             const response = await fetch(`${location.origin}/api/changes`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ changes: [{ key:'weekPlan', value:state.weekPlan }] })
+                body: JSON.stringify({ changes: [{ key: 'weekPlan', value: state.weekPlan }] })
             });
             saved = response.ok;
         } catch (error) {
@@ -4646,16 +5593,19 @@ async function reportPlanDetailIncomplete(detailId, stopId) {
     if (!detail) return notify('No se encontró el detalle.', 'err');
     const now = new Date().toISOString();
     const actor = getCurrentUser();
-    const attempt = { type:'detalle', reason, at:now, byId:actor.id || '', byName:actor.name || actor.username || '' };
+    const attempt = { type: 'detalle', reason, at: now, byId: actor.id || '', byName: actor.name || actor.username || '' };
     // Se considera atendido en estadisticas, registrado formalmente en detalles fisicos
     // y disponible para envio de reporte por WhatsApp.
     detail.status = 'no_realizado';
     detail.detailKind = 'physical';
     detail.completedAt = now;
     detail.updatedAt = now;
-    detail.technicianReport = { ...(detail.technicianReport || {}), result:'no_realizado', reason, completedAt:now, completedBy:actor.id || '', completedByName:actor.name || actor.username || '' };
+    detail.technicianReport = { ...(detail.technicianReport || {}), result: 'no_realizado', reason, completedAt: now, completedBy: actor.id || '', completedByName: actor.name || actor.username || '' };
     detail.incompleteHistory = [...(detail.incompleteHistory || []), attempt];
     setUpdatedAudit(detail, 'reportó detalle no terminado');
+    if (typeof prepareTechnicianSummaryFile === 'function') {
+        prepareTechnicianSummaryFile({ ...detail, technicianReport: { ...(detail.technicianReport || {}) } }).catch(() => { });
+    }
     const allPlanStops = typeof getPlanMapStops === 'function' ? getPlanMapStops() : getPlanStopsForView('general');
     const stop = (stopId ? allPlanStops.find(item => item.id === stopId) : null)
         || allPlanStops.find(item => (item.detailIds || []).includes(detail.id))
@@ -4695,13 +5645,13 @@ async function reportWholeStopIncomplete(stopId) {
     if (!stop) return;
     const now = new Date().toISOString();
     const actor = getCurrentUser();
-    const attempt = { type:'parada', reason, at:now, byId:actor.id || '', byName:actor.name || actor.username || '' };
+    const attempt = { type: 'parada', reason, at: now, byId: actor.id || '', byName: actor.name || actor.username || '' };
     stop.incompleteHistory = [...(stop.incompleteHistory || []), attempt];
     stop.lastIncompleteReason = reason;
     stop.scheduledDate = localDateKey(1);
     stop.siteStatus = 'pendiente';
     stop.updatedAt = now;
-    getStopDetails(stop).filter(detail => !['completada','no_realizado'].includes(detail.status || '')).forEach(detail => {
+    getStopDetails(stop).filter(detail => !['completada', 'no_realizado'].includes(detail.status || '')).forEach(detail => {
         detail.incompleteHistory = [...(detail.incompleteHistory || []), attempt];
         detail.updatedAt = now;
     });
@@ -4867,8 +5817,13 @@ function renderPlanDetailRow(detail, stop, day, historical = false) {
     const technicianLocation = detail.detailLocation
         || detail.technicianReport?.location
         || ((!isNaN(safeFloat(detail.lat)) && !isNaN(safeFloat(detail.lng))) ? `${detail.lat}, ${detail.lng}` : '');
-    const rawPhone = String(detail.clientPhone || detail.phone || detail.technicianReport?.phone || '').replace(/\D/g, '');
-    const phoneCallBtn = (isTechnicianPlanView() && rawPhone)
+    const rawPhoneStr = String(detail.clientPhone || detail.phone || detail.technicianReport?.phone || '').trim();
+    const rawPhone = rawPhoneStr.replace(/\D/g, '');
+    const hasValidPhone = rawPhone.length >= 7 && !/^0+$/.test(rawPhone);
+    const clientPhoneHtml = (rawPhoneStr && rawPhoneStr !== '0000000000')
+        ? `<div class="detail-client-phone-line"><b>Teléfono:</b> ${hasValidPhone ? `<a href="tel:${escapeAttr(rawPhone)}">${escapeHtml(rawPhoneStr)}</a>` : `<span>${escapeHtml(rawPhoneStr)}</span>`}</div>`
+        : '';
+    const phoneCallBtn = (isTechnicianPlanView() && hasValidPhone)
         ? `<a href="tel:${escapeAttr(rawPhone)}" class="tech-call-btn" title="Llamar al cliente"><svg class="tech-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> Llamar</a>`
         : '';
     const technicianActions = isTechnicianPlanView()
@@ -4883,11 +5838,13 @@ function renderPlanDetailRow(detail, stop, day, historical = false) {
         : `<div class="detail-status-line">${noDone ? '<span class="badge ba">No realizado</span>' : `<span class="priority-badge priority-${escapeAttr(detail.priority || 'media')}"><span class="priority-dot"></span>${escapeHtml(pl(detail.priority || 'media'))}</span>`}<span class="detail-folio">${escapeHtml(getDetailFolio(detail))}</span><span class="plan-category-badge category-${escapeAttr(category)}">${escapeHtml(planCategoryLabel(category))}</span></div>`;
     const completedSummary = done ? `
                 ${hasClient ? `<div class="detail-client-line"><b>Cliente:</b> ${escapeHtml(visibleClientName)}</div>` : ''}
+                ${clientPhoneHtml}
                 <strong class="detail-title-line">${isTechnicianPlanView() ? '' : '<b>Detalle:</b> '}${escapeHtml(technicianDetailText)}</strong>
                 ${technicianDescription ? `<small class="detail-description-line"><b>Información:</b> ${escapeHtml(technicianDescription)}</small>` : ''}
                 ${renderDetailLocation(detail.detailLocation || detail.technicianReport?.location)}
                 ${detail.technicianReport?.modifiedAt || detail.modifiedAt ? `<small class="detail-modified-line"><b>Modificado:</b> ${escapeHtml(formatPlanDateTime(detail.technicianReport?.modifiedAt || detail.modifiedAt))}</small>` : ''}` : `
                 ${hasClient ? `<div class="detail-client-line"><b>Cliente:</b> ${escapeHtml(visibleClientName)}</div>` : (!isTechnicianPlanView() ? '<div class="detail-client-line is-empty"><b>Cliente:</b> Sin nombre registrado</div>' : '')}
+                ${clientPhoneHtml}
                 ${isTechnicianPlanView() ? `
                     <strong class="detail-title-line">${escapeHtml(technicianDetailText)}</strong>
                     ${technicianDescription ? `<small class="detail-description-line"><b>Información:</b> ${escapeHtml(technicianDescription)}</small>` : ''}
@@ -4931,7 +5888,7 @@ async function openPlanDetailReport(detailId, stopId = '', day = selectedDay) {
     const requested = getWorkOrderRequestedText(detail, 'Sin descripcion capturada');
     const completedWork = getTechnicianReportCompletedWork(detail, requested);
     const location = detail.detailLocation || report.location || ((!isNaN(safeFloat(detail.lat)) && !isNaN(safeFloat(detail.lng))) ? `${detail.lat}, ${detail.lng}` : 'Sin ubicacion capturada');
-    const typeLabels = { comunidad:'Comunidad', torre:'Torre', troncal:'Troncal', punto_venta:'Punto de venta' };
+    const typeLabels = { comunidad: 'Comunidad', torre: 'Torre', troncal: 'Troncal', punto_venta: 'Punto de venta' };
     const statusText = resolved ? (noDone ? 'No realizado' : 'Completada') : 'Pendiente';
     const dateValue = resolved ? (report.completedAt || detail.completedAt || detail.updatedAt) : (detail.createdAt || detail.updatedAt);
     let modal = document.getElementById('plan-detail-report-mo');
@@ -4943,7 +5900,7 @@ async function openPlanDetailReport(detailId, stopId = '', day = selectedDay) {
     const field = (icon, label, value, tone = '') => `<div class="plan-report-field ${tone}"><span class="plan-report-field-icon">${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value || 'Sin registro')}</strong></div></div>`;
     const editButton = resolved && detail.status === 'completada' && isTechnicianPlanView()
         ? `<button type="button" class="btn plan-detail-report-edit" onclick="CM('plan-detail-report-mo');openTechnicianCompletionForm('${escapeAttr(detail.id)}')">Editar reporte</button>`
-        : (!resolved && !isPlanReadOnly() && stop ? `<button type="button" class="btn plan-detail-report-edit" title="Editar detalle" aria-label="Editar detalle" onclick="editPlanDetailFromReport('${escapeAttr(stop.id)}','${escapeAttr(day)}','${escapeAttr(detail.id)}')">${stopActionIcon('edit')}</button>` : '');
+        : (!resolved && stop ? `<button type="button" class="btn plan-detail-report-edit" title="Editar detalle" aria-label="Editar detalle" onclick="editPlanDetailFromReport('${escapeAttr(stop.id)}','${escapeAttr(day)}','${escapeAttr(detail.id)}')">${stopActionIcon('edit')}</button>` : '');
     const card = document.getElementById('plan-detail-report-card');
     card.innerHTML = `
         <header class="plan-detail-report-head">
@@ -4966,13 +5923,16 @@ async function openPlanDetailReport(detailId, stopId = '', day = selectedDay) {
         </div>
         <section class="plan-detail-report-wide"><span>•</span><div><small>Trabajo solicitado</small><strong>${escapeHtml(requested)}</strong></div></section>
         ${resolved && (noDone || completedWork || report.observations || report.materialUsed) ? `<section class="plan-detail-report-wide ${noDone ? 'warning' : 'success'}"><span>${noDone ? '•' : '✓'}</span><div>${noDone || completedWork ? `<small>${noDone ? 'Motivo reportado' : 'Trabajo realizado'}</small><strong>${escapeHtml(noDone ? (report.reason || 'No se capturó un motivo') : completedWork)}</strong>` : ''}${report.observations ? `<p><b>Notas:</b> ${escapeHtml(report.observations)}</p>` : ''}${report.materialUsed ? `<p><b>Material usado:</b> ${escapeHtml(report.materialUsed)}</p>` : ''}</div></section>` : (!resolved ? '<div class="plan-detail-report-pending-note">Este trabajo sigue pendiente con los datos registrados.</div>' : '')}
-        ${photos.length ? `<section class="plan-detail-report-evidence"><small>Fotos del trabajo</small><div>${photos.map((photo,index) => `<button type="button" onclick="openPlanEvidenceGallery('${escapeAttr(galleryKey)}',${index})"><img src="${escapeAttr(photo)}" alt="Evidencia ${index + 1}"><span>${index + 1}</span></button>`).join('')}</div></section>` : (resolved ? '<div class="plan-detail-report-no-evidence">Sin fotografías de evidencia.</div>' : '')}
+        ${photos.length ? `<section class="plan-detail-report-evidence"><small>Fotos del trabajo</small><div>${photos.map((photo, index) => `<button type="button" onclick="openPlanEvidenceGallery('${escapeAttr(galleryKey)}',${index})"><img src="${escapeAttr(photo)}" alt="Evidencia ${index + 1}"><span>${index + 1}</span></button>`).join('')}</div></section>` : (resolved ? '<div class="plan-detail-report-no-evidence">Sin fotografías de evidencia.</div>' : '')}
         <footer class="plan-detail-report-footer"><span>Folio: <b>${escapeHtml(getDetailFolio(detail))}</b></span><button type="button" class="btn bgh" onclick="CM('plan-detail-report-mo')">Cerrar</button></footer>`;
     OM('plan-detail-report-mo');
 }
 
 function editPlanDetailFromReport(stopId, day, detailId) {
-    if (isPlanReadOnly()) return notify('No tienes permiso para editar este detalle.', 'warn');
+    const detail = (state.workOrders || []).find(item => item.id === detailId && !item.deletedAt);
+    if (detail && ['completada', 'no_realizado'].includes(detail.status) && !canManagePlanStops()) {
+        return notify('No tienes permiso para editar este detalle finalizado.', 'warn');
+    }
     CM('plan-detail-report-mo');
     openPlanDetailEditor(detailId, stopId, day);
 }
@@ -5006,9 +5966,9 @@ function openPlanDetailEditor(detailId, stopId = '', day = selectedDay) {
             ${field('&#128205;', 'Pueblo o antena', `<input id="pde-target" list="pde-target-options" value="${escapeAttr(selectedTargetLabel)}" placeholder="Escribe para buscar o agregar"><datalist id="pde-target-options">${targetOptions}</datalist>`)}
             ${field('&#8982;', 'Ubicacion / coordenadas', `<input id="pde-location" value="${escapeAttr(detail.detailLocation || '')}" placeholder="17.273400, -98.788000 o enlace de Maps">`)}
             ${field('&#128506;', 'Zona', `<select id="pde-zone"><option value="">Sin zona</option>${zones.map(zone => `<option value="${escapeAttr(zone)}" ${zone === detail.region ? 'selected' : ''}>${escapeHtml(zone)}</option>`).join('')}</select>`)}
-            ${field('&#9881;', 'Tipo de trabajo', `<select id="pde-type">${[['comunidad','Comunidad'],['torre','Torre'],['troncal','Troncal'],['punto_venta','Punto de venta']].map(([value,label]) => `<option value="${value}" ${value === detail.visitType ? 'selected' : ''}>${label}</option>`).join('')}</select>`)}
-            ${field('&#9670;', 'Categoria', `<select id="pde-category">${['otro','instalacion','alineacion_antena','antena_desconectada','antena_quemada','antena_inalambrica','reubicacion_antena','resurtir_antena','solicitud_respaldo'].map(value => `<option value="${value}" ${value === getPlanDetailCategory(detail) ? 'selected' : ''}>${escapeHtml(planCategoryLabel(value))}</option>`).join('')}</select>`)}
-            ${field('&#9873;', 'Prioridad', `<select id="pde-priority">${['baja','media','alta','muy_alta'].map(value => `<option value="${value}" ${value === (detail.priority || 'media') ? 'selected' : ''}>${escapeHtml(pl(value))}</option>`).join('')}</select>`)}
+            ${field('&#9881;', 'Tipo de trabajo', `<select id="pde-type">${[['comunidad', 'Comunidad'], ['torre', 'Torre'], ['troncal', 'Troncal'], ['punto_venta', 'Punto de venta']].map(([value, label]) => `<option value="${value}" ${value === detail.visitType ? 'selected' : ''}>${label}</option>`).join('')}</select>`)}
+            ${field('&#9670;', 'Categoria', `<select id="pde-category">${['otro', 'instalacion', 'alineacion_antena', 'antena_desconectada', 'antena_quemada', 'antena_inalambrica', 'reubicacion_antena', 'resurtir_antena', 'solicitud_respaldo'].map(value => `<option value="${value}" ${value === getPlanDetailCategory(detail) ? 'selected' : ''}>${escapeHtml(planCategoryLabel(value))}</option>`).join('')}</select>`)}
+            ${field('&#9873;', 'Prioridad', `<select id="pde-priority">${['baja', 'media', 'alta', 'muy_alta'].map(value => `<option value="${value}" ${value === (detail.priority || 'media') ? 'selected' : ''}>${escapeHtml(pl(value))}</option>`).join('')}</select>`)}
             ${field('&#128203;', 'Detalle solicitado', `<textarea id="pde-title" rows="3">${escapeHtml(detail.title || '')}</textarea>`, true)}
             ${field('&#128221;', 'Notas / observaciones', `<textarea id="pde-description" rows="2" placeholder="Notas opcionales">${escapeHtml(detail.description || detail.desc || '')}</textarea>`, true)}
         </div>
@@ -5050,6 +6010,11 @@ async function savePlanDetailEditor(detailId, stopId, day) {
     detail.nodeCode = node?.nodeCode || '';
     detail.nodeName = node ? getNodeLabel(node) : '';
     detail.town = node?.town || (!eq ? typedTarget : '');
+    const nowIso = new Date().toISOString();
+    detail.modifiedAt = nowIso;
+    detail.updatedAt = nowIso;
+    const actorUser = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+    detail.modifiedByName = actorUser?.name || actorUser?.username || 'Usuario';
     setUpdatedAudit(detail, 'edito detalle pendiente');
     const saved = await saveDB();
     if (!saved) return notify('No se pudo guardar el detalle.', 'err');
@@ -5174,10 +6139,10 @@ function renderStopTechReportSummary(details = []) {
     return `
         <div class="plan-stop-report-summary">
             ${reported.slice(0, 4).map(detail => {
-                const report = detail.technicianReport || {};
-                const isNoDone = detail.status === 'no_realizado' || report.result === 'no_realizado';
-                const photos = getAdminTechReportPhotos(report);
-                return `
+        const report = detail.technicianReport || {};
+        const isNoDone = detail.status === 'no_realizado' || report.result === 'no_realizado';
+        const photos = getAdminTechReportPhotos(report);
+        return `
                     <div class="plan-stop-report-item ${isNoDone ? 'not-done' : 'done'}">
                         <span class="badge ${isNoDone ? 'ba' : 'bg2'}">${isNoDone ? 'No realizado' : 'Terminado'}</span>
                         <strong>${escapeHtml(detail.title || 'Detalle')}</strong>
@@ -5187,7 +6152,7 @@ function renderStopTechReportSummary(details = []) {
                         ${report.materialUsed ? `<small>Material: ${escapeHtml(report.materialUsed)}</small>` : ''}
                         ${photos.length ? renderEvidenceThumbnails(photos, `${detail.id}-summary`) : '<small>Sin evidencia</small>'}
                     </div>`;
-            }).join('')}
+    }).join('')}
             ${reported.length > 4 ? `<small class="plan-stop-report-more">+ ${reported.length - 4} reportes más en Ver detalles</small>` : ''}
         </div>`;
 }
@@ -5253,7 +6218,7 @@ function setPlanStopPickerType(type) {
 }
 
 function getPlanStopPickerItems() {
-    if (planStopPickerType === 'node') return (state.nodes || []).filter(item => !item.deletedAt).map(item => ({ id:item.id, type:'node', title:getNodeLabel(item), subtitle:`Comunidad · ${getNodePlanDetails(item.id).length} detalles`, search:[getNodeLabel(item),item.nodeCode,item.town,item.zone].join(' ') }));
+    if (planStopPickerType === 'node') return (state.nodes || []).filter(item => !item.deletedAt).map(item => ({ id: item.id, type: 'node', title: getNodeLabel(item), subtitle: `Comunidad · ${getNodePlanDetails(item.id).length} detalles`, search: [getNodeLabel(item), item.nodeCode, item.town, item.zone].join(' ') }));
     return (state.equipment || []).filter(item => !item.deletedAt).map(item => {
         const linkedNodes = typeof getAllLinkedNodesForEquipment === 'function' ? getAllLinkedNodesForEquipment(item.id) : [];
         const linkedCount = linkedNodes.length;
@@ -5434,7 +6399,7 @@ function getAllLinkedNodesForEquipment(equipmentId) {
             fromApi.forEach(n => {
                 if (n && n.id && !n.deletedAt) nodeMap.set(n.id, n);
             });
-        } catch (_) {}
+        } catch (_) { }
     }
 
     if (eq && Array.isArray(eq.linkedNodeIds)) {
@@ -5468,7 +6433,7 @@ function getEquipmentPlanDetailGroups(equipmentId, onlyIds = null) {
     if (typeof getEquipmentLinkedNodeIds === 'function') {
         try {
             getEquipmentLinkedNodeIds(equipmentId).forEach(id => linkedNodeIds.add(id));
-        } catch (_) {}
+        } catch (_) { }
     }
     const antenna = [];
     const byNode = new Map();
@@ -5801,6 +6766,16 @@ function removeStopFromFullscreen(day, stopId) {
 }
 
 const _pendingDetailFetchIds = new Set();
+let _debouncedRenderPlanDaysTimer = null;
+
+function _scheduleDebouncedRenderPlanDays() {
+    if (_debouncedRenderPlanDaysTimer) return;
+    _debouncedRenderPlanDaysTimer = setTimeout(() => {
+        _debouncedRenderPlanDaysTimer = null;
+        if (typeof renderPlanDays === 'function') renderPlanDays();
+        if (typeof updateTechnicianMobileBellBadge === 'function') updateTechnicianMobileBellBadge();
+    }, 180);
+}
 
 function getStopDetails(stop) {
     if (!stop) return [];
@@ -5859,8 +6834,7 @@ function getStopDetails(stop) {
                         if (typeof saveWorkOrdersToGlobalCache === 'function') {
                             saveWorkOrdersToGlobalCache([fetched]);
                         }
-                        if (typeof renderPlanDays === 'function') renderPlanDays();
-                        if (typeof updateTechnicianMobileBellBadge === 'function') updateTechnicianMobileBellBadge();
+                        _scheduleDebouncedRenderPlanDays();
                     }
                 }).catch(() => {
                     _pendingDetailFetchIds.delete(id);
@@ -5874,7 +6848,9 @@ function getStopDetails(stop) {
         saveWorkOrdersToGlobalCache(Array.from(details.values()));
     }
 
-    return sortDetailsByPriority(Array.from(details.values()));
+    return typeof sortDetailsByPriority === 'function'
+        ? sortDetailsByPriority(Array.from(details.values()))
+        : Array.from(details.values());
 }
 
 function getStopProgress(stop) {
@@ -5887,8 +6863,16 @@ function getStopProgress(stop) {
 }
 
 function getVisibleStopNotes(stop, details = getStopDetails(stop)) {
-    const note = String(stop.notes || '').trim();
+    let note = String(stop.notes || '').trim();
     if (!note) return '';
+    if (/undefined/i.test(note)) {
+        const fallbackName = (stop.name && stop.name.toLowerCase() !== 'parada' && stop.name.toLowerCase() !== 'undefined') ? stop.name : (stop.town || '');
+        if (fallbackName) {
+            note = note.replace(/:\s*undefined(\s*\(Pueblo registrado\))?/gi, `: ${fallbackName} (Pueblo registrado)`).replace(/\bundefined\b/gi, fallbackName).trim();
+        } else {
+            note = note.replace(/:\s*undefined(\s*\(Pueblo registrado\))?/gi, '').replace(/\bundefined\b/gi, '').trim();
+        }
+    }
     const duplicatedAsDetail = (details || []).some(detail => String(detail.title || '').trim().toLowerCase() === note.toLowerCase());
     return duplicatedAsDetail ? '' : note;
 }
@@ -5982,7 +6966,7 @@ async function setMapStopOrder(day, stopId, value) {
 
 async function deleteStop(day, id) {
     if (!canManagePlanStops()) return notify('Solo un administrador o soporte puede eliminar paradas de la ruta', 'err');
-    
+
     const currentPlan = typeof getSelectedGeneralPlan === 'function' ? getSelectedGeneralPlan() : null;
     let stop = null;
     let parentPlan = currentPlan;
@@ -6048,7 +7032,7 @@ async function deleteStop(day, id) {
 
 function openRegisterStopAsNodeModal(stopId) {
     if (!canManagePlanStops()) return notify('Solo un administrador o soporte puede registrar nuevos pueblos', 'err');
-    
+
     const currentPlan = typeof getSelectedGeneralPlan === 'function' ? getSelectedGeneralPlan() : null;
     let stop = null;
     if (currentPlan && Array.isArray(currentPlan.stops)) {
@@ -6175,7 +7159,7 @@ async function saveNewNodeFromStop() {
     }
 
     if (typeof saveRecord === 'function') {
-        await saveRecord('nodes', newNode).catch(() => {});
+        await saveRecord('nodes', newNode).catch(() => { });
     }
 
     // Vincular parada
@@ -6205,7 +7189,7 @@ async function saveNewNodeFromStop() {
 }
 
 async function clearAllPlanningContext() {
-    const confirmed = await askConfirmation({ title:'Eliminar toda la planificación', message:'Se eliminarán todos los planes semanales y generales.', confirmText:'Eliminar todo', cancelText:'Cancelar', tone:'danger' });
+    const confirmed = await askConfirmation({ title: 'Eliminar toda la planificación', message: 'Se eliminarán todos los planes semanales y generales.', confirmText: 'Eliminar todo', cancelText: 'Cancelar', tone: 'danger' });
     if (!confirmed) return;
     Object.values(state.weekPlan || {}).forEach(plan => {
         if (!plan || typeof plan !== 'object') return;
@@ -6228,7 +7212,7 @@ async function clearAllPlanningContext() {
 }
 
 function initPlanMap() {
-    if (planMap || !document.getElementById('plan-map')) return;
+    if (planMap || typeof L === 'undefined' || !document.getElementById('plan-map')) return;
     planMap = L.map('plan-map').setView([17.55, -99.50], 8);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap',
@@ -6298,7 +7282,7 @@ async function renderPlanMap() {
                     <button class="btn bsm bc" onclick="setMapStopOrder('${escapeAttr(p.day)}','${escapeAttr(p.id)}',document.getElementById('map-order-${escapeAttr(p.id)}').value)">Reordenar</button>
                 </div>
             </div>
-        `, { maxWidth:420 });
+        `, { maxWidth: 420 });
         planMarkers.push(marker);
     });
 
@@ -6399,8 +7383,8 @@ function renderWeeklyRouteView() {
     const doneDetails = totalDetails - pendingDetails;
     const feasibility = calculateDayRouteFeasibility(stops);
 
-    const dayLabelStr = weeklyRouteSelectedDay === 'all' 
-        ? 'Todos los días' 
+    const dayLabelStr = weeklyRouteSelectedDay === 'all'
+        ? 'Todos los días'
         : (weeklyRouteSelectedDay === 'unscheduled' ? 'Sin fecha asignada' : formatCalendarDate(weeklyRouteSelectedDay));
 
     const label = selectedTechId === SHARED_PLAN_ID
@@ -6430,6 +7414,622 @@ function renderWeeklyRouteView() {
 
     renderWeeklyRouteList(stops);
 }
+
+/* ==========================================================================
+   COBERTURA DE PUEBLOS: MONITOREO DE >80% COMPLETADOS Y SIN ATENCIÓN
+   ========================================================================== */
+let townsCoverageCurrentTab = 'covered'; // 'covered' | 'unattended'
+let townsCoverageSearchQuery = '';
+let townsCoverageUrgencyFilter = 'all'; // 'all' | 'nunca' | 'critica' | 'alta' | 'media' | 'baja'
+
+function getTownUrgencyInfo(item) {
+    if (!item || !item.isUnattended) return null;
+    let days = 0;
+    if (item.oldestPendingDate) {
+        const d = new Date(item.oldestPendingDate);
+        if (!isNaN(d.getTime())) {
+            const diffMs = Date.now() - d.getTime();
+            days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+        }
+    }
+
+    let baseLevel = 'baja';
+    let baseRank = 1;
+    let icon = '🔵';
+    let label = 'Urgencia Baja';
+    let shortLabel = 'Baja';
+    let badgeClass = 'urgency-baja';
+    let color = '#2563eb';
+
+    if (days >= 30) {
+        baseLevel = 'critica';
+        baseRank = 4;
+        icon = '🚨';
+        label = 'Urgencia Crítica';
+        shortLabel = 'Crítica';
+        badgeClass = 'urgency-critica';
+        color = '#dc2626';
+    } else if (days >= 14) {
+        baseLevel = 'alta';
+        baseRank = 3;
+        icon = '⚠️';
+        label = 'Urgencia Alta';
+        shortLabel = 'Alta';
+        badgeClass = 'urgency-alta';
+        color = '#ea580c';
+    } else if (days >= 7) {
+        baseLevel = 'media';
+        baseRank = 2;
+        icon = '⏳';
+        label = 'Urgencia Media';
+        shortLabel = 'Media';
+        badgeClass = 'urgency-media';
+        color = '#d97706';
+    }
+
+    // Clasificación especial para los que NUNCA se han atendido (solo si tiene detalles registrados)
+    const isNever = Boolean(item.isNeverAttended || (item.completed === 0 && Number(item.total) > 0));
+    if (isNever) {
+        return {
+            level: 'nunca',
+            timeLevel: baseLevel,
+            isNeverAttended: true,
+            rank: 5,
+            days,
+            icon: '⛔',
+            timeIcon: icon,
+            label: 'Nunca atendido',
+            shortLabel: 'Nunca atendido',
+            badgeClass: 'urgency-nunca',
+            color: '#b91c1c'
+        };
+    }
+
+    return {
+        level: baseLevel,
+        timeLevel: baseLevel,
+        isNeverAttended: false,
+        rank: baseRank,
+        days,
+        icon,
+        timeIcon: icon,
+        label,
+        shortLabel,
+        badgeClass,
+        color
+    };
+}
+
+function formatTimeAgoCustom(dateString) {
+    if (!dateString) return 'Sin fecha registrada';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Fecha inválida';
+    const now = new Date();
+    const diffMs = now - date;
+    if (diffMs < 0) return 'Reciente';
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    if (diffMinutes < 60) return `Hace ${Math.max(1, diffMinutes)} min`;
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `Hace ${diffHours} h`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Hace 1 día';
+    if (diffDays < 7) return `Hace ${diffDays} días`;
+    const diffWeeks = Math.floor(diffDays / 7);
+    if (diffWeeks === 1) return 'Hace 1 semana';
+    if (diffWeeks < 5) return `Hace ${diffWeeks} semanas`;
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths === 1) return 'Hace 1 mes';
+    if (diffMonths < 12) return `Hace ${diffMonths} meses`;
+    const diffYears = Math.floor(diffDays / 365);
+    return `Hace ${diffYears} año${diffYears === 1 ? '' : 's'}`;
+}
+
+function calculateTownCoverageData() {
+    const nodes = (state.nodes || []).filter(n => n && !n.deletedAt);
+    const workOrders = (state.workOrders || []).filter(w => w && !w.deletedAt);
+
+    // Mapeo por ID de nodo
+    const townStats = nodes.map(node => {
+        const id = node.id;
+        const code = node.nodeCode || '';
+        const townName = node.town || node.name || code || 'Pueblo sin nombre';
+        const zone = node.zone || node.region || '';
+
+        // 1. Obtener detalles directamente asociados en memoria
+        const nodeOrders = workOrders.filter(w => w.nodeId === id || (code && w.nodeCode === code));
+
+        let total = nodeOrders.length;
+        let completed = nodeOrders.filter(w => ['completada', 'no_realizado', 'done'].includes(w.status || '')).length;
+        let pending = Math.max(0, total - completed);
+
+        // Si el catálogo precargado en node tiene estadísticas del servidor más completas, utilizarlas como base
+        if (Number.isFinite(Number(node.mapDetailTotal)) && Number(node.mapDetailTotal) > total) {
+            total = Number(node.mapDetailTotal);
+            completed = Math.max(completed, Number(node.mapDetailResolved) || 0);
+            pending = Math.max(0, total - completed);
+        }
+
+        // Determinar fecha del detalle más antiguo pendiente / sin atención
+        let oldestPendingDate = node.mapOldestPendingAt || null;
+        let latestResolvedDate = node.mapLatestResolvedAt || null;
+        nodeOrders.forEach(w => {
+            const isResolved = ['completada', 'no_realizado', 'done'].includes(w.status || '');
+            const dateVal = w.updatedAt || w.updated_at || w.createdAt || w.created_at;
+            if (!isResolved) {
+                if (dateVal) {
+                    if (!oldestPendingDate || new Date(dateVal) < new Date(oldestPendingDate)) {
+                        oldestPendingDate = dateVal;
+                    }
+                }
+            } else {
+                if (dateVal) {
+                    if (!latestResolvedDate || new Date(dateVal) > new Date(latestResolvedDate)) {
+                        latestResolvedDate = dateVal;
+                    }
+                }
+            }
+        });
+
+        // Si no hay detalles pero el nodo tiene createdAt, usarlo como referencia secundaria
+        if (!oldestPendingDate && (node.createdAt || node.created_at)) {
+            oldestPendingDate = node.createdAt || node.created_at;
+        }
+
+        const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const hasCompleted = completed > 0;
+        const isCovered80 = hasCompleted && total > 0 && (completed / total) >= 0.8;
+        const effectivePending = Math.max(pending, Number(node.mapUnattendedCount) || 0);
+        const hasRegisteredDetails = total > 0 || nodeOrders.length > 0 || (Number(node.mapDetailTotal) > 0);
+        const isNeverAttended = hasRegisteredDetails && completed === 0 && (effectivePending > 0 || total > 0);
+        const isUnattended = hasRegisteredDetails && effectivePending > 0 && !isCovered80;
+
+        const townObj = {
+            id,
+            node,
+            code,
+            townName,
+            zone,
+            total,
+            completed,
+            pending: effectivePending,
+            percentage,
+            hasCompleted,
+            isCovered80,
+            isNeverAttended,
+            isUnattended,
+            oldestPendingDate,
+            latestResolvedDate,
+            lat: safeFloat(node.lat),
+            lng: safeFloat(node.lng)
+        };
+        townObj.urgency = getTownUrgencyInfo(townObj);
+        return townObj;
+    });
+
+    return townStats;
+}
+
+function renderTownsCoverageSection() {
+    const allData = calculateTownCoverageData();
+    const coveredList = allData.filter(item => item.isCovered80);
+    const unattendedList = allData.filter(item => item.isUnattended);
+
+    if (!allData.length) return '';
+
+    // Ordenar listas
+    const sortedCovered = [...coveredList].sort((a, b) => b.percentage - a.percentage || b.completed - a.completed);
+    const sortedUnattended = [...unattendedList].sort((a, b) => {
+        const rankA = a.urgency ? a.urgency.rank : 0;
+        const rankB = b.urgency ? b.urgency.rank : 0;
+        if (rankB !== rankA) return rankB - rankA;
+        const timeA = a.oldestPendingDate ? new Date(a.oldestPendingDate).getTime() : 0;
+        const timeB = b.oldestPendingDate ? new Date(b.oldestPendingDate).getTime() : 0;
+        return timeA - timeB;
+    });
+
+    const previewCovered = sortedCovered.slice(0, 3);
+    const previewUnattended = sortedUnattended.slice(0, 3);
+
+    // Conteo por niveles de urgencia
+    const nuncaCount = unattendedList.filter(i => i.isNeverAttended || i.urgency?.level === 'nunca').length;
+    const criticaCount = unattendedList.filter(i => i.urgency?.level === 'critica' || i.urgency?.timeLevel === 'critica').length;
+    const altaCount = unattendedList.filter(i => i.urgency?.level === 'alta' || i.urgency?.timeLevel === 'alta').length;
+    const mediaCount = unattendedList.filter(i => i.urgency?.level === 'media' || i.urgency?.timeLevel === 'media').length;
+    const bajaCount = unattendedList.filter(i => i.urgency?.level === 'baja' || i.urgency?.timeLevel === 'baja').length;
+
+    const renderCard = (item, isCovered) => {
+        const timeAgoText = formatTimeAgoCustom(item.oldestPendingDate);
+        const resolvedAgoText = item.latestResolvedDate ? formatTimeAgoCustom(item.latestResolvedDate) : 'Sin fecha reciente';
+        const hasCoords = !isNaN(item.lat) && !isNaN(item.lng);
+        const isNever = !isCovered && Boolean(item.isNeverAttended || item.urgency?.level === 'nunca');
+        const cardUrgencyClass = !isCovered && item.urgency ? `urgency-${item.urgency.level}` : '';
+        return `
+            <div class="town-coverage-card ${cardUrgencyClass}${isNever ? ' is-never-attended' : ''}">
+                <div class="town-coverage-card-head">
+                    <div class="town-coverage-card-title">
+                        <strong title="${escapeAttr(item.townName)}">${escapeHtml(item.townName)}</strong>
+                        <small>${escapeHtml(item.code ? item.code + ' · ' : '')}${escapeHtml(item.zone || 'Sin zona')}</small>
+                    </div>
+                    ${isCovered
+                ? `<span class="town-coverage-badge badge-green">${item.percentage}% Hecho</span>`
+                : (isNever
+                    ? `<span class="town-coverage-badge urgency-nunca" title="Pueblo con detalles registrados que nunca ha recibido atención">⛔ Nunca atendido</span>`
+                    : `<span class="town-coverage-badge ${item.urgency ? item.urgency.badgeClass : 'badge-red'}" title="${item.urgency ? item.urgency.label + ' (' + item.urgency.days + ' días sin atención)' : 'Sin atención'}">${item.urgency ? item.urgency.icon + ' ' + item.urgency.label : 'Sin atención'}</span>`)
+            }
+                </div>
+                ${isCovered ? `
+                    <div class="town-coverage-progress-wrap">
+                        <div class="town-coverage-progress-fill" style="width:${item.percentage}%"></div>
+                    </div>
+                    <div class="town-coverage-metrics-row">
+                        <span>Avance: <b>${item.completed} de ${item.total}</b></span>
+                        <span>Faltan: <b>${item.pending}</b></span>
+                    </div>
+                    <div class="town-coverage-resolved-wait" style="margin-top:2px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <span>Último resuelto: <strong>${resolvedAgoText}</strong></span>
+                    </div>
+                ` : `
+                    <div class="town-coverage-unattended-wait ${cardUrgencyClass}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:inherit;flex-shrink:0;">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span>Sin atender: <strong>${timeAgoText}</strong> ${isNever ? `<span class="town-urgency-tag nunca">(Nunca atendido · ${item.urgency ? item.urgency.days : 0} d)</span>` : (item.urgency ? `<span class="town-urgency-tag">(${item.urgency.days} d)</span>` : '')}</span>
+                    </div>
+                    <div class="town-coverage-metrics-row" style="margin-top:2px;">
+                        <span>Pendientes: <b>${item.pending} detalles</b> ${isNever ? '<small style="color:#b91c1c;font-weight:800;">(0 atendidos)</small>' : (item.completed > 0 ? `<small style="color:#64748b;font-weight:700;">(${item.completed} resueltos)</small>` : '')}</span>
+                    </div>
+                `}
+                <div class="town-coverage-actions">
+                    ${hasCoords ? `
+                        <button type="button" class="btn bsm bgh" onclick="panPlanMapToActiveStop({lat:${item.lat},lng:${item.lng}})" title="Centrar este pueblo en el mapa">
+                            📍 Mapa
+                        </button>
+                    ` : ''}
+                    <button type="button" class="btn bsm bc" onclick="addNodeStopFromMap('${escapeAttr(item.id)}')" title="Agregar este pueblo al plan activo">
+                        ＋ Plan
+                    </button>
+                </div>
+            </div>
+        `;
+    };
+
+    return `
+        <div class="plan-towns-coverage-section">
+            <div class="plan-towns-coverage-header">
+                <div class="plan-towns-coverage-title-group">
+                    <div class="plan-towns-coverage-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11m16-11v11M8 14v4m4-4v4m4-4v4" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="plan-towns-coverage-title">Cobertura y Atención de Pueblos</div>
+                        <div class="plan-towns-coverage-subtitle">Pueblos con >80% de detalles cubiertos y localidades esperando atención</div>
+                    </div>
+                </div>
+                <div class="plan-towns-coverage-header-actions">
+                    <button type="button" class="plan-towns-pill-btn pill-covered" onclick="openTownsCoverageModal('covered')" title="Ver todos los pueblos con >80% completado">
+                        <span class="pill-dot green"></span>
+                        <span>>80% Cubierto: <b>${coveredList.length}</b></span>
+                    </button>
+                    <button type="button" class="plan-towns-pill-btn pill-unattended" onclick="openTownsCoverageModal('unattended', 'all')" title="Ver pueblos pendientes sin atención">
+                        <span class="pill-dot red"></span>
+                        <span>Sin atención: <b>${unattendedList.length}</b></span>
+                    </button>
+                    <button type="button" class="btn bsm bc" onclick="openTownsCoverageModal()" title="Abrir ventana completa de cobertura con búsqueda">
+                        Ver todos y filtrar
+                    </button>
+                </div>
+            </div>
+
+            <div class="plan-towns-coverage-columns">
+                <!-- Columna 1: >80% Cubierto -->
+                <div class="plan-towns-col">
+                    <div class="plan-towns-col-head">
+                        <div class="plan-towns-col-title">
+                            <span class="col-indicator green"></span>
+                            <span>Más del 80% cubierto (${coveredList.length})</span>
+                        </div>
+                        <small style="font-size:11px;color:#15803d;font-weight:700;">Solo con detalles hechos</small>
+                    </div>
+                    <div class="plan-towns-cards-list">
+                        ${previewCovered.length ? previewCovered.map(item => renderCard(item, true)).join('') : `
+                            <div class="plan-towns-col-empty">
+                                <span>No hay pueblos con >80% de avance completado aún.</span>
+                            </div>
+                        `}
+                    </div>
+                    ${coveredList.length > 3 ? `
+                        <button type="button" class="plan-towns-col-more-btn" onclick="openTownsCoverageModal('covered')">
+                            Ver todos los ${coveredList.length} pueblos cubiertos →
+                        </button>
+                    ` : ''}
+                </div>
+
+                <!-- Columna 2: Sin atención -->
+                <div class="plan-towns-col">
+                    <div class="plan-towns-col-head">
+                        <div class="plan-towns-col-title">
+                            <span class="col-indicator red"></span>
+                            <span>Sin atención (${unattendedList.length})</span>
+                        </div>
+                        <div class="plan-towns-urgency-mini-tags">
+                            ${nuncaCount > 0 ? `<button type="button" class="mini-urgency-tag tag-nunca" onclick="openTownsCoverageModal('unattended', 'nunca')" title="Pueblos con detalles registrados que nunca se han atendido">⛔ ${nuncaCount} Nunca atendidos</button>` : ''}
+                            ${criticaCount > 0 ? `<button type="button" class="mini-urgency-tag tag-critica" onclick="openTownsCoverageModal('unattended', 'critica')" title="Ver pueblos con urgencia crítica (≥30 días)">🚨 ${criticaCount} Crítica</button>` : ''}
+                            ${altaCount > 0 ? `<button type="button" class="mini-urgency-tag tag-alta" onclick="openTownsCoverageModal('unattended', 'alta')" title="Ver pueblos con urgencia alta (14-29 días)">⚠️ ${altaCount} Alta</button>` : ''}
+                            ${mediaCount > 0 ? `<button type="button" class="mini-urgency-tag tag-media" onclick="openTownsCoverageModal('unattended', 'media')" title="Ver pueblos con urgencia media (7-13 días)">⏳ ${mediaCount} Media</button>` : ''}
+                            ${bajaCount > 0 ? `<button type="button" class="mini-urgency-tag tag-baja" onclick="openTownsCoverageModal('unattended', 'baja')" title="Ver pueblos con urgencia baja (<7 días)">🔵 ${bajaCount} Baja</button>` : ''}
+                        </div>
+                    </div>
+                    <div class="plan-towns-cards-list">
+                        ${previewUnattended.length ? previewUnattended.map(item => renderCard(item, false)).join('') : `
+                            <div class="plan-towns-col-empty">
+                                <span>🎉 ¡Excelente! No hay pueblos con detalles pendientes sin atención.</span>
+                            </div>
+                        `}
+                    </div>
+                    ${unattendedList.length > 3 ? `
+                        <button type="button" class="plan-towns-col-more-btn" onclick="openTownsCoverageModal('unattended')">
+                            Ver todos los ${unattendedList.length} pueblos sin atención →
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function ensureTownsCoverageModalMarkup() {
+    let modal = document.getElementById('towns-coverage-mo');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'towns-coverage-mo';
+        modal.className = 'mo plan-dialog-overlay';
+        modal.innerHTML = `
+            <div class="towns-coverage-modal">
+                <header class="towns-coverage-head">
+                    <div class="towns-coverage-title-group">
+                        <div class="towns-coverage-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11m16-11v11M8 14v4m4-4v4m4-4v4" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h2>Cobertura de Pueblos</h2>
+                            <p>Monitoreo operativo de pueblos atendidos y pendientes de atención por urgencia</p>
+                        </div>
+                    </div>
+                    <button type="button" class="plan-dialog-close" onclick="CM('towns-coverage-mo')" aria-label="Cerrar ventana">✕</button>
+                </header>
+
+                <div class="towns-coverage-tabs">
+                    <button type="button" class="towns-coverage-tab-btn active" id="tab-btn-covered" onclick="switchTownsCoverageTab('covered')">
+                        <span>✓ Más del 80% cubierto</span>
+                        <span class="towns-coverage-tab-count count-covered" id="badge-count-covered">0</span>
+                    </button>
+                    <button type="button" class="towns-coverage-tab-btn" id="tab-btn-unattended" onclick="switchTownsCoverageTab('unattended')">
+                        <span>⚠️ Sin atención</span>
+                        <span class="towns-coverage-tab-count count-unattended" id="badge-count-unattended">0</span>
+                    </button>
+                    <div style="margin-left:auto;padding-bottom:10px;">
+                        <input id="towns-coverage-search" placeholder="Buscar pueblo o clave..." oninput="onTownsCoverageSearchInput(this.value)" style="box-sizing:border-box;height:34px;padding:0 12px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;width:210px;outline:none;">
+                    </div>
+                </div>
+
+                <div class="towns-coverage-body" id="towns-coverage-content"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    return modal;
+}
+
+function openTownsCoverageModal(tab = 'covered', urgencyFilter = 'all') {
+    ensureTownsCoverageModalMarkup();
+    townsCoverageCurrentTab = tab;
+    townsCoverageUrgencyFilter = urgencyFilter || 'all';
+    townsCoverageSearchQuery = '';
+    const searchInput = document.getElementById('towns-coverage-search');
+    if (searchInput) searchInput.value = '';
+    updateTownsCoverageTabsUI();
+    renderTownsCoverageContent();
+    OM('towns-coverage-mo');
+}
+
+function switchTownsCoverageTab(tab) {
+    townsCoverageCurrentTab = tab;
+    townsCoverageUrgencyFilter = 'all';
+    updateTownsCoverageTabsUI();
+    renderTownsCoverageContent();
+}
+
+function setTownsCoverageUrgencyFilter(filter) {
+    townsCoverageUrgencyFilter = filter || 'all';
+    renderTownsCoverageContent();
+}
+
+function onTownsCoverageSearchInput(val) {
+    townsCoverageSearchQuery = (val || '').toLowerCase().trim();
+    renderTownsCoverageContent();
+}
+
+function updateTownsCoverageTabsUI() {
+    const btnCovered = document.getElementById('tab-btn-covered');
+    const btnUnattended = document.getElementById('tab-btn-unattended');
+    if (btnCovered) btnCovered.classList.toggle('active', townsCoverageCurrentTab === 'covered');
+    if (btnUnattended) btnUnattended.classList.toggle('active', townsCoverageCurrentTab === 'unattended');
+}
+
+function renderTownsCoverageContent() {
+    const container = document.getElementById('towns-coverage-content');
+    if (!container) return;
+
+    const allData = calculateTownCoverageData();
+
+    // 1. Pueblos con más del 80% cubierto (solo si tiene detalles completados)
+    const coveredList = allData.filter(item => item.isCovered80);
+
+    // 2. Pueblos que aún no se les ha dado atención (0 completados y con pendientes)
+    const unattendedList = allData.filter(item => item.isUnattended);
+
+    // Conteo por niveles de urgencia
+    const criticaTotal = unattendedList.filter(i => i.urgency?.level === 'critica').length;
+    const altaTotal = unattendedList.filter(i => i.urgency?.level === 'alta').length;
+    const mediaTotal = unattendedList.filter(i => i.urgency?.level === 'media').length;
+    const bajaTotal = unattendedList.filter(i => i.urgency?.level === 'baja').length;
+
+    // Actualizar badges numéricos
+    const badgeCovered = document.getElementById('badge-count-covered');
+    const badgeUnattended = document.getElementById('badge-count-unattended');
+    if (badgeCovered) badgeCovered.textContent = coveredList.length;
+    if (badgeUnattended) badgeUnattended.textContent = unattendedList.length;
+
+    let targetList = townsCoverageCurrentTab === 'covered' ? coveredList : unattendedList;
+
+    // Filtrar por urgencia si estamos en pestaña sin atención
+    if (townsCoverageCurrentTab === 'unattended' && townsCoverageUrgencyFilter !== 'all') {
+        targetList = targetList.filter(item => item.urgency?.level === townsCoverageUrgencyFilter);
+    }
+
+    if (townsCoverageSearchQuery) {
+        targetList = targetList.filter(item => {
+            const q = townsCoverageSearchQuery;
+            return item.townName.toLowerCase().includes(q) || item.code.toLowerCase().includes(q) || item.zone.toLowerCase().includes(q);
+        });
+    }
+
+    let urgencyBarHtml = '';
+    if (townsCoverageCurrentTab === 'unattended') {
+        urgencyBarHtml = `
+            <div class="towns-coverage-urgency-bar">
+                <span class="urgency-bar-label">Nivel de urgencia:</span>
+                <button type="button" class="urgency-filter-pill ${townsCoverageUrgencyFilter === 'all' ? 'active' : ''}" onclick="setTownsCoverageUrgencyFilter('all')">
+                    Todas (${unattendedList.length})
+                </button>
+                <button type="button" class="urgency-filter-pill pill-critica ${townsCoverageUrgencyFilter === 'critica' ? 'active' : ''}" onclick="setTownsCoverageUrgencyFilter('critica')" title="≥30 días sin atención">
+                    🚨 Crítica (${criticaTotal})
+                </button>
+                <button type="button" class="urgency-filter-pill pill-alta ${townsCoverageUrgencyFilter === 'alta' ? 'active' : ''}" onclick="setTownsCoverageUrgencyFilter('alta')" title="14 a 29 días sin atención">
+                    ⚠️ Alta (${altaTotal})
+                </button>
+                <button type="button" class="urgency-filter-pill pill-media ${townsCoverageUrgencyFilter === 'media' ? 'active' : ''}" onclick="setTownsCoverageUrgencyFilter('media')" title="7 a 13 días sin atención">
+                    ⏳ Media (${mediaTotal})
+                </button>
+                <button type="button" class="urgency-filter-pill pill-baja ${townsCoverageUrgencyFilter === 'baja' ? 'active' : ''}" onclick="setTownsCoverageUrgencyFilter('baja')" title="Menos de 7 días sin atención">
+                    🔵 Baja (${bajaTotal})
+                </button>
+            </div>
+        `;
+    }
+
+    if (!targetList.length) {
+        container.innerHTML = `
+            ${urgencyBarHtml}
+            <div class="towns-coverage-empty">
+                <strong>No hay pueblos en esta categoría</strong>
+                <p>${townsCoverageCurrentTab === 'covered' ? 'Ningún pueblo supera actualmente el 80% de cobertura con detalles hechos.' : (townsCoverageUrgencyFilter !== 'all' ? `No se encontraron pueblos con nivel de urgencia "${townsCoverageUrgencyFilter}".` : 'Todos los pueblos con detalles ya han recibido al menos una atención.')}</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Ordenar listas
+    if (townsCoverageCurrentTab === 'covered') {
+        // Ordenar por porcentaje descendente y mayor total de detalles
+        targetList.sort((a, b) => b.percentage - a.percentage || b.completed - a.completed);
+    } else {
+        // Ordenar por urgencia (mayor rango primero) y luego por fecha más antigua (mayor tiempo en espera)
+        targetList.sort((a, b) => {
+            const rankA = a.urgency ? a.urgency.rank : 0;
+            const rankB = b.urgency ? b.urgency.rank : 0;
+            if (rankB !== rankA) return rankB - rankA;
+            const timeA = a.oldestPendingDate ? new Date(a.oldestPendingDate).getTime() : 0;
+            const timeB = b.oldestPendingDate ? new Date(b.oldestPendingDate).getTime() : 0;
+            return timeA - timeB;
+        });
+    }
+
+    const cardsHtml = targetList.map(item => {
+        const timeAgoText = formatTimeAgoCustom(item.oldestPendingDate);
+        const resolvedAgoText = item.latestResolvedDate ? formatTimeAgoCustom(item.latestResolvedDate) : 'Sin fecha reciente';
+        const hasCoords = !isNaN(item.lat) && !isNaN(item.lng);
+        const cardUrgencyClass = townsCoverageCurrentTab === 'unattended' && item.urgency ? `urgency-${item.urgency.level}` : '';
+
+        return `
+            <div class="town-coverage-card ${cardUrgencyClass}">
+                <div class="town-coverage-card-head">
+                    <div class="town-coverage-card-title">
+                        <strong title="${escapeAttr(item.townName)}">${escapeHtml(item.townName)}</strong>
+                        <small>${escapeHtml(item.code ? item.code + ' · ' : '')}${escapeHtml(item.zone || 'Sin zona asignada')}</small>
+                    </div>
+                    ${townsCoverageCurrentTab === 'covered'
+                ? `<span class="town-coverage-badge badge-green">${item.percentage}% Hecho</span>`
+                : `<span class="town-coverage-badge ${item.urgency ? item.urgency.badgeClass : 'badge-red'}" title="${item.urgency ? item.urgency.label + ' (' + item.urgency.days + ' días sin atención)' : 'Sin atención'}">${item.urgency ? item.urgency.icon + ' ' + item.urgency.label : 'Sin atención'}</span>`
+            }
+                </div>
+
+                ${townsCoverageCurrentTab === 'covered' ? `
+                    <div class="town-coverage-progress-wrap">
+                        <div class="town-coverage-progress-fill" style="width:${item.percentage}%"></div>
+                    </div>
+                    <div class="town-coverage-metrics-row">
+                        <span>Avance: <b>${item.completed} de ${item.total}</b></span>
+                        <span>Faltantes: <b>${item.pending}</b></span>
+                    </div>
+                    <div class="town-coverage-resolved-wait" style="margin-top:2px;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <span>Último resuelto: <strong>${resolvedAgoText}</strong></span>
+                    </div>
+                ` : `
+                    <div class="town-coverage-unattended-wait ${cardUrgencyClass}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:inherit;flex-shrink:0;">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span>Sin atender: <strong>${timeAgoText}</strong> ${item.urgency ? `<span class="town-urgency-tag">(${item.urgency.days} días)</span>` : ''}</span>
+                    </div>
+                    <div class="town-coverage-metrics-row" style="margin-top:2px;">
+                        <span>Detalles acumulados: <b>${item.total || item.pending} pendientes</b></span>
+                    </div>
+                `}
+
+                <div class="town-coverage-actions">
+                    ${hasCoords ? `
+                        <button type="button" class="btn bsm bgh" onclick="panPlanMapToActiveStop({lat:${item.lat},lng:${item.lng}}); CM('towns-coverage-mo');" title="Centrar este pueblo en el mapa">
+                            📍 Ver en mapa
+                        </button>
+                    ` : ''}
+                    <button type="button" class="btn bsm bc" onclick="addNodeStopFromMap('${escapeAttr(item.id)}'); CM('towns-coverage-mo');" title="Agregar parada de este pueblo al plan activo">
+                        ＋ Agregar al plan
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        ${urgencyBarHtml}
+        <div class="towns-coverage-grid">
+            ${cardsHtml}
+        </div>
+    `;
+}
+
+window.openTownsCoverageModal = openTownsCoverageModal;
+window.switchTownsCoverageTab = switchTownsCoverageTab;
+window.setTownsCoverageUrgencyFilter = setTownsCoverageUrgencyFilter;
+window.onTownsCoverageSearchInput = onTownsCoverageSearchInput;
+window.renderTownsCoverageSection = renderTownsCoverageSection;
+window.calculateTownCoverageData = calculateTownCoverageData;
+window.getTownUrgencyInfo = getTownUrgencyInfo;
 
 function openWeeklyRouteModal() {
     weeklyRouteSelectedDay = 'all';
@@ -6696,7 +8296,7 @@ async function toggleRouteDetailStatus(detailId) {
 async function deleteRouteDetail(detailId) {
     const detail = (state.workOrders || []).find(w => w.id === detailId && !w.deletedAt);
     if (!detail) return;
-    const confirmed = await askConfirmation({ title:'Eliminar detalle', message:'Este detalle se quitará de la ruta.', confirmText:'Eliminar', cancelText:'Cancelar', tone:'danger' });
+    const confirmed = await askConfirmation({ title: 'Eliminar detalle', message: 'Este detalle se quitará de la ruta.', confirmText: 'Eliminar', cancelText: 'Cancelar', tone: 'danger' });
     if (!confirmed) return;
     getPlanMapStops().forEach(stop => {
         stop.detailIds = (stop.detailIds || []).filter(id => id !== detailId);
@@ -6874,8 +8474,8 @@ function renderPlanAntennaMarkers() {
                 ${eq.ip ? `<div class="mono" style="font-size:10px;color:#64748b">${escapeHtml(eq.ip)}</div>` : ''}
                 <div style="margin:8px 0"><span class="badge" style="background:${status.color};color:#fff">${status.label}</span></div>
                 ${details.length
-                    ? details.slice(0, 4).map(d => `<div style="font-size:11px;margin-top:6px"><strong style="color:${pc(d.priority)}">${escapeHtml(d.title)}</strong></div>`).join('')
-                    : '<div style="font-size:11px;color:#64748b">Sin detalles pendientes</div>'}
+                ? details.slice(0, 4).map(d => `<div style="font-size:11px;margin-top:6px"><strong style="color:${pc(d.priority)}">${escapeHtml(d.title)}</strong></div>`).join('')
+                : '<div style="font-size:11px;color:#64748b">Sin detalles pendientes</div>'}
             </div>
         `);
 
@@ -7021,24 +8621,27 @@ async function fetchRoadRoute(points, maxPoints = 25) {
     let duration = 0;
     let roadLegs = 0;
     let directLegs = 0;
+    const maxLegAttempts = Math.min(routedPoints.length - 1, 6);
 
     for (let i = 0; i < routedPoints.length - 1; i++) {
         const from = routedPoints[i];
         const to = routedPoints[i + 1];
-        try {
-            const leg = await fetchOsrmRoute([from, to]);
-            features.push({ type: 'Feature', geometry: leg.geometry, properties: { kind: 'road' } });
-            distance += Number(leg.distance || 0);
-            duration += Number(leg.duration || 0);
-            roadLegs++;
-        } catch (e) {
-            features.push({
-                type: 'Feature',
-                geometry: { type: 'LineString', coordinates: [[from.lng, from.lat], [to.lng, to.lat]] },
-                properties: { kind: 'direct' }
-            });
-            directLegs++;
+        if (i < maxLegAttempts) {
+            try {
+                const leg = await fetchOsrmRoute([from, to]);
+                features.push({ type: 'Feature', geometry: leg.geometry, properties: { kind: 'road' } });
+                distance += Number(leg.distance || 0);
+                duration += Number(leg.duration || 0);
+                roadLegs++;
+                continue;
+            } catch (e) { }
         }
+        features.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: [[from.lng, from.lat], [to.lng, to.lat]] },
+            properties: { kind: 'direct' }
+        });
+        directLegs++;
     }
 
     // Si todos los tramos fallan, no lanzamos error. Retornamos las lineas directas.
@@ -7275,11 +8878,11 @@ function renderFullscreenStopDetails(stop) {
         </div>
         <div class="plan-popup-detail-list">
             ${details.slice(0, 14).map(detail => {
-                const isDone = detail.status === 'completada';
-                const isNoDone = detail.status === 'no_realizado';
-                const report = detail.technicianReport || {};
-                const photos = getAdminTechReportPhotos(report);
-                return `
+        const isDone = detail.status === 'completada';
+        const isNoDone = detail.status === 'no_realizado';
+        const report = detail.technicianReport || {};
+        const photos = getAdminTechReportPhotos(report);
+        return `
                     <div class="plan-popup-detail ${isDone ? 'done' : ''} ${isNoDone ? 'not-done' : ''}" style="border-left-color:${pc(detail.priority)}">
                         <div class="plan-popup-detail-title">
                             <span class="badge ${isDone ? 'bg2' : (isNoDone ? 'ba' : 'bty')}">${isDone ? 'Hecho' : (isNoDone ? 'No realizado' : pl(detail.priority))}</span>
@@ -7292,7 +8895,7 @@ function renderFullscreenStopDetails(stop) {
                         ${report.materialUsed ? `<small><b>Material:</b> ${escapeHtml(report.materialUsed)}</small>` : ''}
                         ${photos.length ? renderEvidenceThumbnails(photos, `${detail.id}-popup`) : ''}
                     </div>`;
-            }).join('')}
+    }).join('')}
             ${details.length > 14 ? `<div class="plan-popup-more">+ ${details.length - 14} detalles más</div>` : ''}
         </div>`;
 }
@@ -7574,8 +9177,8 @@ async function renderPlanFullscreenMap(forceFit = false) {
                 <div style="margin:8px 0"><span class="badge" style="background:${st.color};color:#fff">${st.label}</span></div>
                 ${renderMapEntityDetailStats('equipment', eq.id)}
                 ${!canManagePlanStops() ? '' : (existingStop
-                    ? `<button class="btn bsm br" style="margin-top:10px;width:100%" onclick="removeStopFromFullscreen('${escapeAttr(existingStop.mapDay || selectedDay)}','${escapeAttr(existingStop.id)}')">Quitar parada</button>`
-                    : `<button class="btn bsm bc" style="margin-top:10px;width:100%" onclick="addEquipmentStopFromMap('${escapeAttr(eq.id)}'); setTimeout(() => renderPlanFullscreenMap(true), 180)">Agregar parada</button>`)}
+                ? `<button class="btn bsm br" style="margin-top:10px;width:100%" onclick="removeStopFromFullscreen('${escapeAttr(existingStop.mapDay || selectedDay)}','${escapeAttr(existingStop.id)}')">Quitar parada</button>`
+                : `<button class="btn bsm bc" style="margin-top:10px;width:100%" onclick="addEquipmentStopFromMap('${escapeAttr(eq.id)}'); setTimeout(() => renderPlanFullscreenMap(true), 180)">Agregar parada</button>`)}
             </div>
         `);
         addBound(lat, lng);
@@ -7600,8 +9203,8 @@ async function renderPlanFullscreenMap(forceFit = false) {
                 <div style="margin:8px 0"><span class="badge" style="background:${st.color};color:#fff">${escapeHtml(st.label || 'Nodo')}</span></div>
                 ${renderMapEntityDetailStats('node', node.id)}
                 ${!canManagePlanStops() ? '' : (existingStop
-                    ? `<button class="btn bsm br" style="margin-top:10px;width:100%" onclick="removeStopFromFullscreen('${escapeAttr(existingStop.mapDay || selectedDay)}','${escapeAttr(existingStop.id)}')">Quitar parada</button>`
-                    : `<button class="btn bsm bc" style="margin-top:10px;width:100%" onclick="addNodeStopFromMap('${escapeAttr(node.id)}'); setTimeout(() => renderPlanFullscreenMap(true), 180)">Agregar parada</button>`)}
+                ? `<button class="btn bsm br" style="margin-top:10px;width:100%" onclick="removeStopFromFullscreen('${escapeAttr(existingStop.mapDay || selectedDay)}','${escapeAttr(existingStop.id)}')">Quitar parada</button>`
+                : `<button class="btn bsm bc" style="margin-top:10px;width:100%" onclick="addNodeStopFromMap('${escapeAttr(node.id)}'); setTimeout(() => renderPlanFullscreenMap(true), 180)">Agregar parada</button>`)}
             </div>
         `);
         addBound(lat, lng);
@@ -7842,9 +9445,6 @@ function getStopDistance(a, b) {
 }
 
 function getInitialPlanTechId(activeTechs) {
-    if (isPlanReadOnly()) return SHARED_PLAN_ID;
-    const techWithStops = activeTechs.find(t => hasAnyStopsForTech(t.id));
-    if (techWithStops) return techWithStops.id;
     return SHARED_PLAN_ID;
 }
 
@@ -7886,7 +9486,7 @@ function getPlanMapStops() {
     return stops.map((stop, index) => {
         const equipment = stop.equipmentId ? (state.equipment || []).find(item => item.id === stop.equipmentId && !item.deletedAt) : null;
         const node = stop.nodeId ? (state.nodes || []).find(item => item.id === stop.nodeId && !item.deletedAt) : null;
-        return { ...stop, ...getStopCurrentPosition(stop), mapDay:day, mapIndex:index, mapLabel:`${index + 1}. ${isTechnicianPlanView() ? getTechnicianStopName(stop, equipment, node) : (stop.name || 'Parada')}` };
+        return { ...stop, ...getStopCurrentPosition(stop), mapDay: day, mapIndex: index, mapLabel: `${index + 1}. ${isTechnicianPlanView() ? getTechnicianStopName(stop, equipment, node) : (stop.name || 'Parada')}` };
     });
 }
 
@@ -7929,7 +9529,7 @@ async function openTechnicianCompletionForm(detailId) {
     technicianCompletionPhotos = getAdminTechReportPhotos(detail.technicianReport || {}).slice(0, 6);
     let modal = document.getElementById('tech-completion-mo');
     if (!modal) {
-        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-completion-mo"><div class="md tech-installation-modal tech-completion-modal"><div class="tech-installation-head"><div><div class="mt2">Terminar trabajo</div><small>Anota lo que hiciste y toma foto de evidencia.</small></div><button class="btn bsm bgh" type="button" onclick="closeTechnicianCompletionForm()">Cerrar</button></div><div class="row2"><div class="fi"><label>Cliente</label><input id="tech-completion-client" placeholder="Nombre completo"></div><div class="fi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><label style="margin:0;">Teléfono</label><button type="button" class="btn bsm bgh" style="font-size:11px;padding:2px 8px;height:24px;min-height:24px;cursor:pointer;" onclick="setTechnicianNoPhone()">No tiene número</button></div><input id="tech-completion-phone" type="tel" inputmode="tel" placeholder="10 dígitos (o 'No tiene número')"></div></div><div class="fi"><label>Ubicación (coordenadas)</label><div class="tech-coordinate-row"><input id="tech-completion-location" class="mono" placeholder="18.09563, -99.19604"><button class="btn bgh" type="button" onclick="useCurrentTechnicianCoordinates()">Mi ubicación actual</button></div></div><div class="fi"><label>¿Qué trabajo hiciste?</label><textarea id="tech-completion-work" rows="4" placeholder="Describe brevemente qué se reparó o instaló..."></textarea></div><div class="fi"><label>Notas extras <span class="optional-label">Opcional</span></label><textarea id="tech-completion-notes" rows="3" placeholder="Comentarios adicionales (opcional)..."></textarea></div><div class="tech-evidence-box"><strong>Fotos del trabajo</strong><small>Toma o sube al menos 1 foto (máx. 6).</small><div class="tech-evidence-actions"><label class="btn bc">Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">De galería<input type="file" accept="image/*" multiple onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label></div><div id="tech-completion-evidence-preview" class="tech-install-evidence-preview"></div></div><div class="tech-completion-actions-row" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;"><button class="btn bc bfu" type="button" style="flex:1 1 200px;" onclick="saveTechnicianCompletion()">Guardar y terminar</button><button class="btn ba tech-modal-btn-incomplete" type="button" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:800;padding:0 18px;min-height:50px;border-radius:14px;cursor:pointer;" onclick="markCurrentDetailIncompleteFromModal()">No se pudo realizar</button></div></div></div>`);
+        document.body.insertAdjacentHTML('beforeend', `<div class="mo" id="tech-completion-mo"><div class="md tech-installation-modal tech-completion-modal"><div class="tech-installation-head"><div><div class="mt2">Terminar trabajo</div><small>Anota lo que hiciste y toma foto de evidencia.</small></div><button class="btn bsm bgh" type="button" onclick="closeTechnicianCompletionForm()">Cerrar</button></div><div class="row2"><div class="fi"><label>Cliente</label><input id="tech-completion-client" placeholder="Nombre completo"></div><div class="fi"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><label style="margin:0;">Teléfono</label><button type="button" class="btn bsm bgh" style="font-size:11px;padding:2px 8px;height:24px;min-height:24px;cursor:pointer;" onclick="setTechnicianNoPhone()">No tiene número</button></div><input id="tech-completion-phone" type="tel" inputmode="tel" placeholder="10 dígitos (o 'No tiene número')"></div></div><div class="fi"><label>Ubicación (coordenadas)</label><div class="tech-coordinate-row"><input id="tech-completion-location" class="mono" placeholder="18.09563, -99.19604"><button class="btn bgh" type="button" onclick="useCurrentTechnicianCoordinates()">Mi ubicación actual</button></div></div><div class="fi"><label>Detalle realizado <span style="color:#ef4444;font-weight:900;">* (Obligatorio)</span></label><textarea id="tech-completion-work" rows="3" placeholder="Describe el trabajo o detalle realizado..."></textarea></div><div class="fi" id="tech-completion-material-wrap"><label>Material utilizado <span style="color:#ef4444;font-weight:900;">* (Obligatorio)</span></label><textarea id="tech-completion-material" rows="3" placeholder="Describe el material utilizado "></textarea></div><div class="fi"><label>Notas extras <span class="optional-label">Opcional</span></label><textarea id="tech-completion-notes" rows="2" placeholder="Comentarios adicionales (opcional)..."></textarea></div><div class="tech-evidence-box"><strong>Fotos del trabajo</strong><small>Toma o sube al menos 1 foto (máx. 6).</small><div class="tech-evidence-actions"><label class="btn bc">Tomar foto<input type="file" accept="image/*" capture="environment" onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label><label class="btn bgh">De galería<input type="file" accept="image/*" multiple onchange="addTechnicianCompletionPhotos(this.files);this.value=''" hidden></label></div><div id="tech-completion-evidence-preview" class="tech-install-evidence-preview"></div></div><div class="tech-completion-actions-row" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;"><button class="btn bc bfu" type="button" style="flex:1 1 200px;" onclick="saveTechnicianCompletion()">Guardar y terminar</button><button class="btn ba tech-modal-btn-incomplete" type="button" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:800;padding:0 18px;min-height:50px;border-radius:14px;cursor:pointer;" onclick="markCurrentDetailIncompleteFromModal()">No se pudo realizar</button></div></div></div>`);
         modal = document.getElementById('tech-completion-mo');
     }
     const completionPhone = document.getElementById('tech-completion-phone');
@@ -7951,6 +9551,20 @@ async function openTechnicianCompletionForm(detailId) {
     document.getElementById('tech-completion-location').value = detail.detailLocation || (!isNaN(safeFloat(detail.lat)) && !isNaN(safeFloat(detail.lng)) ? `${detail.lat}, ${detail.lng}` : '');
     document.getElementById('tech-completion-work').value = detail.technicianReport?.solution || '';
     document.getElementById('tech-completion-notes').value = detail.technicianReport?.observations || '';
+    const compMatInput = document.getElementById('tech-completion-material');
+    if (compMatInput) {
+        compMatInput.value = detail.technicianReport?.materialUsed || '';
+        compMatInput.classList.remove('is-invalid-input');
+        compMatInput.oninput = () => compMatInput.classList.remove('is-invalid-input');
+    }
+    const compWorkInput = document.getElementById('tech-completion-work');
+    if (compWorkInput) {
+        compWorkInput.classList.remove('is-invalid-input');
+        compWorkInput.oninput = () => compWorkInput.classList.remove('is-invalid-input');
+        const workLabel = compWorkInput.closest('.fi')?.querySelector('label');
+        if (workLabel) workLabel.innerHTML = 'Detalle realizado <span style="color:#ef4444;font-weight:900;">* (Obligatorio)</span>';
+    }
+
     renderTechnicianCompletionPhotos();
     OM('tech-completion-mo');
 }
@@ -7965,9 +9579,10 @@ function markCurrentDetailIncompleteFromModal() {
 
 async function closeTechnicianCompletionForm() {
     const work = document.getElementById('tech-completion-work')?.value.trim() || '';
+    const mat = document.getElementById('tech-completion-material')?.value.trim() || '';
     const notes = document.getElementById('tech-completion-notes')?.value.trim() || '';
     const hasPhotos = technicianCompletionPhotos && technicianCompletionPhotos.length > 0;
-    if (work || notes || hasPhotos) {
+    if (work || mat || notes || hasPhotos) {
         const ok = await askConfirmation({
             title: 'Descartar cambios',
             message: 'Tienes información o fotos sin guardar. ¿Deseas salir sin terminar?',
@@ -8120,7 +9735,28 @@ async function saveTechnicianCompletion() {
         finalLocation = `${finalLat.toFixed(6)}, ${finalLng.toFixed(6)}`;
     }
 
-    if (!workDone) return notify('Escribe qué trabajo hiciste.', 'warn');
+    const materialUsed = document.getElementById('tech-completion-material')?.value.trim() || '';
+
+    if (!workDone) {
+        const workInput = document.getElementById('tech-completion-work');
+        if (workInput) {
+            workInput.classList.add('is-invalid-input');
+            workInput.focus();
+            workInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        return notify('El detalle realizado es obligatorio. Por favor describe el trabajo que realizaste.', 'err');
+    }
+
+    if (!materialUsed) {
+        const matInput = document.getElementById('tech-completion-material');
+        if (matInput) {
+            matInput.classList.add('is-invalid-input');
+            matInput.focus();
+            matInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        return notify('El material utilizado es obligatorio. Por favor anota qué material usaste.', 'err');
+    }
+
     if (!technicianCompletionPhotos.length) return notify('Agrega al menos una foto del trabajo.', 'warn');
 
     const confirmMsg = editingCompleted
@@ -8150,19 +9786,28 @@ async function saveTechnicianCompletion() {
     if (editingCompleted) detail.modifiedAt = now;
     detail.technicianReport = {
         ...previousReport,
-        result:'terminado',
-        solution:workDone,
+        result: 'terminado',
+        solution: workDone,
+        materialUsed,
         observations,
-        reason:'',
-        phone:finalPhone,
-        location:detail.detailLocation,
-        evidencePhotos:technicianCompletionPhotos.slice(),
-        completedAt:detail.completedAt,
-        completedBy:previousReport.completedBy || actor.id || '',
-        completedByName:previousReport.completedByName || actor.name || actor.username || '',
-        ...(editingCompleted ? { modifiedAt:now, modifiedBy:actor.id || '', modifiedByName:actor.name || actor.username || '' } : {})
+        reason: '',
+        phone: finalPhone,
+        location: detail.detailLocation,
+        evidencePhotos: technicianCompletionPhotos.slice(),
+        completedAt: detail.completedAt,
+        completedBy: previousReport.completedBy || actor.id || '',
+        completedByName: previousReport.completedByName || actor.name || actor.username || '',
+        ...(editingCompleted ? { modifiedAt: now, modifiedBy: actor.id || '', modifiedByName: actor.name || actor.username || '' } : {})
     };
     setUpdatedAudit(detail, editingCompleted ? 'modificó detalle terminado' : 'marcó detalle hecho con evidencia');
+    // Pre-generar la imagen del reporte con las fotos en memoria antes de saveDB() para que el envío por WhatsApp en celular sea instantáneo
+    const _localPhotosSnapshot = technicianCompletionPhotos.slice();
+    if (typeof prepareTechnicianSummaryFile === 'function') {
+        prepareTechnicianSummaryFile({
+            ...detail,
+            technicianReport: { ...(detail.technicianReport || {}), evidencePhotos: _localPhotosSnapshot }
+        }).catch(() => { });
+    }
     getPlanMapStops().forEach(stop => {
         if ((stop.detailIds || []).includes(detail.id) || (stop.equipmentId && stop.equipmentId === detail.equipmentId)) {
             syncStopCompletion(stop);
@@ -8229,6 +9874,9 @@ function openTechnicianCompletionSummary(detail) {
     if (!detail) return;
     window._currentTechnicianCompletionDetail = detail;
     window._lastReportedDetail = detail;
+    if (typeof prepareTechnicianSummaryFile === 'function') {
+        setTimeout(() => { prepareTechnicianSummaryFile(detail).catch(() => {}); }, 0);
+    }
     const date = selectedCalendarDate || localDateKey();
     const dayStops = getPlanStopsForView('general').filter(stop => stop.scheduledDate === date);
     const detailsById = new Map();
@@ -8237,7 +9885,7 @@ function openTechnicianCompletionSummary(detail) {
         getStopResolvedHistory(stop).forEach(item => detailsById.set(item.id, item));
     });
     const dayDetails = Array.from(detailsById.values());
-    const completed = dayDetails.filter(item => ['completada','no_realizado'].includes(item.status || '')).length;
+    const completed = dayDetails.filter(item => ['completada', 'no_realizado'].includes(item.status || '')).length;
     const pending = Math.max(0, dayDetails.length - completed);
     const report = detail.technicianReport || {};
     const requestedDetail = getTechnicianReportRequestedText(detail);
@@ -8263,7 +9911,10 @@ function openTechnicianCompletionSummary(detail) {
     card.innerHTML = `<div class="tech-summary-report-head"><span class="tech-summary-report-check ${isNoDone ? 'is-unsolved' : ''}">${checkIcon}</span><div><small>${isNoDone ? 'NO SE PUDO TERMINAR' : (isInstallation ? 'NUEVA INSTALACIÓN' : 'TRABAJO TERMINADO')}</small><h2>${isNoDone ? 'Trabajo no realizado' : (isInstallation ? 'Nueva instalación' : '¡Trabajo terminado!')}</h2></div></div>
         <div class="tech-summary-report-progress"><strong>${completed} de ${dayDetails.length}</strong><span>trabajos listos hoy</span><b>${pending} pendiente${pending === 1 ? '' : 's'}</b></div>
         ${(() => {
-            const towerAnt = typeof findAntennaForDetail === 'function' ? findAntennaForDetail(detail) : null;
+            const associatedStop = (typeof getPlanStopsForView === 'function' ? getPlanStopsForView('general') : []).find(s => (s.detailIds || []).includes(detail?.id) || s.id === detail?.stopId) || null;
+            const isTownStop = !!(associatedStop && (associatedStop.nodeId || associatedStop.type === 'node'));
+            const isDirectTowerStop = !!(associatedStop && (associatedStop.equipmentId || associatedStop.type === 'equipment' || associatedStop.category === 'torre') && !associatedStop.nodeId);
+            const towerAnt = (!isTownStop && isDirectTowerStop && typeof findAntennaForDetail === 'function') ? findAntennaForDetail(detail, associatedStop) : null;
             if (!towerAnt) return '';
             const hasMat = !!(towerAnt.towerSections || towerAnt.towerRadios || towerAnt.towerBatteries || towerAnt.towerPanels || towerAnt.towerExtraNotes || towerAnt.towerMaterialNotes || (Array.isArray(towerAnt.towerMaterialPhotos) && towerAnt.towerMaterialPhotos.length));
             return `
@@ -8285,7 +9936,7 @@ function openTechnicianCompletionSummary(detail) {
         })()}
         <div class="tech-summary-report-grid">
             <div><small>Técnico</small><strong>${escapeHtml(user.name || user.nombre || user.username || 'Técnico')}</strong></div>
-            <div><small>Fecha y hora</small><strong>${escapeHtml(new Date(report.completedAt || detail.completedAt || Date.now()).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'}))}</strong></div>
+            <div><small>Fecha y hora</small><strong>${escapeHtml(new Date(report.completedAt || detail.completedAt || Date.now()).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }))}</strong></div>
             ${report.modifiedAt || detail.modifiedAt ? `<div><small>Última modificación</small><strong>${escapeHtml(formatPlanDateTime(report.modifiedAt || detail.modifiedAt))}</strong></div>` : ''}
             <div><small>Cliente</small><strong>${escapeHtml(detail.clientName || 'Sin nombre')}</strong></div>
             <div><small>Pueblo</small><strong>${escapeHtml(town)}</strong></div>
@@ -8299,15 +9950,20 @@ function openTechnicianCompletionSummary(detail) {
             </div>
         ` : ''}
         ${completedWork ? `<div class="tech-summary-report-detail"><small>Trabajo realizado</small><strong>${escapeHtml(completedWork)}</strong></div>` : ''}
+        ${(!isNoDone && report.materialUsed) ? `<div class="tech-summary-report-detail" style="border-left:4px solid #0284c7;background:#f0f9ff;"><small style="color:#0284c7;font-weight:800;">Material utilizado</small><strong style="color:#0369a1;">${escapeHtml(report.materialUsed)}</strong></div>` : ''}
         ${report.observations ? `<div class="tech-summary-report-detail"><small>Notas extras</small><strong>${escapeHtml(report.observations)}</strong></div>` : ''}
-        ${photos.length ? `<div class="tech-summary-report-photos">${photos.slice(0,4).map((photo,index) => `<img src="${escapeAttr(photo)}" alt="Evidencia ${index + 1}">`).join('')}</div>` : ''}
+        ${photos.length ? `<div class="tech-summary-report-photos">${photos.slice(0, 4).map((photo, index) => `<img src="${escapeAttr(photo)}" alt="Evidencia ${index + 1}">`).join('')}</div>` : ''}
         <div class="tech-summary-report-footer"><span>WiFiMex · ${isNoDone ? 'Incidencia' : 'Avance'} del ${escapeHtml(formatCalendarDate(date))}</span><div><button type="button" class="btn bgh" onclick="copyTechnicianOrderNumber('${escapeAttr(detail.id)}')">Copiar folio</button><button type="button" class="btn tech-whatsapp-share" onclick="shareTechnicianCompletion('${escapeAttr(detail.id)}')">Enviar por WhatsApp</button>${(() => {
-    const towerAnt = typeof findAntennaForDetail === 'function' ? findAntennaForDetail(detail) : null;
-    const antId = towerAnt?.id || detail.equipmentId;
-    if (!antId) return '';
-    const hasMat = towerAnt ? !!(towerAnt.towerSections || towerAnt.towerRadios || towerAnt.towerBatteries || towerAnt.towerPanels || towerAnt.towerExtraNotes || towerAnt.towerMaterialNotes || (Array.isArray(towerAnt.towerMaterialPhotos) && towerAnt.towerMaterialPhotos.length)) : false;
-    return `<button type="button" class="btn btn-tower-callout ${hasMat ? 'is-registered' : 'is-pending'}" onclick="openTowerMaterialModal('${escapeAttr(antId)}')"><span class="tower-btn-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="6" y1="17" x2="18" y2="17"/></svg></span> <span>Material torre</span></button>`;
-})()}<button type="button" class="btn bgh" onclick="CM('tech-completion-summary-mo')">Cerrar</button></div></div>`;
+            const associatedStop = (typeof getPlanStopsForView === 'function' ? getPlanStopsForView('general') : []).find(s => (s.detailIds || []).includes(detail?.id) || s.id === detail?.stopId) || null;
+            const isTownStop = !!(associatedStop && (associatedStop.nodeId || associatedStop.type === 'node'));
+            const isDirectTowerStop = !!(associatedStop && (associatedStop.equipmentId || associatedStop.type === 'equipment' || associatedStop.category === 'torre') && !associatedStop.nodeId);
+            if (isTownStop || !isDirectTowerStop) return '';
+            const towerAnt = typeof findAntennaForDetail === 'function' ? findAntennaForDetail(detail, associatedStop) : null;
+            const antId = towerAnt?.id || detail.equipmentId;
+            if (!antId) return '';
+            const hasMat = towerAnt ? !!(towerAnt.towerSections || towerAnt.towerRadios || towerAnt.towerBatteries || towerAnt.towerPanels || towerAnt.towerExtraNotes || towerAnt.towerMaterialNotes || (Array.isArray(towerAnt.towerMaterialPhotos) && towerAnt.towerMaterialPhotos.length)) : false;
+            return `<button type="button" class="btn btn-tower-callout ${hasMat ? 'is-registered' : 'is-pending'}" onclick="openTowerMaterialModal('${escapeAttr(antId)}')"><span class="tower-btn-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 4 22h16L12 2z"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="6" y1="17" x2="18" y2="17"/></svg></span> <span>Material torre</span></button>`;
+        })()}<button type="button" class="btn bgh" onclick="CM('tech-completion-summary-mo')">Cerrar</button></div></div>`;
     OM('tech-completion-summary-mo');
 }
 
@@ -8333,11 +9989,15 @@ function getTechnicianReportTown(detail) {
 }
 
 function getTechnicianReportRequestedText(detail) {
-    return getWorkOrderRequestedText(detail, detail?.title || 'Detalle');
+    if (typeof getWorkOrderRequestedText === 'function') {
+        return getWorkOrderRequestedText(detail, detail?.title || 'Detalle');
+    }
+    return detail?.title || detail?.description || 'Detalle';
 }
 
 function technicianReportTextsMatch(left, right) {
-    const key = value => normalizeName(typeof repairDisplayText === 'function' ? repairDisplayText(value) : value)
+    const norm = typeof normalizeName === 'function' ? normalizeName : s => String(s || '').trim().toLowerCase();
+    const key = value => norm(typeof repairDisplayText === 'function' ? repairDisplayText(value) : value)
         .replace(/[^a-z0-9ñ]+/g, ' ')
         .trim();
     const leftKey = key(left);
@@ -8377,77 +10037,181 @@ function drawSummaryWrappedText(ctx, text, x, y, maxWidth, lineHeight, maxLines 
 
 function loadTechnicianSummaryImage(src) {
     return new Promise(resolve => {
+        if (!src) return resolve(null);
+        let done = false;
+        const finish = value => { if (!done) { done = true; resolve(value); } };
         const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = () => resolve(null);
+        if (!/^data:|^blob:/i.test(String(src))) image.crossOrigin = 'anonymous';
+        image.onload = () => finish(image);
+        image.onerror = () => finish(null);
+        setTimeout(() => finish(null), 6000);
         image.src = src;
     });
 }
 
 async function createTechnicianSummaryImage(detail) {
     const report = detail.technicianReport || {};
-    const user = getCurrentUser();
+    const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
     const isInstallation = detail.category === 'instalacion';
     const isNoDone = detail.status === 'no_realizado' || report.result === 'no_realizado';
-    const requestedDetail = getTechnicianReportRequestedText(detail);
-    const completedWork = getTechnicianReportCompletedWork(detail, requestedDetail);
-    const town = getTechnicianReportTown(detail);
-    const canvas = document.createElement('canvas');
-    canvas.width = 1080;
-    canvas.height = 1700;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = isNoDone ? '#fff1f2' : '#eaf4fb'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#ffffff'; ctx.fillRect(54, 48, 972, canvas.height - 96);
-    if (isNoDone) {
-        ctx.fillStyle = '#dc2626'; ctx.beginPath(); ctx.arc(126, 130, 48, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif'; ctx.fillText('!', 116, 148);
-        ctx.fillStyle = '#b91c1c'; ctx.font = 'bold 23px sans-serif'; ctx.fillText('REPORTE DE INCIDENCIA', 202, 107);
-        ctx.fillStyle = '#10264a'; ctx.font = 'bold 48px sans-serif'; ctx.fillText('Detalle no realizado', 202, 162);
-    } else {
-        ctx.fillStyle = '#0aa35d'; ctx.beginPath(); ctx.arc(126, 130, 48, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif'; ctx.fillText('V', 108, 148);
-        ctx.fillStyle = '#0874e8'; ctx.font = 'bold 23px sans-serif'; ctx.fillText(isInstallation ? 'NUEVA ORDEN REGISTRADA' : 'REPORTE DE AVANCE', 202, 107);
-        ctx.fillStyle = '#10264a'; ctx.font = 'bold 48px sans-serif'; ctx.fillText(isInstallation ? 'Nueva instalación' : 'Detalle terminado', 202, 162);
-    }
-    ctx.fillStyle = '#d8e7f2'; ctx.fillRect(84, 204, 912, 2);
+    const isNewPending = detail.status === 'pendiente' || !detail.status;
+    const requestedDetail = typeof getTechnicianReportRequestedText === 'function'
+        ? getTechnicianReportRequestedText(detail)
+        : (detail.title || detail.description || 'Detalle');
+    const completedWork = typeof getTechnicianReportCompletedWork === 'function'
+        ? getTechnicianReportCompletedWork(detail, requestedDetail)
+        : (report.solution || '');
+    const town = typeof getTechnicianReportTown === 'function' ? getTechnicianReportTown(detail) : (detail.town || 'Sin pueblo');
+    const materialUsed = report.materialUsed || '';
+    const clientPhoneStr = String(detail.clientPhone || detail.phone || detail.telefono || report.phone || '').trim();
+    const rawDate = report.completedAt || detail.completedAt || detail.createdAt || Date.now();
+    const dateTimeStr = new Date(rawDate).toLocaleString('es-MX', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+
+    const phoneDisplay = clientPhoneStr || 'Sin teléfono';
     const fields = isInstallation ? [
         ['NÚMERO DE ORDEN', getDetailFolio(detail)],
         ['TÉCNICO', report.completedByName || user.name || user.username || 'Técnico'],
-        ['FECHA Y HORA', new Date(detail.createdAt || Date.now()).toLocaleString('es-MX')],
         ['CLIENTE', detail.clientName || 'Sin nombre'],
-        ['TELÉFONO', detail.clientPhone || 'Sin teléfono'],
+        ['TELÉFONO', phoneDisplay],
         ['PUEBLO O COMUNIDAD', town],
         ['UBICACIÓN', detail.detailLocation || 'Sin ubicación'],
         ['DETALLES DE LA INSTALACIÓN', report.solution || 'Sin observaciones adicionales']
     ] : (isNoDone ? [
         ['FOLIO DEL DETALLE', getDetailFolio(detail)],
-        ['TÉCNICO', user.name || user.nombre || user.username || 'Técnico'],
-        ['FECHA Y HORA', new Date(report.completedAt || detail.completedAt || Date.now()).toLocaleString('es-MX')],
+        ['TÉCNICO', report.completedByName || user.name || user.nombre || user.username || 'Técnico'],
         ['CLIENTE', detail.clientName || 'Sin nombre'],
+        ['TELÉFONO', phoneDisplay],
         ['PUEBLO O COMUNIDAD', town],
         ['UBICACIÓN', detail.detailLocation || report.location || 'Sin ubicación'],
         ['DETALLE NO CONCLUIDO', requestedDetail],
         ['MOTIVO DE NO CONCLUSIÓN', report.reason || 'Sin motivo especificado']
+    ] : (isNewPending ? [
+        ['NUEVO DETALLE EN RUTA', getDetailFolio(detail)],
+        ['TÉCNICO', detail.createdByName || user.name || user.username || 'Técnico'],
+        ['CLIENTE', detail.clientName || 'Sin nombre'],
+        ['TELÉFONO', phoneDisplay],
+        ['PUEBLO O COMUNIDAD', town],
+        ['UBICACIÓN', detail.detailLocation || 'Sin ubicación'],
+        ['TRABAJO SOLICITADO', requestedDetail || detail.title || 'Detalle en ruta']
     ] : [
         ['FOLIO DEL DETALLE', getDetailFolio(detail)],
-        ['TÉCNICO', user.name || user.nombre || user.username || 'Técnico'],
-        ['FECHA Y HORA', new Date(report.completedAt || detail.completedAt || Date.now()).toLocaleString('es-MX')],
+        ['TÉCNICO', report.completedByName || user.name || user.nombre || user.username || 'Técnico'],
         ['CLIENTE', detail.clientName || 'Sin nombre'],
+        ['TELÉFONO', phoneDisplay],
         ['PUEBLO O COMUNIDAD', town],
         ['UBICACIÓN', detail.detailLocation || report.location || 'Sin ubicación'],
         ['DETALLE ATENDIDO', requestedDetail],
-        ...(completedWork ? [['TRABAJO REALIZADO', completedWork]] : [])
-    ]);
+        ...(completedWork ? [['TRABAJO REALIZADO', completedWork]] : []),
+        ['MATERIAL UTILIZADO', materialUsed || 'Sin material registrado']
+    ]));
+
+    const photos = getAdminTechReportPhotos(report).slice(0, 4);
+    const canvas = document.createElement('canvas');
+    canvas.width = 1080;
+    const totalBoxesHeight = fields.reduce((sum, [label]) => {
+        const isMultiLine = label === 'DETALLES DE LA INSTALACIÓN' || label === 'MOTIVO DE NO CONCLUSIÓN' || label === 'TRABAJO REALIZADO' || label === 'MATERIAL UTILIZADO';
+        const boxHeight = isMultiLine ? 134 : 106;
+        return sum + boxHeight + 12;
+    }, 0);
+    const baseHeight = 244 + totalBoxesHeight + (photos.length ? 220 : 0) + 90;
+    canvas.height = Math.max(1300, baseHeight);
+
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = isNoDone ? '#fff1f2' : (isNewPending ? '#f0f9ff' : '#eaf4fb');
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(54, 48, 972, canvas.height - 96);
+
+    if (isNoDone) {
+        ctx.fillStyle = '#dc2626'; ctx.beginPath(); ctx.arc(126, 130, 48, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif'; ctx.fillText('!', 116, 148);
+        ctx.fillStyle = '#b91c1c'; ctx.font = 'bold 23px sans-serif'; ctx.fillText('REPORTE DE INCIDENCIA', 202, 107);
+        ctx.fillStyle = '#10264a'; ctx.font = 'bold 48px sans-serif'; ctx.fillText('Detalle no realizado', 202, 162);
+    } else if (isNewPending) {
+        ctx.fillStyle = '#0284c7'; ctx.beginPath(); ctx.arc(126, 130, 48, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif'; ctx.fillText('+', 111, 148);
+        ctx.fillStyle = '#0369a1'; ctx.font = 'bold 23px sans-serif'; ctx.fillText('NUEVO DETALLE EN RUTA', 202, 107);
+        ctx.fillStyle = '#10264a'; ctx.font = 'bold 48px sans-serif'; ctx.fillText('Trabajo registrado', 202, 162);
+    } else {
+        ctx.fillStyle = '#0aa35d'; ctx.beginPath(); ctx.arc(126, 130, 48, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif'; ctx.fillText('✓', 106, 148);
+        ctx.fillStyle = '#0874e8'; ctx.font = 'bold 23px sans-serif'; ctx.fillText(isInstallation ? 'NUEVA ORDEN REGISTRADA' : 'REPORTE DE TRABAJO TERMINADO', 202, 107);
+        ctx.fillStyle = '#10264a'; ctx.font = 'bold 48px sans-serif'; ctx.fillText(isInstallation ? 'Nueva instalación' : 'Detalle terminado', 202, 162);
+    }
+    ctx.fillStyle = '#d8e7f2'; ctx.fillRect(84, 204, 912, 2);
+
     let y = 244;
     fields.forEach(([label, value], index) => {
-        const boxHeight = index >= (isInstallation ? 7 : (isNoDone ? 6 : 5)) ? 132 : 104;
-        ctx.fillStyle = index === 0 ? (isNoDone ? '#fee2e2' : '#e9f4ff') : '#f8fbfe'; ctx.fillRect(84, y, 912, boxHeight);
-        ctx.fillStyle = isNoDone && index === 0 ? '#b91c1c' : '#667b92'; ctx.font = 'bold 20px sans-serif'; ctx.fillText(label, 108, y + 31);
-        ctx.fillStyle = index === 0 ? (isNoDone ? '#991b1b' : '#0868bd') : '#10264a'; ctx.font = index === 0 ? 'bold 39px sans-serif' : 'bold 28px sans-serif';
-        drawSummaryWrappedText(ctx, value, 108, y + 72, 852, 34, index >= (isInstallation ? 7 : (isNoDone ? 6 : 5)) ? 2 : 1);
+        const isFirst = index === 0;
+        const isPhone = label === 'TELÉFONO';
+        const isMultiLine = label === 'DETALLES DE LA INSTALACIÓN' || label === 'MOTIVO DE NO CONCLUSIÓN' || label === 'TRABAJO REALIZADO' || label === 'MATERIAL UTILIZADO';
+        const boxHeight = isMultiLine ? 134 : 106;
+
+        ctx.fillStyle = isFirst ? (isNoDone ? '#fee2e2' : '#e9f4ff') : '#f8fbfe';
+        ctx.fillRect(84, y, 912, boxHeight);
+
+        if (isFirst) {
+            // Folio a la izquierda
+            ctx.textAlign = 'left';
+            ctx.fillStyle = isNoDone ? '#b91c1c' : '#667b92';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillText(label, 108, y + 31);
+
+            ctx.fillStyle = isNoDone ? '#991b1b' : '#0868bd';
+            ctx.font = 'bold 38px sans-serif';
+            ctx.fillText(value, 108, y + 72);
+
+            // Fecha y hora a toda la derecha
+            ctx.textAlign = 'right';
+            ctx.fillStyle = isNoDone ? '#b91c1c' : '#667b92';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.fillText('FECHA Y HORA', 972, y + 31);
+
+            ctx.fillStyle = '#10264a';
+            ctx.font = 'bold 26px sans-serif';
+            ctx.fillText(dateTimeStr, 972, y + 72);
+
+            ctx.textAlign = 'left';
+        } else if (isPhone) {
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#667b92';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillText('TELÉFONO', 108, y + 31);
+
+            ctx.fillStyle = (value && value !== 'Sin teléfono') ? '#0284c7' : '#64748b';
+            ctx.font = 'bold 28px sans-serif';
+            drawSummaryWrappedText(ctx, value, 108, y + 72, 852, 34, 1);
+        } else if (label === 'CLIENTE') {
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#667b92';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillText(label, 108, y + 31);
+            ctx.fillStyle = '#10264a';
+            ctx.font = 'bold 28px sans-serif';
+            drawSummaryWrappedText(ctx, value, 108, y + 72, 852, 34, 1);
+            const phoneText = phoneDisplay;
+            void phoneText;
+        } else {
+            ctx.textAlign = 'left';
+            ctx.fillStyle = isNoDone && index === 0 ? '#b91c1c' : '#667b92';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillText(label, 108, y + 31);
+
+            ctx.fillStyle = '#10264a';
+            ctx.font = 'bold 28px sans-serif';
+            drawSummaryWrappedText(ctx, value, 108, y + 72, 852, 34, isMultiLine ? 2 : 1);
+        }
+
         y += boxHeight + 12;
     });
-    const photos = getAdminTechReportPhotos(report).slice(0, 4);
+
     if (photos.length) {
         const images = await Promise.all(photos.map(loadTechnicianSummaryImage));
         const gap = 12;
@@ -8460,7 +10224,10 @@ async function createTechnicianSummaryImage(detail) {
             ctx.drawImage(image, (image.width - sw) / 2, (image.height - sh) / 2, sw, sh, x, y, width, 176);
         });
     }
-    ctx.fillStyle = '#10264a'; ctx.font = 'bold 22px sans-serif'; ctx.fillText('WiFiMex · Reporte de servicio', 84, canvas.height - 37);
+
+    ctx.fillStyle = '#10264a';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.fillText('WiFiMex · Reporte de servicio', 84, canvas.height - 37);
     return canvas;
 }
 
@@ -8647,37 +10414,454 @@ async function copyTechnicianOrderNumber(detailId, announce = true) {
     return copied;
 }
 
+
+const _cachedTechnicianSummaryFiles = new Map();
+
+function getTechnicianSummaryCacheKey(detail) {
+    if (!detail) return '';
+    const report = detail.technicianReport || {};
+    return [
+        detail.id || '',
+        detail.status || '',
+        detail.updatedAt || '',
+        report.completedAt || '',
+        report.solution || '',
+        report.reason || '',
+        Array.isArray(report.evidencePhotos) ? report.evidencePhotos.length : 0
+    ].join('_');
+}
+
+async function prepareTechnicianSummaryFile(detail) {
+    if (!detail) return null;
+    const cleanFolio = getDetailFolio(detail).replace(/[^a-zA-Z0-9_-]/g, '-');
+    const fileName = `reporte-${cleanFolio}.png`;
+    try {
+        const canvas = await createTechnicianSummaryImage(detail);
+        if (!canvas) return null;
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (!blob) return null;
+        let file = null;
+        try {
+            file = new File([blob], fileName, { type: 'image/png' });
+        } catch (_) {
+            file = blob;
+            file.name = fileName;
+        }
+        const result = { blob, file, fileName };
+        const key = getTechnicianSummaryCacheKey(detail);
+        if (key) _cachedTechnicianSummaryFiles.set(key, result);
+        return result;
+    } catch (err) {
+        console.warn('Error preparando imagen de reporte:', err);
+        return null;
+    }
+}
+
+let _technicianShareInProgress = false;
+
 async function shareTechnicianCompletion(detailId) {
     const detail = findTechnicianCompletionDetail(detailId);
     if (!detail) {
         notify('No se encontró el detalle para compartir.', 'err');
         return;
     }
-    const fullText = buildTechnicianWhatsAppMessage(detail);
-    if (!fullText) return;
+    if (_technicianShareInProgress) return;
+    _technicianShareInProgress = true;
+    const buttons = Array.from(document.querySelectorAll('.tech-whatsapp-share'));
+    buttons.forEach(btn => { btn.disabled = true; btn.dataset.label = btn.dataset.label || btn.textContent; btn.textContent = 'Preparando imagen...'; });
+    try {
+        const cleanFolio = getDetailFolio(detail).replace(/[^a-zA-Z0-9_-]/g, '-');
+        const fileName = `reporte-${cleanFolio}.png`;
+        const key = getTechnicianSummaryCacheKey(detail);
+        let prepared = _cachedTechnicianSummaryFiles.get(key) || null;
+        if (!prepared) prepared = await prepareTechnicianSummaryFile(detail);
+        if (!prepared || !prepared.blob) {
+            notify('No se pudo generar la imagen del reporte. Intenta de nuevo.', 'err');
+            return;
+        }
+        const { blob } = prepared;
+        const file = prepared.file || new File([blob], fileName, { type: 'image/png' });
+        const isMobile = typeof window !== 'undefined' && (
+            /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '') ||
+            (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent || '')) ||
+            (window.innerWidth > 0 && window.innerWidth <= 820) ||
+            (window.matchMedia && window.matchMedia('(max-width: 820px)').matches)
+        );
 
-    // 1. Guardar de respaldo en el portapapeles siempre
-    await copyTextToClipboard(fullText);
+        // 1. Compartir directamente el archivo de imagen en celular (SOLO FOTO, SIN TEXTO, NUNCA GUARDAR EN EL DISPOSITIVO)
+        if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+            let canShareFile = true;
+            if (typeof navigator.canShare === 'function') {
+                try { canShareFile = navigator.canShare({ files: [file] }); } catch (_) { canShareFile = true; }
+            }
+            if (canShareFile) {
+                try {
+                    await navigator.share({
+                        files: [file]
+                    });
+                    // Compartido exitosamente mediante la hoja nativa
+                    return;
+                } catch (shareErr) {
+                    if (shareErr && shareErr.name === 'AbortError') {
+                        // El técnico canceló la ventana de compartir; no descargar ni guardar nada
+                        return;
+                    }
+                    console.warn('navigator.share error:', shareErr);
+                }
+            }
+        }
 
-    // 2. Abrir WhatsApp inmediatamente sin bloquearse por popups móviles
-    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(fullText)}`;
-    const link = document.createElement('a');
-    link.href = waUrl;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-        try { link.remove(); } catch (_) {}
-    }, 400);
+        // 2. Si Web Share no está disponible:
+        // Intentar copiar la imagen al portapapeles (sin guardar archivo)
+        let copiedImage = false;
+        if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.write === 'function' && typeof ClipboardItem !== 'undefined') {
+            try {
+                await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                copiedImage = true;
+            } catch (_) {}
+        }
 
-    const isTech = (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
-                   (typeof userHasRole === 'function' && userHasRole('tecnico'));
-    if (!isTech) {
-        notify('Reporte copiado y WhatsApp abierto.');
+        if (isMobile) {
+            // EN CELULAR: REGLA ESTRICTA - NUNCA GUARDAR EN EL DISPOSITIVO
+            if (copiedImage) {
+                notify('Imagen copiada. Abre WhatsApp para pegarla.', 'ok');
+            } else {
+                notify('Abre WhatsApp para compartir la imagen.', 'ok');
+            }
+            setTimeout(() => { try { window.location.href = 'whatsapp://send'; } catch (_) {} }, 350);
+            return;
+        }
+
+        // 3. Solo en computadora (escritorio) como respaldo si no hay Web Share ni portapapeles:
+        if (copiedImage) {
+            notify('Imagen copiada al portapapeles (pégala en WhatsApp Web con Ctrl+V).', 'ok');
+            setTimeout(() => {
+                try { window.open('https://web.whatsapp.com', '_blank'); } catch (_) {}
+            }, 350);
+        } else {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                try { document.body.removeChild(a); } catch (_) {}
+                try { URL.revokeObjectURL(url); } catch (_) {}
+            }, 1500);
+            notify('Imagen descargada para compartir en WhatsApp Web.', 'ok');
+            setTimeout(() => {
+                try { window.open('https://web.whatsapp.com', '_blank'); } catch (_) {}
+            }, 350);
+        }
+    } finally {
+        _technicianShareInProgress = false;
+        buttons.forEach(btn => { btn.disabled = false; btn.textContent = btn.dataset.label || 'Enviar por WhatsApp'; });
     }
 }
 
+function closeTechnicianAddModal() {
+    CM('tech-add-detail-mo');
+}
+
+function setTechnicianAddNoPhone() {
+    const el = document.getElementById('tech-add-phone');
+    if (el) el.value = 'No tiene número';
+}
+
+function useCurrentTechnicianCoordinatesForAdd() {
+    if (!navigator.geolocation) return notify('Tu dispositivo no soporta geolocalización.', 'err');
+    navigator.geolocation.getCurrentPosition(pos => {
+        const input = document.getElementById('tech-add-location');
+        if (input) input.value = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+        notify('Ubicación obtenida con éxito.', 'ok');
+    }, err => {
+        console.warn('Geolocation error:', err);
+        notify('No se pudo obtener tu ubicación GPS.', 'warn');
+    }, { enableHighAccuracy: true, timeout: 8000 });
+}
+
+function useCurrentTechnicianCoordinatesForEditor() {
+    if (!navigator.geolocation) return notify('Tu dispositivo no soporta geolocalización.', 'err');
+    navigator.geolocation.getCurrentPosition(pos => {
+        const input = document.getElementById('pde-location');
+        if (input) input.value = `${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)}`;
+        notify('Ubicación obtenida con éxito.', 'ok');
+    }, err => {
+        console.warn('Geolocation error:', err);
+        notify('No se pudo obtener tu ubicación GPS.', 'warn');
+    }, { enableHighAccuracy: true, timeout: 8000 });
+}
+
+function openTechnicianAddDetailModal(stopId) {
+    return openTechnicianAddModal(stopId);
+}
+
+function openTechnicianAddModal(preselectedStopId) {
+    const planStops = typeof getPlanMapStops === 'function' ? getPlanMapStops() : getPlanStopsForView('general');
+    const nodes = (state.nodes || []).filter(n => !n.deletedAt);
+    const equipment = (state.equipment || []).filter(e => !e.deletedAt);
+
+    let modal = document.getElementById('tech-add-detail-mo');
+    if (!modal) {
+        document.body.insertAdjacentHTML('beforeend', `
+            <div class="mo" id="tech-add-detail-mo">
+                <div class="md tech-add-detail-dialog" style="max-width:540px;">
+                    <div class="material-modal-head">
+                        <div>
+                            <div class="mt2">Registrar Detalle en Ruta</div>
+                            <small>Agrega un nuevo servicio o cliente a la agenda de hoy.</small>
+                        </div>
+                        <button type="button" class="btn bsm bgh" onclick="closeTechnicianAddModal()">✕</button>
+                    </div>
+                    <div class="fi" style="margin-top:10px;">
+                        <label>Parada / Pueblo del plan</label>
+                        <select id="tech-add-stop" onchange="const cb=document.getElementById('tech-add-custom-target-box');if(cb)cb.style.display=this.value==='__custom__'?'block':'none';"></select>
+                    </div>
+                    <div class="fi" id="tech-add-custom-target-box" style="display:none;">
+                        <label>Pueblo o Antena (búsqueda)</label>
+                        <input id="tech-add-target" list="tech-add-target-options" placeholder="Escribe el pueblo o antena...">
+                        <datalist id="tech-add-target-options"></datalist>
+                    </div>
+                    <div class="row2">
+                        <div class="fi">
+                            <label>Nombre del cliente</label>
+                            <input id="tech-add-client" placeholder="Ej. Juan Pérez">
+                        </div>
+                        <div class="fi">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                                <label style="margin:0;">Teléfono</label>
+                                <button type="button" class="btn bsm bgh" style="font-size:11px;padding:2px 8px;height:24px;min-height:24px;cursor:pointer;" onclick="setTechnicianAddNoPhone()">No tiene número</button>
+                            </div>
+                            <input id="tech-add-phone" placeholder="10 dígitos">
+                        </div>
+                    </div>
+                    <div class="fi">
+                        <label>Trabajo solicitado</label>
+                        <input id="tech-add-work" placeholder="Ej. Reparación de fibra / Alineación">
+                    </div>
+                    <div class="fi">
+                        <label>Ubicación / Coordenadas GPS (opcional)</label>
+                        <div class="tech-coordinate-row" style="display:flex;gap:8px;">
+                            <input id="tech-add-location" class="mono" placeholder="17.123456, -99.123456 o enlace Maps" style="flex:1;">
+                            <button class="btn bgh" type="button" onclick="useCurrentTechnicianCoordinatesForAdd()">Mi ubicación actual</button>
+                        </div>
+                    </div>
+                    <div class="row2">
+                        <div class="fi">
+                            <label>Tipo de visita</label>
+                            <select id="tech-add-type">
+                                <option value="instalacion">Instalación</option>
+                                <option value="servicio">Servicio / Falla</option>
+                                <option value="retiro">Retiro</option>
+                                <option value="revision">Revisión</option>
+                            </select>
+                        </div>
+                        <div class="fi">
+                            <label>Prioridad</label>
+                            <select id="tech-add-priority">
+                                <option value="baja">Baja</option>
+                                <option value="media" selected>Media</option>
+                                <option value="alta">Alta</option>
+                                <option value="critica">Crítica</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="fi">
+                        <label>Notas adicionales</label>
+                        <textarea id="tech-add-notes" rows="2" placeholder="Detalles extra..."></textarea>
+                    </div>
+                    <div class="card-actions" style="margin-top:14px;">
+                        <button type="button" class="btn bgh" onclick="closeTechnicianAddModal()">Cancelar</button>
+                        <button type="button" class="btn bc" onclick="saveTechnicianAddDetail()">💾 Guardar detalle</button>
+                    </div>
+                </div>
+            </div>
+        `);
+        modal = document.getElementById('tech-add-detail-mo');
+        modal.addEventListener('click', event => { if (event.target === modal) closeTechnicianAddModal(); });
+    }
+
+    const stopSelect = document.getElementById('tech-add-stop');
+    if (stopSelect) {
+        let stopOptions = `<option value="">-- Selecciona una parada de la ruta --</option>`;
+        planStops.forEach((s, idx) => {
+            const isSel = (preselectedStopId && s.id === preselectedStopId) || (idx === 0 && !preselectedStopId);
+            const eq = s.equipmentId ? equipment.find(e => e.id === s.equipmentId) : null;
+            const node = s.nodeId ? nodes.find(n => n.id === s.nodeId) : null;
+            const sName = isTechnicianPlanView() ? getTechnicianStopName(s, eq, node) : (s.name || 'Parada');
+            stopOptions += `<option value="${escapeAttr(s.id)}" ${isSel ? 'selected' : ''}>${idx + 1}. ${escapeHtml(sName)}</option>`;
+        });
+        stopOptions += `<option value="__custom__">➕ Registrar en otro pueblo o antena...</option>`;
+        stopSelect.innerHTML = stopOptions;
+    }
+
+    const targetDatalist = document.getElementById('tech-add-target-options');
+    if (targetDatalist) {
+        targetDatalist.innerHTML = equipment.map(item => `<option value="${escapeAttr(item.name || item.ip || 'Antena')}" data-type="equipment" data-id="${escapeAttr(item.id)}">Antena</option>`).concat(nodes.map(item => `<option value="${escapeAttr(getNodeLabel(item))}" data-type="node" data-id="${escapeAttr(item.id)}">Pueblo</option>`)).join('');
+    }
+
+    const clientEl = document.getElementById('tech-add-client');
+    if (clientEl) clientEl.value = '';
+    const phoneEl = document.getElementById('tech-add-phone');
+    if (phoneEl) phoneEl.value = '';
+    const locEl = document.getElementById('tech-add-location');
+    if (locEl) locEl.value = '';
+    const workEl = document.getElementById('tech-add-work');
+    if (workEl) workEl.value = '';
+    const notesEl = document.getElementById('tech-add-notes');
+    if (notesEl) notesEl.value = '';
+    const typeEl = document.getElementById('tech-add-type');
+    if (typeEl) typeEl.value = 'instalacion';
+    const prioEl = document.getElementById('tech-add-priority');
+    if (prioEl) prioEl.value = 'media';
+    const customBox = document.getElementById('tech-add-custom-target-box');
+    if (customBox) customBox.style.display = (planStops.length === 0 || stopSelect?.value === '__custom__') ? 'block' : 'none';
+
+    OM('tech-add-detail-mo');
+}
+
+async function saveTechnicianAddDetail() {
+    const client = document.getElementById('tech-add-client')?.value.trim() || '';
+    const phone = document.getElementById('tech-add-phone')?.value.trim() || 'No tiene número';
+    const work = document.getElementById('tech-add-work')?.value.trim() || '';
+    const notes = document.getElementById('tech-add-notes')?.value.trim() || '';
+    const locVal = document.getElementById('tech-add-location')?.value.trim() || '';
+    const type = document.getElementById('tech-add-type')?.value || 'instalacion';
+    const priority = document.getElementById('tech-add-priority')?.value || 'media';
+    const stopId = document.getElementById('tech-add-stop')?.value || '';
+    const customTarget = document.getElementById('tech-add-target')?.value.trim() || '';
+
+    if (!work && !client) {
+        return notify('Escribe el nombre del cliente o el trabajo solicitado.', 'warn');
+    }
+
+    const parsedLoc = parseOptionalLocation(locVal);
+    if (!parsedLoc.valid) {
+        return notify('La ubicación o coordenadas no son válidas.', 'warn');
+    }
+
+    const plan = getSelectedGeneralPlan();
+    const planStops = typeof getPlanMapStops === 'function' ? getPlanMapStops() : getPlanStopsForView('general');
+    let stop = null;
+
+    if (stopId && stopId !== '__custom__') {
+        stop = planStops.find(s => s.id === stopId) || (plan?.stops || []).find(s => s.id === stopId);
+    }
+
+    let node = null;
+    let eq = null;
+
+    if (!stop && customTarget) {
+        const cleanTarget = normalizeName(customTarget);
+        eq = (state.equipment || []).find(e => !e.deletedAt && normalizeName(e.name || e.ip) === cleanTarget);
+        if (!eq) {
+            node = (state.nodes || []).find(n => !n.deletedAt && (normalizeName(n.name) === cleanTarget || normalizeName(n.town) === cleanTarget));
+        }
+        if (plan) {
+            const now = new Date().toISOString();
+            const newStop = {
+                id: gid('stop'),
+                name: eq ? eq.name : (node ? getNodeLabel(node) : customTarget),
+                equipmentId: eq ? eq.id : '',
+                nodeId: node ? node.id : '',
+                equipmentName: eq ? eq.name : '',
+                nodeName: node ? getNodeLabel(node) : '',
+                town: node?.town || eq?.town || customTarget,
+                lat: parsedLoc.lat || safeFloat(eq?.lat ?? node?.lat) || 0,
+                lng: parsedLoc.lng || safeFloat(eq?.lng ?? node?.lng) || 0,
+                region: node?.zone || eq?.region || '',
+                scheduledDate: selectedCalendarDate || localDateKey(),
+                detailIds: [],
+                details: [],
+                createdAt: now
+            };
+            if (!Array.isArray(plan.stops)) plan.stops = [];
+            plan.stops.push(newStop);
+            stop = newStop;
+        }
+    }
+
+    const id = gid('w');
+    const actor = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+    const now = new Date().toISOString();
+    const folio = typeof getNextWorkOrderFolio === 'function'
+        ? getNextWorkOrderFolio(type)
+        : (typeof getDetailFolio === 'function' ? getDetailFolio({ id, category: type, visitType: type }) : `DET-${String(id).slice(-6)}`);
+
+    let finalLat = parsedLoc.lat || (stop ? safeFloat(stop.lat) : '') || '';
+    let finalLng = parsedLoc.lng || (stop ? safeFloat(stop.lng) : '') || '';
+    let finalLoc = parsedLoc.location || (stop && stop.lat && stop.lng ? `${Number(stop.lat).toFixed(6)}, ${Number(stop.lng).toFixed(6)}` : '');
+
+    const newOrder = {
+        id,
+        folio,
+        title: work || `Trabajo para ${client || 'cliente'}`,
+        desc: notes,
+        description: notes,
+        clientName: client,
+        clientPhone: phone,
+        phone,
+        telefono: phone,
+        equipmentId: eq?.id || stop?.equipmentId || '',
+        equipmentName: eq?.name || stop?.equipmentName || '',
+        nodeId: node?.id || stop?.nodeId || '',
+        nodeName: node ? getNodeLabel(node) : (stop?.nodeName || ''),
+        nodeCode: node?.nodeCode || stop?.nodeCode || '',
+        town: node?.town || eq?.town || stop?.town || stop?.name || '',
+        region: eq?.region || node?.zone || stop?.region || '',
+        visitType: type,
+        category: type,
+        priority,
+        technicianId: selectedTechId || actor.id || '',
+        technicianName: actor.name || actor.username || 'Técnico',
+        detailLocation: finalLoc,
+        lat: finalLat,
+        lng: finalLng,
+        status: 'pendiente',
+        detailKind: 'physical',
+        createdAt: now,
+        createdById: actor.id || '',
+        createdByName: actor.name || actor.username || 'Técnico',
+        createdByRole: actor.role || 'tecnico',
+        updatedAt: now
+    };
+
+    if (!Array.isArray(state.workOrders)) state.workOrders = [];
+    state.workOrders.push(newOrder);
+    setCreatedAudit(newOrder, 'creó detalle desde móvil');
+
+    if (stop) {
+        if (!Array.isArray(stop.detailIds)) stop.detailIds = [];
+        if (!stop.detailIds.includes(newOrder.id)) stop.detailIds.push(newOrder.id);
+        if (!Array.isArray(stop.details)) stop.details = [];
+        if (!stop.details.some(d => d.id === newOrder.id)) stop.details.push(newOrder);
+        newOrder.stopId = stop.id;
+        expandedTechRouteStopIds.add(stop.id);
+    }
+
+    let saved = false;
+    try {
+        if (typeof saveRecord === 'function') {
+            saved = await saveRecord('workOrders', newOrder);
+        } else if (typeof saveDB === 'function') {
+            saved = await saveDB();
+        }
+    } catch (saveErr) {
+        console.warn('save error:', saveErr);
+    }
+    if (!saved && typeof saveDB === 'function') {
+        try { await saveDB(); } catch (_) {}
+    }
+
+    closeTechnicianAddModal();
+    notify(`Detalle guardado: ${folio}`, 'ok');
+    renderPlan();
+    renderPlanDays();
+    if (isTechnicianPlanView()) {
+        setTimeout(renderTechnicianDayMap, 60);
+    }
+}
 function openTechnicianAddMenu() {
     let modal = document.getElementById('tech-add-menu-mo');
     if (!modal) {
@@ -9069,6 +11253,9 @@ function openTechnicianInstallationSummary(order) {
     if (!order) return;
     window._currentTechnicianCompletionDetail = order;
     window._lastReportedDetail = order;
+    if (typeof prepareTechnicianSummaryFile === 'function') {
+        setTimeout(() => { prepareTechnicianSummaryFile(order).catch(() => {}); }, 0);
+    }
     const report = order.technicianReport || {};
     const photos = getAdminTechReportPhotos(report);
     let modal = document.getElementById('tech-installation-summary-mo');
@@ -9482,4 +11669,79 @@ if (typeof window !== 'undefined') {
     window.openTechnicianCompletionSummary = openTechnicianCompletionSummary;
     window.openTechnicianInstallationSummary = openTechnicianInstallationSummary;
     window.findTechnicianCompletionDetail = findTechnicianCompletionDetail;
+}
+
+function renderDetailLocation(value) {
+    const loc = typeof getLocationDisplay === 'function' ? getLocationDisplay(value || '') : (typeof getDetailLocationInfo === 'function' ? getDetailLocationInfo(value || '') : { url: '', hasLocation: false, label: value || '' });
+    if (loc.url || loc.hasLocation) {
+        return `<div class="tech-detail-location-badge has-gps"><svg class="tech-gps-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg><strong>Con ubicación GPS:</strong> <a class="order-location-link" href="${escapeAttr(loc.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Abrir Maps</a><span class="order-location-muted">${escapeHtml(loc.label)}</span></div>`;
+    }
+    return `<div class="tech-detail-location-badge no-gps"><svg class="tech-gps-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/><line x1="2" y1="2" x2="22" y2="22"/></svg><span class="order-location-muted no-location">${escapeHtml(loc.label || 'Sin ubicación registrada')}</span></div>`;
+}
+
+function refreshTechnicianDayMap() {
+    if (technicianDayMap) {
+        technicianDayMap.remove();
+        technicianDayMap = null;
+    }
+    renderTechnicianDayMap();
+}
+
+function toggleTechLocationsSheet() {
+    const sheet = document.getElementById('tech-locations-sheet');
+    const btn = document.getElementById('tech-toggle-sheet-btn');
+    if (!sheet) return;
+    if (sheet.style.display === 'none' || !sheet.style.display) {
+        renderTechLocationsSheet();
+        sheet.style.display = 'block';
+        if (btn) btn.textContent = 'Ocultar paradas';
+    } else {
+        sheet.style.display = 'none';
+        if (btn) btn.textContent = 'Ver paradas';
+    }
+}
+
+function renderTechLocationsSheet() {
+    const sheet = document.getElementById('tech-locations-sheet');
+    if (!sheet) return;
+    const date = selectedCalendarDate || (typeof localDateKey === 'function' ? localDateKey() : new Date().toISOString().slice(0, 10));
+    const stops = getPlanMapStops().filter(s => !s.deletedAt && (s.scheduledDate === date || (!s.scheduledDate && date === localDateKey())));
+    if (!stops.length) {
+        sheet.innerHTML = '<p style="color:#64748b;font-size:12px;margin:0;">No hay paradas programadas para hoy.</p>';
+        return;
+    }
+    sheet.innerHTML = `<div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;">Paradas de la ruta (${stops.length})</div>` +
+        stops.map((s, idx) => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e2e8f0;font-size:12px;">
+                <span><b>${idx + 1}.</b> ${escapeHtml(s.name || 'Parada')}</span>
+                <span style="color:#64748b;font-size:11px;">${(s.detailIds || []).length} detalles</span>
+            </div>
+        `).join('');
+}
+
+if (typeof window !== 'undefined') {
+    window.scrollWeekBoard = scrollWeekBoard;
+    window.setupWeekBoardWheelScroll = setupWeekBoardWheelScroll;
+    window.openRegisterStopAsNodeModal = openRegisterStopAsNodeModal;
+    window.saveNewNodeFromStop = saveNewNodeFromStop;
+    window.deleteStop = deleteStop;
+    window.buildTechnicianWhatsAppMessage = buildTechnicianWhatsAppMessage;
+    window.shareTechnicianCompletion = shareTechnicianCompletion;
+    window.copyTechnicianOrderNumber = copyTechnicianOrderNumber;
+    window.openTechnicianCompletionSummary = openTechnicianCompletionSummary;
+    window.openTechnicianInstallationSummary = openTechnicianInstallationSummary;
+    window.findTechnicianCompletionDetail = findTechnicianCompletionDetail;
+    window.prepareTechnicianSummaryFile = prepareTechnicianSummaryFile;
+    window.getTechnicianSummaryCacheKey = getTechnicianSummaryCacheKey;
+    window.getTechnicianSummaryMode = getTechnicianSummaryMode;
+    window.setTechnicianAddNoPhone = setTechnicianAddNoPhone;
+    window.useCurrentTechnicianCoordinatesForAdd = useCurrentTechnicianCoordinatesForAdd;
+    window.useCurrentTechnicianCoordinatesForEditor = useCurrentTechnicianCoordinatesForEditor;
+    window.openTechnicianAddModal = openTechnicianAddModal;
+    window.openTechnicianAddDetailModal = openTechnicianAddDetailModal;
+    window.closeTechnicianAddModal = closeTechnicianAddModal;
+    window.saveTechnicianAddDetail = saveTechnicianAddDetail;
+    window.refreshTechnicianDayMap = refreshTechnicianDayMap;
+    window.toggleTechLocationsSheet = toggleTechLocationsSheet;
+    window.renderTechLocationsSheet = renderTechLocationsSheet;
 }

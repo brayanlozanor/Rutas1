@@ -228,7 +228,7 @@
 .tech-stop-details-panel{margin-top:18px!important}
 .tech-cloud-unavailable{max-width:620px;margin:40px auto;display:grid;gap:12px!important}.tech-cloud-unavailable b{font-size:20px;color:#071b42}.tech-cloud-unavailable span{line-height:1.5}.tech-cloud-unavailable .btn{justify-self:center;min-width:190px}
 .tech-bottom-nav{position:fixed;z-index:900;left:50%;bottom:10px;transform:translateX(-50%);width:min(916px,calc(100vw - 24px));height:82px;background:rgba(255,255,255,.97);border:1px solid #dce4ef;border-radius:24px;box-shadow:0 15px 45px rgba(14,38,73,.15);display:grid;grid-template-columns:repeat(4,1fr);backdrop-filter:blur(16px)}
-.tech-bottom-nav button{border:0;background:transparent;color:#66758a;font-weight:800;display:grid;place-content:center;gap:3px;font-size:12px}.tech-bottom-nav button span{font-size:24px;line-height:1}.tech-bottom-nav button.active{color:#086aca}
+.tech-bottom-nav button{border:0;background:transparent;color:#66758a;font-weight:800;display:grid;place-content:center;gap:3px;font-size:12px}.tech-bottom-nav button span{font-size:14px;line-height:1}.tech-bottom-nav button.active{color:#086aca}
 .tech-brand{justify-self:center;text-decoration:none;color:#075bbd;font-size:30px;font-weight:900;letter-spacing:-1.5px}.tech-brand span{color:#f28a1a;margin-left:5px}
 .tech-brand{display:block;width:158px;height:52px;font-size:0;background:#fff url('../brand/wifimex-logo.jpg') center/contain no-repeat;border-radius:8px}
 .tech-route-hero .logo{display:none!important}
@@ -246,7 +246,7 @@
   .tech-stop-head{grid-template-columns:48px minmax(0,1fr)!important;gap:10px!important}.route-stop-num{width:46px!important;height:46px!important;font-size:17px!important}.tech-stop-head h3{font-size:17px!important}
   .route-stop-status,.route-stop-timeline{margin-left:58px!important}.route-stop-status .badge{font-size:9px!important;padding:6px 8px!important}
   .tech-order-actions{margin:12px 0 0 58px!important;justify-content:stretch!important}.tech-order-actions .btn{width:100%;min-width:0}
-  .tech-bottom-nav{height:72px;bottom:7px;border-radius:20px}.tech-bottom-nav button span{font-size:21px}
+  .tech-bottom-nav{height:72px;bottom:7px;border-radius:20px}.tech-bottom-nav button span{font-size:12px}
 }
 @media(max-width:390px){
   .tech-plan-picker{grid-template-columns:1fr!important}.tech-plan-card{grid-column:auto}.tech-plan-pill{min-height:70px}

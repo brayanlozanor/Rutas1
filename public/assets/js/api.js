@@ -51,8 +51,8 @@ const DATA_PARTS_BY_PAGE = {
     'nodos.html': ['nodes'],
     'ordenes.html': ['operations', 'people'],
     'mapa.html': ['map'],
-    'planificar.html': ['people', 'materials', 'planning'],
-    'tecnico-ruta.html': ['people', 'materials', 'planning'],
+    'planificar.html': ['planning'],
+    'tecnico-ruta.html': ['planning'],
     'material.html': ['materials'],
     'rutas.html': ['routes'],
     'tecnicos.html': ['people'],
@@ -86,21 +86,35 @@ function ensureLoadingOverlay() {
         overlay.className = 'loading-overlay';
         overlay.innerHTML = `
             <div class="loading-card">
-                <div class="loading-brand"><span class="loading-ring"></span><img src="assets/brand/wifimex-logo.jpg" alt="WiFiMex"></div>
+                <div class="loading-brand"><span class="loading-ring"></span><div class="logo">WiFi<span>Mex</span></div><img src="assets/brand/wifimex-logo.jpg" alt="WiFiMex" class="loading-brand-logo"></div>
                 <div class="loading-copy"><strong id="netops-loading-title">Esperando...</strong><span id="netops-loading-sub">Sincronizando información con la nube.</span><i class="loading-progress"></i></div>
             </div>`;
         document.body.appendChild(overlay);
     }
+    overlay.style.pointerEvents = 'none';
     return overlay;
 }
 
-function showLoading(title = 'Esperando...', subtitle = 'Sincronizando informacion con la nube.') {
+function showLoading(title = 'Esperando...', subtitle = 'Sincronizando informacion con la nube.', forceCenter = false) {
     if (!document.body) return;
+    if (document.getElementById('plan-initial-loader')) return;
     const overlay = ensureLoadingOverlay();
+    overlay.style.pointerEvents = 'none';
     const titleEl = document.getElementById('netops-loading-title');
     const subEl = document.getElementById('netops-loading-sub');
     if (titleEl) titleEl.textContent = title;
     if (subEl) subEl.textContent = subtitle;
+
+    // Si es la carga inicial o se solicita explícitamente centro, centrar la tarjeta con estilo principal
+    if (forceCenter || !window.netopsInitialLoadDone) {
+        overlay.classList.add('loading-centered');
+        overlay.classList.remove('loading-docked');
+    } else {
+        overlay.classList.add('loading-docked');
+        overlay.classList.remove('loading-centered');
+    }
+
+    overlay.style.display = 'flex';
     overlay.classList.add('show');
 }
 
@@ -108,7 +122,16 @@ function hideLoading() {
     clearTimeout(loadingTimer);
     loadingTimer = null;
     const overlay = document.getElementById('netops-loading');
-    if (overlay) overlay.classList.remove('show');
+    if (overlay) {
+        overlay.classList.remove('show');
+        overlay.style.display = 'none';
+        // A partir de que se completa la carga inicial, el cargando pasa a modo docked en esquina
+        if (overlay.classList.contains('loading-centered')) {
+            overlay.classList.remove('loading-centered');
+            overlay.classList.add('loading-docked');
+        }
+    }
+    window.netopsInitialLoadDone = true;
 }
 
 function delayedLoading(title, subtitle, delay = 500) {
@@ -577,19 +600,32 @@ function getTechnicianUsers() {
 }
 
 function ensureTechnicianMirror(user) {
-    if (!user || normalizeRole(user.role) !== 'tecnico') return;
-    const existing = (state.technicians || []).find(t => t.userId === user.id || t.usuario === user.username);
+    if (!user) return;
+    const cleanUsername = String(user.username || '').replace(/^@+/, '').trim();
+    const existing = (state.technicians || []).find(t => (user.id && t.userId === user.id) || normalizeName(String(t.usuario || '').replace(/^@+/, '')) === normalizeName(cleanUsername));
+    if (normalizeRole(user.role) !== 'tecnico') {
+        if (existing) {
+            existing.estado = 'inactivo';
+            if (user.deletedAt) existing.deletedAt = user.deletedAt;
+        }
+        return;
+    }
     const payload = {
         nombre: user.name,
         telefono: user.phone || '',
         estado: user.status === 'inactivo' ? 'inactivo' : 'activo',
-        usuario: user.username,
+        usuario: cleanUsername,
         password: user.password,
         notas: user.notes || '',
         regiones: Array.isArray(user.zones) ? user.zones : []
     };
-    if (existing) Object.assign(existing, payload);
-    else state.technicians.push({ id: gid('t'), userId: user.id, ...payload });
+    if (existing) {
+        Object.assign(existing, payload);
+        existing.userId = user.id;
+        if (!user.deletedAt) delete existing.deletedAt;
+    } else {
+        state.technicians.push({ id: gid('t'), userId: user.id, ...payload });
+    }
 }
 
 function syncTechniciansFromUsers() {
@@ -801,11 +837,21 @@ function normalizeWorkOrderLocations() {
     normalizeWorkOrderLocationList(state.workOrders);
 }
 
-const rById = id => REGS.find(r => id && r.id === id) || {n: id || 'General', c: '#64748b'};
-const getZoneLabel = id => rById(id).n;
+function rById(id) {
+    return REGS.find(r => id && r.id === id) || {n: id || 'General', c: '#64748b'};
+}
+function getZoneLabel(id) {
+    return rById(id).n;
+}
 
 function isOpenOrder(order) {
     return !!order && !order.deletedAt && order.status !== 'completada' && order.status !== 'done';
+}
+
+if (typeof window !== 'undefined') {
+    window.rById = rById;
+    window.getZoneLabel = getZoneLabel;
+    window.isOpenOrder = isOpenOrder;
 }
 
 function getEquipmentLinkedNodeIds(equipmentId) {
@@ -1415,7 +1461,11 @@ function getStateCacheKey(parts = null) {
 
 function getLastGoodCloudState(parts = null) {
     try {
-        const cached = JSON.parse(localStorage.getItem(getStateCacheKey(parts)) || 'null');
+        let cached = JSON.parse(localStorage.getItem(getStateCacheKey(parts)) || 'null');
+        if (cached && cached.data && typeof cached.data === 'object') return cached;
+        // Fallback a clave previa de planificación si migró de ['materials','people','planning'] a ['planning']
+        const legacyPlanKey = `${LAST_GOOD_STATE_KEY}:materials,people,planning`;
+        cached = JSON.parse(localStorage.getItem(legacyPlanKey) || 'null');
         return cached && cached.data && typeof cached.data === 'object' ? cached : null;
     } catch(e) {
         return null;
@@ -2080,8 +2130,14 @@ function startAutoSync() {
 }
 async function loadDB(options = {}) {
     // La retroalimentación de red es global. Se puede silenciar únicamente
-    // para procesos automáticos pasando { globalFeedback:false }.
-    const showOverlay = options.globalFeedback !== false;
+    // para procesos automáticos pasando { globalFeedback:false } o { showOverlay:false }.
+    const isTechOrMobile = (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
+                           (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(max-width: 768px)').matches) ||
+                           (typeof document !== 'undefined' && document.body && (document.body.classList.contains('plan-technician-view') || document.body.dataset.techView));
+    const showOverlay = options.globalFeedback !== false &&
+                        options.showOverlay !== false &&
+                        !options.silent &&
+                        !(isTechOrMobile && (options.preferCache || options.background));
     const overlayDelay = Number.isFinite(Number(options.overlayDelay)) ? Math.max(0, Number(options.overlayDelay)) : 0;
     const loadingTitle = options.loadingTitle || 'Cargando datos';
     const loadingSubtitle = options.loadingSubtitle || 'Consultando la informacion actualizada.';

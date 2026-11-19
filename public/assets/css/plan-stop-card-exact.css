@@ -4,10 +4,10 @@
 }
 
 .planificar-page .stop-card-heading {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 30px;
-  align-items: start;
-  gap: 12px
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
 }
 
 .planificar-page .stop-sequence {
@@ -24,7 +24,8 @@
 }
 
 .planificar-page .stop-heading-copy {
-  min-width: 0
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
 }
 
 .planificar-page .stop-card-heading .stop-title {
@@ -37,32 +38,40 @@
 }
 
 .planificar-page .stop-card-heading .stop-drag-handle {
-  position: static !important;
-  width: 30px;
-  height: 38px;
-  margin-top: -2px
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .planificar-page .stop-card-head-actions {
   display: inline-flex !important;
   align-items: center !important;
+  justify-content: flex-end !important;
   gap: 6px !important;
   flex-shrink: 0 !important;
+  z-index: 10 !important;
+  position: relative !important;
 }
 
 .planificar-page .btn-stop-remove-action {
-  width: 28px !important;
-  height: 28px !important;
-  border-radius: 7px !important;
-  border: 1px solid #fee2e2 !important;
-  background: #fff5f5 !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  border: 1px solid #fecaca !important;
+  background: #fef2f2 !important;
   color: #ef4444 !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
   padding: 0 !important;
-  transition: all 0.15s ease !important;
+  transition: all 0.18s ease-in-out !important;
+  z-index: 10 !important;
+  position: relative !important;
+  pointer-events: auto !important;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.12) !important;
 }
 
 .planificar-page .btn-stop-remove-action:hover {
@@ -70,6 +79,7 @@
   color: #ffffff !important;
   border-color: #b91c1c !important;
   transform: scale(1.08) !important;
+  box-shadow: 0 3px 8px rgba(220, 38, 38, 0.3) !important;
 }
 
 .planificar-page .btn-register-pueblo-chip {
@@ -278,7 +288,9 @@
 
 /* Acciones finales de la parada: el orden se controla arrastrando. */
 .planificar-page .stop-card-heading {
-  grid-template-columns: minmax(0, 1fr) 30px !important
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
 }
 
 .planificar-page .stop-sequence,

@@ -129,9 +129,25 @@ function sanitizeDataForSession(data,session) {
 }
 
 function classifyApiError(error) {
+  if (error?.status && (error?.type || error?.syncType)) {
+    return { type: error.type || error.syncType, code: error.code || 'VALIDATION_FAILED', status: error.status, userMessage: error.message };
+  }
+  if (error?.status === 400 || error?.syncType === 'DATOS_INVALIDOS') {
+    return { type: 'DATOS_INVALIDOS', code: error.code || 'INVALID_DATA', status: 400, userMessage: error.message };
+  }
   const message = String(error?.message || error || 'Error desconocido');
   const lower = message.toLowerCase();
-  if (error instanceof SyntaxError || lower.includes('json')) return { type:'DATOS_INVALIDOS', code:'INVALID_JSON', status:400 };
+  if (lower.includes('unique constraint failed: users.username') || (lower.includes('sqlite_constraint_unique') && lower.includes('username'))) {
+    return {
+      type: 'DATOS_INVALIDOS',
+      code: 'USERNAME_ALREADY_EXISTS',
+      status: 400,
+      userMessage: 'El nombre de usuario ya está registrado en la base de datos. Por favor elige otro.'
+    };
+  }
+  if (error instanceof SyntaxError || lower.includes('json') || lower.includes('ya está en uso') || lower.includes('ya existe') || lower.includes('obligatorio')) {
+    return { type:'DATOS_INVALIDOS', code:'INVALID_DATA', status:400, userMessage: message };
+  }
   if (lower.includes('d1') || lower.includes('sqlite') || lower.includes('sql') || lower.includes('constraint') || lower.includes('foreign key')) {
     return { type:'BASE_DE_DATOS', code:'D1_OPERATION_FAILED', status:500 };
   }
@@ -375,8 +391,9 @@ export default {
       return json({ error: 'Ruta no encontrada' }, 404);
     } catch (err) {
       const failure = classifyApiError(err);
-      console.error(JSON.stringify({ event:'api_error',requestId,path:url.pathname,errorType:failure.type,errorCode:failure.code,message:err?.message || String(err) }));
-      return json({ ok:false,success:false,error:err?.message || String(err),errorType:failure.type,errorCode:failure.code,requestId },failure.status);
+      const finalErrorMessage = failure.userMessage || err?.message || String(err);
+      console.error(JSON.stringify({ event:'api_error',requestId,path:url.pathname,errorType:failure.type,errorCode:failure.code,message:finalErrorMessage }));
+      return json({ ok:false,success:false,error:finalErrorMessage,errorType:failure.type,errorCode:failure.code,requestId },failure.status);
     }
   }
 };

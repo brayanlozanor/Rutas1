@@ -17,23 +17,33 @@
   .topbar.app-sidebar .logo:after{font-size:14px!important}
   .topbar.app-sidebar .nav,.topbar.app-sidebar.menu-open .nav{gap:3px!important;padding:10px 13px 6px!important;overflow-y:auto!important}
   .topbar.app-sidebar .nav:before{padding-bottom:7px!important;margin-bottom:5px!important}
-  .topbar.app-sidebar .nav .nb{min-height:42px!important;padding:5px 10px!important;gap:9px!important}
-  .topbar.app-sidebar .nav .nb .nav-emoji{width:38px!important;height:38px!important;flex:0 0 38px!important;border-radius:11px!important;opacity:1!important;visibility:visible!important;filter:none!important}
-  .topbar.app-sidebar .nav .nb .nav-emoji svg{width:23px!important;height:23px!important;opacity:1!important;visibility:visible!important;stroke:#fff!important}
+  .topbar.app-sidebar .nav .nb{min-height:38px!important;padding:4px 8px!important;gap:8px!important;font-size:11.5px!important}
+  .topbar.app-sidebar .nav .nb .nav-label{font-size:11.5px!important;font-weight:700!important;letter-spacing:-0.01em!important;line-height:1.2!important}
+  .topbar.app-sidebar .nav .nb .nav-emoji{width:34px!important;height:34px!important;flex:0 0 34px!important;border-radius:10px!important;opacity:1!important;visibility:visible!important;filter:none!important}
+  .topbar.app-sidebar .nav .nb .nav-emoji svg{width:20px!important;height:20px!important;opacity:1!important;visibility:visible!important;stroke:#fff!important}
   .topbar.app-sidebar .nav .nb .nav-emoji img{opacity:1!important;visibility:visible!important;filter:none!important}
-  .topbar.app-sidebar .sbar{margin:0 13px 10px!important;padding:8px!important;gap:5px!important}
-  .topbar.app-sidebar .sbar .user-pill{min-height:32px!important;padding:6px 8px!important}
-  .topbar.app-sidebar .sbar .btn{min-height:34px!important;padding:6px 8px!important}
+  .topbar.app-sidebar .sbar{margin:0 10px 10px!important;padding:6px!important;gap:5px!important}
+  .topbar.app-sidebar .sbar .user-pill{min-height:30px!important;padding:4px 6px!important;font-size:11px!important}
+  .topbar.app-sidebar .sbar .btn{min-height:32px!important;padding:5px 8px!important;font-size:11px!important}
 
-  body.sidebar-collapsed .topbar.app-sidebar .logo-link{min-height:64px!important;padding:8px!important}
-  body.sidebar-collapsed .topbar.app-sidebar .logo{width:50px!important}
-  body.sidebar-collapsed .topbar.app-sidebar .logo:before{width:50px!important;height:40px!important}
-  body.sidebar-collapsed #mobile-menu-toggle{top:62px!important}
-  body.sidebar-collapsed .topbar.app-sidebar .nav{flex:1 1 auto!important;margin:36px 0 0!important;padding:0 9px 5px!important;gap:5px!important;overflow:hidden!important}
-  body.sidebar-collapsed .topbar.app-sidebar .nav .nb{width:48px!important;height:48px!important;min-width:48px!important;min-height:48px!important;flex:0 0 48px!important;border-radius:13px!important;opacity:1!important;visibility:visible!important}
-  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji{width:44px!important;height:44px!important;flex:0 0 44px!important;border-radius:12px!important;opacity:1!important;visibility:visible!important}
-  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji svg{width:24px!important;height:24px!important;opacity:1!important;visibility:visible!important;stroke:#fff!important}
+  :root{--sidebar-closed:56px!important}
+  body.sidebar-collapsed{--sidebar-closed:56px!important}
+  body.sidebar-collapsed:not(.tech-route-body){padding-left:56px!important}
+  body.sidebar-collapsed .topbar.app-sidebar{width:56px!important;min-width:56px!important;padding:0 0 8px 0!important}
+  body.sidebar-collapsed .topbar.app-sidebar .logo-link{min-height:52px!important;padding:6px 0!important;justify-content:center!important}
+  body.sidebar-collapsed .topbar.app-sidebar .logo{width:44px!important;display:flex!important;justify-content:center!important}
+  body.sidebar-collapsed .topbar.app-sidebar .logo:before{width:42px!important;height:34px!important}
+  body.sidebar-collapsed #mobile-menu-toggle{top:54px!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav{flex:1 1 auto!important;margin:20px 0 0!important;padding:0 6px 5px!important;gap:4px!important;overflow:hidden!important;align-items:center!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb{width:42px!important;height:42px!important;min-width:42px!important;min-height:42px!important;flex:0 0 42px!important;padding:0!important;margin:0 auto!important;display:flex!important;align-items:center!important;justify-content:center!important;border-radius:12px!important;opacity:1!important;visibility:visible!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji{width:36px!important;height:36px!important;flex:0 0 36px!important;margin:0!important;border-radius:10px!important;opacity:1!important;visibility:visible!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji svg{width:20px!important;height:20px!important;opacity:1!important;visibility:visible!important;stroke:#fff!important}
   body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-emoji img{opacity:1!important;visibility:visible!important;filter:none!important}
+  body.sidebar-collapsed .topbar.app-sidebar .nav .nb .nav-label{display:none!important}
+  body.sidebar-collapsed .topbar.app-sidebar .sbar{width:42px!important;min-height:42px!important;padding:0!important;margin:auto auto 10px!important;display:flex!important;justify-content:center!important}
+  body.sidebar-collapsed .topbar.app-sidebar .sbar .user-pill{display:none!important}
+  body.sidebar-collapsed .topbar.app-sidebar .sbar .btn{width:40px!important;height:40px!important;min-width:40px!important;min-height:40px!important;border-radius:11px!important;font-size:0!important;display:flex!important;align-items:center!important;justify-content:center!important}
+  body.sidebar-collapsed .topbar.app-sidebar .sbar .btn:after{content:"⏻";font-size:16px!important;line-height:1!important}
   body.sidebar-collapsed .topbar.app-sidebar .nav .nb:nth-child(1) .nav-emoji,
   body.sidebar-collapsed .topbar.app-sidebar .nav .nb:nth-child(2) .nav-emoji,
   body.sidebar-collapsed .topbar.app-sidebar .nav .nb:nth-child(5) .nav-emoji{background:linear-gradient(145deg,#18bdff 0%,#0874ef 48%,#064bd1 100%)!important;box-shadow:inset 0 1px 1px rgba(255,255,255,.75),inset 0 -5px 10px rgba(0,30,130,.28),0 7px 15px rgba(8,83,190,.28)!important}

@@ -582,8 +582,8 @@
       (state.workOrders || []).forEach(w => {
         if (w.deletedAt) return;
         const linked = ids.has(w.id);
-        const open = !['completada', 'eliminada', 'no_realizado'].includes(w.status || '');
-        const resolved = ['completada', 'no_realizado'].includes(w.status || '');
+        const open = !['completada', 'eliminada'].includes(w.status || '');
+        const resolved = w.status === 'completada';
         const resolvedInThisPlan = resolved && wasTechDetailResolvedDuringStop(w, stop);
         const sameEquipment = stop.equipmentId
           && (w.equipmentId === stop.equipmentId || (stop.includeLinkedNodeDetails !== false && w.nodeId && linkedNodeIds.has(w.nodeId)))
@@ -605,8 +605,28 @@
     }
 
     function getVisibleTechStopNotes(stop, details) {
-      const note = String(stop.notes || '').trim();
+      let note = String(stop.notes || '').trim();
       if (!note) return '';
+      if (/undefined/i.test(note)) {
+        let fallbackName = (stop.name && stop.name.toLowerCase() !== 'parada' && stop.name.toLowerCase() !== 'undefined') ? stop.name : (stop.town || '');
+        if (!fallbackName && stop.nodeId) {
+          const nd = (state.nodes || []).find(n => n.id === stop.nodeId && !n.deletedAt);
+          if (nd) fallbackName = nd.town || nd.name;
+        }
+        if (!fallbackName && stop.equipmentId) {
+          const eq = (state.equipment || []).find(e => e.id === stop.equipmentId && !e.deletedAt);
+          if (eq) fallbackName = eq.name;
+        }
+        if (!fallbackName && !isNaN(stop.lat) && !isNaN(stop.lng)) {
+          const closest = (state.nodes || []).find(n => !n.deletedAt && !isNaN(n.lat) && !isNaN(n.lng) && Math.abs(stop.lat - n.lat) < 0.01 && Math.abs(stop.lng - n.lng) < 0.01);
+          if (closest) fallbackName = closest.town || closest.name;
+        }
+        if (fallbackName) {
+          note = note.replace(/:\s*undefined(\s*\(Pueblo registrado\))?/gi, `: ${fallbackName} (Pueblo registrado)`).replace(/\bundefined\b/gi, fallbackName).trim();
+        } else {
+          note = note.replace(/:\s*undefined(\s*\(Pueblo registrado\))?/gi, '').replace(/\bundefined\b/gi, '').trim();
+        }
+      }
       const duplicatedAsDetail = (details || []).some(detail => String(detail.title || '').trim().toLowerCase() === note.toLowerCase());
       return duplicatedAsDetail ? '' : note;
     }
@@ -744,13 +764,14 @@
       const eq = stop.equipmentId ? (state.equipment || []).find(e => e.id === stop.equipmentId) : null;
       const node = stop.nodeId ? (state.nodes || []).find(n => n.id === stop.nodeId && !n.deletedAt) : null;
       const name = stop.name || eq?.name || node?.name || 'Parada';
-      const towerAnt = (eq && !stop.nodeId) ? eq : null;
+      const isTownStop = !!(stop.nodeId || stop.type === 'node' || node);
+      const towerAnt = (!isTownStop && eq && (stop.type === 'equipment' || stop.category === 'torre' || !stop.type)) ? eq : null;
       const hasMat = towerAnt ? !!(towerAnt.towerSections || towerAnt.towerRadios || towerAnt.towerBatteries || towerAnt.towerPanels || towerAnt.towerExtraNotes || towerAnt.towerMaterialNotes || (Array.isArray(towerAnt.towerMaterialPhotos) && towerAnt.towerMaterialPhotos.length)) : false;
       const towerBtn = towerAnt ? `<button type="button" class="btn bsm btn-tower-callout ${hasMat ? 'is-registered' : 'is-pending'}" onclick="event.stopPropagation(); openTowerMaterialModal(\'${escapeTech(towerAnt.id)}\')" title="Material e infraestructura de torre ${escapeTech(towerAnt.name)}" style="margin-left: 8px; vertical-align: middle;"><span class="tower-btn-icon">🗼</span> <span class="tower-btn-label">Material torre</span><span class="tower-btn-tag">${hasMat ? '✓' : 'Registrar'}</span></button>` : '';
       const progress = getStopProgressForTech(stop);
       const details = getStopDetailsForTech(stop);
-      const active = details.filter(d => d.status !== 'completada' && d.status !== 'no_realizado');
-      const reported = details.filter(d => d.status === 'completada' || d.status === 'no_realizado');
+      const active = details.filter(d => d.status !== 'completada');
+      const reported = details.filter(d => d.status === 'completada');
       const region = rById(getStopRegionForTech(stop));
       const status = getTechStopStatus(stop, progress);
       const visibleNotes = getVisibleTechStopNotes(stop, details);
@@ -849,15 +870,23 @@
         <div class="route-detail-line ${done ? 'done' : ''} ${noDone ? 'not-done' : ''}">
           <span class="detail-status-line ${done ? 'done-status' : (noDone ? 'not-done-status' : '')}" style="border-color:${pc(detail.priority)}">${done ? 'Terminado' : (noDone ? 'No realizado' : `<span class="priority-badge priority-${escapeTech(detail.priority || 'media')}"><span class="priority-dot"></span>${escapeTech(pl(detail.priority || 'media'))}</span>`)}</span>
           ${detail.clientName ? `<small class="detail-client-line"><b>Cliente:</b> ${escapeTech(detail.clientName)}</small>` : ''}
+          ${(() => {
+            const techClientPhone = String(detail.clientPhone || detail.phone || detail.telefono || detail.technicianReport?.phone || '').trim();
+            const techPhoneDigits = techClientPhone.replace(/\D/g, '');
+            return techClientPhone
+              ? `<small class="detail-client-phone-line" style="display:block;margin-top:2px;color:#0284c7;font-weight:700;"><b>Teléfono:</b> ${techPhoneDigits && techPhoneDigits.length >= 7 ? `<a href="tel:${escapeTech(techPhoneDigits)}" style="color:#0284c7;text-decoration:underline;">${escapeTech(techClientPhone)}</a>` : escapeTech(techClientPhone)}</small>`
+              : '';
+          })()}
           <strong class="detail-title-line">${escapeTech(detail.title || 'Detalle')}</strong>
           ${detail.desc ? `<small>${escapeTech(detail.desc)}</small>` : ''}          ${detailMapsUrl ? `<small><a class="order-location-link" href="${escapeTech(detailMapsUrl)}" target="_blank" rel="noopener">Abrir Maps</a> ${escapeTech(detailLocation)}</small>` : (detailLocation ? `<small>${escapeTech(detailLocation)}</small>` : '')}
           ${detail.materialPlanned ? `<small>📦 Material sugerido: ${escapeTech(detail.materialPlanned)}</small>` : ''}
+          ${noDone ? `<div class="tech-detail-no-done-note" style="display:inline-flex;align-items:center;gap:5px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;margin:4px 0 6px;"><span>⚠️ No realizado</span>${(report && report.reason) ? `<span>· ${escapeTech(report.reason)}</span>` : ''}</div>` : ''}
           ${reportHtml}
           <div class="tech-detail-actions">
             ${done
               ? `<span class="tech-locked-done">Reporte enviado</span>`
               : (noDone
-                ? `<button class="btn bsm bg2" onclick="openTechDetailReport('${escapeTech(detail.id)}','terminado')">Terminar detalle</button><span class="tech-locked-done">No realizado enviado</span>`
+                ? `<button class="btn bsm bg2" onclick="openTechDetailReport('${escapeTech(detail.id)}','terminado')">Terminar detalle</button><span class="tech-locked-done" style="background:#fee2e2;color:#991b1b;border-color:#fecaca;">No realizado</span>`
                 : `<button class="btn bsm bg2" onclick="openTechDetailReport('${escapeTech(detail.id)}','terminado')">Terminar</button><button class="btn bsm ba" onclick="openTechDetailReport('${escapeTech(detail.id)}','no_realizado')">No lo hice</button>`)}
           </div>
         </div>
@@ -1502,4 +1531,10 @@
       return String(value ?? '').replace(/[&<>"']/g, ch => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       }[ch]));
+    }
+
+    if (typeof window !== 'undefined') {
+      window.getStopDetailsForTech = getStopDetailsForTech;
+      window.renderTechStop = renderTechStop;
+      window.renderTechDetail = renderTechDetail;
     }

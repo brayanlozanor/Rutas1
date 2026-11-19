@@ -48,7 +48,35 @@ function renderMateriales() {
 
     const totalPages = Math.max(1, Math.ceil(total / materialPageSize));
     const rangeStart = Number(meta.offset) || 0;
-    gridEl.insertAdjacentHTML('beforeend', `<footer class="inventory-pagination"><button onclick="changeMaterialPage(${materialCurrentPage-1})" ${materialCurrentPage===1?'disabled':''}>‹</button><span>${total?rangeStart+1:0}-${Math.min(rangeStart+materiales.length,total)} de ${total}</span><button onclick="changeMaterialPage(${materialCurrentPage+1})" ${materialCurrentPage>=totalPages?'disabled':''}>›</button></footer>`);
+    const isFirst = materialCurrentPage <= 1;
+    const isLast = materialCurrentPage >= totalPages;
+
+    let pageButtons = '';
+    let startP = Math.max(1, materialCurrentPage - 2);
+    let endP = Math.min(totalPages, startP + 4);
+    if (endP - startP < 4) startP = Math.max(1, endP - 4);
+
+    for (let p = startP; p <= endP; p++) {
+      const activeCls = p === materialCurrentPage ? 'active' : '';
+      pageButtons += `<button type="button" class="dispatch-page-num ${activeCls}" onclick="changeMaterialPage(${p})">${p}</button>`;
+    }
+
+    gridEl.insertAdjacentHTML('beforeend', `
+      <div class="dispatch-pagination-bar" style="margin-top:16px;width:100%">
+        <div class="dispatch-pagination-info">
+          Mostrando <strong>${total ? rangeStart + 1 : 0}–${Math.min(rangeStart + materiales.length, total)}</strong> de <strong>${total}</strong> materiales
+        </div>
+        <div class="dispatch-pagination-controls">
+          <button type="button" class="dispatch-page-nav-btn" onclick="changeMaterialPage(${materialCurrentPage - 1})" ${isFirst ? 'disabled' : ''} title="Página anterior">
+            ‹ Anterior
+          </button>
+          <div class="dispatch-page-numbers">${pageButtons}</div>
+          <button type="button" class="dispatch-page-nav-btn" onclick="changeMaterialPage(${materialCurrentPage + 1})" ${isLast ? 'disabled' : ''} title="Página siguiente">
+            Siguiente ›
+          </button>
+        </div>
+      </div>
+    `);
   }
 }
 

@@ -4,7 +4,7 @@ const path = require('path');
 
 console.log('--- TEST: Technician No-Admin Empty State & Assigned Details Badge ---');
 
-const planificarJs = fs.readFileSync(path.join(__dirname, '../public/assets/js/planificar.js'), 'utf8');
+const planificarJs = fs.readFileSync(path.join(__dirname, '../public/assets/js/planificar.js'), 'utf8').replace(/\r\n/g, '\n');
 
 // 1. Check getLoggedTechnicianId and ensureLoggedTechnicianRecord
 assert(planificarJs.includes('function getLoggedTechnicianId()'), 'getLoggedTechnicianId must exist');

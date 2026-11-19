@@ -929,6 +929,109 @@ async function initMaterialPage() {
   await cargarDirectorioTecnicos();
   normalizeMaterials();
   renderMaterialViews();
+  setupMaterialClipboardPaste();
+}
+
+function setupMaterialClipboardPaste() {
+  document.addEventListener('paste', handleMaterialClipboardPaste);
+}
+
+function handleMaterialClipboardPaste(e) {
+  const clipboardData = e.clipboardData || window.clipboardData;
+  if (!clipboardData) return;
+  const pastedText = clipboardData.getData('text');
+  if (!pastedText || !pastedText.trim()) return;
+
+  // 1. Detectar si estamos en el modal de entregar material ("#deliver-material-mo") o editando envío
+  const deliverModal = document.getElementById('deliver-material-mo');
+  const isDeliverOpen = deliverModal && deliverModal.classList.contains('open');
+  const isTargetInDeliver = e.target && deliverModal && deliverModal.contains(e.target);
+
+  if (isDeliverOpen && isTargetInDeliver) {
+    const lines = pastedText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length > 1 || pastedText.includes('\t') || pastedText.includes(';') || (pastedText.includes(',') && !pastedText.match(/^\d+,\d+$/))) {
+      e.preventDefault();
+      let addedCount = 0;
+      for (const line of lines) {
+        let parts = line.split(/[\t;,|]+/).map(p => p.trim()).filter(Boolean);
+        if (parts.length === 0) continue;
+        let matName = '';
+        let matQty = 1;
+        let matUnit = 'pieza';
+        if (parts.length === 1) {
+          const match = parts[0].match(/^([\d.,]+)\s+(.+)$/) || parts[0].match(/^(.+?)\s+([\d.,]+)$/);
+          if (match) {
+            if (Number.isFinite(parseFloat(match[1]))) {
+              matQty = parseFloat(match[1]) || 1;
+              matName = match[2];
+            } else {
+              matName = match[1];
+              matQty = parseFloat(match[2]) || 1;
+            }
+          } else {
+            matName = parts[0];
+          }
+        } else if (parts.length >= 2) {
+          if (!isNaN(parseFloat(parts[0])) && isNaN(parseFloat(parts[1]))) {
+            matQty = parseFloat(parts[0]) || 1;
+            matName = parts[1];
+            if (parts[2]) matUnit = parts[2];
+          } else {
+            matName = parts[0];
+            matQty = parseFloat(parts[1]) || 1;
+            if (parts[2]) matUnit = parts[2];
+          }
+        }
+        if (matName) {
+          addDeliverRow(matName, matQty, matUnit);
+          addedCount++;
+        }
+      }
+      if (addedCount > 0) {
+        notify(`Se agregaron ${addedCount} materiales desde el portapapeles.`);
+      }
+      return;
+    }
+  }
+
+  // 2. Detectar si estamos en el modal de nuevo/editar material ("#material-mo")
+  const materialModal = document.getElementById('material-mo');
+  const isMatModalOpen = materialModal && materialModal.classList.contains('open');
+  const isTargetInMatModal = e.target && materialModal && materialModal.contains(e.target);
+
+  if (isMatModalOpen && isTargetInMatModal) {
+    const lines = pastedText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (pastedText.includes('\t') || lines.length > 1 || pastedText.includes(';')) {
+      const firstLine = lines[0];
+      const cols = firstLine.split(/[\t;,|]+/).map(c => c.trim());
+      if (cols.length >= 2) {
+        e.preventDefault();
+        const nameField = document.getElementById('mat-nombre');
+        const qtyField = document.getElementById('mat-cantidad');
+        const unitField = document.getElementById('mat-unidad');
+        const minField = document.getElementById('mat-minimo');
+        const descField = document.getElementById('mat-desc');
+
+        if (nameField) nameField.value = cols[0] || '';
+        if (qtyField && cols[1] !== undefined && !isNaN(parseFloat(cols[1]))) {
+          qtyField.value = parseFloat(cols[1]);
+        }
+        if (unitField && cols[2]) {
+          const u = cols[2].toLowerCase();
+          const validUnits = ['pieza', 'unidad', 'paquete', 'rollo', 'metro', 'kg', 'caja'];
+          const matched = validUnits.find(vu => vu === u || u.startsWith(vu));
+          if (matched) unitField.value = matched;
+        }
+        if (minField && cols[3] !== undefined && !isNaN(parseFloat(cols[3]))) {
+          minField.value = parseFloat(cols[3]);
+        }
+        if (descField && cols[4]) {
+          descField.value = cols.slice(4).join(' ');
+        }
+        notify('Datos del material rellenados desde el portapapeles.');
+      }
+    }
+  }
 }
 
 function normalizeMaterials() {

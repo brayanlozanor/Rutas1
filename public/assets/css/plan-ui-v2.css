@@ -1,4 +1,167 @@
 /* Acciones, diálogos y organizador semanal de Planificar. */
+
+/* Pantalla de carga inicial sólida para computadora (desktop) y técnico */
+.plan-initial-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  background: rgba(244, 247, 250, 0.55);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: all;
+  user-select: none;
+}
+.plan-initial-loader.is-hidden {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+.stop-card.plan-placeholder-card {
+  opacity: 0.92;
+  cursor: default;
+}
+.plan-initial-loader .plan-initial-card {
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  width: min(440px, calc(100vw - 32px));
+  max-width: 440px;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 18px 24px;
+  border: 1px solid #d9e3ee;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 70px rgba(15, 39, 66, 0.26);
+  text-align: left;
+  overflow: hidden;
+  pointer-events: none;
+}
+.plan-initial-loader .plan-initial-card:before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #0874e8 0 32%, #39bb61 32% 52%, #f7b000 52% 72%, #e5233f 72% 100%);
+  display: block;
+}
+.plan-initial-loader .loading-brand {
+  position: relative;
+  display: grid;
+  width: 64px;
+  height: 64px;
+  min-width: 64px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(15, 39, 66, 0.12);
+}
+.plan-initial-loader .loading-brand img,
+.plan-initial-loader .loading-brand .loading-brand-logo {
+  display: block !important;
+  position: relative !important;
+  z-index: 2 !important;
+  width: 44px !important;
+  height: 32px !important;
+  max-width: 44px !important;
+  max-height: 32px !important;
+  object-fit: contain !important;
+}
+.plan-initial-loader .loading-brand .logo {
+  display: none !important;
+}
+.plan-initial-loader .loading-brand .logo::before {
+  content: none !important;
+  display: none !important;
+}
+.plan-initial-loader .loading-brand .logo span {
+  display: none !important;
+}
+.plan-initial-loader .loading-ring {
+  position: absolute;
+  inset: -3px;
+  border: 3px solid transparent;
+  border-top-color: #0874e8;
+  border-right-color: #39bb61;
+  border-bottom-color: #f7b000;
+  border-left-color: #e5233f;
+  border-radius: 50%;
+  animation: activitySpin 1.1s linear infinite;
+}
+.plan-initial-loader .loading-copy {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+}
+.plan-initial-loader .plan-initial-card strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: #10243f;
+  white-space: nowrap;
+}
+.plan-initial-loader .plan-initial-card span {
+  display: block;
+  margin-top: 3px;
+  color: #60728c;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.plan-initial-loader .loading-progress {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin-top: 10px;
+  border-radius: 99px;
+  background: #e9eef5;
+  overflow: hidden;
+}
+.plan-initial-loader .loading-progress:after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 38%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0874e8, #39bb61);
+  animation: netopsProgressSlide 1.3s ease-in-out infinite alternate;
+}
+/* Indicador sutil de carga al cambiar de plan o procesar paradas */
+.plan-subtle-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  margin: 12px 0;
+  color: #0874e8;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 4px 14px rgba(8, 116, 232, 0.06);
+}
+.plan-subtle-spinner .spinner-ring {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid #dbeafe;
+  border-top-color: #0874e8;
+  border-radius: 50%;
+  animation: activitySpin 0.75s linear infinite;
+}
+
+
 .planificar-page .plan-sidebar{overflow:hidden!important}
 .planificar-page .plan-sidebar .fi{min-width:0}
 .planificar-page .plan-sidebar select{box-sizing:border-box;width:100%;min-width:0;padding-right:28px!important;font-size:11px!important;text-overflow:ellipsis}
@@ -42,9 +205,763 @@
 @media(max-width:620px){.plan-dialog-overlay{padding:6px!important}.plan-dialog-card{width:calc(100vw - 12px)!important;max-height:calc(100dvh - 12px)!important}.plan-dialog-head{grid-template-columns:44px minmax(0,1fr) 38px;padding:16px;gap:10px}.plan-dialog-icon{width:43px;height:43px;border-radius:11px}.plan-dialog-head h2{font-size:19px}.plan-dialog-body{grid-template-columns:1fr;padding:16px}.plan-dialog-actions{padding:12px 16px}.plan-dialog-actions .btn{min-width:0!important;flex:1}.plan-assignment-summary{grid-template-columns:1fr;margin:16px}.plan-assignment-arrow{transform:rotate(90deg);justify-self:center}.plan-assignment-warning{margin:0 16px 16px}.planificar-page .plan-sidebar-action-row{grid-template-columns:1fr}}
 @media(max-width:700px){#plan-stop-mo{padding:5px!important}#plan-stop-mo .plan-stop-picker-card{width:calc(100vw - 10px)!important;max-height:calc(100dvh - 10px)!important;padding:16px 12px!important;border-radius:14px!important}#plan-stop-mo .plan-stop-picker-head{gap:10px}#plan-stop-mo .plan-stop-picker-head h2{font-size:18px}#plan-stop-mo .plan-stop-picker-close{width:38px;height:38px;flex-basis:38px}#plan-stop-mo .plan-stop-picker-tabs{grid-template-columns:1fr}#plan-stop-mo .plan-stop-picker-tabs button:first-child{border-radius:9px 9px 0 0}#plan-stop-mo .plan-stop-picker-tabs button:last-child{border-radius:0 0 9px 9px}#plan-stop-mo .plan-stop-picker-results{max-height:50dvh}#plan-stop-mo .plan-stop-picker-result{grid-template-columns:38px minmax(0,1fr) 34px;gap:8px;padding:6px 8px}#plan-stop-mo .plan-stop-picker-result>span{width:36px;height:36px}}
 
-/* ========================================================
-   DISEÑO PLANIFICAR VISTA ESCRITORIO & INTELIGENCIA DE RUTA
-   ======================================================== */
+/* Botón y Sección de Cobertura de Pueblos (>80% y Sin Atención) */
+.btn.btn-towns-coverage {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+  color: #fff !important;
+  border: 1px solid #0284c7 !important;
+  box-shadow: 0 3px 10px rgba(2, 132, 199, 0.32) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  min-height: 38px !important;
+  padding: 8px 14px !important;
+  border-radius: 8px !important;
+  font-size: 12.5px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  transition: all .18s ease-in-out !important;
+}
+
+.btn.btn-towns-coverage:hover {
+  background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+  box-shadow: 0 5px 14px rgba(2, 132, 199, 0.44) !important;
+  transform: translateY(-1px) !important;
+}
+
+.btn.btn-towns-coverage:active {
+  transform: translateY(0) !important;
+}
+
+/* Modal y contenedor de Cobertura de Pueblos */
+.towns-coverage-modal {
+  box-sizing: border-box !important;
+  width: min(880px, calc(100vw - 24px)) !important;
+  max-height: calc(100dvh - 28px) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border-radius: 18px !important;
+  background: #ffffff !important;
+  box-shadow: 0 28px 80px rgba(10, 29, 54, 0.35) !important;
+  border: 1px solid #d8e5f2 !important;
+}
+
+.towns-coverage-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 14px !important;
+  padding: 18px 22px !important;
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  flex-shrink: 0 !important;
+}
+
+.towns-coverage-title-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.towns-coverage-icon {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, #e0f2fe, #bae6fd) !important;
+  color: #0284c7 !important;
+  display: grid !important;
+  place-items: center !important;
+}
+
+.towns-coverage-icon svg {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+.towns-coverage-title-group h2 {
+  margin: 0 !important;
+  font-size: 19px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  line-height: 1.2 !important;
+}
+
+.towns-coverage-title-group p {
+  margin: 2px 0 0 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+}
+
+.towns-coverage-tabs {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 12px 22px 0 !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  flex-shrink: 0 !important;
+}
+
+.towns-coverage-tab-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 10px 16px !important;
+  border: none !important;
+  border-bottom: 2.5px solid transparent !important;
+  background: transparent !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #64748b !important;
+  cursor: pointer !important;
+  transition: all .15s ease !important;
+}
+
+.towns-coverage-tab-btn:hover {
+  color: #0284c7 !important;
+}
+
+.towns-coverage-tab-btn.active {
+  color: #0284c7 !important;
+  border-bottom-color: #0284c7 !important;
+}
+
+.towns-coverage-tab-count {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 2px 8px !important;
+  border-radius: 999px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+}
+
+.towns-coverage-tab-count.count-covered {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+}
+
+.towns-coverage-tab-count.count-unattended {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+}
+
+.towns-coverage-body {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  padding: 18px 22px !important;
+  background: #f8fafc !important;
+}
+
+.towns-coverage-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+.town-coverage-card {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  padding: 14px 16px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04) !important;
+  transition: all .16s ease !important;
+}
+
+.town-coverage-card:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08) !important;
+}
+
+.town-coverage-card-head {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+}
+
+.town-coverage-card-title {
+  min-width: 0 !important;
+  flex: 1 1 auto !important;
+}
+
+.town-coverage-card-title strong {
+  display: block !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.town-coverage-card-title small {
+  display: block !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+  margin-top: 1px !important;
+}
+
+.town-coverage-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+}
+
+.town-coverage-badge.badge-green {
+  background: #dcfce7 !important;
+  color: #166534 !important;
+  border: 1px solid #bbf7d0 !important;
+}
+
+.town-coverage-badge.badge-red,
+.town-coverage-badge.urgency-critica {
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+  border: 1px solid #fecaca !important;
+}
+
+.town-coverage-badge.urgency-nunca {
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+  border: 1.5px solid #f87171 !important;
+  font-weight: 800 !important;
+  box-shadow: 0 1px 4px rgba(185, 28, 28, 0.12) !important;
+}
+
+.town-coverage-badge.urgency-alta {
+  background: #fff7ed !important;
+  color: #c2410c !important;
+  border: 1px solid #fed7aa !important;
+}
+
+.town-coverage-badge.urgency-media {
+  background: #fffbeb !important;
+  color: #b45309 !important;
+  border: 1px solid #fde68a !important;
+}
+
+.town-coverage-badge.urgency-baja {
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+  border: 1px solid #bfdbfe !important;
+}
+
+.town-coverage-card.urgency-nunca {
+  border-left: 4px solid #991b1b !important;
+  background: linear-gradient(180deg, #fffafa 0%, #ffffff 100%) !important;
+  box-shadow: 0 4px 18px rgba(185, 28, 28, 0.08) !important;
+}
+
+.town-coverage-card.urgency-critica {
+  border-left: 4px solid #ef4444 !important;
+}
+
+.town-coverage-card.urgency-alta {
+  border-left: 4px solid #f97316 !important;
+}
+
+.town-coverage-card.urgency-media {
+  border-left: 4px solid #f59e0b !important;
+}
+
+.town-coverage-card.urgency-baja {
+  border-left: 4px solid #3b82f6 !important;
+}
+
+.town-coverage-unattended-wait.urgency-nunca {
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #991b1b !important;
+}
+
+.town-coverage-unattended-wait.urgency-critica {
+  background: #fff1f2 !important;
+  border-color: #ffe4e6 !important;
+  color: #be123c !important;
+}
+
+.town-coverage-unattended-wait.urgency-alta {
+  background: #fff7ed !important;
+  border-color: #ffedd5 !important;
+  color: #c2410c !important;
+}
+
+.town-coverage-unattended-wait.urgency-media {
+  background: #fffbeb !important;
+  border-color: #fef3c7 !important;
+  color: #b45309 !important;
+}
+
+.town-coverage-unattended-wait.urgency-baja {
+  background: #eff6ff !important;
+  border-color: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+.town-urgency-tag {
+  display: inline-block;
+  margin-left: 4px;
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.town-urgency-tag.nunca {
+  color: #991b1b !important;
+  font-weight: 800 !important;
+}
+
+.towns-coverage-urgency-bar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-wrap: wrap !important;
+  padding: 8px 12px !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 9px !important;
+  margin-bottom: 12px !important;
+}
+
+.urgency-bar-label {
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  color: #475569 !important;
+  text-transform: uppercase !important;
+  letter-spacing: .03em !important;
+  margin-right: 4px !important;
+}
+
+.urgency-filter-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 4px 10px !important;
+  border-radius: 999px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  background: #fff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #475569 !important;
+  cursor: pointer !important;
+  transition: all .15s ease !important;
+}
+
+.urgency-filter-pill:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+.urgency-filter-pill.active {
+  background: #0874f9 !important;
+  border-color: #0874f9 !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(8,116,249,0.25) !important;
+}
+
+.urgency-filter-pill.pill-nunca.active {
+  background: #991b1b !important;
+  border-color: #991b1b !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(153,27,27,0.3) !important;
+}
+
+.urgency-filter-pill.pill-critica.active {
+  background: #dc2626 !important;
+  border-color: #dc2626 !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(220,38,38,0.25) !important;
+}
+
+.urgency-filter-pill.pill-alta.active {
+  background: #ea580c !important;
+  border-color: #ea580c !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(234,88,12,0.25) !important;
+}
+
+.urgency-filter-pill.pill-media.active {
+  background: #d97706 !important;
+  border-color: #d97706 !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(217,119,6,0.25) !important;
+}
+
+.urgency-filter-pill.pill-baja.active {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.25) !important;
+}
+
+.plan-towns-urgency-mini-tags {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  flex-wrap: wrap !important;
+}
+
+.mini-urgency-tag {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  padding: 2px 7px !important;
+  border-radius: 6px !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+  transition: transform .12s ease !important;
+}
+
+.mini-urgency-tag:hover {
+  transform: scale(1.05) !important;
+}
+
+.mini-urgency-tag.tag-nunca {
+  background: #fee2e2 !important;
+  color: #7f1d1d !important;
+  border: 1px solid #f87171 !important;
+}
+
+.mini-urgency-tag.tag-nunca:hover {
+  background: #fecaca !important;
+  color: #5b0e0e !important;
+}
+
+.mini-urgency-tag.tag-critica {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+  border: 1px solid #fecaca !important;
+}
+
+.mini-urgency-tag.tag-alta {
+  background: #ffedd5 !important;
+  color: #9a3412 !important;
+  border: 1px solid #fed7aa !important;
+}
+
+.mini-urgency-tag.tag-media {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  border: 1px solid #fde68a !important;
+}
+
+.mini-urgency-tag.tag-baja {
+  background: #dbeafe !important;
+  color: #1e40af !important;
+  border: 1px solid #bfdbfe !important;
+}
+
+.town-coverage-progress-wrap {
+  width: 100% !important;
+  background: #f1f5f9 !important;
+  border-radius: 999px !important;
+  height: 6px !important;
+  overflow: hidden !important;
+}
+
+.town-coverage-progress-fill {
+  height: 100% !important;
+  border-radius: 999px !important;
+  background: linear-gradient(90deg, #10b981, #059669) !important;
+  transition: width .25s ease !important;
+}
+
+.town-coverage-metrics-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  font-size: 11.5px !important;
+  color: #475569 !important;
+  font-weight: 600 !important;
+}
+
+.town-coverage-unattended-wait {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 7px 10px !important;
+  background: #fff1f2 !important;
+  border: 1px solid #ffe4e6 !important;
+  border-radius: 8px !important;
+  font-size: 11.5px !important;
+  color: #be123c !important;
+  font-weight: 700 !important;
+}
+
+.town-coverage-unattended-wait svg {
+  width: 14px !important;
+  height: 14px !important;
+  flex-shrink: 0 !important;
+}
+
+.town-coverage-resolved-wait {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 5px 8px !important;
+  background: #f0fdf4 !important;
+  border: 1px solid #dcfce7 !important;
+  border-radius: 8px !important;
+  font-size: 11.5px !important;
+  color: #15803d !important;
+  font-weight: 700 !important;
+}
+
+.town-coverage-resolved-wait svg {
+  width: 14px !important;
+  height: 14px !important;
+  flex-shrink: 0 !important;
+  color: #16a34a !important;
+}
+
+.town-coverage-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-top: 4px !important;
+  padding-top: 8px !important;
+  border-top: 1px dashed #e2e8f0 !important;
+}
+
+.town-coverage-actions .btn {
+  flex: 1 1 auto !important;
+  min-height: 32px !important;
+  padding: 4px 10px !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  border-radius: 6px !important;
+}
+
+.towns-coverage-empty {
+  padding: 40px 20px !important;
+  text-align: center !important;
+  color: #64748b !important;
+  background: #ffffff !important;
+  border-radius: 12px !important;
+  border: 1px dashed #cbd5e1 !important;
+}
+
+.towns-coverage-empty strong {
+  display: block !important;
+  font-size: 15px !important;
+  color: #1e293b !important;
+  margin-bottom: 4px !important;
+}
+
+/* Sección inline en el tablero de planificar */
+.plan-towns-coverage-section {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin-top: 18px !important;
+  background: #ffffff !important;
+  border: 1px solid #dbeafe !important;
+  border-radius: 14px !important;
+  padding: 18px 20px !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05) !important;
+}
+
+.plan-towns-coverage-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap !important;
+  gap: 12px !important;
+  margin-bottom: 16px !important;
+  padding-bottom: 14px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+.plan-towns-coverage-title-group {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.plan-towns-coverage-icon {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 10px !important;
+  background: linear-gradient(135deg, #e0f2fe, #bae6fd) !important;
+  color: #0284c7 !important;
+  display: grid !important;
+  place-items: center !important;
+  flex-shrink: 0 !important;
+}
+
+.plan-towns-coverage-icon svg {
+  width: 22px !important;
+  height: 22px !important;
+}
+
+.plan-towns-coverage-title {
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+  line-height: 1.25 !important;
+}
+
+.plan-towns-coverage-subtitle {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+  margin-top: 2px !important;
+}
+
+.plan-towns-coverage-header-actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-wrap: wrap !important;
+}
+
+.plan-towns-pill-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  padding: 6px 12px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all .16s ease !important;
+  border: 1px solid transparent !important;
+  background: #f8fafc !important;
+}
+
+.plan-towns-pill-btn.pill-covered {
+  background: #f0fdf4 !important;
+  color: #166534 !important;
+  border-color: #bbf7d0 !important;
+}
+
+.plan-towns-pill-btn.pill-covered:hover {
+  background: #dcfce7 !important;
+  transform: translateY(-1px) !important;
+}
+
+.plan-towns-pill-btn.pill-unattended {
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+  border-color: #fecaca !important;
+}
+
+.plan-towns-pill-btn.pill-unattended:hover {
+  background: #fee2e2 !important;
+  transform: translateY(-1px) !important;
+}
+
+.plan-towns-pill-btn .pill-dot {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  display: inline-block !important;
+}
+
+.plan-towns-pill-btn .pill-dot.green {
+  background: #16a34a !important;
+}
+
+.plan-towns-pill-btn .pill-dot.red {
+  background: #dc2626 !important;
+}
+
+.plan-towns-coverage-columns {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)) !important;
+  gap: 16px !important;
+}
+
+.plan-towns-col {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  padding: 14px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.plan-towns-col-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding-bottom: 8px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.plan-towns-col-title {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  font-size: 13.5px !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+}
+
+.plan-towns-col-title .col-indicator {
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  display: inline-block !important;
+}
+
+.plan-towns-col-title .col-indicator.green {
+  background: #16a34a !important;
+}
+
+.plan-towns-col-title .col-indicator.red {
+  background: #dc2626 !important;
+}
+
+.plan-towns-cards-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+
+.plan-towns-col-empty {
+  padding: 24px 16px !important;
+  text-align: center !important;
+  color: #64748b !important;
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  background: #ffffff !important;
+  border-radius: 10px !important;
+  border: 1px dashed #cbd5e1 !important;
+}
+
+.plan-towns-col-more-btn {
+  margin-top: 4px !important;
+  width: 100% !important;
+  padding: 9px 12px !important;
+  border-radius: 8px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #ffffff !important;
+  color: #0284c7 !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  transition: all .16s ease !important;
+}
+
+.plan-towns-col-more-btn:hover {
+  background: #e0f2fe !important;
+  border-color: #7dd3fc !important;
+  color: #0369a1 !important;
+}
+
 
 /* Route Intelligence & Feasibility Widget */
 .plan-route-intel-box{margin-top:10px;padding:12px;border:1px solid #dce6f2;border-radius:11px;background:linear-gradient(180deg,#fbfdff 0%,#f4f8fc 100%);box-shadow:0 2px 8px rgba(16,43,75,.04)}
@@ -61,7 +978,12 @@
 .intel-badge-row{display:flex;justify-content:center}
 .intel-badge-row .badge{width:100%;text-align:center;justify-content:center;padding:5px 8px;font-size:9px;font-weight:800;border-radius:7px}
 
-/* Weather Widget */
+/* Weather Widget - SOLO visible cuando está en modo tarjetas (card mode) */
+.plan-weather-box.is-hidden,
+body.planificar-page:not(.plan-cards-active) .plan-weather-box,
+body.plan-technician-view .plan-weather-box {
+  display: none !important;
+}
 .plan-weather-box{margin-top:8px;padding:11px 12px;border:1px solid #dbe7f3;border-radius:11px;background:#f7faff;box-shadow:0 2px 7px rgba(16,43,75,.03)}
 .weather-box-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .weather-icon{font-size:22px;line-height:1}
@@ -130,5 +1052,770 @@ body.plan-technician-view .plan-inter-stop-transit .transit-line{display:none!im
 .plan-site-detail-item small{display:block;color:#627993;margin-top:2px}
 .plan-view-toggle-btn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:6px 12px;border:1px solid #cfdde8;border-radius:8px;background:#ffffff;color:#475e77;font-family:inherit;font-size:11px;font-weight:800;cursor:pointer}
 .plan-view-toggle-btn:hover{border-color:#0874e8;color:#0874e8;background:#f4f9ff}
+
+/* Buscador y listado de asignación de técnicos */
+.tech-assignment-panel{margin-top:10px;margin-bottom:8px;padding:9px 10px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;box-sizing:border-box}
+.tech-assignment-panel-title{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:800;color:#1e293b;margin-bottom:7px}
+.tech-assignment-count{font-size:9px;font-weight:800;color:#0369a1;background:#e0f2fe;padding:2px 7px;border-radius:99px;letter-spacing:.02em}
+.tech-search-input-wrap{position:relative;display:flex;align-items:center;margin-bottom:7px}
+.tech-search-icon{position:absolute;left:8px;pointer-events:none;color:#94a3b8;display:flex;align-items:center}
+.tech-search-icon svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2}
+.tech-plan-search-input{box-sizing:border-box;width:100%!important;height:32px!important;padding-left:26px!important;padding-right:24px!important;font-size:11px!important;font-weight:600!important;border-radius:7px!important;border:1px solid #cbd5e1!important;background:#ffffff!important;color:#0f172a!important;outline:0}
+.tech-plan-search-input:focus{border-color:#2563eb!important;box-shadow:0 0 0 2px rgba(37,99,235,.15)!important}
+.tech-plan-search-clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:16px;line-height:1;color:#94a3b8;cursor:pointer;padding:0 4px}
+.tech-plan-search-clear:hover{color:#ef4444}
+.tech-plan-search-results{display:flex;flex-direction:column;gap:5px;max-height:190px;overflow-y:auto;scrollbar-width:thin;padding-right:2px}
+.tech-plan-search-item{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;background:#ffffff;border:1px solid #edf2f7;font-size:11px;transition:all .15s ease}
+.tech-plan-search-item:hover{background:#f8fafc;border-color:#cbd5e1}
+.tech-plan-search-item.is-current-plan{background:#f0fdf4;border-color:#bbf7d0}
+.tech-plan-search-item.is-jumpable{cursor:pointer}
+.tech-plan-search-item.is-jumpable:hover{background:#eff6ff;border-color:#93c5fd}
+.tech-plan-search-item.is-jumpable .tech-name-clickable{color:#1d4ed8;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(29,78,216,.35);text-underline-offset:2px}
+.tech-plan-search-item.is-jumpable:hover .tech-name-clickable{color:#1e40af;text-decoration-color:#1e40af}
+.tech-plan-assigned-tag{color:#1d4ed8;font-weight:500}
+.tech-plan-assigned-tag b{color:#0f172a;font-weight:700}
+.tech-plan-item-left{display:flex;align-items:center;gap:7px;min-width:0;flex:1}
+.tech-avatar-mini-circle{display:grid;place-items:center;width:24px;height:24px;min-width:24px;border-radius:99px;background:#e0f2fe;color:#0284c7;font-size:10px;font-weight:800;letter-spacing:-.02em}
+.tech-plan-name-wrap{display:flex;flex-direction:column;min-width:0;flex:1}
+.tech-plan-name-wrap strong{font-size:11px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tech-plan-name-wrap small{font-size:9px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tech-plan-item-right{display:flex;align-items:center;flex-shrink:0}
+.tech-plan-badge-assigned{cursor:pointer;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;font-size:10px;font-weight:800;padding:4px 10px;border-radius:99px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-family:inherit;transition:all .18s cubic-bezier(0.4,0,0.2,1);box-shadow:0 1px 3px rgba(37,99,235,.08)}
+.tech-plan-badge-assigned:hover{background:#dbeafe;border-color:#60a5fa;transform:translateY(-1px);color:#1e3a8a;box-shadow:0 3px 8px rgba(37,99,235,.18)}
+.tech-plan-badge-icon{font-size:11px}
+.tech-plan-badge-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
+.tech-plan-badge-current{border:1px solid #86efac;background:#dcfce7;color:#15803d;font-size:10px;font-weight:800;padding:3px 8px;border-radius:99px;display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.tech-plan-badge-unassigned{border:1px dashed #cbd5e1;background:#f8fafc;color:#64748b;font-size:10px;font-weight:600;padding:3px 8px;border-radius:99px;white-space:nowrap}
+.tech-plan-search-empty{padding:12px;font-size:10px;font-weight:600;color:#94a3b8;text-align:center}
+
+/* ========================================================
+   ENCABEZADO DESTACADO DEL PLAN Y CUADRILLA ASIGNADA
+   ======================================================== */
+.plan-board-header-banner{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:12px;padding:14px 18px;border:1px solid #d0e1f3;border-radius:14px;background:linear-gradient(135deg,#ffffff 0%,#f5f9ff 100%);box-shadow:0 4px 14px rgba(15,43,75,.05)}
+.plan-board-header-left{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.plan-board-header-pill{display:inline-flex;align-items:center;gap:6px;font-size:9px;font-weight:900;color:#0369a1;text-transform:uppercase;letter-spacing:.05em}
+.plan-board-status-dot{width:7px;height:7px;border-radius:99px;background:#10b981;box-shadow:0 0 0 3px rgba(16,185,129,.2)}
+.plan-board-title{margin:0;font-size:20px;font-weight:800;color:#0f2b4e;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plan-board-header-right{display:flex;align-items:center;flex-shrink:0}
+.plan-header-crew-card{display:inline-flex;align-items:center;gap:10px;padding:8px 14px;border:1.5px solid #93c5fd;border-radius:12px;background:#eff6ff;box-shadow:0 2px 8px rgba(37,99,235,.08);transition:all .15s ease}
+.plan-header-crew-card:hover{border-color:#60a5fa;box-shadow:0 4px 12px rgba(37,99,235,.14)}
+.crew-card-icon{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:#dbeafe;color:#1d4ed8;font-size:14px}
+.crew-card-info{display:flex;flex-direction:column;line-height:1.2}
+.crew-card-label{font-size:9px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.03em}
+.crew-card-names{font-size:13px;font-weight:800;color:#1e40af}
+.plan-header-crew-card.unassigned{background:#fffdf2;border-color:#fde047;box-shadow:0 2px 8px rgba(202,138,4,.08)}
+.plan-header-crew-card.unassigned .crew-card-icon{background:#fef9c3;color:#ca8a04}
+.plan-header-crew-card.unassigned .crew-card-names{color:#854d0e}
+
+/* Tarjeta de resumen de plan seleccionado en la barra lateral */
+.plan-selected-summary-card {
+  margin-top: 6px;
+  margin-bottom: 10px;
+  padding: 11px 13px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #f0f7ff 0%, #e6f1fc 100%);
+  border: 1.5px solid #bae6fd;
+  box-shadow: 0 3px 12px rgba(2, 132, 199, 0.09);
+}
+.plan-summary-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.plan-summary-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+.plan-summary-status-pill {
+  font-size: 8.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #dbeafe;
+  color: #1e40af;
+  padding: 2px 7px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.plan-summary-title-text {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f2b4e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plan-summary-stops-counter {
+  font-size: 10px;
+  font-weight: 800;
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid #bae6fd;
+  white-space: nowrap;
+}
+.plan-summary-crew-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.plan-summary-crew-tag-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #475569;
+}
+.plan-summary-crew-chips {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.plan-sidebar-tech-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: #eff6ff;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plan-sidebar-tech-badge.unassigned {
+  color: #92400e;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+/* Modal de confirmación de asignación y desasignación con estilos según acción */
+.plan-dialog-icon.unassignment{background:#fee2e2!important;color:#dc2626!important}
+.plan-dialog-icon.warning{background:#fef3c7!important;color:#d97706!important}
+.plan-assignment-warning.unassign-warning{background:#fef2f2!important;border:1.5px solid #fca5a5!important;color:#991b1b!important}
+.plan-assignment-warning.reassign-warning{background:#fffbeb!important;border:1.5px solid #fcd34d!important;color:#92400e!important}
+.btn-confirm-danger{background:#dc2626!important;border-color:#b91c1c!important;color:#ffffff!important;box-shadow:0 3px 10px rgba(220,38,38,.25)!important}
+.btn-confirm-danger:hover{background:#b91c1c!important}
+
+/* ========================================================
+   CUADRILLA EN EL ENCABEZADO SUPERIOR: CHIPS INDIVIDUALES CON BOTÓN DESASIGNAR
+   ======================================================== */
+.plan-header-crew-box{display:flex;flex-direction:column;gap:4px}
+.plan-header-crew-meta{display:flex;align-items:center;gap:6px}
+.plan-header-chips-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.plan-header-tech-chip{display:inline-flex;align-items:center;gap:6px;background:#eff6ff;border:1.5px solid #93c5fd;border-radius:999px;padding:3px 6px 3px 8px;font-size:11px;font-weight:700;color:#1e40af;box-shadow:0 1px 4px rgba(37,99,235,.08);transition:all .15s ease}
+.plan-header-tech-chip:hover{background:#dbeafe;border-color:#60a5fa;box-shadow:0 2px 6px rgba(37,99,235,.14)}
+.header-chip-avatar{display:grid;place-items:center;width:20px;height:20px;min-width:20px;border-radius:50%;background:#2563eb;color:#ffffff;font-size:9px;font-weight:800}
+.header-chip-name{max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.header-chip-remove{display:grid;place-items:center;width:18px;height:18px;min-width:18px;border-radius:50%;background:#fee2e2;border:none;color:#dc2626;font-size:11px;font-weight:900;line-height:1;cursor:pointer;padding:0;transition:all .15s ease}
+.header-chip-remove:hover{background:#dc2626;color:#ffffff;transform:scale(1.1)}
+
+/* ========================================================
+   MENÚ INTERACTIVO CON PESTAÑAS: ASIGNACIÓN DE PLANES
+   Orden: "planes", "en este plan", "tecnicos"
+   Diseño: Colorido, moderno y formal
+   ======================================================== */
+.plan-assign-menu-box {
+  margin-top: 8px;
+  margin-bottom: 12px;
+  border: 1.5px solid #cfe2f3;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 4px 18px rgba(15, 43, 75, 0.06);
+  overflow: hidden;
+}
+.plan-assign-nav {
+  display: flex;
+  background: linear-gradient(180deg, #f1f5fa 0%, #e9eff6 100%);
+  padding: 5px;
+  border-bottom: 1px solid #dbe6f1;
+  gap: 4px;
+}
+.plan-assign-nav-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 5px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: #52677f;
+  cursor: pointer;
+  transition: all 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.plan-assign-nav-btn:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.65);
+}
+.plan-assign-nav-btn.is-active {
+  background: #ffffff;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(15, 43, 75, 0.08);
+}
+#plan-tab-btn-plans.is-active {
+  color: #1d4ed8;
+  border-bottom: 2px solid #2563eb;
+}
+#plan-tab-btn-plans.is-active .plan-assign-tab-badge {
+  background: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+#plan-tab-btn-team.is-active {
+  color: #047857;
+  border-bottom: 2px solid #059669;
+}
+#plan-tab-btn-team.is-active .plan-assign-tab-badge {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+#plan-tab-btn-search.is-active {
+  color: #6d28d9;
+  border-bottom: 2px solid #7c3aed;
+}
+#plan-tab-btn-search.is-active .plan-assign-tab-badge {
+  background: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #ddd6fe;
+}
+.plan-assign-tab-badge {
+  font-size: 9px;
+  padding: 1.5px 6px;
+  border-radius: 99px;
+  background: #e2e8f0;
+  color: #475569;
+  font-weight: 800;
+  font-family: inherit;
+  transition: all 0.14s ease;
+}
+.plan-assign-panel-content {
+  padding: 9px;
+}
+.plan-team-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 2px 8px;
+  border-bottom: 1.5px solid #edf2f7;
+  margin-bottom: 8px;
+}
+.plan-team-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #0f2b4e;
+}
+.plan-team-subtitle {
+  font-size: 9px;
+  color: #64748b;
+  display: block;
+}
+.plan-team-count-badge {
+  font-size: 10px;
+  font-weight: 800;
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  padding: 2px 8px;
+  border-radius: 99px;
+}
+.plan-team-section-title {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 9px 2px 5px;
+}
+.plan-team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.plan-team-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 9px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  transition: all 0.15s ease;
+}
+.plan-team-card:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+.plan-team-card.is-assigned {
+  border-color: #86efac;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.08);
+}
+.plan-team-card-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.plan-team-avatar {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  min-width: 25px;
+  border-radius: 50%;
+  background: #e0f2fe;
+  color: #0284c7;
+  font-size: 10px;
+  font-weight: 800;
+}
+.plan-team-card.is-assigned .plan-team-avatar {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(5, 150, 105, 0.25);
+}
+.plan-team-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.plan-team-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plan-team-sub {
+  font-size: 9px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.btn-team-unassign {
+  background: #fee2e2;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3.5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.btn-team-unassign:hover {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.25);
+}
+.btn-team-add {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  border: 1px solid #1d4ed8;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3.5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.2);
+}
+.btn-team-add:hover {
+  background: #1e40af;
+  transform: translateY(-1px);
+}
+.btn-team-transfer {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  color: #92400e;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3.5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.btn-team-transfer:hover {
+  background: #d97706;
+  color: #ffffff;
+  border-color: #b45309;
+}
+.plan-team-empty-hint {
+  padding: 12px;
+  font-size: 10.5px;
+  color: #64748b;
+  text-align: center;
+  font-style: italic;
+}
+.plan-catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.plan-catalog-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+.plan-catalog-item:hover {
+  border-color: #93c5fd;
+  background: #f8fbff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
+}
+.plan-catalog-item.is-active {
+  border-color: #3b82f6;
+  border-left: 4px solid #2563eb;
+  background: linear-gradient(135deg, #eff6ff 0%, #e0f0fe 100%);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.14);
+}
+.plan-catalog-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.plan-catalog-item-icon {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  min-width: 25px;
+  border-radius: 7px;
+  background: #f1f5f9;
+  font-size: 13px;
+}
+.plan-catalog-item-icon.is-active {
+  background: #dbeafe;
+}
+.plan-catalog-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.plan-catalog-item-title {
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plan-catalog-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 9px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plan-catalog-stops-pill {
+  background: #f1f5f9;
+  color: #334155;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-weight: 700;
+}
+.plan-catalog-crew-pill.has-crew {
+  background: #dcfce7;
+  color: #166534;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-weight: 700;
+}
+.plan-catalog-crew-pill.no-crew {
+  background: #fffbeb;
+  color: #92400e;
+  padding: 1px 6px;
+  border-radius: 99px;
+  font-weight: 700;
+}
+.plan-catalog-badge {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 99px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  font-family: inherit;
+  transition: all 0.14s ease;
+}
+.plan-catalog-badge.current {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  border-color: #1d4ed8;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+}
+
+/* Barra inferior del técnico universal (solo en celular / móvil) */
+@media (min-width: 769px) {
+  .tech-bottom-nav,
+  #tech-bottom-nav,
+  body.plan-technician-view .tech-bottom-nav,
+  html[data-role="tecnico"] body .tech-bottom-nav {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .tech-bottom-nav,
+  body.plan-technician-view .tech-bottom-nav,
+  body.plan-technician-view .tech-bottom-nav.tech-bottom-nav-three,
+  html[data-role="tecnico"] body.plan-technician-view .tech-bottom-nav {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    height: 64px !important;
+    padding: 4px 6px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
+    background: rgba(255, 255, 255, 0.98) !important;
+    border-top: 1px solid #dfe8f2 !important;
+    box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08) !important;
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
+    box-sizing: border-box !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 2500 !important;
+  }
+}
+
+.tech-bottom-nav button,
+.tech-bottom-nav a,
+body.plan-technician-view .tech-bottom-nav button,
+body.plan-technician-view .tech-bottom-nav a,
+html[data-role="tecnico"] body.plan-technician-view .tech-bottom-nav button {
+  display: flex !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  padding: 3px 2px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: #64748b !important;
+  cursor: pointer !important;
+  text-decoration: none !important;
+}
+
+.tech-bottom-nav button.active,
+.tech-bottom-nav a.active,
+body.plan-technician-view .tech-bottom-nav button.active,
+html[data-role="tecnico"] body.plan-technician-view .tech-bottom-nav button.active {
+  color: #0874e8 !important;
+  background: rgba(8, 116, 232, 0.07) !important;
+}
+
+.tech-bottom-nav button span,
+.tech-bottom-nav a span,
+.tech-bottom-nav span,
+body.plan-technician-view .tech-bottom-nav button span,
+body.plan-technician-view .tech-bottom-nav span,
+html[data-role="tecnico"] body.plan-technician-view .tech-bottom-nav span {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1.1 !important;
+  letter-spacing: -0.01em !important;
+  text-align: center !important;
+  display: block !important;
+  white-space: nowrap !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.tech-bottom-nav .tech-nav-svg,
+body.plan-technician-view .tech-bottom-nav .tech-nav-svg,
+html[data-role="tecnico"] body.plan-technician-view .tech-bottom-nav .tech-nav-svg {
+  width: 20px !important;
+  height: 20px !important;
+  display: block !important;
+  margin: 0 auto !important;
+  flex-shrink: 0 !important;
+}
+
+/* ========================================================
+   DISPOSICIÓN MÓVIL OPTIMIZADA (TELÉFONOS Y TABLETS)
+   ======================================================== */
+@media (max-width: 768px) {
+  /* Barra inferior del técnico: 3 columnas perfectamente distribuidas, texto de tamaño adecuado */
+  .tech-bottom-nav,
+  body.plan-technician-view .tech-bottom-nav,
+  body.plan-technician-view .tech-bottom-nav.tech-bottom-nav-three,
+  html[data-role="tecnico"] body.plan-technician-view .tech-bottom-nav {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    height: 64px !important;
+    padding: 4px 6px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
+    background: rgba(255, 255, 255, 0.98) !important;
+    border-top: 1px solid #dfe8f2 !important;
+    box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08) !important;
+    backdrop-filter: blur(14px) !important;
+    -webkit-backdrop-filter: blur(14px) !important;
+    box-sizing: border-box !important;
+  }
+
+  .tech-bottom-nav button,
+  .tech-bottom-nav a,
+  body.plan-technician-view .tech-bottom-nav button,
+  body.plan-technician-view .tech-bottom-nav a,
+  html[data-role="tecnico"] body.plan-technician-view .tech-bottom-nav button {
+    display: flex !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-direction: column !important;
+    gap: 2px !important;
+    padding: 3px 2px !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 8px !important;
+    background: transparent !important;
+    color: #64748b !important;
+    cursor: pointer !important;
+    text-decoration: none !important;
+  }
+
+  .tech-bottom-nav button.active,
+  .tech-bottom-nav a.active,
+  body.plan-technician-view .tech-bottom-nav button.active,
+  html[data-role="tecnico"] body.plan-technician-view .tech-bottom-nav button.active {
+    color: #0874e8 !important;
+    background: rgba(8, 116, 232, 0.07) !important;
+  }
+
+  .tech-bottom-nav button span,
+  .tech-bottom-nav a span,
+  .tech-bottom-nav span,
+  body.plan-technician-view .tech-bottom-nav button span,
+  body.plan-technician-view .tech-bottom-nav span,
+  html[data-role="tecnico"] body.plan-technician-view .tech-bottom-nav span {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    line-height: 1.1 !important;
+    letter-spacing: -0.01em !important;
+    text-align: center !important;
+    display: block !important;
+    white-space: nowrap !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .tech-bottom-nav .tech-nav-svg,
+  body.plan-technician-view .tech-bottom-nav .tech-nav-svg,
+  html[data-role="tecnico"] body.plan-technician-view .tech-bottom-nav .tech-nav-svg {
+    width: 20px !important;
+    height: 20px !important;
+    display: block !important;
+    margin: 0 auto !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Espacio inferior de seguridad para que la barra flotante nunca tape las paradas ni los botones */
+  body.plan-technician-view,
+  html[data-role="tecnico"] body.plan-technician-view,
+  html[data-role="tecnico"] body.sidebar-collapsed.plan-technician-view,
+  body.plan-technician-view .main,
+  body.plan-technician-view #plan-panel,
+  body.plan-technician-view .plan-shell,
+  html[data-role="tecnico"] body.plan-technician-view .plan-shell {
+    padding-bottom: calc(85px + env(safe-area-inset-bottom, 16px)) !important;
+  }
+
+  /* Encabezado del técnico en móviles */
+  .plan-technician-view .tech-mobile-header,
+  html[data-role="tecnico"] body.plan-technician-view .tech-mobile-header {
+    height: 60px !important;
+    padding: 6px 12px !important;
+    grid-template-columns: 40px 1fr 40px !important;
+    gap: 8px !important;
+  }
+
+  .plan-technician-view .tech-mobile-header strong,
+  html[data-role="tecnico"] body.plan-technician-view .tech-mobile-header strong {
+    font-size: 16px !important;
+    line-height: 1.2 !important;
+  }
+
+  .plan-technician-view .tech-mobile-header small,
+  html[data-role="tecnico"] body.plan-technician-view .tech-mobile-header small {
+    font-size: 10.5px !important;
+    color: #64748b !important;
+  }
+
+  .tech-header-logout {
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  .tech-header-spacer {
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  /* Tarjetas de paradas en móvil */
+  body.plan-technician-view .stop-card,
+  html[data-role="tecnico"] body.plan-technician-view .stop-card {
+    margin: 8px 4px !important;
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+  }
+}
+
+
+
 
 

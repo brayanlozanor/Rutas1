@@ -129,7 +129,7 @@ async function mockFindOrFetch(detailId, stateRef, fetchMock) {
   console.log('✓ Completion forms use findOrFetchWorkOrder');
 
   console.log('--- 6. Testing try...catch in renderPlanDays ---');
-  assert(planificarJs.includes('function renderPlanDays() {\n    try {'), 'renderPlanDays must be wrapped in try/catch');
+  assert(/function renderPlanDays\(\)\s*\{\s*try\s*\{/.test(planificarJs), 'renderPlanDays must be wrapped in try/catch');
   assert(planificarJs.includes('Ocurrió un problema al cargar los detalles') || planificarJs.includes('Hubo un inconveniente al mostrar los detalles'), 'renderPlanDays must have user-friendly recovery UI');
   console.log('✓ renderPlanDays has try/catch protection');
 

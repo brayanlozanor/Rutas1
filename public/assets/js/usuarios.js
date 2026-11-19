@@ -98,7 +98,12 @@ function openUserModal() {
 function resetUserForm() {
   editingUserId = null;
   document.getElementById('user-form-title').textContent = 'Agregar usuario';
-  ['user-name','user-username','user-password','user-phone','user-notes'].forEach(id => document.getElementById(id).value = '');
+  ['user-name','user-username','user-password','user-phone','user-notes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const passEl = document.getElementById('user-password');
+  if (passEl) passEl.placeholder = '********';
   document.getElementById('user-role').value = 'tecnico';
   document.getElementById('user-status').value = 'activo';
   updateUserColorPreview('#0284c7');
@@ -108,9 +113,10 @@ function resetUserForm() {
 async function saveUser() {
   const auditCountBefore=Array.isArray(state.auditLog)?state.auditLog.length:0;
   let userToSave=null;
+  const usernameClean = document.getElementById('user-username').value.trim().replace(/^@+/, '').trim();
   const payload = {
     name: document.getElementById('user-name').value.trim(),
-    username: document.getElementById('user-username').value.trim(),
+    username: usernameClean,
     password: document.getElementById('user-password').value.trim(),
     phone: document.getElementById('user-phone').value.trim(),
     role: normalizeUserRoleValue(document.getElementById('user-role').value),
@@ -123,9 +129,9 @@ async function saveUser() {
     notify(editingUserId ? 'Captura nombre, usuario y rol.' : 'Captura nombre, usuario, contraseña y rol.', 'err');
     return;
   }
-  const exists = (state.users || []).find(user => !user.deletedAt && user.id !== editingUserId && normalizeName(user.username) === normalizeName(payload.username));
+  const exists = (state.users || []).find(user => !user.deletedAt && user.id !== editingUserId && normalizeName(String(user.username || '').replace(/^@+/, '')) === normalizeName(payload.username));
   if (exists) {
-    notify('Ese nombre de usuario ya existe.', 'err');
+    notify(`El nombre de usuario "@${payload.username}" ya existe. Elige otro.`, 'err');
     return;
   }
   if (editingUserId) {
@@ -136,17 +142,22 @@ async function saveUser() {
     setUpdatedAudit(user, 'modificó usuario');
     ensureTechnicianMirror(user);
     userToSave=user;
-    notify('Usuario actualizado.');
   } else {
     const user = { id: gid('us'), createdAt:new Date().toISOString(), ...payload };
     setCreatedAudit(user, 'creó usuario');
     state.users.push(user);
     ensureTechnicianMirror(user);
     userToSave=user;
-    notify('Usuario creado.');
   }
-  let ok=await saveRecord('users',userToSave);
-  const technician=(state.technicians||[]).find(item=>item.userId===userToSave.id||normalizeName(item.usuario)===normalizeName(userToSave.username));
+
+  let ok = await saveRecord('users', userToSave);
+  if (!ok) {
+    // Si la inserción falló (por ejemplo por username duplicado en la base de datos),
+    // NO cerramos el modal ni limpiamos el formulario para que el usuario pueda corregir el campo.
+    return;
+  }
+
+  const technician=(state.technicians||[]).find(item=>item.userId===userToSave.id||normalizeName(String(item.usuario||'').replace(/^@+/, ''))===normalizeName(userToSave.username));
   if(ok&&technician)ok=await saveRecord('technicians',technician);
   if(ok)for(const audit of (state.auditLog||[]).slice(auditCountBefore))ok=(await saveRecord('auditLog',audit))&&ok;
   if (ok) {
@@ -176,7 +187,7 @@ async function saveUser() {
   }
   CM('user-mo');
   resetUserForm();
-  if(ok) await loadUserPage(); else renderUsuarios();
+  await loadUserPage();
 }
 
 function editUser(id) {
@@ -186,7 +197,7 @@ function editUser(id) {
   initUserColorPalette();
   document.getElementById('user-form-title').textContent = 'Editar usuario';
   document.getElementById('user-name').value = user.name || '';
-  document.getElementById('user-username').value = user.username || '';
+  document.getElementById('user-username').value = String(user.username || '').replace(/^@+/, '');
   document.getElementById('user-password').value = '';
   document.getElementById('user-password').placeholder = 'Dejar vacío para conservar la contraseña';
   document.getElementById('user-phone').value = user.phone || '';

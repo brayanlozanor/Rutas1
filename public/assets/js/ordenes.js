@@ -59,6 +59,7 @@ function orderActionIcon(type) {
   const icons = {
     view: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.8"/></svg>',
     edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16-.8 4 4-.8L18.5 7.9l-3.2-3.2L4 16ZM13.8 6.2l3.2 3.2"/></svg>',
+    complete: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.6L16.5 8.5"/></svg>',
     reopen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 1-2.3-5.7"/><path d="M20 4v7h-7"/></svg>',
     actions: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>',
     delete: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 10v7M14 10v7"/></svg>'
@@ -91,6 +92,10 @@ function orderReportField(icon, label, value, options = {}) {
 
 function canEditOrder(order) {
   if (!order) return false;
+  // En detalles físicos cualquier usuario autenticado puede editar
+  const kind = (typeof getOrderDetailKind === 'function' ? getOrderDetailKind(order) : order.detailKind) || activeOrderDetailKind;
+  if (kind === 'physical') return true;
+
   if (typeof userHasRole === 'function' && userHasRole('administrador', 'admin')) return true;
   const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
   if (!user) return false;
@@ -138,7 +143,27 @@ function isOrderCreator(order, user) {
 
 let editingWOId = '';
 let copyingWOFromId = '';
-let activeOrderDetailKind = new URLSearchParams(window.location.search).get('detailKind') === 'network' ? 'network' : 'physical';
+let activeOrderDetailKind = new URLSearchParams(window.location.search).get('detailKind') === 'physical' ? 'physical' : 'network';
+if (typeof window !== 'undefined') window.activeOrderDetailKind = activeOrderDetailKind;
+
+if (typeof window !== 'undefined' && typeof window.getZoneLabel !== 'function') {
+  window.getZoneLabel = function(id) {
+    const regList = (typeof window !== 'undefined' && window.REGS) || (typeof REGS !== 'undefined' && REGS) || [];
+    const found = regList.find(r => id && r.id === id);
+    return found?.n || id || 'General';
+  };
+}
+
+if (typeof window !== 'undefined' && typeof window.isOpenOrder !== 'function') {
+  window.isOpenOrder = function(order) {
+    return !!order && !order.deletedAt && order.status !== 'completada' && order.status !== 'done';
+  };
+}
+
+function getOrderDetailKind(order) {
+  if (order?.detailKind === 'network' || order?.detailKind === 'physical') return order.detailKind;
+  return /_red$|^red_/.test(String(order?.category || '')) ? 'network' : 'physical';
+}
 const ORDER_CATEGORIES_BY_KIND = {
   physical: [
     ['instalacion', 'Nueva instalación'],
@@ -236,7 +261,7 @@ async function loadOrderPage({ scroll = false } = {}) {
       return loadOrderPage({ scroll });
     }
     state.workOrders = Array.isArray(data.workOrders) ? data.workOrders : [];
-    if (_currentlyLoadedNotificationOrder && !state.workOrders.some(w => w.id === _currentlyLoadedNotificationOrder.id)) {
+    if (_currentlyLoadedNotificationOrder && getOrderDetailKind(_currentlyLoadedNotificationOrder) === activeOrderDetailKind && !state.workOrders.some(w => w.id === _currentlyLoadedNotificationOrder.id)) {
       state.workOrders.unshift(_currentlyLoadedNotificationOrder);
     }
     if (Array.isArray(data.nodes)) state.nodes = data.nodes;
@@ -301,6 +326,9 @@ async function loadOrderPage({ scroll = false } = {}) {
         notify('Sin conexión a internet. Mostrando los últimos datos confirmados.', 'warn');
       } else {
         notify(describeSyncError(error), 'err');
+        state.workOrders = state.workOrders || [];
+        renderOrderFilterMenus();
+        renderWOs();
       }
     }
     return restoredFromCache;
@@ -354,9 +382,27 @@ function syncWODetailKindField(kind) {
   const label = document.getElementById('wo-detail-kind-label');
   if (input) input.value = resolved;
   if (label) label.textContent = resolved === 'network' ? 'Detalle de red' : 'Detalle físico';
+  const modal = document.getElementById('wo-mo');
+  if (modal) {
+    modal.dataset.kind = resolved;
+    modal.dataset.detailKind = resolved;
+  }
   const assignField = document.getElementById('wo-assign-field');
   if (assignField) {
     assignField.style.display = resolved === 'network' ? '' : 'none';
+  }
+  const eqField = document.getElementById('wo-equipment-field') || document.getElementById('wo-equipment')?.closest('.fi');
+  const zoneField = document.getElementById('wo-zone-field') || document.getElementById('wo-zone')?.closest('.fi');
+  const relInfo = document.getElementById('wo-relation-info');
+  const nodeEquipGrid = document.getElementById('wo-node-equipment-grid');
+  if (resolved === 'physical') {
+    if (eqField) eqField.style.display = 'none';
+    if (zoneField) zoneField.style.display = 'none';
+    if (relInfo) {
+      relInfo.style.display = 'none';
+      relInfo.textContent = '';
+    }
+    if (nodeEquipGrid) nodeEquipGrid.style.gridTemplateColumns = '1fr';
   }
   renderWOCategoryOptions(resolved, document.getElementById('wo-category')?.value || '');
 }
@@ -570,8 +616,9 @@ function initOrdenesPage() {
         const isReportOpen = reportModal?.classList.contains('open');
 
         if (isDecisionOpen || isReportOpen) {
+          const hasOtherOpenModal = Array.from(document.querySelectorAll('.mo.open')).some(el => el !== reportModal);
           const hasHigherModal = Array.from(document.querySelectorAll('.mo.open')).some(el => el !== reportModal && el !== decisionModal);
-          if (hasHigherModal) return; // Permitir que ventanas modales superiores (galería de evidencias, etc.) cierren primero
+          if (hasHigherModal || (hasOtherOpenModal && !isDecisionOpen)) return; // Permitir que ventanas modales superiores cierren primero
           event.preventDefault();
           event.stopImmediatePropagation();
           closeOrderReportModalDirectly();
@@ -590,6 +637,24 @@ function initOrdenesPage() {
   updateOrderDetailTabs();
   initOrderFontScale();
   bindOrderConnectivityEvents();
+  try {
+    const rawCached = localStorage.getItem('netops_cached_work_orders_' + activeOrderDetailKind);
+    if (rawCached) {
+      const cached = JSON.parse(rawCached);
+      if (cached && Array.isArray(cached.workOrders) && cached.workOrders.length > 0) {
+        state.workOrders = cached.workOrders;
+        if (Array.isArray(cached.nodes) && cached.nodes.length) state.nodes = cached.nodes;
+        if (cached.pageMeta) {
+          window.netopsPageMeta = window.netopsPageMeta || {};
+          window.netopsPageMeta.operations = cached.pageMeta;
+        }
+      }
+    }
+  } catch (_) {}
+  renderOrderFilterMenus();
+  if (Array.isArray(state.workOrders) && state.workOrders.length > 0) {
+    renderWOs();
+  }
   loadDB({ showOverlay: false, preferCache: !requestedOrderCopyId }).then(() => {
     fillOrderSelects();
     return loadOrderPage();
@@ -752,6 +817,9 @@ function removeWOEvidencePhoto(index) {
 }
 
 function updateOrderDetailTabs() {
+  if (typeof window !== 'undefined') {
+    window.activeOrderDetailKind = activeOrderDetailKind;
+  }
   if (document.body) {
     document.body.dataset.detailKind = activeOrderDetailKind;
   }
@@ -765,9 +833,11 @@ function updateOrderDetailTabs() {
   const heroTitle = document.getElementById('orders-hero-title');
   const heroSub = document.getElementById('orders-hero-subtitle');
   if (activeOrderDetailKind === 'physical') {
+    document.title = 'WiFiMex · Detalles físicos';
     if (heroTitle) heroTitle.textContent = 'Detalles físicos';
-    if (heroSub) heroSub.textContent = 'Administra, prioriza y consulta los detalles de trabajo de campo y pueblos.';
+    if (heroSub) heroSub.textContent = 'Registro de infraestructura física para consulta y resolución en campo.';
   } else {
+    document.title = 'WiFiMex · Detalles de red';
     if (heroTitle) heroTitle.textContent = 'Detalles de red';
     if (heroSub) heroSub.textContent = 'Administra, prioriza y atiende los reportes y requerimientos de red.';
   }
@@ -781,20 +851,47 @@ function selectOrderDetailKind(kind, force = false) {
   const next = kind === 'physical' ? 'physical' : 'network';
   const hasOrders = Array.isArray(state.workOrders) && state.workOrders.length > 0;
   if (!force && hasOrders && next === activeOrderDetailKind) return;
+  if (force && currentOrderReportId && typeof closeOrderReportModalDirectly === 'function') {
+    closeOrderReportModalDirectly();
+  }
   activeOrderDetailKind = next;
+  if (typeof window !== 'undefined') {
+    window.activeOrderDetailKind = activeOrderDetailKind;
+  }
+  if (_currentlyLoadedNotificationOrder && getOrderDetailKind(_currentlyLoadedNotificationOrder) !== next) {
+    _currentlyLoadedNotificationOrder = null;
+  }
   if (next !== 'network') {
     filterOnlyMyAssignments = false;
   }
   orderCurrentPage = 1;
   activeOrderFilters.category.clear();
+  activeOrderFilters.status.clear();
+  closeOrderFilterMenus();
   updateOrderDetailTabs();
   updateOrderFiltersForDetailKind();
   renderActiveOrderFilters();
   renderOrderFilterMenus();
-  const url = new URL(window.location.href);
-  url.searchParams.set('detailKind', next);
-  window.history.replaceState({}, '', url);
-  void loadOrderPage();
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set('detailKind', next);
+    window.history.replaceState({}, '', url);
+  } catch (e) {}
+  try {
+    const rawCached = typeof localStorage !== 'undefined' ? localStorage.getItem('netops_cached_work_orders_' + next) : null;
+    if (rawCached) {
+      const cached = JSON.parse(rawCached);
+      if (cached && Array.isArray(cached.workOrders)) {
+        state.workOrders = cached.workOrders;
+        if (cached.pageMeta) {
+          window.netopsPageMeta = window.netopsPageMeta || {};
+          window.netopsPageMeta.operations = cached.pageMeta;
+        }
+      }
+    }
+  } catch (e) {}
+  if (typeof renderWOs === 'function') renderWOs();
+  void loadOrderPage({ scroll: true });
 }
 
 function clearOrderFilters() {
@@ -858,6 +955,10 @@ function updateOrderFiltersForDetailKind() {
   const myDoneCard = document.getElementById('wo-stat-my-done-card');
   if (myPendingCard) myPendingCard.style.display = (isNetwork && isSupportOrAttention) ? '' : 'none';
   if (myDoneCard) myDoneCard.style.display = (isNetwork && isSupportOrAttention) ? '' : 'none';
+
+  // Ocultar guías de flujo y colores en detalles físicos (son exclusivas de la coordinación de red)
+  const guidesGroup = document.querySelector('.order-subtle-guides-group');
+  if (guidesGroup) guidesGroup.style.display = isNetwork ? '' : 'none';
 }
 
 function getOrderFilterOptions(kind) {
@@ -906,7 +1007,10 @@ function getOrderFilterOptions(kind) {
         ['completada', 'Concluido']
       ];
     }
-    return ORDER_FILTER_META.status.options;
+    return [
+      ['pendiente', 'Registro activo'],
+      ['completada', 'Completado']
+    ];
   }
   if (kind === 'zone') return (REGS || []).map(region => [region.id, region.n]);
   if (kind === 'creator') {
@@ -1469,35 +1573,11 @@ function updateWORelationInfo() {
   const box = document.getElementById('wo-relation-info');
   if (!box) return;
   const isNetwork = (document.getElementById('wo-detail-kind')?.value || activeOrderDetailKind) === 'network';
-  if (isNetwork) {
+  if (!isNetwork || isNetwork) {
+    // Tanto en detalle físico (solo pueblo, sin solicitar antena ni zona) como en red se mantiene oculta la caja
     box.style.display = 'none';
     box.textContent = '';
     return;
-  }
-  const node = getSelectedNodeByHiddenId();
-  const eq = getSelectedEquipmentByHiddenId();
-  const lines = [];
-  if (eq) {
-    const eqLabel = getEquipmentRelationLabel(eq.id);
-    if (eqLabel && eqLabel !== 'Sin pueblos vinculados') lines.push(eqLabel);
-  }
-  if (node) {
-    const nodeLabel = getNodeRelationLabel(node.id);
-    if (nodeLabel && nodeLabel !== 'Sin antena vinculada') lines.push(nodeLabel);
-  }
-  const newNodeName = document.getElementById('wo-node')?.dataset.newNodeName || '';
-  box.classList.toggle('is-new-node', Boolean(newNodeName));
-  if (newNodeName) {
-    box.style.display = 'block';
-    box.textContent = `Pueblo nuevo listo: “${newNodeName}”. Selecciona su zona y guarda el detalle.`;
-  } else if (lines.length) {
-    box.style.display = 'block';
-    box.textContent = lines.join(' | ');
-  } else if (!node && !eq) {
-    box.style.display = 'block';
-    box.textContent = 'Selecciona un pueblo registrado o usa la opción “Agregar pueblo”. La antena se asignará automáticamente.';
-  } else {
-    box.style.display = 'none';
   }
 }
 
@@ -1687,9 +1767,15 @@ function applyRoleFormVisibility() {
     const detailKindLabel = document.getElementById('wo-detail-kind-label');
     if (detailKindLabel) detailKindLabel.textContent = 'Detalle físico';
 
-    if (modalTitle) modalTitle.textContent = editingWOId ? 'Editar detalle físico' : 'Agregar detalle manual';
-    if (modalSub) modalSub.textContent = 'Orden: cliente, categoría, detalle específico, pueblo, zona, tipo y prioridad.';
-    if (saveBtn) saveBtn.textContent = 'Guardar detalle';
+    if (modalTitle) modalTitle.textContent = editingWOId ? 'Editar registro de detalle físico' : 'Registrar detalle físico';
+    if (modalSub) modalSub.textContent = 'Registro de infraestructura física para consulta y resolución posterior en ruta.';
+    if (saveBtn) saveBtn.textContent = 'Guardar registro';
+
+    const stepNetworkTitle = document.querySelector('#wo-step-network-card .modal-section-card-title span:last-child');
+    if (stepNetworkTitle) stepNetworkTitle.textContent = 'Pueblo'; // Anteriormente 'Ubicación de infraestructura (Pueblo y Antena)', ahora solo pueblo
+
+    const targetTeamFi = document.getElementById('wo-target-team-field');
+    if (targetTeamFi) targetTeamFi.style.display = 'none';
 
     // Cliente y teléfono (2 columnas en modal-grid)
     if (clientGrid) clientGrid.style.display = '';
@@ -1726,42 +1812,30 @@ function applyRoleFormVisibility() {
     if (detailLabel) detailLabel.textContent = 'DETALLE ESPECÍFICO';
     if (detailTextarea) detailTextarea.placeholder = 'Describe exactamente lo que sucede, horario, alcance, equipo o referencia...';
 
-    // Pueblo y Antena asignada (grid de 2 columnas)
+    // Pueblo (1 sola columna a ancho completo; en detalle físico NO se solicita antena ni zona)
     if (nodeGrid) {
       nodeGrid.style.display = 'grid';
-      nodeGrid.style.gridTemplateColumns = '1fr 1fr';
+      nodeGrid.style.gridTemplateColumns = '1fr';
     }
     if (nodeFi) {
       nodeFi.style.display = '';
-      nodeFi.style.gridColumn = '';
+      nodeFi.style.gridColumn = '1 / -1';
       const nLabel = nodeFi.querySelector('label');
-      if (nLabel) nLabel.textContent = 'PUEBLO';
+      if (nLabel) nLabel.innerHTML = 'Pueblo vinculado <b class="req-star" style="color:#ef4444;font-size:11px;margin-left:4px;">* Obligatorio</b>';
     }
     if (nodeInput) nodeInput.placeholder = 'Busca un pueblo o escribe uno nuevo...';
 
-    if (equipmentFi) {
-      equipmentFi.style.display = '';
-      const eLabel = equipmentFi.querySelector('label');
-      if (eLabel) eLabel.textContent = 'ANTENA ASIGNADA';
-      const eInput = document.getElementById('wo-equipment');
-      if (eInput) {
-        eInput.readOnly = true;
-        eInput.placeholder = 'Se asigna automáticamente al elegir un pueblo';
-      }
-    }
+    // Antena asignada: OCULTA (no se solicita antena en detalle físico)
+    if (equipmentFi) equipmentFi.style.display = 'none';
 
-    // Relation info box
+    // Relation info box: OCULTO en detalle físico
     if (relationInfo) {
-      relationInfo.style.display = '';
-      updateWORelationInfo();
+      relationInfo.style.display = 'none';
+      relationInfo.textContent = '';
     }
 
-    // Zona (visible y editable en detalles físicos)
-    if (zoneFi) {
-      zoneFi.style.display = '';
-      const zLabel = zoneFi.querySelector('label');
-      if (zLabel) zLabel.textContent = 'ZONA';
-    }
+    // Zona: OCULTA (no se solicita zona en detalle físico, solo pueblo)
+    if (zoneFi) zoneFi.style.display = 'none';
 
     // Asignación (OCULTO en detalles físicos)
     if (assignFi) assignFi.style.display = 'none';
@@ -1793,6 +1867,9 @@ function applyRoleFormVisibility() {
   // ==========================================
   // DETALLES DE RED
   // ==========================================
+  const stepNetworkTitle = document.querySelector('#wo-step-network-card .modal-section-card-title span:last-child');
+  if (stepNetworkTitle) stepNetworkTitle.textContent = 'Pueblo y Asignación de Atención';
+
   if (detailKindFi) detailKindFi.style.display = 'none';
   if (equipmentFi) equipmentFi.style.display = 'none';
   if (relationInfo) relationInfo.style.display = 'none';
@@ -2357,6 +2434,7 @@ function filteredOrders() {
 
   const rawList = (state.workOrders || []).filter(w => {
     if (w.deletedAt) return false;
+    if (getOrderDetailKind(w) !== activeOrderDetailKind) return false;
 
     // Filtro "Mis detalles"
     // Solo los que faltan por resolver (sin envíos) o los que faltan por confirmar de este lado (solo en red)
@@ -2714,7 +2792,21 @@ async function reopenCompletedWO(id) {
 }
 
 function getOrderStatusMeta(order) {
-  if (order?.status === 'completada') return { label: getOrderCategory(order) === 'instalacion' ? 'Completado' : 'Concluido', className: 'is-done', title: 'Detalle concluido satisfactoriamente' };
+  const isPhysical = (typeof getOrderDetailKind === 'function' ? getOrderDetailKind(order) : order?.detailKind) === 'physical';
+  if (order?.status === 'completada') {
+    return {
+      label: isPhysical ? 'Completado' : (getOrderCategory(order) === 'instalacion' ? 'Completado' : 'Concluido'),
+      className: 'is-done',
+      title: isPhysical ? 'Detalle físico resuelto y concluido' : 'Detalle concluido satisfactoriamente'
+    };
+  }
+  if (isPhysical) {
+    return {
+      label: 'Registro activo',
+      className: 'is-pending',
+      title: 'Registro de detalle físico pendiente de atención'
+    };
+  }
   if (order?.status === 'resuelto_soporte') {
     return {
       label: 'Resuelto',
@@ -2897,6 +2989,8 @@ function getOrderCurrentUserClosureAction(order) {
   }
 }
 
+let _closingChatAfterResolution = false;
+
 function promptCloseOrderChatDecision(order, actionType) {
   let modal = document.getElementById('order-chat-close-decision-mo');
   if (!modal) {
@@ -2904,6 +2998,12 @@ function promptCloseOrderChatDecision(order, actionType) {
     modal.id = 'order-chat-close-decision-mo';
     modal.className = 'mo';
     document.body.appendChild(modal);
+  }
+  if (!modal.dataset.backdropBound) {
+    modal.dataset.backdropBound = '1';
+    modal.addEventListener('click', event => {
+      if (event.target === modal) dismissCloseOrderChatDecision();
+    });
   }
   modal.style.setProperty('z-index', '16000', 'important');
   // Asegurar siempre que esté después de order-tech-report-mo en el DOM para nunca quedar detrás
@@ -2916,7 +3016,7 @@ function promptCloseOrderChatDecision(order, actionType) {
   const title = isPropose ? '¿Mandar a concluir este caso?' : '¿Confirmar conclusión del caso?';
   const message = isPropose
     ? 'Puedes mandar a concluir este caso para su validación, o simplemente cerrar la conversación.'
-    : 'La contraparte ya envió a concluir este caso. Puedes confirmar la conformidad y cerrarlo definitivamente, o simplemente cerrar la ventana.';
+    : 'La contraparte ya envió a concluir este caso. Puedes confirmar la conformidad y cerrarlo definitivamente, devolverlo con observaciones, o simplemente cerrar la ventana.';
   const actionBtnText = isPropose ? 'Mandar a concluir' : 'Confirmar y cerrar';
   const actionBtnIcon = isPropose
     ? '<svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2;margin-right:6px;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>'
@@ -2945,6 +3045,11 @@ function promptCloseOrderChatDecision(order, actionType) {
         <button type="button" class="btn ${isPropose ? 'bc' : 'btn-ok-success'}" style="width:100%;justify-content:center;min-height:38px;font-size:13px;font-weight:800;border-radius:10px;padding:8px 16px;" onclick="executeChatCloseAction('${order.id}', '${actionType}')">
           ${actionBtnIcon}${orderEscape(actionBtnText)}
         </button>
+        ${!isPropose ? `
+        <button type="button" class="btn net-btn-return" style="width:100%;justify-content:center;min-height:36px;font-size:12.5px;font-weight:700;border-radius:10px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;" onclick="executeChatCloseAction('${order.id}', 'return')">
+          <svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2;margin-right:6px;"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>Devolver con observaciones
+        </button>
+        ` : ''}
         <button type="button" class="btn bgh" style="width:100%;justify-content:center;min-height:36px;font-size:12.5px;font-weight:700;border-radius:10px;color:#475569;" onclick="confirmJustCloseOrderReport()">
           Simplemente cerrar chat
         </button>
@@ -2956,20 +3061,25 @@ function promptCloseOrderChatDecision(order, actionType) {
 }
 
 function dismissCloseOrderChatDecision() {
+  _closingChatAfterResolution = false;
   CM('order-chat-close-decision-mo');
 }
 
 function confirmJustCloseOrderReport() {
+  _closingChatAfterResolution = false;
   CM('order-chat-close-decision-mo');
   closeOrderReportModalDirectly();
 }
 
 async function executeChatCloseAction(orderId, actionType) {
   CM('order-chat-close-decision-mo');
+  _closingChatAfterResolution = true;
   if (actionType === 'propose') {
     await proposeTwoPartyClosure(orderId);
   } else if (actionType === 'confirm') {
     await confirmTwoPartyClosure(orderId);
+  } else if (actionType === 'return') {
+    openReturnNetworkModal(orderId);
   }
 }
 
@@ -3835,7 +3945,7 @@ function getOrderClosureStatus(order) {
 }
 
 function getOrderPendingUserAction(order) {
-  if (!order || order.detailKind !== 'network' || order.status === 'completada') {
+  if (!order || (typeof getOrderDetailKind === 'function' ? getOrderDetailKind(order) : order.detailKind) !== 'network' || order.status === 'completada') {
     return { requiresMyAction: false, waitingOther: false, badge: '', kind: '' };
   }
   const isSoporte = userHasRole('soporte');
@@ -4234,6 +4344,9 @@ function renderOrderFooterActions(order) {
   } else if (isUnresolvablePending) {
     if (canConfirmUnres) {
       closureButtonsHtml = `
+        <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${order.id}')" title="Devolver caso con observaciones para continuar la atención">
+          <svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver
+        </button>
         <button type="button" class="btn net-btn-confirm" style="background:linear-gradient(135deg,#dc2626,#b91c1c);border-color:#b91c1c;" onclick="confirmNetworkUnresolvableConcluded('${order.id}')" title="Confirmar que no se puede realizar y concluir el caso">
           <svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Confirmar no realizable
         </button>
@@ -4255,6 +4368,9 @@ function renderOrderFooterActions(order) {
       if (closureStatus.attentionConfirmed || order.status === 'resuelto_soporte') {
         if (isSoporte || isAdmin) {
           closureButtonsHtml = `
+            <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${order.id}')" title="Devolver caso a Atención a clientes con observaciones">
+              <svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver
+            </button>
             <button type="button" class="btn net-btn-confirm" onclick="confirmTwoPartyClosure('${order.id}')" title="Confirmar solución y concluir caso formalmente">
               <svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Confirmar y cerrar
             </button>
@@ -4281,6 +4397,9 @@ function renderOrderFooterActions(order) {
       if (closureStatus.supportConfirmed || order.status === 'resuelto_soporte') {
         if (isAtencion || isAdmin) {
           closureButtonsHtml = `
+            <button type="button" class="btn net-btn-return" onclick="openReturnNetworkModal('${order.id}')" title="Devolver reporte a Soporte técnico con observaciones">
+              <svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg> Devolver
+            </button>
             <button type="button" class="btn net-btn-confirm" onclick="confirmTwoPartyClosure('${order.id}')" title="Confirmar satisfacción del cliente y concluir caso">
               <svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Confirmar y cerrar
             </button>
@@ -4319,6 +4438,7 @@ function renderOrderFooterActions(order) {
       </div>
       <div class="footer-actions-right">
         ${closureButtonsHtml}
+        <button type="button" class="btn bgh net-btn-close-chat" onclick="requestCloseOrderReport()" title="Cerrar ventana">Cerrar</button>
       </div>
     </div>
   `;
@@ -4541,6 +4661,10 @@ async function proposeTwoPartyClosure(orderId) {
     notify('Caso enviado a concluir. En espera de confirmación de Soporte técnico.', 'ok');
     updateOrderChatLive(order);
     renderWOs();
+    if (_closingChatAfterResolution) {
+      _closingChatAfterResolution = false;
+      closeOrderReportModalDirectly();
+    }
   } else {
     if (!isSoporte && !isAdmin) {
       return notify('Acción restringida: Este reporte está en manos de Soporte técnico. Solo Soporte puede mandar a concluir.', 'warn');
@@ -4603,6 +4727,10 @@ async function confirmTwoPartyClosure(orderId) {
   notify('Detalle concluido satisfactoriamente por ambas partes.', 'ok');
   updateOrderChatLive(order);
   renderWOs();
+  if (_closingChatAfterResolution) {
+    _closingChatAfterResolution = false;
+    closeOrderReportModalDirectly();
+  }
 }
 
 function updateOrderChatLive(updatedOrder) {
@@ -4863,6 +4991,7 @@ function ensureOrderVisibleInTable(order) {
     if (typeof renderActiveOrderFilters === 'function') renderActiveOrderFilters();
     if (typeof renderOrderFilterMenus === 'function') renderOrderFilterMenus();
   }
+  if (typeof renderWOs === 'function') renderWOs();
   if (typeof renderOrdersTable === 'function') renderOrdersTable();
 }
 
@@ -5066,9 +5195,9 @@ async function openOrderTechnicianReport(orderId) {
   } else {
     // Vista para detalles físicos de infraestructura (antenas y nodos)
     bodyContent = `
-      <div class="physical-record-banner" style="background:#f5f3ff;border:1px solid #ddd6fe;border-left:4px solid #7c3aed;padding:12px 14px;border-radius:10px;margin-bottom:14px;font-size:12.5px;color:#5b21b6;display:flex;align-items:center;gap:10px;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-        <div><strong>Bitácora de infraestructura:</strong> Este detalle pertenece al historial físico de antenas y pueblos. No se asigna a ningún usuario para resolver; queda registrado para consulta operativa en sitio.</div>
+      <div class="physical-record-banner" style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #6366f1;padding:12px 14px;border-radius:10px;margin-bottom:14px;font-size:12.5px;color:#334155;display:flex;align-items:center;gap:10px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" style="flex-shrink:0;"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        <div><strong>Registro de detalle físico:</strong> Este registro documenta una necesidad física en sitio o antena para su consulta y resolución en una ruta técnica posterior.</div>
       </div>
       <div class="order-report-summary">
         ${order.equipmentName ? orderReportField('work', 'Antena vinculada', `${orderEscape(order.equipmentName)} ${order.equipmentId ? `<button type="button" class="btn bsm bg2" onclick="openTowerMaterialModal('${order.equipmentId}')" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;padding:2px 8px;margin-left:6px;">🗼 Material de torre</button>` : ''}`, { raw: true }) : ''}
@@ -5081,7 +5210,7 @@ async function openOrderTechnicianReport(orderId) {
         ${orderReportField('work', 'Tipo de trabajo', getOrderDisplayType(order))}
         ${orderReportField('flag', 'Prioridad', pl(order.priority || 'media'))}
         ${orderReportField('tag', 'Categoría', orderCategoryLabel(getOrderCategory(order)))}
-        ${order.originNetworkFolio ? orderReportField('tag', 'Origen de red', `<a href="/ordenes.html?detailKind=network&orderId=${encodeURIComponent(order.originNetworkOrderId || order.originNetworkFolio)}" style="color:#2563eb;font-weight:700;text-decoration:underline;">Folio ${orderEscape(order.originNetworkFolio)}</a>`, { raw: true }) : ''}
+        ${order.originNetworkFolio ? orderReportField('tag', 'Origen de red', `<a href="/ordenes.html?detailKind=network&orderId=${encodeURIComponent(order.originNetworkOrderId || order.originNetworkFolio)}" onclick="event.preventDefault();openOrderTechnicianReport('${orderEscape(order.originNetworkOrderId || order.originNetworkFolio)}')" style="color:#2563eb;font-weight:700;text-decoration:underline;">Folio ${orderEscape(order.originNetworkFolio)}</a>`, { raw: true }) : ''}
       </div>
       <section class="order-report-block order-report-request"><span class="order-report-field-icon">${orderReportIcon('clipboard')}</span><div><small>Detalle solicitado</small><p>${orderEscape(requestedDetail)}</p></div></section>
       ${report.solution ? `<section class="order-report-block"><small>Trabajo realizado</small><p>${orderEscape(report.solution)}</p></section>` : ''}
@@ -5111,18 +5240,19 @@ async function openOrderTechnicianReport(orderId) {
   const reopenCount = typeof getOrderReopenCount === 'function' ? getOrderReopenCount(order) : ((order.isReopened || order.reopenedAt) ? 1 : 0);
   const reopenLabel = reopenCount > 1 ? `Reabierto (${reopenCount} veces)` : 'Reabierto (1 vez)';
   const reopenTitle = reopenCount > 1 ? `Detalle reabierto ${reopenCount} veces` : 'Detalle reabierto 1 vez';
+  const modalHeaderTitle = (order.detailKind === 'physical')
+    ? (completed ? 'Registro físico concluido' : 'Registro de detalle físico')
+    : (completed ? 'Reporte del técnico' : 'Detalle de la orden');
+  const headerIcon = orderReportIcon(order.detailKind === 'physical' ? 'work' : 'clipboard');
 
-  card.innerHTML = `<div class="modal-head order-report-head"><div class="order-report-head-main"><span class="order-report-title-icon">${orderReportIcon('clipboard')}</span><div><h2>${completed ? 'Reporte del técnico' : 'Detalle de la orden'}</h2><p>${orderReportIcon('pin')}<span>${orderEscape(getOrderPlace(order))}</span><em>${orderEscape(getOrderFolio(order))}</em>${reopenCount > 0 ? `<span class="order-reopened-badge" style="margin-left:6px;" title="${reopenTitle}"><svg class="order-reopened-icon" viewBox="0 0 24 24"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> ${reopenLabel}</span>` : ''}</p></div></div><button type="button" class="order-report-close" aria-label="Cerrar" onclick="requestCloseOrderReport()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  card.innerHTML = `<div class="modal-head order-report-head"><div class="order-report-head-main"><span class="order-report-title-icon">${headerIcon}</span><div><h2>${modalHeaderTitle}</h2><p>${orderReportIcon('pin')}<span>${orderEscape(getOrderPlace(order))}</span><em>${orderEscape(getOrderFolio(order))}</em>${order.detailKind === 'network' && reopenCount > 0 ? `<span class="order-reopened-badge" style="margin-left:6px;" title="${reopenTitle}"><svg class="order-reopened-icon" viewBox="0 0 24 24"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> ${reopenLabel}</span>` : ''}</p></div></div><button type="button" class="order-report-close" aria-label="Cerrar" onclick="requestCloseOrderReport()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     ${bodyContent}`;
   OM('order-tech-report-mo');
 
   if (order.detailKind === 'network') {
     requestAnimationFrame(() => {
       setTimeout(() => {
-        const chatSection = card.querySelector('.order-chat-section');
-        if (chatSection) {
-          card.scrollTop = Math.max(0, chatSection.offsetTop - 10);
-        }
+        card.scrollTop = 0;
         const messagesBox = document.getElementById('order-chat-messages');
         if (messagesBox) {
           messagesBox.scrollTop = messagesBox.scrollHeight;
@@ -5293,11 +5423,12 @@ function renderWOs() {
               `;
     }
 
+    const isNetworkRow = w.detailKind === 'network';
     const trClasses = [
-      rowIsDoneVisual ? 'order-row-done' : '',
+      rowIsDoneVisual ? 'order-row-done' : (w.detailKind === 'physical' ? 'order-row-open' : ''),
       selectedOrderRowId === String(w.id) ? 'order-row-selected' : '',
-      pendingAction.requiresMyAction ? 'order-row-action-required' : '',
-      pendingAction.waitingOther ? 'order-row-waiting-counterparty' : ''
+      isNetworkRow && pendingAction.requiresMyAction ? 'order-row-action-required' : '',
+      isNetworkRow && pendingAction.waitingOther ? 'order-row-waiting-counterparty' : ''
     ].filter(Boolean).join(' ');
 
     return `
@@ -5305,7 +5436,7 @@ function renderWOs() {
                 <td data-label="Folio">
                   <div class="order-folio-cell">
                     <strong class="order-folio">${orderEscape(getOrderFolio(w))}</strong>
-                    ${reopenCount > 0 ? `<span class="order-reopened-badge" title="${reopenTitle}"><svg class="order-reopened-icon" viewBox="0 0 24 24"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> ${reopenLabel}</span>` : ''}
+                    ${isNetworkRow && reopenCount > 0 ? `<span class="order-reopened-badge" title="${reopenTitle}"><svg class="order-reopened-icon" viewBox="0 0 24 24"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> ${reopenLabel}</span>` : ''}
                   </div>
                 </td>
                 <td data-label="Zona">${orderEscape(getZoneLabel(target.zone || w.region) || '--')}</td>
@@ -5319,6 +5450,7 @@ function renderWOs() {
                       ${w.equipmentName ? `<span class="order-equip-tag" style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:10px;background:#ede9fe;color:#6d28d9;border:1px solid #ddd6fe;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07 19.07 4.93"/></svg> Antena: ${orderEscape(w.equipmentName)}</span>` : ''}
                       ${w.nodeName ? `<span class="order-node-tag" style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:10px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg> Pueblo: ${orderEscape(w.nodeName)}</span>` : ''}
                       ${w.originNetworkFolio ? `<span class="order-origin-tag" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;">Red: ${orderEscape(w.originNetworkFolio)}</span>` : ''}
+                      ${w.updatedByName && w.updatedAt && w.updatedAt !== w.createdAt ? `<span class="order-editor-tag" style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;" title="Última edición por ${orderEscape(w.updatedByName)} el ${new Date(w.updatedAt).toLocaleString('es-MX')}">✏️ Editado por: ${renderUserColorChip(w.updatedByName, w.updatedById)}</span>` : ''}
                     </div>
                   ` : `
                     <div class="order-assignment-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">
@@ -5347,23 +5479,39 @@ function renderWOs() {
                 <td data-label="Estado">
                   <div class="order-state-cell">
                     <span class="order-status-badge ${rowStatus.className}">${orderEscape(rowStatus.label)}</span>
-                    ${pendingAction.requiresMyAction ? `<button type="button" class="order-action-needed-pill is-${pendingAction.kind || 'action'}-pill" onclick="event.stopPropagation();selectOrderRow('${w.id}');openOrderTechnicianReport('${w.id}')" title="Se requiere tu confirmación en este detalle">${orderEscape(pendingAction.badge)}</button>` : (pendingAction.waitingOther ? `<span class="order-waiting-other-pill is-${pendingAction.kind || 'waiting'}-pill">${orderEscape(pendingAction.badge)}</span>` : '')}
+                    ${isNetworkRow && pendingAction.requiresMyAction ? `<button type="button" class="order-action-needed-pill is-${pendingAction.kind || 'action'}-pill" onclick="event.stopPropagation();selectOrderRow('${w.id}');openOrderTechnicianReport('${w.id}')" title="Se requiere tu confirmación en este detalle">${orderEscape(pendingAction.badge)}</button>` : (isNetworkRow && pendingAction.waitingOther ? `<span class="order-waiting-other-pill is-${pendingAction.kind || 'waiting'}-pill">${orderEscape(pendingAction.badge)}</span>` : '')}
                   </div>
                 </td>
                 <td data-label="Acción">
                   <div class="order-actions">
-                    ${networkQuickActions}
-                    ${w.detailKind !== 'network' ? `<button class="btn order-view-report" title="Ver detalle completo" aria-label="Ver detalle completo" onclick="openOrderTechnicianReport('${w.id}')">${orderActionIcon('view')}</button>` : ''}
-                    ${rowReported ? (canReopen ? `
-                      <button class="btn order-reopen-action" title="Reabrir detalle para nueva atención" aria-label="Reabrir detalle para nueva atención" onclick="event.stopPropagation();reopenCompletedWO('${w.id}')">${orderActionIcon('reopen')}</button>
+                    ${isNetworkRow ? `
+                      ${networkQuickActions}
+                      ${rowReported ? (canReopen ? `
+                        <button class="btn order-reopen-action" title="Reabrir detalle para nueva atención" aria-label="Reabrir detalle para nueva atención" onclick="event.stopPropagation();reopenCompletedWO('${w.id}')">${orderActionIcon('reopen')}</button>
+                      ` : `
+                        <button class="btn order-reopen-action order-reopen-disabled" disabled style="opacity:0.35;cursor:not-allowed;" title="No tienes permiso para reabrir este detalle" aria-label="No tienes permiso para reabrir este detalle">${orderActionIcon('reopen')}</button>
+                      `) : (canEditOrder(w) ? `
+                        <button class="btn order-edit-action" title="Editar información del detalle" aria-label="Editar información del detalle" onclick="openWO('${w.id}')">${orderActionIcon('edit')}</button>
+                      ` : `
+                        <button class="btn order-edit-action order-edit-disabled" disabled style="opacity:0.35;cursor:not-allowed;" title="Solo quien creó el detalle puede editarlo" aria-label="Solo quien creó el detalle puede editarlo">${orderActionIcon('edit')}</button>
+                      `)}
+                      <button class="btn order-delete-action" title="${userHasRole('administrador', 'admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" aria-label="${userHasRole('administrador', 'admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" onclick="deleteWO('${w.id}')">${orderActionIcon('delete')}</button>
                     ` : `
-                      <button class="btn order-reopen-action order-reopen-disabled" disabled style="opacity:0.35;cursor:not-allowed;" title="No tienes permiso para reabrir este detalle" aria-label="No tienes permiso para reabrir este detalle">${orderActionIcon('reopen')}</button>
-                    `) : (canEditOrder(w) ? `
-                      <button class="btn order-edit-action" title="Editar información del detalle" aria-label="Editar información del detalle" onclick="openWO('${w.id}')">${orderActionIcon('edit')}</button>
-                    ` : `
-                      <button class="btn order-edit-action order-edit-disabled" disabled style="opacity:0.35;cursor:not-allowed;" title="Solo quien creó el detalle puede editarlo" aria-label="Solo quien creó el detalle puede editarlo">${orderActionIcon('edit')}</button>
-                    `)}
-                    <button class="btn order-delete-action" title="${userHasRole('administrador', 'admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" aria-label="${userHasRole('administrador', 'admin') ? 'Eliminar detalle definitivamente' : 'Solicitar eliminación del detalle'}" onclick="deleteWO('${w.id}')">${orderActionIcon('delete')}</button>
+                      <button class="btn order-view-report" title="Ver registro físico" aria-label="Ver registro físico" onclick="openOrderTechnicianReport('${w.id}')">${orderActionIcon('view')}</button>
+                      ${canEditOrder(w) ? `
+                        <button class="btn order-edit-action" title="Editar información del registro físico" aria-label="Editar información del registro físico" onclick="openWO('${w.id}')">${orderActionIcon('edit')}</button>
+                      ` : `
+                        <button class="btn order-edit-action order-edit-disabled" disabled style="opacity:0.35;cursor:not-allowed;" title="Solo quien creó el detalle puede editarlo" aria-label="Solo quien creó el detalle puede editarlo">${orderActionIcon('edit')}</button>
+                      `}
+                      ${rowReported ? (canReopen ? `
+                        <button class="btn order-reopen-action" title="Reabrir detalle para nueva atención" aria-label="Reabrir detalle para nueva atención" onclick="event.stopPropagation();reopenCompletedWO('${w.id}')">${orderActionIcon('reopen')}</button>
+                      ` : `
+                        <button class="btn order-reopen-action order-reopen-disabled" disabled style="opacity:0.35;cursor:not-allowed;" title="No tienes permiso para reabrir este detalle" aria-label="No tienes permiso para reabrir este detalle">${orderActionIcon('reopen')}</button>
+                      `) : `
+                        <button class="btn order-complete-action" style="border-color:#a7f3d0!important;background:#ecfdf5!important;color:#059669!important;" title="Completar registro físico" aria-label="Completar registro físico" onclick="event.stopPropagation();markWODone('${w.id}')">${orderActionIcon('complete')}</button>
+                      `}
+                      <button class="btn order-delete-action" title="${userHasRole('administrador', 'admin') ? 'Eliminar registro definitivamente' : 'Solicitar eliminación del detalle'}" aria-label="${userHasRole('administrador', 'admin') ? 'Eliminar registro definitivamente' : 'Solicitar eliminación del detalle'}" onclick="deleteWO('${w.id}')">${orderActionIcon('delete')}</button>
+                    `}
                   </div>
                 </td>
               </tr>`;
@@ -5664,6 +5812,10 @@ async function submitNetworkResolution() {
   notify('Detalle resuelto.', 'ok');
   await loadOrderPage();
   updateOrderChatLive(order);
+  if (_closingChatAfterResolution) {
+    _closingChatAfterResolution = false;
+    closeOrderReportModalDirectly();
+  }
 }
 
 async function startAttendingNetworkOrder(id) {
@@ -5923,6 +6075,10 @@ async function submitNetworkReturn() {
   notify('Detalle devuelto.', 'warn');
   await loadOrderPage();
   updateOrderChatLive(order);
+  if (_closingChatAfterResolution) {
+    _closingChatAfterResolution = false;
+    closeOrderReportModalDirectly();
+  }
 }
 
 async function confirmNetworkClientSatisfied(id) {

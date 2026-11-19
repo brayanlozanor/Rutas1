@@ -5,16 +5,20 @@ const vm = require('vm');
 
 console.log('--- TEST: Technician Custom Confirmations & Antenna-Only Tower Material Scope ---');
 
-const commonJs = fs.readFileSync(path.join(__dirname, '../public/assets/js/common.js'), 'utf8');
-const planificarJs = fs.readFileSync(path.join(__dirname, '../public/assets/js/planificar.js'), 'utf8');
-const tecnicoRutaJs = fs.readFileSync(path.join(__dirname, '../public/assets/js/tecnico-ruta.js'), 'utf8');
+const commonJs = fs.readFileSync(path.join(__dirname, '../public/assets/js/common.js'), 'utf8').replace(/\r\n/g, '\n');
+const planificarJs = fs.readFileSync(path.join(__dirname, '../public/assets/js/planificar.js'), 'utf8').replace(/\r\n/g, '\n');
+const tecnicoRutaJs = fs.readFileSync(path.join(__dirname, '../public/assets/js/tecnico-ruta.js'), 'utf8').replace(/\r\n/g, '\n');
 
 // 1. Verify window.confirm is NOT used in technician completion / report handlers
-assert(!planificarJs.match(/async function saveTechnicianCompletion[\s\S]*?window\.confirm\(confirmMsg\)/),
+const extractFn = (source, name) => {
+  const match = source.match(new RegExp(`(?:async\\s+)?function\\s+${name}[\\s\\S]*?\\n\\}`));
+  return match ? match[0] : '';
+};
+assert(!extractFn(planificarJs, 'saveTechnicianCompletion').includes('window.confirm('),
   'saveTechnicianCompletion must NOT use native window.confirm');
-assert(!planificarJs.match(/async function reportPlanDetailIncomplete[\s\S]*?window\.confirm\(/),
+assert(!extractFn(planificarJs, 'reportPlanDetailIncomplete').includes('window.confirm('),
   'reportPlanDetailIncomplete must NOT use native window.confirm');
-assert(!planificarJs.match(/async function reportWholeStopIncomplete[\s\S]*?window\.confirm\(/),
+assert(!extractFn(planificarJs, 'reportWholeStopIncomplete').includes('window.confirm('),
   'reportWholeStopIncomplete must NOT use native window.confirm');
 
 assert(planificarJs.includes('askConfirmation({') || planificarJs.includes('askConfirmation('),

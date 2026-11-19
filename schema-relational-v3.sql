@@ -214,6 +214,18 @@ CREATE INDEX IF NOT EXISTS idx_work_orders_assigned_user ON work_orders(assigned
 CREATE INDEX IF NOT EXISTS idx_work_orders_deleted_kind_status ON work_orders(deleted_at, detail_kind, status);
 CREATE INDEX IF NOT EXISTS idx_work_orders_created_by ON work_orders(created_by);
 CREATE INDEX IF NOT EXISTS idx_wo_node_eq_pri ON work_orders(node_id, equipment_id, priority, status) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_wo_kind_created ON work_orders(detail_kind, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_wo_kind_status_created ON work_orders(detail_kind, status, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_wo_kind_priority_created ON work_orders(detail_kind, priority, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_wo_kind_assigned_created ON work_orders(detail_kind, assigned_user_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_wo_kind_assigned_status ON work_orders(detail_kind, assigned_user_id, status, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_wo_kind_creator ON work_orders(detail_kind, created_by, status) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_wo_kind_node_eq ON work_orders(detail_kind, node_id, equipment_id, status) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_wo_kind_updated ON work_orders(detail_kind, updated_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_wo_net_status_created ON work_orders(status, created_at DESC) WHERE deleted_at IS NULL AND detail_kind = 'network';
+CREATE INDEX IF NOT EXISTS idx_wo_net_assigned ON work_orders(assigned_user_id, status, created_at DESC) WHERE deleted_at IS NULL AND detail_kind = 'network';
+CREATE INDEX IF NOT EXISTS idx_wo_net_creator ON work_orders(created_by, status) WHERE deleted_at IS NULL AND detail_kind = 'network';
+CREATE INDEX IF NOT EXISTS idx_wo_net_node_eq ON work_orders(node_id, equipment_id, status) WHERE deleted_at IS NULL AND detail_kind = 'network';
 CREATE TABLE IF NOT EXISTS work_order_reports (
   id TEXT PRIMARY KEY,
   work_order_id TEXT NOT NULL UNIQUE,

@@ -1,7 +1,6 @@
 const LIST_KEYS = new Set([
-  'equipment', 'nodes', 'workOrders', 'technicians', 'users',
-  'techAccessLog', 'deletionRequests', 'auditLog', 'materials', 'routes',
-  'materialMovements'
+  'users', 'technicians', 'nodes', 'equipment', 'materials', 'routes',
+  'workOrders', 'materialMovements', 'deletionRequests', 'techAccessLog', 'auditLog'
 ]);
 
 const DAY_KEYS = ['lunes','martes','miercoles','jueves','viernes','sabado','domingo','general'];
@@ -318,6 +317,8 @@ async function syncUserColumns(env) {
     if (!columns.has('color')) {
       await run(env, 'ALTER TABLE users ADD COLUMN color TEXT');
     }
+    // Liberar usernames de usuarios eliminados históricamente para evitar bloqueos por UNIQUE constraint
+    await run(env, "UPDATE users SET username = username || '__deleted_' || id WHERE deleted_at IS NOT NULL AND username NOT LIKE '%__deleted_%'");
   } catch (e) {
     // Ignore if already added or concurrency
   }
@@ -332,7 +333,7 @@ async function ensurePlansColumns(env) {
       try {
         await run(env, 'ALTER TABLE plans ADD COLUMN scheduled_date TEXT');
       } catch (e) {
-        if (!/duplicate column name/i.test(String(e?.message || error))) throw e;
+        if (!/duplicate column name/i.test(String(e?.message || e))) throw e;
       }
     }
   } catch (e) {
@@ -358,7 +359,19 @@ async function ensurePerformanceIndices(env) {
     'CREATE INDEX IF NOT EXISTS idx_plan_assignments_tech ON plan_assignments(technician_id, plan_id)',
     'CREATE INDEX IF NOT EXISTS idx_work_orders_deleted_kind_status ON work_orders(deleted_at, detail_kind, status)',
     'CREATE INDEX IF NOT EXISTS idx_wo_node_eq_pri ON work_orders(node_id, equipment_id, priority, status) WHERE deleted_at IS NULL',
-    'CREATE INDEX IF NOT EXISTS idx_work_orders_created_by ON work_orders(created_by)'
+    'CREATE INDEX IF NOT EXISTS idx_work_orders_created_by ON work_orders(created_by)',
+    'CREATE INDEX IF NOT EXISTS idx_wo_kind_created ON work_orders(detail_kind, created_at DESC) WHERE deleted_at IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_wo_kind_status_created ON work_orders(detail_kind, status, created_at DESC) WHERE deleted_at IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_wo_kind_priority_created ON work_orders(detail_kind, priority, created_at DESC) WHERE deleted_at IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_wo_kind_assigned_created ON work_orders(detail_kind, assigned_user_id, created_at DESC) WHERE deleted_at IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_wo_kind_assigned_status ON work_orders(detail_kind, assigned_user_id, status, created_at DESC) WHERE deleted_at IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_wo_kind_creator ON work_orders(detail_kind, created_by, status) WHERE deleted_at IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_wo_kind_node_eq ON work_orders(detail_kind, node_id, equipment_id, status) WHERE deleted_at IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_wo_kind_updated ON work_orders(detail_kind, updated_at DESC) WHERE deleted_at IS NULL',
+    'CREATE INDEX IF NOT EXISTS idx_wo_net_status_created ON work_orders(status, created_at DESC) WHERE deleted_at IS NULL AND detail_kind = \'network\'',
+    'CREATE INDEX IF NOT EXISTS idx_wo_net_assigned ON work_orders(assigned_user_id, status, created_at DESC) WHERE deleted_at IS NULL AND detail_kind = \'network\'',
+    'CREATE INDEX IF NOT EXISTS idx_wo_net_creator ON work_orders(created_by, status) WHERE deleted_at IS NULL AND detail_kind = \'network\'',
+    'CREATE INDEX IF NOT EXISTS idx_wo_net_node_eq ON work_orders(node_id, equipment_id, status) WHERE deleted_at IS NULL AND detail_kind = \'network\''
   ];
   for (const sql of stmts) {
     try {
@@ -537,6 +550,51 @@ async function ensureRole(env, role) {
   return row?.id ? Number(row.id) : null;
 }
 
+async function resolveValidUserId(env, candidateId) {
+  const id = nullableText(candidateId);
+  if (!id) return null;
+  const direct = await first(env, 'SELECT id FROM users WHERE id = ?', [id]);
+  if (direct?.id) return direct.id;
+  const byTech = await first(env, 'SELECT user_id FROM technicians WHERE id = ? AND user_id IS NOT NULL', [id]);
+  if (byTech?.user_id) {
+    const u = await first(env, 'SELECT id FROM users WHERE id = ?', [byTech.user_id]);
+    if (u?.id) return u.id;
+  }
+  const cleanUser = id.replace(/^@+/, '').trim();
+  if (cleanUser) {
+    const byUsername = await first(env, 'SELECT id FROM users WHERE lower(username) = lower(?)', [cleanUser]);
+    if (byUsername?.id) return byUsername.id;
+  }
+  return null;
+}
+
+async function resolveValidTechnicianId(env, candidateId) {
+  const id = nullableText(candidateId);
+  if (!id) return null;
+  const direct = await first(env, 'SELECT id FROM technicians WHERE id = ? OR user_id = ?', [id, id]);
+  if (direct?.id) return direct.id;
+  const cleanUser = id.replace(/^@+/, '').trim();
+  if (cleanUser) {
+    const byLegacy = await first(env, 'SELECT id FROM technicians WHERE lower(username_legacy) = lower(?) OR lower(name) = lower(?)', [cleanUser, id]);
+    if (byLegacy?.id) return byLegacy.id;
+  }
+  return null;
+}
+
+async function resolveValidEquipmentId(env, candidateId) {
+  const id = nullableText(candidateId);
+  if (!id) return null;
+  const row = await first(env, 'SELECT id FROM equipment WHERE id = ?', [id]);
+  return row?.id || null;
+}
+
+async function resolveValidNodeId(env, candidateId) {
+  const id = nullableText(candidateId);
+  if (!id) return null;
+  const row = await first(env, 'SELECT id FROM nodes WHERE id = ?', [id]);
+  return row?.id || null;
+}
+
 async function getUserMap(env) {
   const rows = await all(env, `SELECT u.id,u.name,u.username,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id`);
   return new Map(rows.map(row => [row.id, row]));
@@ -571,7 +629,7 @@ function addActorFields(out, prefix, user) {
   if (!user) return;
   out[`${prefix}Id`] = user.id;
   out[`${prefix}Name`] = user.name || '';
-  out[`${prefix}Username`] = user.username || '';
+  out[`${prefix}Username`] = String(user.username || '').split('__deleted_')[0];
   out[`${prefix}Role`] = normalizeRole(user.role);
 }
 
@@ -751,7 +809,10 @@ async function loadPlanningMapCatalog(env) {
       COALESCE(p.very_high,0) AS map_very_high,COALESCE(p.high_count,0) AS map_high,
       COALESCE(p.medium_count,0) AS map_medium,COALESCE(p.low_count,0) AS map_low,
       COALESCE(p.planned_open,0) AS map_planned_open,COALESCE(p.detail_total,0) AS map_detail_total,
-      COALESCE(p.detail_resolved,0) AS map_detail_resolved
+      COALESCE(p.detail_resolved,0) AS map_detail_resolved,
+      p.oldest_pending_at AS map_oldest_pending_at,
+      p.latest_resolved_at AS map_latest_resolved_at,
+      p.unattended_count AS map_unattended_count
       FROM nodes n LEFT JOIN zones z ON z.id=n.zone_id
       LEFT JOIN (
         SELECT w.node_id AS entity_id,
@@ -761,7 +822,10 @@ async function loadPlanningMapCatalog(env) {
           SUM(CASE WHEN COALESCE(w.status,'pendiente') NOT IN ('completada','done') AND w.priority='baja' THEN 1 ELSE 0 END) AS low_count,
           SUM(CASE WHEN COALESCE(w.status,'pendiente') NOT IN ('completada','done') AND planned.work_order_id IS NOT NULL THEN 1 ELSE 0 END) AS planned_open,
           COUNT(*) AS detail_total,
-          SUM(CASE WHEN COALESCE(w.status,'pendiente') IN ('completada','no_realizado','done') THEN 1 ELSE 0 END) AS detail_resolved
+          SUM(CASE WHEN COALESCE(w.status,'pendiente') IN ('completada','no_realizado','done') THEN 1 ELSE 0 END) AS detail_resolved,
+          MIN(CASE WHEN COALESCE(w.status,'pendiente') NOT IN ('completada','no_realizado','done') THEN COALESCE(w.created_at, w.updated_at) ELSE NULL END) AS oldest_pending_at,
+          MAX(CASE WHEN COALESCE(w.status,'pendiente') IN ('completada','no_realizado','done') THEN COALESCE(w.updated_at, w.created_at) ELSE NULL END) AS latest_resolved_at,
+          SUM(CASE WHEN COALESCE(w.status,'pendiente') NOT IN ('completada','no_realizado','done') THEN 1 ELSE 0 END) AS unattended_count
         FROM work_orders w LEFT JOIN (SELECT DISTINCT work_order_id FROM plan_stop_orders) planned ON planned.work_order_id=w.id
         WHERE w.deleted_at IS NULL AND w.node_id IS NOT NULL GROUP BY w.node_id
       ) p ON p.entity_id=n.id
@@ -782,7 +846,12 @@ async function loadPlanningMapCatalog(env) {
       balancerPorts:row.balancer_ports_json?(parseJson(row.balancer_ports_json,[])||[]):[],
       mapVeryHigh:Number(row.map_very_high)||0,mapHigh:Number(row.map_high)||0,mapMedium:Number(row.map_medium)||0,mapLow:Number(row.map_low)||0,mapPlannedOpen:Number(row.map_planned_open)||0,mapDetailTotal:Number(row.map_detail_total)||0,mapDetailResolved:Number(row.map_detail_resolved)||0
     })),
-    nodes:nodeRows.map(row=>({id:row.id,nodeCode:row.node_code||'',town:row.town||'',lat:row.lat,lng:row.lng,status:row.status||'',notes:row.notes||'',zone:row.zone||'',mapVeryHigh:Number(row.map_very_high)||0,mapHigh:Number(row.map_high)||0,mapMedium:Number(row.map_medium)||0,mapLow:Number(row.map_low)||0,mapPlannedOpen:Number(row.map_planned_open)||0,mapDetailTotal:Number(row.map_detail_total)||0,mapDetailResolved:Number(row.map_detail_resolved)||0}))
+    nodes:nodeRows.map(row=>({
+      id:row.id,nodeCode:row.node_code||'',town:row.town||'',lat:row.lat,lng:row.lng,status:row.status||'',notes:row.notes||'',zone:row.zone||'',
+      mapVeryHigh:Number(row.map_very_high)||0,mapHigh:Number(row.map_high)||0,mapMedium:Number(row.map_medium)||0,mapLow:Number(row.map_low)||0,
+      mapPlannedOpen:Number(row.map_planned_open)||0,mapDetailTotal:Number(row.map_detail_total)||0,mapDetailResolved:Number(row.map_detail_resolved)||0,
+      mapOldestPendingAt:row.map_oldest_pending_at||'',mapLatestResolvedAt:row.map_latest_resolved_at||'',mapUnattendedCount:Number(row.map_unattended_count)||0
+    }))
   };
 }
 
@@ -957,7 +1026,14 @@ function workOrderQuery(page = {}) {
     if (dateClauses.length) clauses.push(`(${dateClauses.join(' OR ')})`);
   }
   const detailKind=nullableText(page?.detailKind);
-  if(detailKind){clauses.push("COALESCE(w.detail_kind,'physical')=?");binds.push(detailKind);}
+  if(detailKind === 'network'){
+    clauses.push("w.detail_kind = 'network'");
+  } else if (detailKind === 'physical') {
+    clauses.push("(w.detail_kind = 'physical' OR w.detail_kind IS NULL)");
+  } else if (detailKind) {
+    clauses.push("COALESCE(w.detail_kind,'physical')=?");
+    binds.push(detailKind);
+  }
   const equipmentIds=csvValues(page?.equipmentIds);
   if (equipmentIds.length) { clauses.push(`w.equipment_id IN (${equipmentIds.map(()=>'?').join(',')}) AND w.node_id IS NULL`); binds.push(...equipmentIds); }
   const nodeIds=csvValues(page?.nodeIds);
@@ -965,8 +1041,8 @@ function workOrderQuery(page = {}) {
   const workOrderIds=csvValues(page?.workOrderIds);
   if(workOrderIds.length){clauses.push(`w.id IN (${workOrderIds.map(()=>'?').join(',')})`);binds.push(...workOrderIds);}
   const from=nullableText(page?.from),to=nullableText(page?.to);
-  if(from){clauses.push('(w.created_at>=? OR w.completed_at>=?)');binds.push(from,from);}
-  if(to){clauses.push('(w.created_at<? OR w.completed_at<?)');binds.push(to,to);}
+  if(from){clauses.push('(w.created_at>=? OR w.completed_at>=? OR (w.detail_kind=\'network\' AND w.status=\'resuelto_soporte\' AND w.updated_at>=?))');binds.push(from,from,from);}
+  if(to){clauses.push('(w.created_at<? OR w.completed_at<? OR (w.detail_kind=\'network\' AND w.status=\'resuelto_soporte\' AND w.updated_at<?))');binds.push(to,to,to);}
   const sort = text(page?.sort);
   const statusRank = `CASE
     WHEN w.status IN ('resuelto_soporte', 'no_realizado') THEN 0
@@ -1006,8 +1082,10 @@ async function resolveExactWorkOrderFolioSearch(env,page) {
   const numberOnly=/^\d{6}$/.test(requested);
   if(!prefixed&&!numberOnly)return;
   const detailKind=page.detailKind==='network'?'network':page.detailKind==='physical'?'physical':'';
-  const rows=detailKind
-    ? await all(env,"SELECT id,category FROM work_orders WHERE deleted_at IS NULL AND COALESCE(detail_kind,'physical')=?",[detailKind])
+  const rows=detailKind === 'network'
+    ? await all(env,"SELECT id,category FROM work_orders WHERE deleted_at IS NULL AND detail_kind='network'")
+    : detailKind === 'physical'
+    ? await all(env,"SELECT id,category FROM work_orders WHERE deleted_at IS NULL AND (detail_kind='physical' OR detail_kind IS NULL)")
     : await all(env,'SELECT id,category FROM work_orders WHERE deleted_at IS NULL');
   page._workOrderFolioIds=rows.filter(row=>{
     const folio=workOrderFolio(row);
@@ -1029,11 +1107,14 @@ async function loadWorkOrders(env, ctx, page = null) {
   const rows = await all(env, `SELECT w.*,z.code AS zone_code,e.name AS linked_equipment_name FROM work_orders w LEFT JOIN zones z ON z.id=w.zone_id LEFT JOIN equipment e ON e.id=w.equipment_id${query.where}${orderClause}${pagination}`, binds);
   const ids = rows.map(row => row.id);
   if (!ids.length) return [];
-  if (!ctx.audit) ctx.audit = await getLatestAuditMap(env,ids);
+  const isAdminStats = page?.adminStats === '1';
+  if (!ctx.audit) ctx.audit = isAdminStats ? new Map() : await getLatestAuditMap(env,ids);
   const materials=[];
-  for(const idsChunk of chunkValues(ids)){
-    const placeholders=idsChunk.map(()=>'?').join(',');
-    materials.push(...await all(env,`SELECT * FROM work_order_materials WHERE work_order_id IN (${placeholders}) ORDER BY work_order_id,id`,idsChunk));
+  if (!isAdminStats && page?.detailKind !== 'network') {
+    for(const idsChunk of chunkValues(ids)){
+      const placeholders=idsChunk.map(()=>'?').join(',');
+      materials.push(...await all(env,`SELECT * FROM work_order_materials WHERE work_order_id IN (${placeholders}) ORDER BY work_order_id,id`,idsChunk));
+    }
   }
   const matsBy = new Map();
   for (const row of materials) {
@@ -1042,7 +1123,7 @@ async function loadWorkOrders(env, ctx, page = null) {
     list.push(raw || { id:row.material_id||'', name:row.material_name_legacy||'', quantity:row.quantity ?? 0, unit:row.unit_legacy||'' });
     matsBy.set(row.work_order_id, list);
   }
-  const reports = await loadReportsAndEvidence(env, ids);
+  const reports = isAdminStats ? new Map() : await loadReportsAndEvidence(env, ids);
   return rows.map(row => {
     const isInstallation = isInstallationCategory(row.category);
     const out = {
@@ -1115,7 +1196,7 @@ async function loadAllWorkOrderPages(env, users, page) {
   const result=[];
   const limit=100;
   for(let offset=0;;offset+=limit){
-    const rows=await loadWorkOrders(env,{users,audit:null},{...page,limit:String(limit),offset:String(offset)});
+    const rows=await loadWorkOrders(env,{users,audit:new Map()},{...page,limit:String(limit),offset:String(offset)});
     result.push(...rows);
     if(rows.length<limit)break;
   }
@@ -1160,11 +1241,12 @@ async function loadUsers(env, page = null) {
   const zonesBy = new Map();
   for (const row of zones) { const list=zonesBy.get(row.user_id)||[]; list.push(row.code); zonesBy.set(row.user_id,list); }
   const ctx = {
-    users:new Map(rows.map(row=>[row.id,{...row,role:row.role_code}])),
+    users:await getUserMap(env),
     audit:await getLatestAuditMap(env, rows.map(row => row.id))
   };
   return rows.map(row => {
-    const out = { id:row.id,name:row.name,username:row.username,role:normalizeRole(row.role_code),active:!!row.active,phone:row.phone||'',color:row.color||'',status:row.status||'activo',zones:zonesBy.get(row.id)||[],notes:row.notes||'',hasPassword:!!(row.password_hash||row.password_legacy) };
+    const cleanUsername = String(row.username || '').split('__deleted_')[0];
+    const out = { id:row.id,name:row.name,username:cleanUsername,role:normalizeRole(row.role_code),active:!!row.active,phone:row.phone||'',color:row.color||'',status:row.status||'activo',zones:zonesBy.get(row.id)||[],notes:row.notes||'',hasPassword:!!(row.password_hash||row.password_legacy) };
     if (row.created_at) out.createdAt=row.created_at;
     if (row.updated_at) out.updatedAt=row.updated_at;
     if (row.deleted_at) out.deletedAt=row.deleted_at;
@@ -1183,7 +1265,7 @@ async function loadTechnicians(env, userIds = null) {
     for(const idsChunk of chunkValues(selectedIds))combined.push(...await loadTechnicians(env,idsChunk));
     return combined;
   }
-  const where=selectedIds?` WHERE user_id IN (${selectedIds.map(()=>'?').join(',')})`:'';
+  const where=selectedIds?` WHERE user_id IN (${selectedIds.map(()=>'?').join(',')}) OR user_id IS NULL`:'';
   const rows = await all(env, `SELECT * FROM technicians${where} ORDER BY rowid`,selectedIds||[]);
   if (!rows.length) return [];
   const zones = await all(env, `SELECT tz.technician_id,z.code FROM technician_zones tz JOIN zones z ON z.id=tz.zone_id ORDER BY tz.technician_id,z.id`);
@@ -1657,7 +1739,8 @@ export async function loadStatePart(env, part, page = {}) {
     return {equipment,nodes,materials,routes};
   }
   if (part === 'operations') {
-    await ensureWorkOrderRelationRecovery(env);
+    await ensureRelationalSchema(env).catch(() => {});
+    await ensureWorkOrderRelationRecovery(env).catch(() => {});
     const usersMap = await getUserMap(env);
     const workOrders=await loadWorkOrders(env,{users:usersMap,audit:null},page);
     const placeNodes=page?.includeMapCatalog==='1'
@@ -1666,23 +1749,52 @@ export async function loadStatePart(env, part, page = {}) {
     const visibleIds=new Set(workOrders.map(order=>order.id));
     const deletionRequests=(page?.windowed==='1'||page?.scoped==='1')?(await loadDeletionRequests(env)).filter(request=>visibleIds.has(request.targetId)||visibleIds.has(request.detailId)):[];
     const query=workOrderQuery(page);
+
+    const safeUsersQuery = async (roles) => {
+      try {
+        return await all(env, `SELECT u.id,u.name,u.username,COALESCE(u.color,'') AS color,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN (${roles.map(()=>'?').join(',')}) ORDER BY lower(u.name),lower(u.username)`, roles);
+      } catch (_) {
+        try {
+          return await all(env, `SELECT u.id,u.name,u.username,'' AS color,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN (${roles.map(()=>'?').join(',')}) ORDER BY lower(u.name),lower(u.username)`, roles);
+        } catch (__) {
+          return [];
+        }
+      }
+    };
+
     const [supportUsers, attentionUsers] = await Promise.all([
-      all(env,`SELECT u.id,u.name,u.username,u.color,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('administrador','admin','soporte') ORDER BY lower(u.name),lower(u.username)`),
-      all(env,`SELECT u.id,u.name,u.username,u.color,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN ('atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`)
+      safeUsersQuery(['administrador','admin','soporte']),
+      safeUsersQuery(['atencion_clientes','atencion'])
     ]);
     const mappedSupportUsers = supportUsers.map(user=>({id:user.id,name:user.name||user.username||'Soporte',username:user.username,color:user.color||'',role:normalizeRole(user.role)}));
     const mappedAttentionUsers = attentionUsers.map(user=>({id:user.id,name:user.name||user.username||'Atención',username:user.username,color:user.color||'',role:normalizeRole(user.role)}));
+    const needsZoneJoin = query.where.includes('z.');
+    const totalJoin = needsZoneJoin ? ' LEFT JOIN zones z ON z.id=w.zone_id' : '';
     if (page?.windowed !== '1') {
-      const totalRow=await first(env,`SELECT COUNT(*) AS total FROM work_orders w LEFT JOIN zones z ON z.id=w.zone_id${query.where}`,query.binds);
+      const totalRow=await first(env,`SELECT COUNT(*) AS total FROM work_orders w${totalJoin}${query.where}`,query.binds);
       return {workOrders,deletionRequests,total:Number(totalRow?.total)||0,supportUsers:mappedSupportUsers,attentionUsers:mappedAttentionUsers};
     }
     const statsDetailKind=page?.detailKind==='network'?'network':'physical';
     const excludedStatsCategories=statsDetailKind==='physical'?PHYSICAL_STATS_EXCLUDED_CATEGORIES:[];
     const statsCategoryClause=excludedStatsCategories.length?` AND lower(COALESCE(category,'')) NOT IN (${excludedStatsCategories.map(()=>'?').join(',')})`:'';
-    const [totalRow,statsRow,creatorRows]=await Promise.all([
-      first(env,`SELECT COUNT(*) AS total FROM work_orders w LEFT JOIN zones z ON z.id=w.zone_id${query.where}`,query.binds),
-      first(env,`SELECT COUNT(*) AS total, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND priority IN ('muy_alta','alta') THEN 1 ELSE 0 END) AS critical, SUM(CASE WHEN status='completada' THEN 1 ELSE 0 END) AS done FROM work_orders WHERE deleted_at IS NULL AND COALESCE(detail_kind,'physical')=?${statsCategoryClause}`,[statsDetailKind,...excludedStatsCategories]),
-      all(env,`SELECT DISTINCT u.id,u.name,u.username,u.color FROM work_orders w JOIN users u ON u.id=w.created_by JOIN roles r ON r.id=u.role_id WHERE w.deleted_at IS NULL AND r.code IN ('administrador','admin','soporte','atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`)
+    
+    let creatorRows = [];
+    const creatorKindClause = statsDetailKind === 'network' ? " AND w.detail_kind = 'network'" : (page?.detailKind === 'physical' ? " AND (w.detail_kind = 'physical' OR w.detail_kind IS NULL)" : "");
+    try {
+      creatorRows = await all(env, `SELECT DISTINCT u.id,u.name,u.username,COALESCE(u.color,'') AS color FROM work_orders w JOIN users u ON u.id=w.created_by JOIN roles r ON r.id=u.role_id WHERE w.deleted_at IS NULL${creatorKindClause} AND r.code IN ('administrador','admin','soporte','atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`);
+    } catch (_) {
+      try {
+        creatorRows = await all(env, `SELECT DISTINCT u.id,u.name,u.username,'' AS color FROM work_orders w JOIN users u ON u.id=w.created_by JOIN roles r ON r.id=u.role_id WHERE w.deleted_at IS NULL${creatorKindClause} AND r.code IN ('administrador','admin','soporte','atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`);
+      } catch (__) {
+        creatorRows = [];
+      }
+    }
+
+    const [totalRow,statsRow]=await Promise.all([
+      first(env,`SELECT COUNT(*) AS total FROM work_orders w${totalJoin}${query.where}`,query.binds),
+      statsDetailKind === 'network'
+        ? first(env,`SELECT COUNT(*) AS total, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND NOT (status='resuelto_soporte') THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND priority IN ('muy_alta','alta') THEN 1 ELSE 0 END) AS critical, SUM(CASE WHEN status='completada' OR status='resuelto_soporte' THEN 1 ELSE 0 END) AS done FROM work_orders WHERE deleted_at IS NULL AND detail_kind = 'network'`)
+        : first(env,`SELECT COUNT(*) AS total, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND priority IN ('muy_alta','alta') THEN 1 ELSE 0 END) AS critical, SUM(CASE WHEN status='completada' THEN 1 ELSE 0 END) AS done FROM work_orders WHERE deleted_at IS NULL AND (detail_kind = 'physical' OR detail_kind IS NULL)${statsCategoryClause}`, excludedStatsCategories)
     ]);
     return {
       workOrders,
@@ -1702,7 +1814,7 @@ export async function loadStatePart(env, part, page = {}) {
       first(env,`SELECT COUNT(*) AS total FROM users u JOIN roles r ON r.id=u.role_id${query.where}`,query.binds),
       first(env,page?.hidePrincipal==='1'?"SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL AND lower(username)<>'abraham'":'SELECT COUNT(*) AS total FROM users WHERE deleted_at IS NULL')
     ]);
-    const technicians=await loadTechnicians(env,users.map(user=>user.id));
+    const technicians=await loadTechnicians(env);
     return {technicians,users,total:Number(totalRow?.total)||0,stats:{total:Number(statsRow?.total)||0}};
   }
   if (part === 'activity') {
@@ -1739,23 +1851,37 @@ export async function loadStatePart(env, part, page = {}) {
     if(!mapCatalog)for(const idsChunk of chunkValues(nodeIds))nodes.push(...await loadNodes(env,ctx,{paged:'1',limit:'100',nodeIds:idsChunk.join(',')}));
     const workOrdersById=new Map();
     const appendWorkOrders=rows=>rows.forEach(order=>workOrdersById.set(order.id,order));
-    for(const idsChunk of chunkValues(detailIds))appendWorkOrders(await loadAllWorkOrderPages(env,usersMap,{workOrderIds:idsChunk.join(',')}));
-    // Una parada puede haberse guardado antes de que el navegador cargara sus
-    // ordenes. Recuperar tambien los detalles abiertos por entidad evita que el
-    // plan quede permanentemente en 0/0 aunque la ficha de la antena o pueblo si
-    // los muestre. Los terminados historicos siguen entrando solo por vinculo.
-    for(const idsChunk of chunkValues(equipmentIds))appendWorkOrders(await loadAllWorkOrderPages(env,usersMap,{equipmentIds:idsChunk.join(','),openOnly:'1'}));
-    for(const idsChunk of chunkValues(nodeIds))appendWorkOrders(await loadAllWorkOrderPages(env,usersMap,{nodeIds:idsChunk.join(','),openOnly:'1'}));
+    const workOrderTasks = [
+      ...chunkValues(detailIds).map(idsChunk => loadAllWorkOrderPages(env,usersMap,{workOrderIds:idsChunk.join(',')})),
+      ...chunkValues(equipmentIds).map(idsChunk => loadAllWorkOrderPages(env,usersMap,{equipmentIds:idsChunk.join(','),openOnly:'1'})),
+      ...chunkValues(nodeIds).map(idsChunk => loadAllWorkOrderPages(env,usersMap,{nodeIds:idsChunk.join(','),openOnly:'1'}))
+    ];
     const viewerId = nullableText(page?.viewerId);
     if (viewerId) {
-      appendWorkOrders(await loadAllWorkOrderPages(env,usersMap,{assignee:viewerId}));
+      workOrderTasks.push(loadAllWorkOrderPages(env,usersMap,{assignee:viewerId}));
     }
+    const [woBatches, rawDeletionRequests, materialMovements, technicians, userRows] = await Promise.all([
+      Promise.all(workOrderTasks),
+      loadDeletionRequests(env),
+      loadAllMaterialMovements(env),
+      loadTechnicians(env),
+      all(env, `SELECT u.id,u.name,u.username,u.phone,u.color,u.active,u.status,u.deleted_at,r.code AS role_code FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL ORDER BY lower(u.name),u.rowid`)
+    ]);
+    const users = (userRows || []).map(row => ({
+      id: row.id,
+      name: row.name,
+      username: String(row.username || '').split('__deleted_')[0],
+      role: normalizeRole(row.role_code),
+      active: !!row.active,
+      phone: row.phone || '',
+      color: row.color || '',
+      status: row.status || 'activo'
+    }));
+    for (const batch of woBatches) appendWorkOrders(batch);
     const workOrders=[...workOrdersById.values()];
     const visibleIds=new Set([...equipmentIds,...nodeIds,...detailIds]);
-    const deletionRequests=(await loadDeletionRequests(env)).filter(request=>visibleIds.has(request.targetId)||visibleIds.has(request.nodeId)||visibleIds.has(request.detailId));
-    const materialMovements = await loadAllMaterialMovements(env);
-    const technicians = await loadTechnicians(env);
-    return {weekPlan,prepChecked,syncMeta:syncMeta||{},equipment,nodes,workOrders,deletionRequests,materialMovements,technicians};
+    const deletionRequests=rawDeletionRequests.filter(request=>visibleIds.has(request.targetId)||visibleIds.has(request.nodeId)||visibleIds.has(request.detailId));
+    return {weekPlan,prepChecked,syncMeta:syncMeta||{},equipment,nodes,workOrders,deletionRequests,materialMovements,technicians,users};
   }
   throw new Error(`Seccion de datos no permitida: ${part}`);
 }
@@ -1786,46 +1912,65 @@ async function replaceZones(env, ownerTable, ownerColumn, ownerId, zones) {
 
 async function upsertEquipment(env, rec) {
   await ensureEquipmentColumns(env);
-  const zoneId=await ensureZone(env,rec.region);
+  const zoneId=await ensureZone(env,rec.region || rec.zone);
+  const [createdBy, updatedBy, towerUpdatedBy] = await Promise.all([
+    resolveValidUserId(env, rec.createdById),
+    resolveValidUserId(env, rec.updatedById),
+    resolveValidUserId(env, rec.towerMaterialUpdatedById)
+  ]);
   const balancerPortCount = Number.isInteger(Number(rec.balancerPortCount)) && Number(rec.balancerPortCount) >= 1 && Number(rec.balancerPortCount) <= 48
     ? Number(rec.balancerPortCount)
     : 9;
   const balancerPortsJson = JSON.stringify(Array.isArray(rec.balancerPorts) ? rec.balancerPorts : []);
   await run(env, `INSERT INTO equipment(id,name,ip,type,lat,lng,status,provider,notes,zone_id,ssid,radio_summary_legacy,radio_models_legacy,radio_names_legacy,station_names_legacy,radio_free_text_legacy,created_at,updated_at,deleted_at,purged_at,created_by,updated_by,tower_material_notes,tower_sections,tower_radios,tower_batteries,tower_panels,tower_extra_notes,tower_material_photos_json,tower_material_slots_json,tower_material_updated_at,tower_material_updated_by_name,tower_material_updated_by,balancer_port_count,balancer_ports_json)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET name=excluded.name,ip=excluded.ip,type=excluded.type,lat=excluded.lat,lng=excluded.lng,status=excluded.status,provider=excluded.provider,notes=excluded.notes,zone_id=excluded.zone_id,ssid=excluded.ssid,radio_summary_legacy=excluded.radio_summary_legacy,radio_models_legacy=excluded.radio_models_legacy,radio_names_legacy=excluded.radio_names_legacy,station_names_legacy=excluded.station_names_legacy,radio_free_text_legacy=excluded.radio_free_text_legacy,created_at=COALESCE(equipment.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,purged_at=excluded.purged_at,created_by=COALESCE(equipment.created_by,excluded.created_by),updated_by=excluded.updated_by,tower_material_notes=excluded.tower_material_notes,tower_sections=excluded.tower_sections,tower_radios=excluded.tower_radios,tower_batteries=excluded.tower_batteries,tower_panels=excluded.tower_panels,tower_extra_notes=excluded.tower_extra_notes,tower_material_photos_json=excluded.tower_material_photos_json,tower_material_slots_json=excluded.tower_material_slots_json,tower_material_updated_at=excluded.tower_material_updated_at,tower_material_updated_by_name=excluded.tower_material_updated_by_name,tower_material_updated_by=excluded.tower_material_updated_by,balancer_port_count=excluded.balancer_port_count,balancer_ports_json=excluded.balancer_ports_json`,
-    [rec.id,text(rec.name),text(rec.ip),text(rec.type),nullableNumber(rec.lat),nullableNumber(rec.lng),text(rec.status),text(rec.provider),text(rec.notes),zoneId,rec.ssid??null,rec.radioSummary??null,rec.radioModels??null,rec.radioNames??null,rec.stationNames??null,rec.radioFreeText??null,rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,rec.purgedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById),rec.towerMaterialNotes??null,rec.towerSections??null,rec.towerRadios??null,rec.towerBatteries??null,rec.towerPanels??null,rec.towerExtraNotes??null,JSON.stringify(Array.isArray(rec.towerMaterialPhotos)?rec.towerMaterialPhotos:[]),JSON.stringify(rec.towerMaterialSlots&&typeof rec.towerMaterialSlots==='object'?rec.towerMaterialSlots:{}),rec.towerMaterialUpdatedAt??null,rec.towerMaterialUpdatedByName??null,nullableText(rec.towerMaterialUpdatedById),balancerPortCount,balancerPortsJson]);
+    ON CONFLICT(id) DO UPDATE SET name=excluded.name,ip=excluded.ip,type=excluded.type,lat=excluded.lat,lng=excluded.lng,status=excluded.status,provider=excluded.provider,notes=excluded.notes,zone_id=excluded.zone_id,ssid=excluded.ssid,radio_summary_legacy=excluded.radio_summary_legacy,radio_models_legacy=excluded.radio_models_legacy,radio_names_legacy=excluded.radio_names_legacy,station_names_legacy=excluded.station_names_legacy,radio_free_text_legacy=excluded.radio_free_text_legacy,created_at=COALESCE(equipment.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,purged_at=excluded.purged_at,created_by=COALESCE(equipment.created_by,excluded.created_by),updated_by=COALESCE(excluded.updated_by,equipment.updated_by),tower_material_notes=excluded.tower_material_notes,tower_sections=excluded.tower_sections,tower_radios=excluded.tower_radios,tower_batteries=excluded.tower_batteries,tower_panels=excluded.tower_panels,tower_extra_notes=excluded.tower_extra_notes,tower_material_photos_json=excluded.tower_material_photos_json,tower_material_slots_json=excluded.tower_material_slots_json,tower_material_updated_at=excluded.tower_material_updated_at,tower_material_updated_by_name=excluded.tower_material_updated_by_name,tower_material_updated_by=COALESCE(excluded.tower_material_updated_by,equipment.tower_material_updated_by),balancer_port_count=excluded.balancer_port_count,balancer_ports_json=excluded.balancer_ports_json`,
+    [rec.id,text(rec.name,'Equipo'),text(rec.ip),text(rec.type),nullableNumber(rec.lat),nullableNumber(rec.lng),text(rec.status,'activo'),text(rec.provider),text(rec.notes),zoneId,rec.ssid??null,rec.radioSummary??null,rec.radioModels??null,rec.radioNames??null,rec.stationNames??null,rec.radioFreeText??null,rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,rec.purgedAt??null,createdBy,updatedBy,rec.towerMaterialNotes??null,rec.towerSections??null,rec.towerRadios??null,rec.towerBatteries??null,rec.towerPanels??null,rec.towerExtraNotes??null,JSON.stringify(Array.isArray(rec.towerMaterialPhotos)?rec.towerMaterialPhotos:[]),JSON.stringify(rec.towerMaterialSlots&&typeof rec.towerMaterialSlots==='object'?rec.towerMaterialSlots:{}),rec.towerMaterialUpdatedAt??null,rec.towerMaterialUpdatedByName??null,towerUpdatedBy,balancerPortCount,balancerPortsJson]);
   if (Array.isArray(rec.radioLinks)) {
     await run(env,'DELETE FROM equipment_radios WHERE equipment_id=?',[rec.id]);
-    const stmts=rec.radioLinks.map((r,i)=>env.DB.prepare(`INSERT INTO equipment_radios(id,equipment_id,position,name,model,antenna_type,sector,port,ip,ssid,gateway,location_raw,lat,lng) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(generatedId('er'),rec.id,i,text(r.name),text(r.model),text(r.antennaType),text(r.sector),text(r.port),text(r.ip),text(r.ssid),text(r.gateway),text(r.location),nullableNumber(r.lat),nullableNumber(r.lng)));
+    const stmts=rec.radioLinks.map((r,i)=>env.DB.prepare(`INSERT OR REPLACE INTO equipment_radios(id,equipment_id,position,name,model,antenna_type,sector,port,ip,ssid,gateway,location_raw,lat,lng) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(generatedId('er'),rec.id,i,text(r.name),text(r.model),text(r.antennaType),text(r.sector),text(r.port),text(r.ip),text(r.ssid),text(r.gateway),text(r.location),nullableNumber(r.lat),nullableNumber(r.lng)));
     if (stmts.length) await batchChunks(env,stmts);
   }
   if (Array.isArray(rec.linkedNodeIds)) {
     await run(env,'DELETE FROM equipment_nodes WHERE equipment_id=?',[rec.id]);
-    const cleanNodeIds = rec.linkedNodeIds.filter(Boolean);
+    const cleanNodeIds = [...new Set(rec.linkedNodeIds.map(id => nullableText(id)).filter(Boolean))];
     if (cleanNodeIds.length) {
-      // Regla: un pueblo solo puede asignarse a una antena
+      const existingNodeIds = new Set();
       for (const chunk of chunkValues(cleanNodeIds)) {
         const ph = chunk.map(() => '?').join(',');
-        await run(env, `DELETE FROM equipment_nodes WHERE node_id IN (${ph})`, chunk);
+        const rows = await all(env, `SELECT id FROM nodes WHERE id IN (${ph})`, chunk);
+        rows.forEach(r => existingNodeIds.add(r.id));
       }
-      const stmts=cleanNodeIds.map((nodeId,i)=>env.DB.prepare('INSERT OR IGNORE INTO equipment_nodes(equipment_id,node_id,position,created_at) VALUES(?,?,?,?)').bind(rec.id,nodeId,i,new Date().toISOString()));
-      await batchChunks(env,stmts);
+      const validNodeIds = cleanNodeIds.filter(id => existingNodeIds.has(id));
+      if (validNodeIds.length) {
+        // Regla: un pueblo solo puede asignarse a una antena
+        for (const chunk of chunkValues(validNodeIds)) {
+          const ph = chunk.map(() => '?').join(',');
+          await run(env, `DELETE FROM equipment_nodes WHERE node_id IN (${ph})`, chunk);
+        }
+        const stmts=validNodeIds.map((nodeId,i)=>env.DB.prepare('INSERT OR IGNORE INTO equipment_nodes(equipment_id,node_id,position,created_at) VALUES(?,?,?,?)').bind(rec.id,nodeId,i,new Date().toISOString()));
+        await batchChunks(env,stmts);
+      }
     }
   }
 }
 
 async function upsertNode(env,rec) {
-  const zoneId=await ensureZone(env,rec.zone);
+  const zoneId=await ensureZone(env,rec.zone || rec.region);
+  const [createdBy, updatedBy, deletedBy] = await Promise.all([
+    resolveValidUserId(env, rec.createdById),
+    resolveValidUserId(env, rec.updatedById),
+    resolveValidUserId(env, rec.deletedById)
+  ]);
   await run(env, `INSERT INTO nodes(id,node_code,town,zone_id,lat,lng,status,notes,created_at,updated_at,deleted_at,created_by,updated_by,deleted_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-   ON CONFLICT(id) DO UPDATE SET node_code=excluded.node_code,town=excluded.town,zone_id=excluded.zone_id,lat=excluded.lat,lng=excluded.lng,status=excluded.status,notes=excluded.notes,created_at=COALESCE(nodes.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,created_by=COALESCE(nodes.created_by,excluded.created_by),updated_by=excluded.updated_by,deleted_by=excluded.deleted_by`,
-   [rec.id,text(rec.nodeCode),text(rec.town),zoneId,nullableNumber(rec.lat),nullableNumber(rec.lng),text(rec.status),text(rec.notes),rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById),nullableText(rec.deletedById)]);
+   ON CONFLICT(id) DO UPDATE SET node_code=excluded.node_code,town=excluded.town,zone_id=excluded.zone_id,lat=excluded.lat,lng=excluded.lng,status=excluded.status,notes=excluded.notes,created_at=COALESCE(nodes.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,created_by=COALESCE(nodes.created_by,excluded.created_by),updated_by=COALESCE(excluded.updated_by,nodes.updated_by),deleted_by=COALESCE(excluded.deleted_by,nodes.deleted_by)`,
+   [rec.id,text(rec.nodeCode),text(rec.town || rec.name),zoneId,nullableNumber(rec.lat),nullableNumber(rec.lng),text(rec.status,'activo'),text(rec.notes),rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,createdBy,updatedBy,deletedBy]);
 }
 
 async function upsertWorkOrder(env,rec) {
-  const zoneId=await ensureZone(env,rec.region);
+  const zoneId=await ensureZone(env,rec.region || rec.zone);
   const isInstallation=isInstallationCategory(rec.category);
-  const status=isInstallation?'completada':text(rec.status);
+  const status=isInstallation?'completada':text(rec.status,'pendiente');
   const completedAt=isInstallation?(rec.completedAt||rec.technicianReport?.completedAt||rec.createdAt||new Date().toISOString()):(rec.completedAt??null);
   const relationProperties=['equipmentId','nodeId','equipmentName','nodeCode','nodeName','town'];
   const missingRelationProperty=relationProperties.some(property=>!Object.prototype.hasOwnProperty.call(rec,property));
@@ -1843,10 +1988,18 @@ async function upsertWorkOrder(env,rec) {
   const assignedUserName=nullableText(rec.assignedUserName || rec.assignedToName);
   const targetRole=nullableText(rec.targetRole);
   const originRole=nullableText(rec.originRole);
+  const [validEquipmentId, validNodeId, validReviewOpenedBy, validCreatedBy, validUpdatedBy, validDeletedBy] = await Promise.all([
+    resolveValidEquipmentId(env, equipmentId),
+    resolveValidNodeId(env, nodeId),
+    resolveValidUserId(env, rec.reviewOpenedById),
+    resolveValidUserId(env, rec.createdById),
+    resolveValidUserId(env, rec.updatedById),
+    resolveValidUserId(env, rec.deletedById)
+  ]);
   const insertSql = `INSERT INTO work_orders(id,title,category,detail_kind,review_opened_at,review_opened_by,reviewed_at,last_resent_at,follow_ups_json,source_order_id,description,legacy_desc,client_name,client_phone,equipment_id,node_id,equipment_name_legacy,node_code_legacy,node_name_legacy,town_legacy,priority,visit_type,zone_id,status,detail_location,lat,lng,legacy_technician_id,created_at,updated_at,completed_at,deleted_at,created_by,updated_by,deleted_by,target_role,origin_role,assigned_user_id,assigned_user_name)
    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-   ON CONFLICT(id) DO UPDATE SET title=excluded.title,category=excluded.category,detail_kind=excluded.detail_kind,review_opened_at=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL ELSE COALESCE(NULLIF(work_orders.review_opened_at,''),NULLIF(excluded.review_opened_at,'')) END,review_opened_by=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL WHEN NULLIF(work_orders.review_opened_at,'') IS NULL THEN excluded.review_opened_by ELSE work_orders.review_opened_by END,reviewed_at=excluded.reviewed_at,last_resent_at=excluded.last_resent_at,follow_ups_json=excluded.follow_ups_json,source_order_id=excluded.source_order_id,description=excluded.description,legacy_desc=excluded.legacy_desc,client_name=excluded.client_name,client_phone=excluded.client_phone,equipment_id=excluded.equipment_id,node_id=excluded.node_id,equipment_name_legacy=excluded.equipment_name_legacy,node_code_legacy=excluded.node_code_legacy,node_name_legacy=excluded.node_name_legacy,town_legacy=excluded.town_legacy,priority=excluded.priority,visit_type=excluded.visit_type,zone_id=excluded.zone_id,status=CASE WHEN work_orders.status='en_revision' AND excluded.status='pendiente' AND excluded.last_resent_at IS NULL THEN work_orders.status ELSE excluded.status END,detail_location=excluded.detail_location,lat=excluded.lat,lng=excluded.lng,legacy_technician_id=excluded.legacy_technician_id,created_at=COALESCE(work_orders.created_at,excluded.created_at),updated_at=excluded.updated_at,completed_at=excluded.completed_at,deleted_at=excluded.deleted_at,created_by=COALESCE(work_orders.created_by,excluded.created_by),updated_by=excluded.updated_by,deleted_by=excluded.deleted_by,target_role=COALESCE(excluded.target_role,work_orders.target_role),origin_role=COALESCE(excluded.origin_role,work_orders.origin_role),assigned_user_id=excluded.assigned_user_id,assigned_user_name=excluded.assigned_user_name`;
-  const insertBinds = [rec.id,text(rec.title),rec.category??null,rec.detailKind==='network'?'network':'physical',nullableText(rec.reviewOpenedAt),nullableText(rec.reviewOpenedById),rec.reviewedAt??null,rec.lastResentAt??null,JSON.stringify(Array.isArray(rec.followUps)?rec.followUps:[]),nullableText(rec.sourceOrderId),rec.description??null,rec.desc??null,rec.clientName??null,rec.clientPhone??rec.phone??null,equipmentId,nodeId,equipmentName,nodeCode,nodeName,town,text(rec.priority),text(rec.visitType),zoneId,status,rec.detailLocation??null,nullableNumber(rec.lat),nullableNumber(rec.lng),rec.technicianId??null,rec.createdAt??null,rec.updatedAt??null,completedAt,rec.deletedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById),nullableText(rec.deletedById),targetRole,originRole,assignedUserId,assignedUserName];
+   ON CONFLICT(id) DO UPDATE SET title=excluded.title,category=excluded.category,detail_kind=excluded.detail_kind,review_opened_at=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL ELSE COALESCE(NULLIF(work_orders.review_opened_at,''),NULLIF(excluded.review_opened_at,'')) END,review_opened_by=CASE WHEN excluded.status='pendiente' AND excluded.last_resent_at IS NOT NULL THEN NULL WHEN NULLIF(work_orders.review_opened_at,'') IS NULL THEN excluded.review_opened_by ELSE work_orders.review_opened_by END,reviewed_at=excluded.reviewed_at,last_resent_at=excluded.last_resent_at,follow_ups_json=excluded.follow_ups_json,source_order_id=excluded.source_order_id,description=excluded.description,legacy_desc=excluded.legacy_desc,client_name=excluded.client_name,client_phone=excluded.client_phone,equipment_id=excluded.equipment_id,node_id=excluded.node_id,equipment_name_legacy=excluded.equipment_name_legacy,node_code_legacy=excluded.node_code_legacy,node_name_legacy=excluded.node_name_legacy,town_legacy=excluded.town_legacy,priority=excluded.priority,visit_type=excluded.visit_type,zone_id=excluded.zone_id,status=CASE WHEN work_orders.status='en_revision' AND excluded.status='pendiente' AND excluded.last_resent_at IS NULL THEN work_orders.status ELSE excluded.status END,detail_location=excluded.detail_location,lat=excluded.lat,lng=excluded.lng,legacy_technician_id=excluded.legacy_technician_id,created_at=COALESCE(work_orders.created_at,excluded.created_at),updated_at=excluded.updated_at,completed_at=excluded.completed_at,deleted_at=excluded.deleted_at,created_by=COALESCE(work_orders.created_by,excluded.created_by),updated_by=COALESCE(excluded.updated_by,work_orders.updated_by),deleted_by=COALESCE(excluded.deleted_by,work_orders.deleted_by),target_role=COALESCE(excluded.target_role,work_orders.target_role),origin_role=COALESCE(excluded.origin_role,work_orders.origin_role),assigned_user_id=excluded.assigned_user_id,assigned_user_name=excluded.assigned_user_name`;
+  const insertBinds = [rec.id,text(rec.title,'Detalle'),rec.category??null,rec.detailKind==='network'?'network':'physical',nullableText(rec.reviewOpenedAt),validReviewOpenedBy,rec.reviewedAt??null,rec.lastResentAt??null,JSON.stringify(Array.isArray(rec.followUps)?rec.followUps:[]),nullableText(rec.sourceOrderId),rec.description??null,rec.desc??null,rec.clientName??null,rec.clientPhone??rec.phone??null,validEquipmentId,validNodeId,equipmentName,nodeCode,nodeName,town,text(rec.priority),text(rec.visitType),zoneId,status,rec.detailLocation??null,nullableNumber(rec.lat),nullableNumber(rec.lng),rec.technicianId??null,rec.createdAt??null,rec.updatedAt??null,completedAt,rec.deletedAt??null,validCreatedBy,validUpdatedBy,validDeletedBy,targetRole,originRole,assignedUserId,assignedUserName];
 
   try {
     await run(env, insertSql, insertBinds);
@@ -1877,31 +2030,89 @@ async function upsertUser(env,rec) {
   const roleId=await ensureRole(env,rec.role);
   const password = text(rec.password).trim();
   const passwordHash = password ? await hashPassword(password) : null;
+  const rawUsername = text(rec.username).trim().replace(/^@+/, '').trim();
+  if (!rawUsername) {
+    const err = new Error('El nombre de usuario es obligatorio');
+    err.status = 400;
+    err.code = 'MISSING_USERNAME';
+    err.syncType = 'DATOS_INVALIDOS';
+    throw err;
+  }
+
+  const isDeleting = Boolean(rec.deletedAt);
+
+  // Verificar si otro usuario (activo o eliminado) ya tiene este mismo username
+  const existingWithSameUsername = await first(env, 'SELECT id, name, deleted_at FROM users WHERE lower(username) = lower(?) AND id <> ?', [rawUsername, rec.id]);
+
+  if (existingWithSameUsername) {
+    if (existingWithSameUsername.deleted_at) {
+      // El registro existente fue eliminado previamente: liberar su username para permitir la inserción del nuevo usuario
+      await run(env, "UPDATE users SET username = username || '__deleted_' || id WHERE id = ?", [existingWithSameUsername.id]);
+    } else if (!isDeleting) {
+      // Usuario activo existente: mensaje de validación claro con HTTP 400
+      const err = new Error(`El nombre de usuario "${rawUsername}" ya está en uso por "${existingWithSameUsername.name}". Por favor elige otro.`);
+      err.status = 400;
+      err.code = 'USERNAME_ALREADY_EXISTS';
+      err.syncType = 'DATOS_INVALIDOS';
+      throw err;
+    }
+  }
+
+  // Si este usuario se está eliminando, sufijar su username con su ID único para no bloquear registros futuros
+  const finalUsername = isDeleting
+    ? (rawUsername.includes('__deleted_') ? rawUsername : `${rawUsername}__deleted_${rec.id}`)
+    : rawUsername;
+
   const existing = await first(env,'SELECT id,password_hash,password_legacy FROM users WHERE id=?',[rec.id]);
-  if (!existing && !passwordHash) throw new Error('La contrasena es obligatoria para usuarios nuevos');
+  if (!existing && !passwordHash && !isDeleting && !rec.hasPassword) {
+    const err = new Error('La contrasena es obligatoria para usuarios nuevos');
+    err.status = 400;
+    err.code = 'MISSING_PASSWORD';
+    err.syncType = 'DATOS_INVALIDOS';
+    throw err;
+  }
+  const [createdBy, updatedBy] = await Promise.all([
+    resolveValidUserId(env, rec.createdById),
+    resolveValidUserId(env, rec.updatedById)
+  ]);
   await run(env, `INSERT INTO users(id,name,username,password_legacy,password_hash,role_id,legacy_role,phone,color,status,active,notes,created_at,updated_at,deleted_at,created_by,updated_by) VALUES(?,?,?,NULL,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET name=excluded.name,username=excluded.username,password_legacy=CASE WHEN excluded.password_hash IS NOT NULL THEN NULL ELSE users.password_legacy END,password_hash=COALESCE(excluded.password_hash,users.password_hash),role_id=excluded.role_id,legacy_role=excluded.legacy_role,phone=excluded.phone,color=excluded.color,status=excluded.status,active=excluded.active,notes=excluded.notes,created_at=COALESCE(users.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,created_by=COALESCE(users.created_by,excluded.created_by),updated_by=excluded.updated_by`,
-    [rec.id,text(rec.name),text(rec.username),passwordHash,roleId,text(rec.role),text(rec.phone),nullableText(rec.color),text(rec.status,'activo'),boolInt(rec.active,true),text(rec.notes),rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,nullableText(rec.createdById),nullableText(rec.updatedById)]);
+    ON CONFLICT(id) DO UPDATE SET name=excluded.name,username=excluded.username,password_legacy=CASE WHEN excluded.password_hash IS NOT NULL THEN NULL ELSE users.password_legacy END,password_hash=COALESCE(excluded.password_hash,users.password_hash),role_id=excluded.role_id,legacy_role=excluded.legacy_role,phone=excluded.phone,color=excluded.color,status=excluded.status,active=excluded.active,notes=excluded.notes,created_at=COALESCE(users.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,created_by=COALESCE(users.created_by,excluded.created_by),updated_by=COALESCE(excluded.updated_by,users.updated_by)`,
+    [rec.id,text(rec.name,rawUsername),finalUsername,passwordHash,roleId,text(rec.role),text(rec.phone),nullableText(rec.color),text(rec.status,'activo'),boolInt(rec.active,true),text(rec.notes),rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,createdBy,updatedBy]);
   await replaceZones(env,'user_zones','user_id',rec.id,rec.zones);
 }
 
 async function upsertTechnician(env,rec) {
+  const validUserId = await resolveValidUserId(env, rec.userId || rec.usuario || rec.username);
   await run(env, `INSERT INTO technicians(id,user_id,name,phone,status,username_legacy,password_legacy,notes,created_at,deleted_at) VALUES(?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,name=excluded.name,phone=excluded.phone,status=excluded.status,username_legacy=excluded.username_legacy,password_legacy=excluded.password_legacy,notes=excluded.notes,created_at=COALESCE(technicians.created_at,excluded.created_at),deleted_at=excluded.deleted_at`,
-    [rec.id,nullableText(rec.userId),text(rec.nombre),text(rec.telefono),text(rec.estado),rec.usuario??null,rec.password??null,text(rec.notas),rec.createdAt??null,rec.deletedAt??null]);
-  await replaceZones(env,'technician_zones','technician_id',rec.id,rec.regiones);
+    ON CONFLICT(id) DO UPDATE SET user_id=COALESCE(excluded.user_id,technicians.user_id),name=excluded.name,phone=excluded.phone,status=excluded.status,username_legacy=excluded.username_legacy,password_legacy=COALESCE(excluded.password_legacy,technicians.password_legacy),notes=excluded.notes,created_at=COALESCE(technicians.created_at,excluded.created_at),deleted_at=excluded.deleted_at`,
+    [rec.id,validUserId,text(rec.nombre||rec.name,'Técnico'),text(rec.telefono||rec.phone),text(rec.estado||rec.status,'activo'),rec.usuario??rec.username??null,rec.password??null,text(rec.notas||rec.notes),rec.createdAt??null,rec.deletedAt??null]);
+  await replaceZones(env,'technician_zones','technician_id',rec.id,rec.regiones||rec.zones);
 }
 
 async function upsertMaterial(env,rec) {
-  await run(env, `INSERT INTO materials(id,name,unit,status,notes,created_at,updated_at,deleted_at,stock,minimum_stock,category,price,package_size) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,unit=excluded.unit,status=excluded.status,notes=excluded.notes,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,stock=excluded.stock,minimum_stock=excluded.minimum_stock,category=excluded.category,price=excluded.price,package_size=excluded.package_size`, [rec.id,text(rec.name||rec.nombre),text(rec.unit||rec.unidad),text(rec.status,'activo'),text(rec.notes||rec.desc),rec.createdAt??null,rec.updatedAt??new Date().toISOString(),rec.deletedAt??null,Number(rec.stock??rec.cantidad)||0,Number(rec.minimumStock)||0,text(rec.category||rec.categoria),Number(rec.price??rec.precio)||0,Math.max(1,Number(rec.packageSize)||1)]);
-  if (Object.prototype.hasOwnProperty.call(rec,'photo') && /^data:image\/[a-z0-9.+-]+;base64,/i.test(String(rec.photo||''))) {
+  await run(env, `INSERT INTO materials(id,name,unit,status,notes,created_at,updated_at,deleted_at,stock,minimum_stock,category,price,package_size) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,unit=excluded.unit,status=excluded.status,notes=excluded.notes,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,stock=excluded.stock,minimum_stock=excluded.minimum_stock,category=excluded.category,price=excluded.price,package_size=excluded.package_size`, [rec.id,text(rec.name||rec.nombre,'Material'),text(rec.unit||rec.unidad),text(rec.status,'activo'),text(rec.notes||rec.desc),rec.createdAt??null,rec.updatedAt??new Date().toISOString(),rec.deletedAt??null,Number(rec.stock??rec.cantidad)||0,Number(rec.minimumStock)||0,text(rec.category||rec.categoria),Number(rec.price??rec.precio)||0,Math.max(1,Number(rec.packageSize)||1)]);
+  if (Object.prototype.hasOwnProperty.call(rec,'photo')) {
     await run(env,'DELETE FROM material_photos WHERE material_id=?',[rec.id]);
-    await run(env,'INSERT INTO material_photos(id,material_id,storage_type,storage_key,created_at) VALUES(?,?,?,?,?)',[generatedId('mp'),rec.id,'inline_data_url',rec.photo,rec.updatedAt||new Date().toISOString()]);
+    if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(String(rec.photo||''))) {
+      await run(env,'INSERT OR REPLACE INTO material_photos(id,material_id,storage_type,storage_key,created_at) VALUES(?,?,?,?,?)',[generatedId('mp'),rec.id,'inline_data_url',rec.photo,rec.updatedAt||new Date().toISOString()]);
+    }
   }
   if (Array.isArray(rec.allocations)) {
     await run(env,'DELETE FROM technician_material_stock WHERE material_id=?',[rec.id]);
     const now=new Date().toISOString();
-    const stmts=rec.allocations.filter(x=>x?.technicianId && Number(x.quantity)>0).map(x=>env.DB.prepare('INSERT INTO technician_material_stock(material_id,technician_id,quantity,updated_at) VALUES(?,?,?,?)').bind(rec.id,x.technicianId,Number(x.quantity),x.updatedAt||now));
+    const mergedByTech = new Map();
+    for (const x of rec.allocations) {
+      const q = Number(x?.quantity);
+      if (!x?.technicianId || !Number.isFinite(q) || q <= 0) continue;
+      const validTechId = await resolveValidTechnicianId(env, x.technicianId);
+      if (!validTechId) continue;
+      const prev = mergedByTech.get(validTechId);
+      mergedByTech.set(validTechId, {
+        quantity: (prev?.quantity || 0) + q,
+        updatedAt: x.updatedAt || prev?.updatedAt || now
+      });
+    }
+    const stmts=[...mergedByTech.entries()].map(([techId, info])=>env.DB.prepare('INSERT OR REPLACE INTO technician_material_stock(material_id,technician_id,quantity,updated_at) VALUES(?,?,?,?)').bind(rec.id,techId,info.quantity,info.updatedAt));
     if (stmts.length) await batchChunks(env,stmts);
   }
   const movements = Array.isArray(rec.movements) ? rec.movements : (rec.movement && typeof rec.movement === 'object' ? [rec.movement] : []);
@@ -2001,34 +2212,76 @@ async function upsertMaterialMovement(env, movement) {
 }
 
 async function upsertRoute(env,rec) {
-  await run(env, `INSERT INTO routes(id,name,region_legacy) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,region_legacy=excluded.region_legacy`, [rec.id,text(rec.n),text(rec.r)]);
+  await run(env, `INSERT INTO routes(id,name,region_legacy) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,region_legacy=excluded.region_legacy`, [rec.id,text(rec.n||rec.name,'Ruta'),text(rec.r||rec.region)]);
   if (Array.isArray(rec.coords)) {
     await run(env,'DELETE FROM route_points WHERE route_id=?',[rec.id]);
-    const stmts=rec.coords.map((p,i)=>env.DB.prepare('INSERT INTO route_points(id,route_id,position,name,lat,lng) VALUES(?,?,?,?,?,?)').bind(generatedId('rp'),rec.id,i,text(p.name),nullableNumber(p.lat),nullableNumber(p.lng)));
+    const stmts=rec.coords.map((p,i)=>env.DB.prepare('INSERT OR REPLACE INTO route_points(id,route_id,position,name,lat,lng) VALUES(?,?,?,?,?,?)').bind(generatedId('rp'),rec.id,i,text(p.name),nullableNumber(p.lat),nullableNumber(p.lng)));
     if (stmts.length) await batchChunks(env,stmts);
   }
 }
 
 export async function deleteRecord(env,listKey,id) {
-  if (listKey !== 'routes') throw new Error('Eliminacion directa no permitida');
-  const routeId=nullableText(id);
-  if (!routeId) throw new Error('Ruta sin id');
-  await run(env,'DELETE FROM route_points WHERE route_id=?',[routeId]);
-  await run(env,'DELETE FROM routes WHERE id=?',[routeId]);
+  const targetId=nullableText(id);
+  if (!targetId) throw new Error('Registro sin id');
+  const now=new Date().toISOString();
+  switch (listKey) {
+    case 'routes':
+      await run(env,'DELETE FROM route_points WHERE route_id=?',[targetId]);
+      await run(env,'DELETE FROM routes WHERE id=?',[targetId]);
+      break;
+    case 'users':
+      await run(env,"UPDATE users SET deleted_at=?, updated_at=?, active=0, status='inactivo', username = CASE WHEN username LIKE '%__deleted_%' THEN username ELSE username || '__deleted_' || id END WHERE id=?",[now,now,targetId]);
+      await run(env,"UPDATE technicians SET deleted_at=?, status='inactivo' WHERE user_id=?",[now,targetId]);
+      break;
+    case 'technicians':
+      await run(env,"UPDATE technicians SET deleted_at=?, status='inactivo' WHERE id=?",[now,targetId]);
+      break;
+    case 'equipment':
+      await run(env,'UPDATE equipment SET deleted_at=?, updated_at=? WHERE id=?',[now,now,targetId]);
+      await run(env,'DELETE FROM equipment_nodes WHERE equipment_id=?',[targetId]);
+      break;
+    case 'nodes':
+      await run(env,'UPDATE nodes SET deleted_at=?, updated_at=? WHERE id=?',[now,now,targetId]);
+      await run(env,'DELETE FROM equipment_nodes WHERE node_id=?',[targetId]);
+      break;
+    case 'workOrders':
+      await run(env,'UPDATE work_orders SET deleted_at=?, updated_at=? WHERE id=?',[now,now,targetId]);
+      break;
+    case 'materials':
+      await run(env,'UPDATE materials SET deleted_at=?, updated_at=? WHERE id=?',[now,now,targetId]);
+      break;
+    case 'materialMovements':
+      await run(env,'DELETE FROM material_movements WHERE id=?',[targetId]);
+      break;
+    case 'deletionRequests':
+      await run(env,'DELETE FROM deletion_requests WHERE id=?',[targetId]);
+      break;
+    case 'auditLog':
+      await run(env,'DELETE FROM audit_log WHERE id=?',[targetId]);
+      break;
+    case 'techAccessLog':
+      await run(env,'DELETE FROM tech_access_log WHERE id=?',[targetId]);
+      break;
+    default:
+      throw new Error(`Coleccion no soportada para eliminacion: ${listKey}`);
+  }
   return touchSync(env);
 }
 
 async function upsertAudit(env,rec) {
-  await run(env, `INSERT INTO audit_log(id,action,at,user_id,by_name_legacy,by_username_legacy,by_role_legacy,target_id,target_name,target_type,raw_json) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET action=excluded.action,at=excluded.at,user_id=excluded.user_id,by_name_legacy=excluded.by_name_legacy,by_username_legacy=excluded.by_username_legacy,by_role_legacy=excluded.by_role_legacy,target_id=excluded.target_id,target_name=excluded.target_name,target_type=excluded.target_type,raw_json=excluded.raw_json`, [rec.id,text(rec.action),text(rec.at),nullableText(rec.byId),text(rec.byName),text(rec.byUsername),text(rec.byRole),text(rec.targetId),text(rec.targetName),text(rec.targetType),JSON.stringify(rec)]);
+  const validUserId = await resolveValidUserId(env, rec.byId || rec.userId);
+  await run(env, `INSERT INTO audit_log(id,action,at,user_id,by_name_legacy,by_username_legacy,by_role_legacy,target_id,target_name,target_type,raw_json) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET action=excluded.action,at=excluded.at,user_id=COALESCE(excluded.user_id,audit_log.user_id),by_name_legacy=excluded.by_name_legacy,by_username_legacy=excluded.by_username_legacy,by_role_legacy=excluded.by_role_legacy,target_id=excluded.target_id,target_name=excluded.target_name,target_type=excluded.target_type,raw_json=excluded.raw_json`, [rec.id,text(rec.action),text(rec.at)||new Date().toISOString(),validUserId,text(rec.byName),text(rec.byUsername),text(rec.byRole),text(rec.targetId),text(rec.targetName),text(rec.targetType),JSON.stringify(rec)]);
 }
 
 async function upsertTechAccess(env,rec) {
-  await run(env, `INSERT INTO tech_access_log(id,technician_id,technician_name_legacy,route_scope,scope_label,at,user_agent,updated_at,raw_json) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET technician_id=excluded.technician_id,technician_name_legacy=excluded.technician_name_legacy,route_scope=excluded.route_scope,scope_label=excluded.scope_label,at=excluded.at,user_agent=excluded.user_agent,updated_at=excluded.updated_at,raw_json=excluded.raw_json`, [rec.id,nullableText(rec.technicianId),text(rec.technicianName),text(rec.routeScope),text(rec.scopeLabel),text(rec.at),text(rec.userAgent),rec.updatedAt??null,JSON.stringify(rec)]);
+  const validTechId = await resolveValidTechnicianId(env, rec.technicianId);
+  await run(env, `INSERT INTO tech_access_log(id,technician_id,technician_name_legacy,route_scope,scope_label,at,user_agent,updated_at,raw_json) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET technician_id=COALESCE(excluded.technician_id,tech_access_log.technician_id),technician_name_legacy=excluded.technician_name_legacy,route_scope=excluded.route_scope,scope_label=excluded.scope_label,at=excluded.at,user_agent=excluded.user_agent,updated_at=excluded.updated_at,raw_json=excluded.raw_json`, [rec.id,validTechId,text(rec.technicianName),text(rec.routeScope),text(rec.scopeLabel),text(rec.at)||new Date().toISOString(),text(rec.userAgent),rec.updatedAt??null,JSON.stringify(rec)]);
 }
 
 async function upsertDeletionRequest(env,rec) {
+  const validRequestedBy = await resolveValidUserId(env, rec.requestedByUserId || rec.requestedBy);
   await run(env, `INSERT INTO deletion_requests(id,target_type,target_id,target_name,node_id,detail_id,requested_by,requested_by_name_legacy,status,code,created_at,updated_at,resolved_at,approved_by_name_legacy,rejected_by_name_legacy,completed_by_name_legacy,raw_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-   ON CONFLICT(id) DO UPDATE SET target_type=excluded.target_type,target_id=excluded.target_id,target_name=excluded.target_name,node_id=excluded.node_id,detail_id=excluded.detail_id,requested_by=excluded.requested_by,requested_by_name_legacy=excluded.requested_by_name_legacy,status=excluded.status,code=excluded.code,created_at=excluded.created_at,updated_at=excluded.updated_at,resolved_at=excluded.resolved_at,approved_by_name_legacy=excluded.approved_by_name_legacy,rejected_by_name_legacy=excluded.rejected_by_name_legacy,completed_by_name_legacy=excluded.completed_by_name_legacy,raw_json=excluded.raw_json`, [rec.id,rec.targetType??null,rec.targetId??null,rec.targetName??null,rec.nodeId??null,rec.detailId??null,nullableText(rec.requestedByUserId),rec.requestedByName??null,text(rec.status),rec.code??null,rec.createdAt??null,rec.updatedAt??null,rec.resolvedAt??null,rec.approvedBy??null,rec.rejectedBy??null,rec.completedBy??null,JSON.stringify(rec)]);
+   ON CONFLICT(id) DO UPDATE SET target_type=excluded.target_type,target_id=excluded.target_id,target_name=excluded.target_name,node_id=excluded.node_id,detail_id=excluded.detail_id,requested_by=COALESCE(excluded.requested_by,deletion_requests.requested_by),requested_by_name_legacy=excluded.requested_by_name_legacy,status=excluded.status,code=excluded.code,created_at=COALESCE(deletion_requests.created_at,excluded.created_at),updated_at=excluded.updated_at,resolved_at=excluded.resolved_at,approved_by_name_legacy=excluded.approved_by_name_legacy,rejected_by_name_legacy=excluded.rejected_by_name_legacy,completed_by_name_legacy=excluded.completed_by_name_legacy,raw_json=excluded.raw_json`, [rec.id,rec.targetType??null,rec.targetId??null,rec.targetName??null,rec.nodeId??null,rec.detailId??null,validRequestedBy,rec.requestedByName??null,text(rec.status,'pendiente'),rec.code??null,rec.createdAt??null,rec.updatedAt??null,rec.resolvedAt??null,rec.approvedBy??null,rec.rejectedBy??null,rec.completedBy??null,JSON.stringify(rec)]);
 }
 
 async function upsertRecordInternal(env,key,rec) {
@@ -2063,7 +2316,7 @@ export async function upsertRecords(env,key,records,{touch=true}={}) {
 }
 
 function planStopSqlRecord(planId,stop,index) {
-  return { dbId:`ps-${planId}-${stop.id||index}`, planId, position:index, stop };
+  return { dbId:`ps-${planId}-${index}-${stop.id||index}`, planId, position:index, stop };
 }
 
 async function replaceWeekPlanUnsafe(env,weekPlan) {
@@ -2075,29 +2328,31 @@ async function replaceWeekPlanUnsafe(env,weekPlan) {
   const equipmentIds=new Set((await all(env,'SELECT id FROM equipment')).map(row=>row.id));
   const nodeIds=new Set((await all(env,'SELECT id FROM nodes')).map(row=>row.id));
   const workOrderIds=new Set((await all(env,'SELECT id FROM work_orders')).map(row=>row.id));
-  for (const [scopeKey,scopeValue] of Object.entries(incoming)) {
+  const sortedEntries = Object.entries(incoming).sort(([a], [b]) => a === '__shared__' ? -1 : b === '__shared__' ? 1 : 0);
+  for (const [scopeKey,scopeValue] of sortedEntries) {
     const scope=scopeValue&&typeof scopeValue==='object'?scopeValue:{};
+    const resolvedScopeTechId = scopeKey && scopeKey!=='__shared__' ? await resolveValidTechnicianId(env,scopeKey) : null;
     for (const day of DAY_KEYS) {
       const stops=Array.isArray(scope[day])?scope[day]:[];
       if (!stops.length) continue;
       const planId=`pl-${scopeKey||'blank'}-${day}`;
-      if (seenPlanIds.has(planId)) throw new Error(`Plan duplicado: ${planId}`);
+      if (seenPlanIds.has(planId)) continue;
       seenPlanIds.add(planId);
-      const techExists=scopeKey && scopeKey!=='__shared__' ? await first(env,'SELECT id FROM technicians WHERE id=?',[scopeKey]) : null;
-      planStatements.push(env.DB.prepare('INSERT INTO plans(id,name,scope_type,scope_key,day_key,technician_id,status,scheduled_date,created_at,legacy_source) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(planId,`Legacy ${scopeKey} ${day}`,scopeKey==='__shared__'?'shared':'technician',scopeKey,day,techExists?.id||null,'activo',null,null,'weekPlan array'));
+      planStatements.push(env.DB.prepare('INSERT OR REPLACE INTO plans(id,name,scope_type,scope_key,day_key,technician_id,status,scheduled_date,created_at,legacy_source) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(planId,`Legacy ${scopeKey} ${day}`,scopeKey==='__shared__'?'shared':'technician',scopeKey,day,resolvedScopeTechId,'activo',null,null,'weekPlan array'));
       stops.forEach((stop,i)=>stopRecords.push(planStopSqlRecord(planId,stop,i)));
     }
     for (const plan of Array.isArray(scope._generalPlans)?scope._generalPlans:[]) {
       const planId=plan.id||generatedId('gp');
-      if (seenPlanIds.has(planId)) throw new Error(`Plan duplicado: ${planId}`);
+      if (seenPlanIds.has(planId)) continue;
       seenPlanIds.add(planId);
-      const techExists=scopeKey && scopeKey!=='__shared__' ? await first(env,'SELECT id FROM technicians WHERE id=?',[scopeKey]) : null;
-      planStatements.push(env.DB.prepare('INSERT INTO plans(id,name,scope_type,scope_key,day_key,technician_id,status,scheduled_date,created_at,legacy_source) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(planId,text(plan.name,'Plan general'),scopeKey==='__shared__'?'shared':'technician',scopeKey,'general',techExists?.id||null,'activo',plan.scheduledDate??null,plan.createdAt??null,'weekPlan _generalPlans'));
+      planStatements.push(env.DB.prepare('INSERT OR REPLACE INTO plans(id,name,scope_type,scope_key,day_key,technician_id,status,scheduled_date,created_at,legacy_source) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(planId,text(plan.name,'Plan general'),scopeKey==='__shared__'?'shared':'technician',scopeKey,'general',resolvedScopeTechId,'activo',plan.scheduledDate??null,plan.createdAt??null,'weekPlan _generalPlans'));
       const assignedTechIds = [...new Set([plan.assignedTechId, ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])].filter(Boolean))];
+      const seenAssignedTechs = new Set();
       for (const techId of assignedTechIds) {
-        const assignedTech = await first(env,'SELECT id FROM technicians WHERE id=?',[techId]);
-        if (assignedTech?.id) {
-          assignmentStatements.push(env.DB.prepare('INSERT INTO plan_assignments(id,plan_id,technician_id,assigned_at) VALUES(?,?,?,?)').bind(`pa-${planId}-${assignedTech.id}`,planId,assignedTech.id,plan.assignedAt??new Date().toISOString()));
+        const validTechId = await resolveValidTechnicianId(env, techId);
+        if (validTechId && !seenAssignedTechs.has(validTechId)) {
+          seenAssignedTechs.add(validTechId);
+          assignmentStatements.push(env.DB.prepare('INSERT OR REPLACE INTO plan_assignments(id,plan_id,technician_id,assigned_at) VALUES(?,?,?,?)').bind(`pa-${planId}-${validTechId}`,planId,validTechId,plan.assignedAt??new Date().toISOString()));
         }
       }
       (Array.isArray(plan.stops)?plan.stops:[]).forEach((stop,i)=>stopRecords.push(planStopSqlRecord(planId,stop,i)));
@@ -2114,7 +2369,7 @@ async function replaceWeekPlanUnsafe(env,weekPlan) {
     const s=item.stop||{};
     const equipmentId=equipmentIds.has(s.equipmentId)?s.equipmentId:null;
     const nodeId=nodeIds.has(s.nodeId)?s.nodeId:null;
-    stopStatements.push(env.DB.prepare('INSERT INTO plan_stops(id,plan_id,position,stop_type,equipment_id,node_id,name,lat,lng,notes,site_status,auto_assigned,created_at,raw_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(item.dbId,item.planId,item.position,text(s.type),equipmentId,nodeId,text(s.name),nullableNumber(s.lat),nullableNumber(s.lng),text(s.notes),s.siteStatus??null,s.autoAssigned===undefined?null:boolInt(s.autoAssigned),s.createdAt??null,JSON.stringify(s)));
+    stopStatements.push(env.DB.prepare('INSERT OR REPLACE INTO plan_stops(id,plan_id,position,stop_type,equipment_id,node_id,name,lat,lng,notes,site_status,auto_assigned,created_at,raw_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(item.dbId,item.planId,item.position,text(s.type),equipmentId,nodeId,text(s.name),nullableNumber(s.lat),nullableNumber(s.lng),text(s.notes),s.siteStatus??null,s.autoAssigned===undefined?null:boolInt(s.autoAssigned),s.createdAt??null,JSON.stringify(s)));
     (Array.isArray(s.detailIds)?s.detailIds:[]).forEach((workOrderId,i)=>{
       if (workOrderIds.has(workOrderId)) linkStatements.push(env.DB.prepare('INSERT OR IGNORE INTO plan_stop_orders(plan_stop_id,work_order_id,position) VALUES(?,?,?)').bind(item.dbId,workOrderId,i));
     });
@@ -2165,7 +2420,13 @@ export async function deletePlans(env, planIds) {
 
 export async function applyChanges(env,changes) {
   const touched=[];
-  for (const change of Array.isArray(changes)?changes:[]) {
+  const priorityOrder = [...LIST_KEYS, 'weekPlan', 'prepChecked'];
+  const sortedChanges = (Array.isArray(changes) ? [...changes] : []).sort((a, b) => {
+    const idxA = priorityOrder.indexOf(text(a?.key).trim());
+    const idxB = priorityOrder.indexOf(text(b?.key).trim());
+    return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+  });
+  for (const change of sortedChanges) {
     const key=text(change?.key).trim();
     if (LIST_KEYS.has(key)) {
       const records=Array.isArray(change.records)?change.records:(Array.isArray(change.value)?change.value:[]);
@@ -2300,8 +2561,11 @@ export async function recordWorkOrderReviewExit(env,workOrderId,actor={}) {
 export async function upsertWorkOrderReport(env,incomingWorkOrder) {
   if (!incomingWorkOrder?.id) throw new Error('Detalle tecnico invalido');
   const exists=await first(env,'SELECT id FROM work_orders WHERE id=?',[incomingWorkOrder.id]);
-  if (!exists) throw new Error('No se encontro el detalle en D1');
   const rec=clone(incomingWorkOrder);
+  if (!exists && !rec.title && !rec.desc && !rec.description && !rec.clientName) {
+    throw new Error('No se encontro el detalle en D1');
+  }
+  if (!rec.title) rec.title = rec.desc || rec.description || rec.clientName || 'Detalle técnico';
   const report=rec.technicianReport&&typeof rec.technicianReport==='object'?rec.technicianReport:null;
   if (!report) { await upsertWorkOrder(env,rec); const time=await touchSync(env); return {record:rec,time}; }
   const photos=[];
@@ -2312,9 +2576,7 @@ export async function upsertWorkOrderReport(env,incomingWorkOrder) {
   await upsertWorkOrder(env,rec);
   const reportRow=await first(env,'SELECT id FROM work_order_reports WHERE work_order_id=?',[rec.id]);
   const reportId=reportRow?.id||generatedId('wr');
-  const completedTechnician=nullableText(report.completedBy) ? await first(env,'SELECT user_id FROM technicians WHERE id=?',[report.completedBy]) : null;
-  const completedDirectUser=!completedTechnician && nullableText(report.completedBy) ? await first(env,'SELECT id FROM users WHERE id=?',[report.completedBy]) : null;
-  const completedUserId=completedTechnician?.user_id || completedDirectUser?.id || null;
+  const completedUserId = await resolveValidUserId(env, report.completedBy);
   await run(env, `INSERT INTO work_order_reports(id,work_order_id,result,solution,material_used,reason,completed_by,completed_by_name_legacy,completed_at,evidence_photo_legacy,raw_json) VALUES(?,?,?,?,?,?,?,?,?,NULL,?)
     ON CONFLICT(work_order_id) DO UPDATE SET result=excluded.result,solution=excluded.solution,material_used=excluded.material_used,reason=excluded.reason,completed_by=excluded.completed_by,completed_by_name_legacy=excluded.completed_by_name_legacy,completed_at=excluded.completed_at,evidence_photo_legacy=NULL,raw_json=excluded.raw_json`, [reportId,rec.id,text(report.result),text(report.solution),text(report.materialUsed),text(report.reason),completedUserId,text(report.completedByName),report.completedAt??null,JSON.stringify(cleanReport)]);
   const existingEvidence = await all(env,'SELECT * FROM work_order_evidence WHERE work_order_id=?',[rec.id]);
@@ -2327,7 +2589,10 @@ export async function upsertWorkOrderReport(env,incomingWorkOrder) {
     if (/^\/api\/evidence\//.test(photo)) {
       const id=decodeURIComponent(photo.split('/api/evidence/')[1].split(/[?#]/)[0]);
       const old=existingEvidenceById.get(id) || null;
-      if (old) stmts.push(env.DB.prepare('INSERT OR REPLACE INTO work_order_evidence(id,work_order_id,report_id,evidence_type,storage_type,storage_key,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(old.id,rec.id,reportId,'photo',old.storage_type,old.storage_key,old.created_by,old.created_at));
+      if (old) {
+        const validOldCreatedBy = await resolveValidUserId(env, old.created_by);
+        stmts.push(env.DB.prepare('INSERT OR REPLACE INTO work_order_evidence(id,work_order_id,report_id,evidence_type,storage_type,storage_key,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(old.id,rec.id,reportId,'photo',old.storage_type,old.storage_key,validOldCreatedBy,old.created_at));
+      }
     } else if (/^data:image\//i.test(photo)) {
       stmts.push(env.DB.prepare('INSERT INTO work_order_evidence(id,work_order_id,report_id,evidence_type,storage_type,storage_key,created_by,created_at) VALUES(?,?,?,?,?,?,?,?)').bind(generatedId('we'),rec.id,reportId,'photo','inline_data_url',photo,completedUserId,report.completedAt||new Date().toISOString()));
     }

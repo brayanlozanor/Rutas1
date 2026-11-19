@@ -8,12 +8,175 @@ body.plan-technician-view .sidebar-toggle,
 html[data-role="tecnico"] body .topbar,
 html[data-role="tecnico"] body .topbar.app-sidebar,
 html[data-role="tecnico"] body #mobile-menu-toggle,
-html[data-role="tecnico"] body .sidebar-toggle {
+html[data-role="tecnico"] body .sidebar-toggle,
+html.is-technician-env body .topbar,
+html.is-technician-env body .topbar.app-sidebar,
+html.is-technician-env body #mobile-menu-toggle,
+html.is-technician-env body .sidebar-toggle,
+body.plan-technician-view .hero-panel:not(.tech-dashboard-hero),
+html.is-technician-env body .hero-panel:not(.tech-dashboard-hero),
+body.plan-technician-view .plan-kpi-bar,
+html.is-technician-env body .plan-kpi-bar,
+body.plan-technician-view .plan-sidebar,
+html.is-technician-env body .plan-sidebar,
+body.plan-technician-view .plan-command-bar,
+html.is-technician-env body .plan-command-bar,
+body.plan-technician-view #plan-skeleton-placeholder,
+html.is-technician-env body #plan-skeleton-placeholder {
   display: none !important;
   width: 0 !important;
   min-width: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
+}
+
+/* Ocultar componentes de celular cuando la página es de computadora / escritorio */
+html:not(.is-technician-env) body:not(.plan-technician-view) .tech-mobile-header,
+html:not(.is-technician-env) body:not(.plan-technician-view) .tech-calendar-toolbar,
+html:not(.is-technician-env) body:not(.plan-technician-view) .tech-progress-compact,
+html:not(.is-technician-env) body:not(.plan-technician-view) .tech-plan-banner,
+html:not(.is-technician-env) body:not(.plan-technician-view) #tech-day-map-card,
+html:not(.is-technician-env) body:not(.plan-technician-view) .tech-bottom-nav,
+html:not(.is-technician-env) body:not(.plan-technician-view) #tech-skeleton-placeholder {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* Mostrar componentes de celular cuando es vista de técnico o celular */
+body.plan-technician-view .tech-mobile-header,
+html.is-technician-env body .tech-mobile-header {
+  display: grid !important;
+}
+
+body.plan-technician-view .tech-calendar-toolbar,
+html.is-technician-env body .tech-calendar-toolbar {
+  display: block !important;
+}
+
+body.plan-technician-view .tech-progress-compact,
+html.is-technician-env body .tech-progress-compact {
+  display: block !important;
+}
+
+body.plan-technician-view .tech-plan-banner,
+html.is-technician-env body .tech-plan-banner {
+  display: block !important;
+}
+
+body.plan-technician-view #tech-day-map-card,
+html.is-technician-env body #tech-day-map-card {
+  display: block !important;
+}
+
+body.plan-technician-view #tech-skeleton-placeholder,
+html.is-technician-env body #tech-skeleton-placeholder {
+  display: block !important;
+}
+
+/* Banner de Ruta Asignada para Celular / Técnico */
+.tech-plan-banner {
+  width: 100% !important;
+  max-width: 100% !important;
+  align-self: stretch !important;
+  box-sizing: border-box !important;
+  margin: 0 0 10px 0 !important;
+  padding: 12px 18px !important;
+  background: #ffffff !important;
+  border: 1px solid #dce7f3 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05) !important;
+}
+.tech-plan-banner-pill {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  gap: 12px !important;
+}
+.tech-plan-banner-icon {
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.tech-plan-banner-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.tech-plan-banner-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+.tech-plan-banner-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tech-plan-banner-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.tech-plan-banner-chips {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  overflow-x: auto;
+  padding-top: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+.tech-plan-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.tech-plan-chip.is-active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+  font-weight: 700;
+}
+.tech-plan-chip.is-active small {
+  color: #bfdbfe;
+}
+.tech-plan-banner.is-empty {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  background: #fffbeb !important;
+  border-color: #fef3c7 !important;
+  color: #92400e !important;
+}
+
+@media (max-width: 768px), (max-device-width: 768px) {
+  body.plan-technician-view .tech-bottom-nav,
+  html.is-technician-env body .tech-bottom-nav {
+    display: grid !important;
+  }
 }
 
 body.plan-technician-view,
@@ -26,7 +189,12 @@ html[data-role="tecnico"] body,
 html[data-role="tecnico"] body .main,
 html[data-role="tecnico"] body.sidebar-collapsed .main,
 html[data-role="tecnico"] body .ct,
-html[data-role="tecnico"] body #plan-panel {
+html[data-role="tecnico"] body #plan-panel,
+html.is-technician-env body,
+html.is-technician-env body .main,
+html.is-technician-env body.sidebar-collapsed .main,
+html.is-technician-env body .ct,
+html.is-technician-env body #plan-panel {
   margin-left: 0 !important;
   left: 0 !important;
   width: 100% !important;
@@ -48,6 +216,299 @@ body:has(.tech-bottom-nav) button.floating-notification-bell {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
+}
+
+/* Indicador de recarga/sincronización compacto no invasivo para celular y vista técnica */
+@media (max-width: 768px), (max-device-width: 768px) {
+  .loading-overlay:not(.loading-centered),
+  body.plan-technician-view .loading-overlay:not(.loading-centered) {
+    position: fixed !important;
+    top: 10px !important;
+    right: 12px !important;
+    left: auto !important;
+    bottom: auto !important;
+    width: auto !important;
+    height: auto !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    pointer-events: none !important;
+    z-index: 99999 !important;
+    display: none !important;
+    align-items: flex-start !important;
+    justify-content: flex-end !important;
+  }
+
+  .loading-overlay.show:not(.loading-centered),
+  body.plan-technician-view .loading-overlay.show:not(.loading-centered) {
+    display: flex !important;
+    animation: techLoadingFadeIn 0.2s ease-out !important;
+  }
+
+  .loading-overlay:not(.loading-centered) .loading-card,
+  body.plan-technician-view .loading-overlay:not(.loading-centered) .loading-card {
+    position: relative !important;
+    width: auto !important;
+    max-width: 195px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    padding: 5px 12px !important;
+    border-radius: 999px !important;
+    background: rgba(15, 23, 42, 0.88) !important;
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.22) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2) !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+    text-align: left !important;
+  }
+
+  .loading-overlay:not(.loading-centered) .loading-card:before,
+  body.plan-technician-view .loading-overlay:not(.loading-centered) .loading-card:before {
+    display: none !important;
+  }
+
+  .loading-overlay:not(.loading-centered) .loading-brand,
+  body.plan-technician-view .loading-overlay:not(.loading-centered) .loading-brand {
+    position: relative !important;
+    width: 14px !important;
+    height: 14px !important;
+    min-width: 14px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 50% !important;
+    display: inline-block !important;
+  }
+
+  .loading-overlay:not(.loading-centered) .loading-brand img,
+  body.plan-technician-view .loading-overlay:not(.loading-centered) .loading-brand img {
+    display: none !important;
+  }
+
+  .loading-overlay:not(.loading-centered) .loading-ring,
+  body.plan-technician-view .loading-overlay:not(.loading-centered) .loading-ring {
+    position: absolute !important;
+    inset: 0 !important;
+    border: 2px solid rgba(255, 255, 255, 0.25) !important;
+    border-top-color: #38bdf8 !important;
+    border-radius: 50% !important;
+    animation: activitySpin 0.75s linear infinite !important;
+  }
+
+  .loading-overlay:not(.loading-centered) .loading-copy,
+  body.plan-technician-view .loading-overlay:not(.loading-centered) .loading-copy {
+    display: inline-flex !important;
+    align-items: center !important;
+    min-width: 0 !important;
+  }
+
+  .loading-overlay:not(.loading-centered) .loading-card strong,
+  body.plan-technician-view .loading-overlay:not(.loading-centered) .loading-card strong {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    color: #ffffff !important;
+    line-height: 1.2 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .loading-overlay:not(.loading-centered) .loading-progress,
+  body.plan-technician-view .loading-overlay:not(.loading-centered) .loading-progress {
+    display: none !important;
+  }
+
+  /* Carga principal inicial en celular / vista tecnica: fondo blanco limpio y solido sin transparentar el fondo */
+  .loading-overlay.loading-centered,
+  body.plan-technician-view .loading-overlay.loading-centered,
+  html.is-technician-env .loading-overlay.loading-centered,
+  html[data-role="tecnico"] .loading-overlay.loading-centered,
+  .plan-initial-loader,
+  body.plan-technician-view .plan-initial-loader,
+  html.is-technician-env .plan-initial-loader,
+  html[data-role="tecnico"] .plan-initial-loader {
+    position: fixed !important;
+    inset: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #ffffff !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    pointer-events: none !important;
+    z-index: 999999 !important;
+  }
+
+  .plan-initial-loader.is-hidden,
+  body.plan-technician-view .plan-initial-loader.is-hidden,
+  html.is-technician-env .plan-initial-loader.is-hidden,
+  html[data-role="tecnico"] .plan-initial-loader.is-hidden {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  .loading-overlay.loading-centered.show,
+  body.plan-technician-view .loading-overlay.loading-centered.show {
+    display: flex !important;
+  }
+
+  .loading-overlay.loading-centered .loading-card,
+  body.plan-technician-view .loading-overlay.loading-centered .loading-card {
+    position: relative !important;
+    width: min(90vw, 380px) !important;
+    max-width: 380px !important;
+    padding: 24px 20px 20px !important;
+    border-radius: 22px !important;
+    background: #ffffff !important;
+    border: 1px solid #d7e0ea !important;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    gap: 10px !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+  }
+
+  .loading-overlay.loading-centered .loading-card:before,
+  body.plan-technician-view .loading-overlay.loading-centered .loading-card:before {
+    content: "" !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 4px !important;
+    background: linear-gradient(90deg, #0874e8 0 30%, #39bb61 30% 52%, #f7b000 52% 74%, #e5233f 74% 100%) !important;
+    display: block !important;
+  }
+
+  .loading-overlay.loading-centered .loading-brand,
+  body.plan-technician-view .loading-overlay.loading-centered .loading-brand {
+    position: relative !important;
+    width: 62px !important;
+    height: 62px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    background: #ffffff !important;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08) !important;
+  }
+
+  .loading-overlay.loading-centered .loading-brand img,
+  body.plan-technician-view .loading-overlay.loading-centered .loading-brand img {
+    display: block !important;
+    width: 38px !important;
+    height: 38px !important;
+    object-fit: contain !important;
+  }
+
+  .loading-overlay.loading-centered .loading-ring,
+  body.plan-technician-view .loading-overlay.loading-centered .loading-ring {
+    position: absolute !important;
+    inset: -4px !important;
+    border: 3px solid rgba(8, 116, 232, 0.15) !important;
+    border-top-color: #0874e8 !important;
+    border-right-color: #39bb61 !important;
+    border-radius: 50% !important;
+    animation: activitySpin 0.9s linear infinite !important;
+  }
+
+  .loading-overlay.loading-centered .loading-copy,
+  body.plan-technician-view .loading-overlay.loading-centered .loading-copy {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    width: 100% !important;
+  }
+
+  .loading-overlay.loading-centered .loading-card strong,
+  body.plan-technician-view .loading-overlay.loading-centered .loading-card strong {
+    font-size: 17px !important;
+    font-weight: 800 !important;
+    color: #10233f !important;
+    line-height: 1.3 !important;
+    white-space: normal !important;
+  }
+
+  .loading-overlay.loading-centered .loading-card span:not(.loading-ring),
+  body.plan-technician-view .loading-overlay.loading-centered .loading-card span:not(.loading-ring) {
+    display: block !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    color: #60728c !important;
+    margin-top: 3px !important;
+    line-height: 1.35 !important;
+  }
+
+  .loading-overlay.loading-centered .loading-progress,
+  body.plan-technician-view .loading-overlay.loading-centered .loading-progress {
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    height: 4px !important;
+    margin-top: 10px !important;
+    border-radius: 99px !important;
+    background: #e9eef5 !important;
+    overflow: hidden !important;
+  }
+
+  .loading-overlay.loading-centered .loading-progress:after,
+  body.plan-technician-view .loading-overlay.loading-centered .loading-progress:after {
+    content: "" !important;
+    position: absolute !important;
+    inset: 0 auto 0 0 !important;
+    width: 38% !important;
+    border-radius: inherit !important;
+    background: linear-gradient(90deg, #0874e8 0 30%, #39bb61 30% 52%, #f7b000 52% 74%, #e5233f 74% 100%) !important;
+    animation: activityProgress 0.8s ease-in-out infinite !important;
+  }
+}
+
+/* Fondo de carga inicial blanco y nítido para vista técnica en cualquier tamaño */
+body.plan-technician-view .plan-initial-loader,
+html.is-technician-env .plan-initial-loader,
+html[data-role="tecnico"] .plan-initial-loader,
+body.plan-technician-view #netops-loading.loading-centered,
+html.is-technician-env #netops-loading.loading-centered,
+html[data-role="tecnico"] #netops-loading.loading-centered {
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+body.plan-technician-view .plan-initial-loader.is-hidden,
+html.is-technician-env .plan-initial-loader.is-hidden,
+html[data-role="tecnico"] .plan-initial-loader.is-hidden {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Notificaciones en vista técnica: sobre la barra inferior y sin bloquear clics */
+body.plan-technician-view .nt {
+  pointer-events: none !important;
+  bottom: 84px !important;
+}
+
+@keyframes techLoadingFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 body.plan-technician-view {
@@ -79,34 +540,42 @@ body.plan-technician-view .tech-bottom-nav.tech-bottom-nav-three {
   right: 0 !important;
   bottom: 0 !important;
   left: 0 !important;
+  width: 100% !important;
+  max-width: 100vw !important;
   display: grid !important;
   grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  height: 68px !important;
-  padding: 6px 16px 8px !important;
+  height: 64px !important;
+  padding: 4px 8px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
   border-top: 1px solid #dfe8f2 !important;
   background: rgba(255, 255, 255, 0.98) !important;
-  box-shadow: 0 -6px 22px rgba(29, 64, 105, 0.1) !important;
+  box-shadow: 0 -4px 20px rgba(29, 64, 105, 0.1) !important;
   backdrop-filter: blur(14px) !important;
   -webkit-backdrop-filter: blur(14px) !important;
+  box-sizing: border-box !important;
 }
 
 body.plan-technician-view .tech-bottom-nav button,
 body.plan-technician-view .tech-bottom-nav a {
   display: flex !important;
   min-width: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
   align-items: center !important;
   justify-content: center !important;
   flex-direction: column !important;
-  gap: 3px !important;
+  gap: 2px !important;
+  padding: 4px 2px !important;
+  margin: 0 !important;
   border: 0 !important;
+  border-radius: 10px !important;
   background: transparent !important;
   color: #64748b !important;
   font-family: 'Manrope', sans-serif !important;
   font-size: 11px !important;
-  font-weight: 800 !important;
+  font-weight: 700 !important;
   text-decoration: none !important;
   cursor: pointer !important;
-  transition: color 0.15s ease, transform 0.1s ease !important;
+  transition: color 0.15s ease, background 0.15s ease !important;
 }
 
 body.plan-technician-view .tech-bottom-nav button:hover,
@@ -116,14 +585,35 @@ body.plan-technician-view .tech-bottom-nav button:active {
 
 body.plan-technician-view .tech-bottom-nav button.active {
   color: #0874e8 !important;
+  background: rgba(8, 116, 232, 0.06) !important;
+}
+
+body.plan-technician-view .tech-bottom-nav button span,
+body.plan-technician-view .tech-bottom-nav a span,
+body.plan-technician-view .tech-bottom-nav span {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  line-height: 1.1 !important;
+  letter-spacing: -0.01em !important;
+  display: block !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
 }
 
 body.plan-technician-view .tech-bottom-nav .tech-nav-svg {
-  width: 22px !important;
-  height: 22px !important;
+  width: 20px !important;
+  height: 20px !important;
   stroke: currentColor !important;
-  stroke-width: 2 !important;
+  stroke-width: 2.2 !important;
   fill: none !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+  display: block !important;
+  margin: 0 auto !important;
+  flex-shrink: 0 !important;
 }
 
 body.plan-technician-view .main{background:#f1f6fc}
@@ -163,8 +653,8 @@ body.plan-technician-view .stop-card{position:relative;margin:0;padding:16px;bor
  body.plan-technician-view .plan-kpi-bar{grid-template-columns:1fr 1fr;gap:10px;margin:0 12px 14px;padding:13px;border-radius:21px}body.plan-technician-view .plan-kpi{min-height:88px;padding:13px 10px}body.plan-technician-view .plan-kpi-icon{width:43px;height:43px;font-size:18px}body.plan-technician-view .plan-kpi-copy strong{font-size:24px}body.plan-technician-view .plan-kpi-copy small{font-size:10px}body.plan-technician-view .plan-kpi.kpi-progress{min-height:78px}body.plan-technician-view .plan-kpi-ring{width:55px;height:55px}
  body.plan-technician-view .plan-shell{display:flex!important;padding:0 12px 18px;flex-direction:column;gap:14px}body.plan-technician-view .tech-route-map-card{order:1;width:100%}body.plan-technician-view .plan-calendar{order:2;width:100%;padding:17px}body.plan-technician-view .tech-today-board{order:3;width:100%}
  body.plan-technician-view .plan-map-panel-head{min-height:60px;padding:12px 16px}body.plan-technician-view .plan-map{height:285px!important}body.plan-technician-view .plan-map-legend{gap:9px;padding:13px;font-size:9px}body.plan-technician-view .plan-calendar-head{display:flex;gap:8px}body.plan-technician-view .plan-calendar-head h2{font-size:18px}body.plan-technician-view .plan-calendar-head .badge{font-size:8px}body.plan-technician-view .stop-card{padding:15px 12px}
- .plan-technician-view .tech-bottom-nav{position:fixed;z-index:1700;right:0;bottom:0;left:0;display:grid;grid-template-columns:repeat(5,1fr);height:70px;padding:7px 5px 5px;border-top:1px solid #dfe8f2;background:rgba(255,255,255,.97);box-shadow:0 -6px 20px rgba(29,64,105,.08);backdrop-filter:blur(12px)}
- .plan-technician-view .tech-bottom-nav a,.plan-technician-view .tech-bottom-nav button{display:flex;min-width:0;align-items:center;justify-content:center;flex-direction:column;gap:2px;border:0;background:transparent;color:#49607f;font:700 9px Manrope,sans-serif;text-decoration:none}.plan-technician-view .tech-bottom-nav span{font-size:21px;line-height:1}.plan-technician-view .tech-bottom-nav .active{color:#0874e8}
+ .plan-technician-view .tech-bottom-nav{position:fixed;z-index:2500;right:0;bottom:0;left:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));height:64px;padding:4px 8px calc(6px + env(safe-area-inset-bottom, 0px));border-top:1px solid #dfe8f2;background:rgba(255,255,255,.98);box-shadow:0 -4px 20px rgba(29,64,105,.1);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-sizing:border-box}
+ .plan-technician-view .tech-bottom-nav a,.plan-technician-view .tech-bottom-nav button{display:flex;min-width:0;width:100%;height:100%;align-items:center;justify-content:center;flex-direction:column;gap:2px;border:0;background:transparent;color:#64748b;font:700 11px Manrope,sans-serif;text-decoration:none;cursor:pointer}.plan-technician-view .tech-bottom-nav button span,.plan-technician-view .tech-bottom-nav a span,.plan-technician-view .tech-bottom-nav span{font-size:11px!important;line-height:1.1!important;font-weight:700!important;white-space:nowrap!important;text-align:center!important;max-width:100%!important;overflow:hidden!important;text-overflow:ellipsis!important}.plan-technician-view .tech-bottom-nav .active{color:#0874e8!important}
 }
 
 @media(max-width:760px){html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}html[data-role="tecnico"] body.plan-technician-view .plan-kpi.kpi-progress{grid-column:1/-1!important}}
@@ -206,11 +696,12 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar.tech-summary-d
 body.plan-technician-view .plan-calendar{display:none!important}
 body.plan-technician-view .tech-today-board #plan-title:after{content:none!important}
 .tech-bottom-nav.tech-bottom-nav-three{grid-template-columns:repeat(3,minmax(0,1fr))!important}
-.tech-bottom-nav-three a,.tech-bottom-nav-three button{font-size:10px!important}
+.tech-bottom-nav-three a,.tech-bottom-nav-three button{font-size:11px!important}
+.tech-bottom-nav-three a span,.tech-bottom-nav-three button span{font-size:11px!important;line-height:1.1!important;font-weight:700!important}
 .tech-bottom-nav-three button:last-child{color:#0874e8!important}
 .tech-installation-modal{max-width:560px}.tech-installation-head{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #dde7f2}.tech-installation-head small{display:block;margin-top:4px;color:#687c96;font-weight:700}
 .tech-evidence-box{margin:14px 0;padding:15px;border:1px dashed #a9c6e8;border-radius:15px;background:#f6faff}.tech-evidence-box>strong,.tech-evidence-box>small{display:block}.tech-evidence-box>strong{color:#10264a}.tech-evidence-box>small{margin:4px 0 12px;color:#6b7f99;font-size:10px;font-weight:700}.tech-evidence-actions{display:flex;gap:9px;flex-wrap:wrap}.tech-evidence-actions .btn{cursor:pointer}.tech-install-evidence-preview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:12px}.tech-install-evidence-preview>span{grid-column:1/-1;padding:15px;color:#71829a;text-align:center}.tech-install-evidence-preview>div{position:relative;overflow:hidden;aspect-ratio:1;border-radius:12px;background:#dce8f5}.tech-install-evidence-preview img{width:100%;height:100%;object-fit:cover}.tech-install-evidence-preview button{position:absolute;top:5px;right:5px;display:grid;width:27px;height:27px;place-items:center;border:0;border-radius:50%;background:rgba(10,28,52,.82);color:#fff;font-size:19px;cursor:pointer}
-@media(max-width:760px){.tech-day-label{margin:4px 0 8px}.tech-month-row{margin-top:4px}.tech-installation-modal{width:calc(100vw - 24px)!important}.tech-bottom-nav.tech-bottom-nav-three{padding-right:14px;padding-left:14px}.tech-bottom-nav-three a,.tech-bottom-nav-three button{font-size:10px!important}}
+@media(max-width:760px){.tech-day-label{margin:4px 0 8px}.tech-month-row{margin-top:4px}.tech-installation-modal{width:calc(100vw - 24px)!important}.tech-bottom-nav.tech-bottom-nav-three{padding-right:8px;padding-left:8px}.tech-bottom-nav-three a,.tech-bottom-nav-three button,.tech-bottom-nav-three button span{font-size:11px!important;line-height:1.1!important}}
 
 /* Mapa por día, navegación directa y avisos centrados */
 .tech-day-map-card{grid-area:daymap;overflow:hidden;border-radius:22px;background:#fff;box-shadow:0 10px 28px rgba(29,64,105,.1)}.tech-day-map-card>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;color:#10264a}.tech-day-map-card small{color:#6c8099;font-weight:800}.tech-day-map{height:280px}
@@ -219,10 +710,21 @@ html[data-role="tecnico"] body.plan-technician-view .plan-shell{grid-template-ar
 body.plan-technician-view #nt{top:50%!important;right:auto!important;bottom:auto!important;left:50%!important;width:min(430px,calc(100vw - 32px))!important;max-width:calc(100vw - 32px)!important;margin:0!important;text-align:center!important;transform:translate(-50%,-42%)!important}
 body.plan-technician-view #nt.show{transform:translate(-50%,-50%)!important}
 @media(max-width:1100px){html[data-role="tecnico"] body.plan-technician-view .plan-shell{grid-template-areas:"toolbar" "kpis" "agenda" "daymap" "map"!important}}
-@media(max-width:760px){html[data-role="tecnico"] body.plan-technician-view .tech-day-map-card{order:5;width:100%!important}.tech-day-map{height:250px}html[data-role="tecnico"] body.plan-technician-view .tech-route-map-card{order:6!important}.tech-day-map-card>div:first-child{align-items:flex-start;flex-direction:column;padding:14px 16px}.tech-bottom-nav-three button.active{color:#0874e8!important}}
+@media(max-width:760px){
+  html[data-role="tecnico"] body.plan-technician-view .tech-day-map-card,
+  body.plan-technician-view .tech-day-map-card{order:5;width:100%!important;max-width:100%!important;box-sizing:border-box!important}
+  .tech-day-map,
+  #tech-day-map{width:100%!important;max-width:100%!important;min-width:100%!important;height:270px;box-sizing:border-box!important}
+  .tech-day-map .leaflet-container,
+  #tech-day-map.leaflet-container{width:100%!important;height:100%!important}
+  html[data-role="tecnico"] body.plan-technician-view .tech-route-map-card,
+  body.plan-technician-view .tech-route-map-card{order:6!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important}
+  .tech-day-map-card>div:first-child{align-items:flex-start;flex-direction:column;padding:14px 16px}
+  .tech-bottom-nav-three button.active{color:#0874e8!important}
+}
 
 /* Agenda del tecnico: calendario como pantalla principal */
-.tech-calendar-toolbar{grid-area:toolbar;padding:26px 30px 18px;border-radius:22px;background:#fff;box-shadow:0 10px 28px rgba(29,64,105,.1)}
+.tech-calendar-toolbar{grid-area:toolbar;width:100%!important;max-width:100%!important;box-sizing:border-box!important;padding:22px 24px 18px;border-radius:22px;background:#fff;box-shadow:0 10px 28px rgba(29,64,105,.1)}
 .tech-agenda-title{display:grid;grid-template-columns:42px 1fr 42px;align-items:center;text-align:center}.tech-agenda-title h1{margin:0;color:#0c2450;font-size:25px}.tech-agenda-title button,.tech-agenda-title span{display:grid;width:42px;height:42px;place-items:center;border:0;background:transparent;color:#086ae4;font-size:34px}.tech-agenda-title span{font-size:24px}
 .tech-view-tabs{display:grid;grid-template-columns:repeat(3,1fr);max-width:570px;margin:24px auto 20px;padding:3px;border-radius:30px;background:#f0f4fa}.tech-view-tabs button{height:45px;border:0;border-radius:24px;background:transparent;color:#10264a;font:800 14px Manrope,sans-serif}.tech-view-tabs button.active{background:linear-gradient(135deg,#075ee7,#0879ee);color:#fff;box-shadow:0 7px 17px rgba(8,110,231,.24)}
 .tech-month-row{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;margin-bottom:12px;text-align:center}.tech-month-row strong{color:#10264a;font-size:20px;text-transform:capitalize}.tech-month-row button{border:0;background:transparent;color:#0b2958;font-size:33px}.tech-week-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}.tech-week-day{display:flex;min-height:78px;align-items:center;justify-content:center;flex-direction:column;gap:8px;border:0;border-radius:16px;background:transparent;color:#40597a}.tech-week-day small{font-size:11px;font-weight:800;text-transform:uppercase}.tech-week-day strong{font-size:20px}.tech-week-day.active{background:linear-gradient(145deg,#096de9,#075be0);color:#fff;box-shadow:0 8px 18px rgba(8,103,226,.24)}
@@ -230,12 +732,12 @@ body.plan-technician-view .tech-dashboard-hero{display:none!important}body.plan-
 body.plan-technician-view .plan-calendar{box-shadow:none;padding:0 4px;background:transparent}body.plan-technician-view .plan-calendar-head{display:none}body.plan-technician-view .plan-calendar-grid{grid-template-columns:repeat(auto-fit,minmax(145px,1fr))}body.plan-technician-view .tech-today-board>.sh{padding:24px 24px 12px}body.plan-technician-view .tech-today-board #plan-title:after{content:" y pendientes"}body.plan-technician-view .day-col{border:0}.plan-technician-view .day-head{padding:14px 18px;background:#fff;color:#10264a;font-size:16px}
 body.plan-technician-view .stop-card{margin:10px 12px;padding:20px 18px 18px 24px;border:1px solid #e2eaf4!important;border-left:5px solid #0874e8!important;border-radius:15px!important;box-shadow:0 7px 20px rgba(29,64,105,.07)}body.plan-technician-view .stop-card.done{border-left-color:#18b875!important}body.plan-technician-view .stop-title{font-size:16px}body.plan-technician-view .stop-meta{font-size:12px}
 @media(max-width:1050px){body.plan-technician-view .plan-shell{grid-template-columns:1fr;grid-template-areas:"toolbar" "kpis" "calendar" "agenda" "map";max-width:820px}}
-@media(max-width:760px){.plan-technician-view .tech-mobile-header{height:68px;grid-template-columns:44px 1fr 44px}.plan-technician-view .tech-mobile-header strong{text-align:center;color:#10264a;font-size:19px}.plan-technician-view .tech-mobile-header>span{display:grid;place-items:center;color:#0874e8;font-size:23px}body.plan-technician-view .plan-shell{padding-top:10px}.tech-calendar-toolbar{padding:10px 10px 13px;border-radius:18px}.tech-agenda-title{display:none}.tech-view-tabs{margin:4px auto 16px}.tech-view-tabs button{height:42px}.tech-month-row{margin-bottom:6px}.tech-month-row strong{font-size:18px}.tech-week-strip{gap:2px}.tech-week-day{min-height:66px;border-radius:13px}.tech-week-day small{font-size:9px}.tech-week-day strong{font-size:17px}body.plan-technician-view .plan-kpi-bar{grid-template-columns:repeat(4,1fr);gap:4px;margin:0;padding:9px}body.plan-technician-view .plan-kpi{display:flex;min-width:0;min-height:74px;padding:7px 3px;align-items:center;justify-content:center;flex-direction:column;gap:3px;text-align:center}body.plan-technician-view .plan-kpi-icon{width:34px;height:34px;font-size:14px}body.plan-technician-view .plan-kpi-copy strong{font-size:18px}body.plan-technician-view .plan-kpi-copy small{display:block;font-size:7px}body.plan-technician-view .plan-calendar{display:none}body.plan-technician-view .tech-today-board>.sh{padding:18px 15px 6px}body.plan-technician-view .tech-today-board #plan-title{font-size:18px}body.plan-technician-view .plan-days{padding:0 3px 12px}body.plan-technician-view .day-head{padding:12px 14px;font-size:13px}body.plan-technician-view .stop-card{margin:9px 8px;padding:17px 13px 15px 17px}body.plan-technician-view .stop-title{font-size:14px}body.plan-technician-view .tech-route-map-card{order:5}body.plan-technician-view .plan-map{height:245px!important}}
+@media(max-width:760px){.plan-technician-view .tech-mobile-header{height:68px;grid-template-columns:44px 1fr 44px}.plan-technician-view .tech-mobile-header strong{text-align:center;color:#10264a;font-size:19px}.plan-technician-view .tech-mobile-header>span{display:grid;place-items:center;color:#0874e8;font-size:23px}body.plan-technician-view .plan-shell{padding-top:10px}.tech-calendar-toolbar{width:100%!important;max-width:100%!important;box-sizing:border-box!important;padding:14px 12px 14px;border-radius:18px}.tech-agenda-title{display:none}.tech-view-tabs{margin:4px auto 16px}.tech-view-tabs button{height:42px}.tech-month-row{margin-bottom:8px;width:100%!important;display:grid;grid-template-columns:40px 1fr 40px;align-items:center}.tech-month-row strong{font-size:17px;font-weight:800}.tech-week-strip{display:grid!important;grid-template-columns:repeat(7,1fr)!important;gap:5px!important;width:100%!important;box-sizing:border-box!important}.tech-week-day{min-height:66px;border-radius:13px;width:100%!important;box-sizing:border-box!important}.tech-week-day small{font-size:9.5px;font-weight:800}.tech-week-day strong{font-size:17px;font-weight:800}body.plan-technician-view .plan-kpi-bar{grid-template-columns:repeat(4,1fr);gap:4px;margin:0;padding:9px}body.plan-technician-view .plan-kpi{display:flex;min-width:0;min-height:74px;padding:7px 3px;align-items:center;justify-content:center;flex-direction:column;gap:3px;text-align:center}body.plan-technician-view .plan-kpi-icon{width:34px;height:34px;font-size:14px}body.plan-technician-view .plan-kpi-copy strong{font-size:18px}body.plan-technician-view .plan-kpi-copy small{display:block;font-size:7px}body.plan-technician-view .plan-calendar{display:none}body.plan-technician-view .tech-today-board>.sh{padding:18px 15px 6px}body.plan-technician-view .tech-today-board #plan-title{font-size:18px}body.plan-technician-view .plan-days{padding:0 3px 12px}body.plan-technician-view .day-head{padding:12px 14px;font-size:13px}body.plan-technician-view .stop-card{margin:9px 8px;padding:17px 13px 15px 17px}body.plan-technician-view .stop-title{font-size:14px}body.plan-technician-view .tech-route-map-card{order:5}body.plan-technician-view .plan-map{height:245px!important}}
 
 /* Correccion de prioridades frente al layout general */
 html[data-role="tecnico"] body.plan-technician-view .hero-panel.tech-dashboard-hero{display:none!important}
 html[data-role="tecnico"] body.plan-technician-view .plan-shell{display:grid!important;grid-template-columns:minmax(540px,1.15fr) minmax(430px,.85fr)!important;grid-template-areas:"toolbar map" "kpis map" "calendar map" "agenda map"!important;width:100%!important;max-width:1380px!important;margin:0 auto!important;padding:26px 24px 36px!important}
-html[data-role="tecnico"] body.plan-technician-view .tech-calendar-toolbar{width:auto!important;min-width:0!important}
+html[data-role="tecnico"] body.plan-technician-view .tech-calendar-toolbar{width:100%!important;max-width:100%!important;box-sizing:border-box!important}
 html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar{width:auto!important;margin:0!important}
 html[data-role="tecnico"] body.plan-technician-view .plan-map-panel{width:auto!important;min-width:0!important}
 
@@ -245,17 +747,28 @@ html[data-role="tecnico"] body.plan-technician-view .plan-kpi.kpi-progress{displ
 html[data-role="tecnico"] body.plan-technician-view .plan-kpi.kpi-progress .plan-kpi-icon{color:#ef8515;background:#fff0dd}
 @media(max-width:760px){html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}html[data-role="tecnico"] body.plan-technician-view .plan-kpi{min-height:92px!important;padding:10px 7px!important}html[data-role="tecnico"] body.plan-technician-view .plan-kpi.kpi-progress{grid-column:1/-1!important;min-height:82px!important}html[data-role="tecnico"] body.plan-technician-view .plan-kpi-copy small{font-size:9px!important}}
 @media(max-width:1100px){html[data-role="tecnico"] body.plan-technician-view .plan-shell{grid-template-columns:1fr!important;grid-template-areas:"toolbar" "kpis" "calendar" "agenda" "map"!important;max-width:850px!important}}
-@media(max-width:760px){
- html[data-role="tecnico"] body.plan-technician-view,html[data-role="tecnico"] body.sidebar-collapsed.plan-technician-view{box-sizing:border-box!important;width:100%!important;min-width:0!important;margin:0!important;padding:0 0 78px!important;overflow-x:hidden!important}
- html[data-role="tecnico"] body.plan-technician-view .topbar,html[data-role="tecnico"] body.plan-technician-view .topbar.app-sidebar,html[data-role="tecnico"] body.plan-technician-view #mobile-menu-toggle{display:none!important;width:0!important;min-width:0!important}
- html[data-role="tecnico"] body.plan-technician-view .main,html[data-role="tecnico"] body.sidebar-collapsed.plan-technician-view .main{position:relative!important;left:0!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important}
- html[data-role="tecnico"] body.plan-technician-view .ct,html[data-role="tecnico"] body.plan-technician-view #plan-panel{width:100%!important;max-width:none!important;margin:0!important;padding:0!important}
- html[data-role="tecnico"] body.plan-technician-view .plan-shell{display:flex!important;width:100%!important;max-width:none!important;margin:0!important;padding:10px 10px 22px!important;flex-direction:column!important;gap:12px!important}
- html[data-role="tecnico"] body.plan-technician-view .tech-calendar-toolbar{order:1;width:100%!important}
- html[data-role="tecnico"] body.plan-technician-view .tech-progress-card{order:2;width:100%!important}
- html[data-role="tecnico"] body.plan-technician-view .plan-calendar{order:3}html[data-role="tecnico"] body.plan-technician-view .tech-today-board{order:4;width:100%!important}html[data-role="tecnico"] body.plan-technician-view .tech-route-map-card{order:5;width:100%!important}
+@media(max-width:768px){
+ html[data-role="tecnico"] body.plan-technician-view,html[data-role="tecnico"] body.sidebar-collapsed.plan-technician-view,
+ html.is-technician-env body,body.plan-technician-view{box-sizing:border-box!important;width:100%!important;min-width:0!important;margin:0!important;padding:0 0 calc(85px + env(safe-area-inset-bottom, 16px))!important;overflow-x:hidden!important}
+ html[data-role="tecnico"] body.plan-technician-view .topbar,html[data-role="tecnico"] body.plan-technician-view .topbar.app-sidebar,html[data-role="tecnico"] body.plan-technician-view #mobile-menu-toggle,
+ html.is-technician-env body .topbar,body.plan-technician-view .topbar{display:none!important;width:0!important;min-width:0!important}
+ html[data-role="tecnico"] body.plan-technician-view .main,html[data-role="tecnico"] body.sidebar-collapsed.plan-technician-view .main,
+ html.is-technician-env body .main,body.plan-technician-view .main{position:relative!important;left:0!important;width:100%!important;max-width:none!important;margin:0!important;padding:0!important}
+ html[data-role="tecnico"] body.plan-technician-view .ct,html[data-role="tecnico"] body.plan-technician-view #plan-panel,
+ html.is-technician-env body .ct,body.plan-technician-view #plan-panel{width:100%!important;max-width:none!important;margin:0!important;padding:0!important}
+ html[data-role="tecnico"] body.plan-technician-view .plan-shell,
+ html.is-technician-env body .plan-shell,
+ body.plan-technician-view .plan-shell{display:flex!important;width:100%!important;max-width:none!important;margin:0!important;padding:10px 10px calc(85px + env(safe-area-inset-bottom, 16px))!important;flex-direction:column!important;gap:12px!important}
+ html.is-technician-env body .tech-plan-banner,body.plan-technician-view .tech-plan-banner{order:0!important;width:100%!important;max-width:100%!important;margin:0 0 10px 0!important;align-self:stretch!important}
+ html.is-technician-env body .tech-progress-compact,body.plan-technician-view .tech-progress-compact,body.plan-technician-view #tech-progress-card{order:1!important;width:100%!important}
+ html[data-role="tecnico"] body.plan-technician-view .tech-calendar-toolbar, html.is-technician-env body .tech-calendar-toolbar, body.plan-technician-view .tech-calendar-toolbar{order:2!important;width:100%!important;max-width:100%!important;box-sizing:border-box!important}
+ html[data-role="tecnico"] body.plan-technician-view .plan-calendar{order:3}
+ html.is-technician-env body .plan-board,body.plan-technician-view .plan-board,body.plan-technician-view .tech-today-board{order:4!important;width:100%!important}
+ html.is-technician-env body #tech-day-map-card,body.plan-technician-view #tech-day-map-card,body.plan-technician-view .tech-route-map-card{order:5!important;width:100%!important}
+ html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar,
+ html.is-technician-env body .plan-kpi-bar,
+ body.plan-technician-view .plan-kpi-bar{display:none!important}
 }
-@media(max-width:760px){html[data-role="tecnico"] body.plan-technician-view .plan-kpi-bar{display:none!important}}
 
 /* Tarjeta de Progreso y Desempeño del Técnico */
 /* Barra compacta de progreso del técnico (diseño minimalista de bajo impacto visual) */
@@ -1408,3 +1921,112 @@ body.plan-technician-view .plan-inter-stop-transit .transit-badge b {
   flex-shrink: 0;
   color: #2563eb;
 }
+
+/* Validación de campos obligatorios con resalte en rojo */
+.is-invalid-input,
+input.is-invalid-input,
+textarea.is-invalid-input,
+select.is-invalid-input {
+  border: 2px solid #ef4444 !important;
+  background-color: #fef2f2 !important;
+  color: #991b1b !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25) !important;
+  animation: fieldShakeError 0.35s ease-in-out !important;
+}
+@keyframes fieldShakeError {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+
+/* Hoja informativa de ubicaciones y privacidad del mapa */
+.tech-map-privacy-notice {
+  margin: 10px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  font-size: 11.5px;
+  line-height: 1.45;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.tech-map-privacy-notice svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: #15803d;
+  margin-top: 1px;
+}
+.tech-map-locations-sheet {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+.tech-location-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background: #fff;
+  border: 1px solid #e2eaf2;
+  border-radius: 10px;
+  gap: 10px;
+}
+.tech-location-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Colores contrastados y legibles para estados, prioridades y botones */
+.tech-inline-detail-badges .badge.bgn {
+  background: #dcfce7 !important;
+  color: #15803d !important;
+  border: 1px solid #bbf7d0 !important;
+  font-weight: 800 !important;
+}
+.tech-inline-detail-badges .badge.ba {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+  border: 1px solid #fecaca !important;
+  font-weight: 800 !important;
+}
+.tech-inline-detail-badges .badge.bty {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+  border: 1px solid #fde68a !important;
+  font-weight: 800 !important;
+}
+.tech-inline-detail-actions .tech-detail-finish {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  color: #ffffff !important;
+  border: none !important;
+  font-weight: 800 !important;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3) !important;
+}
+.tech-inline-detail-actions .tech-detail-incomplete {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+  border: 1px solid #fca5a5 !important;
+  font-weight: 800 !important;
+}
+.tech-inline-detail-actions .tech-detail-edit {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+  font-weight: 700 !important;
+}
+.tech-wa-btn {
+  background: linear-gradient(135deg, #25d366, #128c7e) !important;
+  color: #ffffff !important;
+  border: none !important;
+  font-weight: 800 !important;
+  box-shadow: 0 2px 6px rgba(37, 211, 102, 0.3) !important;
+}
+
+

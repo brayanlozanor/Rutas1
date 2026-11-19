@@ -539,8 +539,8 @@
   background: #fff !important;
   box-shadow: 0 5px 18px rgba(18, 42, 76, .06) !important;
   overflow: hidden;
-  flex: 1 1 0% !important;
-  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  min-height: 380px !important;
   display: flex !important;
   flex-direction: column !important;
   justify-content: space-between !important;
@@ -549,17 +549,17 @@
 .orders-page .orders-table-card #orders-table {
   display: flex !important;
   flex-direction: column !important;
-  flex: 1 1 0% !important;
-  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  min-height: 380px !important;
   justify-content: space-between !important;
-  height: 100% !important;
+  height: auto !important;
 }
 
 .orders-page .orders-table-card .table-wrap {
-  flex: 1 1 0% !important;
-  min-height: 0 !important;
+  flex: 1 1 auto !important;
+  min-height: 280px !important;
   height: auto !important;
-  max-height: calc(100% - 56px) !important;
+  max-height: none !important;
   overflow: auto !important;
   border: 0 !important;
   border-radius: 0 !important;
@@ -2006,6 +2006,38 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+/* Detalle físico: solo solicitar pueblo (sin antena ni zona) */
+#wo-mo[data-kind="physical"] #wo-equipment-field,
+#wo-mo[data-kind="physical"] .wo-equipment-field,
+#wo-mo[data-kind="physical"] #wo-zone-field,
+#wo-mo[data-kind="physical"] .wo-zone-field,
+#wo-mo[data-kind="physical"] #wo-relation-info,
+body[data-detail-kind="physical"] #wo-mo #wo-equipment-field,
+body[data-detail-kind="physical"] #wo-mo .wo-equipment-field,
+body[data-detail-kind="physical"] #wo-mo #wo-zone-field,
+body[data-detail-kind="physical"] #wo-mo .wo-zone-field,
+body[data-detail-kind="physical"] #wo-mo #wo-relation-info,
+body.orders-page[data-detail-kind="physical"] #wo-mo #wo-equipment-field,
+body.orders-page[data-detail-kind="physical"] #wo-mo .wo-equipment-field,
+body.orders-page[data-detail-kind="physical"] #wo-mo #wo-zone-field,
+body.orders-page[data-detail-kind="physical"] #wo-mo .wo-zone-field,
+body.orders-page[data-detail-kind="physical"] #wo-mo #wo-relation-info {
+  display: none !important;
+}
+
+#wo-mo[data-kind="physical"] .wo-node-equipment-grid,
+body[data-detail-kind="physical"] #wo-mo .wo-node-equipment-grid,
+body.orders-page[data-detail-kind="physical"] #wo-mo .wo-node-equipment-grid {
+  grid-template-columns: 1fr !important;
+}
+
+#wo-mo[data-kind="physical"] #wo-node-field,
+body[data-detail-kind="physical"] #wo-mo #wo-node-field,
+body.orders-page[data-detail-kind="physical"] #wo-mo #wo-node-field {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
 }
 
 @media (max-width: 760px) {
@@ -5055,6 +5087,17 @@ body.orders-page .loading-progress:after {
 .orders-page .order-table tbody tr.order-row-done:hover > td {
   background-color: #bbf7d0 !important;
 }
+/* Diferenciación visual clara para detalles abiertos / pendientes */
+.orders-page .order-table tbody tr.order-row-open > td {
+  background-color: #ffffff !important;
+}
+.orders-page .order-table tbody tr.order-row-open > td:first-child {
+  border-left: 4px solid #f59e0b !important;
+}
+.orders-page .order-table tbody tr.order-row-done > td:first-child {
+  border-left: 4px solid #10b981 !important;
+}
+
 
 /* Hover más intenso y borde nítido al seleccionar un detalle */
 .orders-page .order-table tbody tr {
@@ -5996,12 +6039,68 @@ button.floating-notification-bell {
   pointer-events: auto !important;
 }
 
-/* En detalles físicos ocultar siempre "Mis pendientes" y "Mis resueltos" */
+.notif-network-ref-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #0284c7;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  line-height: 1.4;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+  vertical-align: middle;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 1px 2px rgba(2, 132, 199, 0.05);
+}
+
+.notif-network-ref-pill svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.netops-toast-title .notif-network-ref-pill {
+  font-size: 9px;
+  padding: 0 5px;
+  line-height: 15px;
+}
+
+/* En detalles físicos ocultar todo elemento que no pertenece al registro operativo de infraestructura */
+body.orders-page[data-detail-kind="physical"] .order-subtle-guides-group,
+body.orders-page[data-detail-kind="physical"] #order-filter-wrap-assignee,
+body.orders-page[data-detail-kind="physical"] #order-filter-wrap-date,
+body.orders-page[data-detail-kind="physical"] #wo-filter-my-assignments,
+body.orders-page[data-detail-kind="physical"] #wo-admin-stats-btn,
 body.orders-page[data-detail-kind="physical"] #wo-stat-my-pending-card,
 body.orders-page[data-detail-kind="physical"] #wo-stat-my-done-card,
 body.orders-page[data-detail-kind="physical"] .stat-my-pending,
-body.orders-page[data-detail-kind="physical"] .stat-my-done {
+body.orders-page[data-detail-kind="physical"] .stat-my-done,
+body.orders-page[data-detail-kind="physical"] .order-action-needed-pill,
+body.orders-page[data-detail-kind="physical"] .order-waiting-other-pill,
+body.orders-page[data-detail-kind="physical"] .order-checking-badge,
+body.orders-page[data-detail-kind="physical"] .order-reopened-badge,
+body.orders-page[data-detail-kind="physical"] .net-unread-chat-dot,
+body.orders-page[data-detail-kind="physical"] .net-btn-open,
+body.orders-page[data-detail-kind="physical"] .net-btn-retake,
+body.orders-page[data-detail-kind="physical"] .net-btn-physical,
+body.orders-page[data-detail-kind="physical"] .order-workflow-actions,
+body.orders-page[data-detail-kind="physical"] #wo-target-team-field,
+body.orders-page[data-detail-kind="physical"] #wo-assign-field,
+body.orders-page[data-detail-kind="physical"] #wo-priority-interval-box {
   display: none !important;
+}
+
+body.orders-page[data-detail-kind="physical"] .order-table tr.order-row-action-required,
+body.orders-page[data-detail-kind="physical"] .order-table tr.order-row-waiting-counterparty {
+  background: inherit !important;
+  box-shadow: none !important;
+  border-left-color: transparent !important;
 }
 
 /* Estilos de paginación para órdenes */
@@ -6322,13 +6421,17 @@ body.orders-page[data-detail-kind="physical"] .stat-my-done {
 
 /* 12. Modal para registrar detalles físicos en antena / pueblo desde detalle de red */
 .insert-physical-record-mo {
-  z-index: 15000 !important;
+  z-index: 18000 !important;
   background: rgba(15, 23, 42, 0.72) !important;
   backdrop-filter: blur(8px) !important;
   padding: 12px !important;
-  display: flex !important;
+  display: none !important;
   align-items: center !important;
   justify-content: center !important;
+}
+
+.insert-physical-record-mo.open {
+  display: flex !important;
 }
 
 .insert-physical-record-card {
@@ -6359,4 +6462,97 @@ body.orders-page[data-detail-kind="physical"] .stat-my-done {
   }
 }
 
+/* 13. Cabecera y pie de acciones siempre visibles y bien posicionados dentro del chat */
+.order-tech-report-card .order-report-head {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 40 !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  margin-bottom: 12px !important;
+  padding-top: 4px !important;
+  padding-bottom: 12px !important;
+}
 
+.order-tech-report-card .order-report-close {
+  position: relative !important;
+  z-index: 45 !important;
+  flex-shrink: 0 !important;
+}
+
+.order-tech-report-card .order-report-footer-actions {
+  position: sticky !important;
+  bottom: 0 !important;
+  z-index: 40 !important;
+  background: #ffffff !important;
+  border-top: 1px solid #e2e8f0 !important;
+  margin-top: 10px !important;
+  padding-top: 12px !important;
+  padding-bottom: 4px !important;
+  box-shadow: 0 -6px 16px rgba(15, 23, 42, 0.04) !important;
+}
+
+.order-report-footer-actions .net-btn-return {
+  background: #fff7ed !important;
+  color: #c2410c !important;
+  border: 1px solid #fdba74 !important;
+  font-weight: 800 !important;
+  font-size: 12px !important;
+  padding: 0 14px !important;
+  min-height: 36px !important;
+  border-radius: 9px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  transition: transform 0.14s ease, filter 0.14s ease, box-shadow 0.14s ease !important;
+}
+
+.order-report-footer-actions .net-btn-return:hover {
+  transform: translateY(-1px);
+  background: #ffedd5 !important;
+  border-color: #fb923c !important;
+}
+
+.order-report-footer-actions .net-btn-close-chat {
+  min-height: 36px !important;
+  padding: 0 14px !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  border-radius: 9px !important;
+  border: 1px solid #cbd5e1 !important;
+  background: #f8fafc !important;
+  color: #334155 !important;
+}
+
+.order-report-footer-actions .net-btn-close-chat:hover {
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* 14. Compensación de zoom de escritorio (body { zoom: 0.8 }) para que ningún modal ni telón quede recortado */
+@media (min-width: 901px) {
+  .order-tech-report-mo,
+  #order-chat-close-decision-mo,
+  .insert-physical-record-mo,
+  #network-resolve-mo,
+  #network-return-mo,
+  #network-unresolvable-mo {
+    width: 125vw !important;
+    height: 125dvh !important;
+    right: auto !important;
+    bottom: auto !important;
+  }
+}
+
+
+
+.orders-page .order-actions .order-complete-action {
+  border-color: #a7f3d0 !important;
+  background: #ecfdf5 !important;
+  color: #059669 !important;
+}
+
+.orders-page .order-actions .order-complete-action:hover {
+  background: #d1fae5 !important;
+  color: #047857 !important;
+}

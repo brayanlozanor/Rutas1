@@ -17,7 +17,7 @@
       category: 'Chilpancingo / Centro',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/x7BZAzmDZ7B2QAL4A',
-      stops: ['Nuevo Balzamar', 'El Palmar', 'Atlixtac'],
+      stops: ['WiFi-Mex', 'Nuevo Balsamar', 'Atlixtac'],
       continuations: [],
       notes: 'Corredor hacia la Montaña baja saliendo desde Chilpancingo.'
     },
@@ -32,7 +32,7 @@
         {
           name: 'Continuidad Sasamulco - Tlacuitlapa',
           mapsUrl: 'https://maps.app.goo.gl/DK5SWkYiojBo9VZt7',
-          stops: ['Tecuexcontitlán', 'Sasamulco', 'El Ahuacatito', 'Tonalapa del Río', 'Coatepec Costales', 'Tlacuitlapa'],
+          stops: ['Tecuexcontitlán', 'Sasamulco', 'Aguacatito', 'Tonalapa del Río', 'Coatepec Costales', 'Tlacuitlapa'],
           triggerStops: ['Tecuexcontitlán', 'Palula', 'Venta de Palula', 'Tonalapa del Sur']
         }
       ],
@@ -76,7 +76,7 @@
         {
           name: 'Continuidad Atetetla - Nanche Dulce',
           mapsUrl: 'https://maps.app.goo.gl/CAeeJpfNkTGgY8GU9',
-          stops: ['Atetetla', 'Xoyacuautla', 'Lagunillas', 'Nanche Dulce'],
+          stops: ['Atetetla', 'Xoyacautla', 'Lagunillas', 'Nanche Dulce'],
           triggerStops: ['Xochimilco', 'Tecolotla', 'Tetelilla']
         }
       ],
@@ -88,7 +88,7 @@
       category: 'Iguala / Norte',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/NaezRHWxNeiHUnrZ7',
-      stops: ['Atopula', 'Escuchapa', 'Chaucingo', 'Cuahuilotla', 'San Juan Teocalcingo'],
+      stops: ['Atopula', 'Escuchapa', 'Chaucingo', 'Coahuilotla', 'San Juan Teocalcingo'],
       continuations: [],
       notes: 'Corredor agropecuario y de enlaces inalámbricos de la región Norte.'
     },
@@ -98,7 +98,7 @@
       category: 'Morelos y Puebla',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/t48YnJ8yUf4p9tgN7',
-      stops: ['Las Bóvedas', 'La Mezquitera', 'La Era', 'Los Elotes', 'Valle de Vázquez', 'Chimalacatlán', 'Quilamula', 'Xochipala', 'Huaxtla'],
+      stops: ['La Boveda', 'La Mezquitera', 'La Calera', 'Los Elotes', 'Valle de Vázquez', 'Chimalacatlán', 'Quilamula', 'Xochipala', 'Huaxtla'],
       continuations: [
         {
           name: 'Continuidad Huaxtla - San José de Pala',
@@ -115,13 +115,13 @@
       category: 'Chilpancingo / Norte',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/NpPHx73d8BoZFqRU7',
-      stops: ['Acaquila', 'Tequicuilco', 'San Miguel de las Palmas', 'Tepetlapa', 'El Cascalote', 'Comala de Gómez', 'Santiago Zacango', 'Tlayahualco', 'Alta Vista'],
+      stops: ['Acaquila', 'Tequicuilco', 'San Miguel de las Palmas', 'Tepetlapa', 'El Cascalote', 'Comala de Gómez', 'Santiago Zacango', 'Tlayahualco', 'Bella Vista'],
       continuations: [
         {
           name: 'Continuidad Zicapa - Papalutla',
           mapsUrl: 'https://maps.app.goo.gl/TQtZabuUMx5S8dpo6',
           stops: ['Zicapa', 'San Francisco', 'San Miguel', 'Mezquitlan', 'Papalutla'],
-          triggerStops: ['Tlayahualco', 'Alta Vista', 'Comala de Gómez']
+          triggerStops: ['Tlayahualco', 'Bella Vista', 'Comala de Gómez']
         }
       ],
       notes: 'Zona de Copalillo y límite con Atenango del Río.'
@@ -137,14 +137,14 @@
         {
           name: 'Continuidad Las Maravillas - San Pedro la Junta',
           mapsUrl: 'https://maps.app.goo.gl/WUe9NW5p1xkoXaF87',
-          stops: ['Tepoxmatla', 'Ayoxuxtla', 'San Miguel Ejido', 'Chiauzumba', 'San Martín la Flor', 'San Manuel la Parota', 'Xaltianguis', 'San Pedro la Junta'],
+          stops: ['Tepoxmatla', 'Ayoxuxtla', 'San Miguel Ejido', 'Chiauzumba', 'San Martín la Flor', 'San Manuel la Parota', 'Xaltianguis', 'San Pedro de la Junta'],
           triggerStops: ['Las Maravillas Puebla', 'Tlaucingo', 'Jolalpan']
         },
         {
           name: 'Continuidad San Pedro la Junta - Las Piletas',
           mapsUrl: 'https://maps.app.goo.gl/19HcsHHrp68tveoU8',
-          stops: ['San Pedro la Junta', 'Santa Cruz Tejalpa', 'El Pitayo', 'Mexquitepec', 'San Martín Toltepec', 'Las Piletas'],
-          triggerStops: ['San Pedro la Junta', 'Xaltianguis']
+          stops: ['San Pedro de la Junta', 'Santa Cruz Tejalpa', 'El Pitayo', 'Mexquitepec', 'San Martín Toltepec', 'Las Piletas'],
+          triggerStops: ['San Pedro de la Junta', 'Xaltianguis']
         }
       ],
       notes: 'Corredor interestatal Guerrero - Puebla / Mixteca poblana.'
@@ -155,7 +155,7 @@
       category: 'San Marcos / Costa Chica',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/WSpthDKpa6SqNCcP8',
-      stops: ['Las Piñas', 'Tlalchocohuite', 'Amatepec', 'Huajintepec', 'Agua Zarca de la Peña', 'Piedra Blanca', 'Rancho Nuevo'],
+      stops: ['Las Piñas', 'Tlachocohuite', 'Amatepec', 'Huajintepec', 'Agua Zarca de la Peña', 'Piedra Blanca', 'Rancho Nuevo'],
       continuations: [
         {
           name: 'Continuidad Rancho Nuevo - Santa Elena de la Villa',
@@ -195,7 +195,7 @@
       category: 'Chilpancingo / Sierra',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/Sn9udx4FiyyFGixt6',
-      stops: ['Michapa', 'Rancho Viejo', 'Chautipa', 'Perseverancia', 'La Estrella', 'Tlayolapa', 'El Terrero', 'El Tabacal'],
+      stops: ['Michapa', 'Rancho Viejo', 'Chautipan', 'Perseverancia', 'La Estrella', 'Tlayolapa', 'El Terrero', 'El Tabacal'],
       continuations: [
         {
           name: 'Continuidad Tabacal - San Francisco',
@@ -212,7 +212,7 @@
       category: 'Chilpancingo / Sierra',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/9BNSo3DcJTLLWNso8',
-      stops: ['Aixcualco', 'Ahuexotitlán', 'Almolonga', 'Zoquiapa', 'El Durazno'],
+      stops: ['Aixcualco', 'Ahuexotitlán', 'Almolonga', 'Zoquiapa', 'Durazno'],
       continuations: [],
       notes: 'Zona oriente de Chilpancingo hacia Tixtla y El Durazno.'
     },
@@ -232,7 +232,7 @@
       category: 'Chilpancingo / Centro',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/kkscGaPRDSL76dTZA',
-      stops: ['El Zapote', 'El Pelillo', 'Loma Larga', 'Tecomapa', 'El Papayito', 'San Juan del Río', 'Agua Zarca', 'Ocotillo'],
+      stops: ['El Zapote', 'El Pellillo', 'Loma Larga', 'Tecomapa', 'El Papayito', 'San Juan del Río', 'Agua Zarca', 'Ocotillo'],
       continuations: [],
       notes: 'Comunidades rurales hacia el sur del municipio.'
     },
@@ -242,7 +242,7 @@
       category: 'Ayutla / Costa Chica',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/3sDa3AMENY1B1kZm6',
-      stops: ['El Tejoruco', 'Parota Seca', 'El Tecorral', 'El Potrero', 'Los Sauces', 'Ayutla Regreso'],
+      stops: ['El Tejoruco', 'Parota Seca', 'Tecorral', 'El Potrero', 'Los Sauces', 'Ayutla'],
       continuations: [],
       notes: 'Circuito de comunidades altas de Ayutla de los Libres.'
     },
@@ -257,7 +257,7 @@
         {
           name: 'Continuidad Tierra Blanca - Tecruz',
           mapsUrl: 'https://maps.app.goo.gl/QqKsba78VjiswbPcA',
-          stops: ['San Juan De Los Pinos', 'El Aguacate', 'Río Grande', 'Tecruz'],
+          stops: ['San Juan los Pinos', 'El Aguacate', 'Río Grande', 'Tecruz'],
           triggerStops: ['Tierra Blanca', 'Escalerilla']
         }
       ],
@@ -269,12 +269,12 @@
       category: 'Ayutla / Costa Chica',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/2KJVHsiXSJQCWnNu5',
-      stops: ['Puma Rosa', 'Colonia Progreso', 'La Unificada', 'Barranca de Guadalupe', 'Filo de Caballos', 'Barranca Tecoani', 'Rio Velero', 'El Camalote', 'Caxitepec'],
+      stops: ['Poma Rosa', 'Barrio Nuevo del Progreso', 'La Unificada', 'Barranca Guadalupe', 'Filo de Caballos', 'Barranca Tecoani', 'Rio Velero', 'El Camalote', 'Caxitepec'],
       continuations: [
         {
           name: 'Continuidad Caxitepec - Yerba Santa',
           mapsUrl: 'https://maps.app.goo.gl/6yAroPJgYDEwSjNa9',
-          stops: ['Alcamani', 'Llano de la Parota', 'Barranca Bejuco', 'Loma Bonita', 'Puerto Buenavista', 'San Marcos', 'Yerba Santa'],
+          stops: ['Alcamani', 'Llano de la Parota', 'Barranca Bejuco', 'Loma Bonita', 'Puerto Buena Vista', 'San Marcos', 'Yerba Santa'],
           triggerStops: ['Caxitepec', 'El Camalote', 'Rio Velero']
         }
       ],
@@ -286,13 +286,13 @@
       category: 'Ayutla / Costa Chica',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/BLjnY9rksDS2tkm56',
-      stops: ['Mexcaltepec', 'Mezcalapa', 'Metlapilapa', 'Villa Guadalupe', 'Xochistlahuaca', 'El Mango 39200', 'Totomixtlahuaca', 'San Miguelito', 'Juquila'],
+      stops: ['Mexcaltepec', 'Mexcalapa', 'Metlapilapa', 'Villa Guadalupe', 'Xochistlahuaca', 'El Mango 39200', 'Totomixtlahuaca', 'San Miguelito', 'San Miguel Tenazapa Juquilita'],
       continuations: [
         {
           name: 'Continuidad Juquilita - Ahuejuyo Viejo',
           mapsUrl: 'https://maps.app.goo.gl/dVp4iDxzLJAwC9z16',
-          stops: ['Tenamazapa', 'Plan jacarandas', 'El Mirador', 'Crucero de Tlacotepec', 'Ahuejuyo viejo'],
-          triggerStops: ['Juquila', 'San Miguelito', 'Totomixtlahuaca']
+          stops: ['San Miguel Tenazapa Juquilita', 'Plan Jacaranda', 'El Mirador', 'Crucero de Tlacotepec', 'Ahuejuyo viejo'],
+          triggerStops: ['San Miguel Tenazapa Juquilita', 'San Miguelito', 'Totomixtlahuaca']
         }
       ],
       notes: 'Ruta indígena Me’phaa y Na Savi de la montaña de Ayutla.'
@@ -303,13 +303,13 @@
       category: 'Ayutla / Costa Chica',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/PwkkJjWLP5NH4uKNA',
-      stops: ['Pozolapa', 'El Zapote', 'La Unión', 'El Guineo', 'Tlachimala', 'La Azozuca', 'La Lima', 'Coacoyulichán', 'El Llano'],
+      stops: ['Pozolapa', 'El Zapote', 'La Unión', 'El Guineo', 'Tlachimala', 'La Azozuca', 'La Lima', 'Coacuyulichan', 'El Llano'],
       continuations: [
         {
           name: 'Continuidad Coacoyulichán - San Agustín Cuilutla',
           mapsUrl: 'https://maps.app.goo.gl/uTVENrWV6wfnYvu17',
           stops: ['Paso Salinas', 'El Coquillo', 'San Agustín Cuilutla'],
-          triggerStops: ['Coacoyulichán', 'El Llano', 'La Lima']
+          triggerStops: ['Coacuyulichan', 'El Llano', 'La Lima']
         }
       ],
       notes: 'Comunidades del valle de Ayutla hacia Cuautepec.'
@@ -320,7 +320,7 @@
       category: 'Ayutla / Costa Chica',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/HJDYMTabFz9Vfbkh6',
-      stops: ['Los Achotes', 'Cruz Verde', 'Poza Verde', 'El Capulín Chocolate', 'San José el Capulin'],
+      stops: ['Los Achotes', 'Santa Cruz', 'Poza Verde', 'El Capulín Chocolate', 'El Capulin'],
       continuations: [],
       notes: 'Comunidades de la zona baja de Ayutla.'
     },
@@ -330,7 +330,7 @@
       category: 'Ayutla / Costa Chica',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/7GCE4jheoUSP8BpKA',
-      stops: ['Tres Cruces', 'Arroyo Mixtecolapa', 'El Cocoyul', 'Colonia Hidalgo', 'Colonia Santa Cruz el Mesón', 'Pascala del Oro'],
+      stops: ['Tres Cruces', 'Arroyo Mixtecolapa', 'El Cocoyul', 'Col Hidalgo', 'Colonia Santa Cruz el Mesón', 'Pazcala del Oro'],
       continuations: [],
       notes: 'Camino montañoso hacia Pascala del Oro.'
     },
@@ -340,7 +340,7 @@
       category: 'San Marcos / Costa Chica',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/mQTgqgoQY9vfDQ3s9',
-      stops: ['El Cocoyult', 'El Cortés', 'Bella Vista', 'Tecomate Nanchal', 'El Tamarindo', 'Yucatán de las Flores', 'Barrio Nuevo de los Muertos', 'Huamuchitos', 'Apanhuac'],
+      stops: ['El Cocoyult', 'El Cortés', 'Bella Vista', 'Tecomate Nanchal', 'El Tamarindo', 'Yucatán de las Flores', 'Barrio Nuevo Dos Muertos', 'Huamuchitos', 'Apanhuac'],
       continuations: [
         {
           name: 'Continuidad Apanhuac - San Juan Grande',
@@ -357,18 +357,18 @@
       category: 'San Marcos / Costa Chica',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/LRSweyFCBT4JMDpc9',
-      stops: ['Vista Hermosa', 'Tecomate Pesqueria', 'Cerro del Toro Pando', 'El Cerro Pesquería', 'Espinalillo', 'Barranca Prieta', 'Alto de Ventura', 'Estero Verde', 'Cuatro Bancos'],
+      stops: ['Vista Hermosa', 'Tecomate Pesqueria', 'Barrio Nuevo Toro Pando', 'El Cerro Pesquería', 'Espinalillo', 'Barranca Prieta', 'Alto de Ventura', 'Estereo Verde', '4 Bancos'],
       continuations: [
         {
           name: 'Continuidad Espinalillo - El Porvenir',
           mapsUrl: 'https://maps.app.goo.gl/rqLSnUFsgsqMgfMq8',
-          stops: ['Playa Larga', 'Vista Alegre', 'El Papayo', 'Arroyo Limón', 'Las Lomitas de Nexpa', 'La Colonia de Río Nexpa', 'Carabalincito', 'Carabalí Grande', 'El Porvenir'],
-          triggerStops: ['Espinalillo', 'Barranca Prieta', 'Cuatro Bancos']
+          stops: ['Playa Larga', 'Vista Alegre', 'El Papayito', 'Arroyo Limón', 'Las Lomitas de Nexpa', 'Lomitas de Nexpan', 'Carabalincito', 'Carabalí Grande', 'El Porvenir'],
+          triggerStops: ['Espinalillo', 'Barranca Prieta', '4 Bancos']
         },
         {
           name: 'Continuidad El Porvenir - El Carrizo',
           mapsUrl: 'https://maps.app.goo.gl/rqLSnUFsgsqMgfMq8',
-          stops: ['Charco del Pozo', 'Los Tamarindos', 'San Antonio', 'El Pabellón', 'El Salto', 'Las Peñas', 'El Carrizo'],
+          stops: ['Pozo del Charco', 'Los Tamarindos', 'San Antonio', 'El Pabellón', 'El Salto', 'Las Peñas', 'El Carrizo'],
           triggerStops: ['El Porvenir', 'Carabalí Grande']
         }
       ],
@@ -385,7 +385,7 @@
         {
           name: 'Continuidad Llano Grande - Buenos Aires',
           mapsUrl: 'https://maps.app.goo.gl/7P3kQQdDy3usfxzP8',
-          stops: ['La Culebra', 'El Cacalote', 'Maldonado', 'Tierra Colorada', 'Buenos Aires'],
+          stops: ['La Culebra', 'Cascalote', 'Maldonado', 'Tierra Colorada', 'Buenos Aires'],
           triggerStops: ['Llano Grande', 'Barajillas', 'Comaltepec']
         }
       ],
@@ -397,13 +397,13 @@
       category: 'San Marcos / Ometepec',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/eV9hph6mvk7r1sYbA',
-      stops: ['Piedra Labrada', 'La Catalina', 'Chicapilla', 'La Culebra', 'Vista Hermosa', 'Camotinchán', 'Cañada del Totomoxtle', 'Tierra Blanca'],
+      stops: ['Piedra Labrada', 'La Catalina', 'Chicapilla', 'La Culebra', 'Vista Hermosa', 'Camotinchán', 'Cañada del Totomoxtla', 'Tierra Blanca'],
       continuations: [
         {
           name: 'Continuidad Tierra Blanca - La Libertad',
           mapsUrl: 'https://maps.app.goo.gl/dY84HMrfpWmMGHsR7',
           stops: ['Piedra Ancha', 'El Tamarindo', 'La Libertad'],
-          triggerStops: ['Tierra Blanca', 'Cañada del Totomoxtle']
+          triggerStops: ['Tierra Blanca', 'Cañada del Totomoxtla']
         }
       ],
       notes: 'Zona afromexicana y serranía de Ometepec.'
@@ -414,7 +414,7 @@
       category: 'Acapulco / Coyuca',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/KEGvf6FAjEB6k5Qw6',
-      stops: ['Encino Prieto', 'Paso Real', 'Atoyaquillo', 'Las Pulgas', 'Barrio Nuevo la Laja', 'Yerbasanta', 'Las Compuertas', 'Barrio Nuevo del Progreso', 'San Isidro'],
+      stops: ['Encino Prieto', 'Paso Real', 'Atoyaquillo', 'La Laja / Pulgas', 'La Laja / Pulgas', 'Yerba Santa', 'Las Compuertas', 'Barrio Nuevo del Progreso', 'San Isidro'],
       continuations: [
         {
           name: 'Continuidad La Remontita - El Huamúchil',
@@ -431,12 +431,12 @@
       category: 'Acapulco / Coyuca',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/PnALUiVNuZq5oKiX7',
-      stops: ['Parotillas', 'Los Ilamos', 'Rancho las Marías', 'Las Parotas', 'Garrapatas', 'San José Cacahuatepec', 'Las Ollitas', 'El Veladero', 'Lomas del Aire'],
+      stops: ['Parotillas', 'Los Ilamos', 'Rancho las Marías', 'La Parota', 'Garrapatas', 'San José Cacahuatepec', 'Las Ollitas', 'El Veladero', 'Lomas del Aire'],
       continuations: [
         {
           name: 'Continuidad Lomas del Aire - Agua del Perro',
           mapsUrl: 'https://maps.app.goo.gl/DN9XAtXJ9V732fvL8',
-          stops: ['Los Huajes', 'Alto del Camarón', 'Agua del Perro'],
+          stops: ['El Huaje', 'Alto de Camaron', 'Agua de Perro'],
           triggerStops: ['Lomas del Aire', 'El Veladero']
         }
       ],
@@ -452,7 +452,7 @@
       category: 'Chilpancingo / Centro',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/bjsNw7dzDZeWRxv96',
-      stops: ['Chilpancingo', 'Nuevo Balzamar', 'Balzamar'],
+      stops: ['WiFi-Mex', 'Nuevo Balsamar', 'Balsamar'],
       continuations: [],
       notes: 'Ruta directa anexada hacia Balzamar.'
     },
@@ -462,7 +462,7 @@
       category: 'Chilpancingo / Centro',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/4L8gKm7JjXE3dWXx8',
-      stops: ['Chilpancingo', 'Papalotepec'],
+      stops: ['WiFi-Mex', 'Papalotepec'],
       continuations: [],
       notes: 'Ruta directa hacia Papalotepec.'
     },
@@ -472,7 +472,7 @@
       category: 'Chilpancingo / Centro',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/CoFdLRT5fa9K6Lk98',
-      stops: ['Chilpancingo', 'Ahuelicán'],
+      stops: ['WiFi-Mex', 'Ahuelicán'],
       continuations: [],
       notes: 'Ruta directa hacia Ahuelicán (Eduardo Neri).'
     },
@@ -482,7 +482,7 @@
       category: 'Chilpancingo / Centro',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/6AVZrTkpA1WjKnJUA',
-      stops: ['Chilpancingo', 'Ahuehuepan'],
+      stops: ['WiFi-Mex', 'Ahuehuepan'],
       continuations: [],
       notes: 'Ruta directa hacia Ahuehuepan.'
     },
@@ -492,7 +492,7 @@
       category: 'Chilpancingo / Centro',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/XBxtSVnBzAphRwPa8',
-      stops: ['Chilpancingo', 'Axaxacualco', 'Tlanipatla'],
+      stops: ['WiFi-Mex', 'Axaxacualco', 'Tlanipatla'],
       continuations: [],
       notes: 'Comunidades al norte de Chilpancingo.'
     },
@@ -502,7 +502,7 @@
       category: 'Chilpancingo / Centro',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/WGvZbipVR9QheKrH8',
-      stops: ['Chilpancingo', 'La Laguna'],
+      stops: ['WiFi-Mex', 'La Laguna'],
       continuations: [],
       notes: 'Comunidad La Laguna.'
     },
@@ -512,7 +512,7 @@
       category: 'Chilpancingo / Centro',
       type: 'corredor',
       mapsUrl: 'https://maps.app.goo.gl/ki799ySSzFnW3BzH9',
-      stops: ['Chilpancingo', 'Amojileca'],
+      stops: ['WiFi-Mex', 'Amojileca'],
       continuations: [],
       notes: 'Sierra poniente de Chilpancingo.'
     },
@@ -528,8 +528,8 @@
       mapsUrl: 'https://maps.app.goo.gl/Sn9udx4FiyyFGixt6',
       stops: [
         'Villa Guerrero', 'Tlayolapa', 'El Terrero', 'El Tabacal', 'San Martín',
-        'Ochuapa', 'Magueyitos', 'El Charco', 'San Francisco', 'La Estrella',
-        'Perseverancia', 'Chautipa', 'Rancho Viejo', 'Michapa'
+        'Ochoapa', 'Magueyitos', 'El Charco', 'San Francisco', 'La Estrella',
+        'Perseverancia', 'Chautipan', 'Rancho Viejo', 'Michapa'
       ],
       continuations: [],
       notes: 'Recorrido secuencial de 14 pueblos en la sierra de Tlayolapa.'
@@ -541,7 +541,7 @@
       type: 'recorrido',
       mapsUrl: 'https://maps.app.goo.gl/3sDa3AMENY1B1kZm6',
       stops: [
-        'Tlayoyotepec', 'Tejoruco', 'Parota Seca', 'Tecorrales', 'Cruzitas',
+        'Teyoyotepec', 'Tejoruco', 'Parota Seca', 'Tecorral', 'Cruzitas',
         'El Potrero', 'Los Sauces', 'Pozolapa', 'Azozuca', 'El Zapote',
         'Guineo', 'La Unión', 'Tlachimala', 'El Capulín'
       ],
@@ -556,10 +556,10 @@
       mapsUrl: 'https://maps.app.goo.gl/VTGhsHypKmtRey8C9',
       stops: [
         'Tamarindo', 'Cuadrilla Nueva', 'Acalmani', 'Cerro Pelón', 'Río Azul',
-        'Plan de Gatica', 'Escalerilla', 'Tierra Blanca', 'San Juan de los Pinos', 'El Aguacate',
-        'Río Grande', 'Te Cruz', 'Colonia Progreso', 'Puma Rosa', 'La Unificada',
-        'Barranca Guadalupe', 'Colonia Filo de Caballos', 'Barranca Tecuani', 'Río Velero', 'Camalote',
-        'Caxitepec', 'Barranca Bejuco', 'Alcalmani', 'Llano la Parota', 'Loma Bonita',
+        'Plan de Gatica', 'Escalerilla', 'Tierra Blanca', 'San Juan los Pinos', 'El Aguacate',
+        'Río Grande', 'Tecruz', 'Barrio Nuevo del Progreso', 'Poma Rosa', 'La Unificada',
+        'Barranca Guadalupe', 'Colonia Filo de Caballos', 'Barranca Tecoani', 'Río Velero', 'Camalote',
+        'Caxitepec', 'Barranca Bejuco', 'Acalmani', 'Llano la Parota', 'Loma Bonita',
         'Yerba Santa'
       ],
       continuations: [],
@@ -572,10 +572,10 @@
       type: 'recorrido',
       mapsUrl: 'https://maps.app.goo.gl/7GCE4jheoUSP8BpKA',
       stops: [
-        'Tres Cruces', 'Arroyo Mixtecolpa', 'Cocoyul', 'Colonia Hidalgo', 'Pascala del Oro',
-        'Colonia Pascala del Oro', 'Metlapilapa', 'Mexcalapa', 'Villa Guadalupe', 'Xochistlahuaca',
-        'El Mango', 'Totomixtlahuaca', 'Ahuejuyo', 'Juquila', 'Tenamazapa',
-        'Plan de Jacarandas', 'San Miguel', 'Mexcaltepec'
+        'Tres Cruces', 'Mixtecolapa', 'Cocoyul', 'Col Hidalgo', 'Pazcala del Oro',
+        'Pazcala del Oro', 'Metlapilapa', 'Mexcalapa', 'Villa Guadalupe', 'Xochistlahuaca',
+        'El Mango', 'Totomixtlahuaca', 'Ahuejuyo', 'San Miguel Tenazapa Juquilita', 'San Miguel Tenazapa Juquilita',
+        'Plan Jacaranda', 'San Miguel', 'Mexcaltepec'
       ],
       continuations: [],
       notes: 'Recorrido secuencial de 18 paradas por la zona de Pascala del Oro.'
@@ -587,7 +587,7 @@
       type: 'recorrido',
       mapsUrl: 'https://maps.app.goo.gl/WSpthDKpa6SqNCcP8',
       stops: [
-        'Omitlán', 'Las Piñas', 'Tlalchocohuites', 'Amatepec', 'Huajintepec',
+        'Omitlán', 'Las Piñas', 'Tlachocohuite', 'Amatepec', 'Huajintepec',
         'Agua Zarca de las Peñas', 'Las Cruces', 'Guayabo', 'Rancho Nuevo', 'Piedra Blanca',
         'Llano Grande', 'El Techale', 'Anáhuac', 'Colonia Anáhuac', 'Cuco',
         'Santa Elena', 'Santa Elena la Villa', 'El Amatal', 'Rancho Viejo', 'Moctezuma'
@@ -602,10 +602,10 @@
       type: 'recorrido',
       mapsUrl: 'https://maps.app.goo.gl/LRSweyFCBT4JMDpc9',
       stops: [
-        'Tecomate Pesquería', 'Vista Hermosa', 'Toro Pando', 'Las Playas', 'Playa Larga',
-        'Barranca Prieta', 'Alto Ventura', 'Estero Verde', 'Cuatro Bancos', 'Charco del Pozo',
+        'Tecomate Pesquería', 'Vista Hermosa', 'Toro Pando', 'Playa Larga', 'Playa Larga',
+        'Barranca Prieta', 'Alto de Ventura', 'Estereo Verde', '4 Bancos', 'Pozo del Charco',
         'El Tamarindo', 'El Porvenir', 'Lomitas de Nexpa', 'Carabalincito', 'Carabalí',
-        'Río Nexpa', 'Vista Alegre', 'El Papayo', 'Arroyo Limón'
+        'Maquina Nexpan', 'Vista Alegre', 'El Papayito', 'Arroyo Limón'
       ],
       continuations: [],
       notes: 'Recorrido costero secuencial de 19 paradas por lagunas y playas.'
@@ -618,9 +618,9 @@
       mapsUrl: 'https://maps.app.goo.gl/mQTgqgoQY9vfDQ3s9',
       stops: [
         'El Cortés', 'Cocoyul', 'Bella Vista', 'Tecomate Nanchal', 'Tamarindo',
-        'Yucatán de las Flores', 'Barrio de los Muertos', 'El Cerrito', 'Huamuchitos', 'Apanhuac',
+        'Yucatán de las Flores', 'Barrio Nuevo Dos Muertos', 'El Cerro Pesqueria', 'Huamuchitos', 'Apanhuac',
         'Espinalillo', 'El Cantón', 'Cacahuatepec', 'El Carrizo', 'Apalani',
-        'Campanario', 'Las Minas', 'San Juan el Chico', 'San Juan el Grande'
+        'Campanario', 'Las Minas', 'San Juan Chico', 'San Juan Grande'
       ],
       continuations: [],
       notes: 'Recorrido secuencial de 19 comunidades rurales del río Papagayo.'
@@ -633,8 +633,8 @@
       mapsUrl: 'https://maps.app.goo.gl/PnALUiVNuZq5oKiX7',
       stops: [
         'Las Ollitas', 'San José Cacahuatepec', 'Garrapatas', 'Parotillas', 'Los Ilamos',
-        'Rancho las Marías', 'Las Parotas', 'Veladero', 'Lomas del Aire', 'Los Huajes',
-        'Alto del Camarón', 'Agua de Perro'
+        'Rancho las Marías', 'La Parota', 'Veladero', 'Lomas del Aire', 'El Huaje',
+        'Alto de Camaron', 'Agua de Perro'
       ],
       continuations: [],
       notes: 'Recorrido secuencial de 12 sitios de la cuenca alta de Acapulco.'
@@ -648,7 +648,7 @@
       stops: [
         'Tlahuizapa', 'Coacoyulillo', 'Inscuinatoyac', 'El Carrizo', 'Santa Rosa',
         'San Miguel', 'San Cristóbal', 'Santa Bárbara', 'Santa Rita', 'Las Marías',
-        'La Calera', 'Ocotillo', 'El Zapote', 'Tecomapa', 'Pelillo',
+        'La Calera', 'Ocotillo', 'El Zapote', 'Tecomapa', 'El Pellillo',
         'Playa Larga', 'Papayito', 'San Juan del Río', 'Agua Zarca'
       ],
       continuations: [],
@@ -676,7 +676,7 @@
       stops: [
         'Tetelilla', 'Santa Cruz', 'Rincón Chiquito', 'Xilocintla', 'Cacahuananche',
         'Texahualco', 'Tlapala', 'Tecolotla', 'Xochimilco', 'Atetetla',
-        'Xoyacuautla', 'Lagunillas', 'Nanche Dulce', 'Atopula', 'Escuchapa',
+        'Xoyacautla', 'Lagunillas', 'Nanche Dulce', 'Atopula', 'Escuchapa',
         'Chaucingo', 'Coahuilotla', 'San Juan Teocalcingo'
       ],
       continuations: [],
@@ -692,7 +692,7 @@
         'Casa de Colores', 'El Palmar', 'Xochipala', 'Venta Vieja', 'Tlamamacan',
         'San Marcos', 'San Agustín', 'San Juan', 'Ameyaltepec', 'Ahuelicán',
         'Ahuehuepan', 'Xalitla', 'Maxela', 'Tonalapa del Sur', 'Palula',
-        'Venta de Palula', 'Tecuexcontitlán', 'Sasamulco', 'Grutas de Cacahuamilpa', 'Crucero las Grutas',
+        'Venta de Palula', 'Tecuexcontitlán', 'Sasamulco', 'Grutas de Cacahuamilpa', 'Crucero de Grutas',
         'Coxcatlán', 'Tlamacazapa', 'Tonalapa del Río', 'Coatepec Costales', 'Tlacuitlapa',
         'Aguacatito'
       ],
@@ -706,10 +706,10 @@
       type: 'recorrido',
       mapsUrl: 'https://maps.app.goo.gl/vNaLxjZeckMd6juKA',
       stops: [
-        'Las Bóvedas', 'La Mezquitera', 'La Era', 'Los Elotes', 'Valle de Vázquez',
-        'Chimalacatlán', 'Aquilamula', 'Xochipala', 'Santiopan', 'Ajuchitlán',
+        'La Boveda', 'La Mezquitera', 'La Calera', 'Los Elotes', 'Valle de Vázquez',
+        'Chimalacatlán', 'Aquilamula', 'Xochipala', 'Xantiopan', 'Ajuchitlán',
         'San José de Pala', 'Tepoxmatla', 'Ayoxuxtla', 'San Miguel Ejido', 'Chiauzumba',
-        'San Martín la Flor', 'La Parota', 'Xaltianguis', 'San Pedro la Junta', 'Santa Cruz Tejalpa',
+        'San Martín la Flor', 'La Parota', 'Xaltianguis', 'San Pedro de la Junta', 'Santa Cruz Tejalpa',
         'El Pitayo', 'Mexquitepec', 'San José Hidalgo', 'Maravillas', 'Tlaucingo',
         'Jolalpan', 'Teutla', 'El Salado', 'Huachinantla', 'San Vicente'
       ],
@@ -724,7 +724,7 @@
       mapsUrl: 'https://maps.app.goo.gl/TQtZabuUMx5S8dpo6',
       stops: [
         'Mezquitlan', 'Papalutla', 'San Miguel Mezquitepec', 'San Francisco Otzutla', 'Zicapa',
-        'Huaxtitlán', 'Tlayahualco', 'Cascalote', 'Santiago Zacango', 'Comala',
+        'Ahuexotitlán', 'Tlayahualco', 'Cascalote', 'Santiago Zacango', 'Comala',
         'San Miguel de las Palmas', 'Tepetlapa', 'Tequicuilco', 'Acaquila', 'San Francisco Ozomatlán',
         'Tula del Río', 'San Agustín Ostotipan', 'San Juan Totolcintla'
       ],
@@ -738,9 +738,9 @@
       type: 'recorrido',
       mapsUrl: 'https://maps.app.goo.gl/uTVENrWV6wfnYvu17',
       stops: [
-        'La Lima', 'Coacoyulichán', 'Poza Verde', 'San Agustín Cuilutla', 'Coquillo',
-        'El Llano', 'Paso Salinas', 'El Carrizo', 'Atlixco', 'Rancho Miramar',
-        'Zihuapoloya', 'Los Achotes', 'Cruz Verde', 'Capulín Chocolate', 'San José Capulín'
+        'La Lima', 'Coacuyulichan', 'Poza Verde', 'San Agustín Cuilutla', 'Coquillo',
+        'El Llano', 'Paso Salinas', 'El Carrizo', 'Atrixco', 'Rancho Miramar',
+        'Zihuapoloya', 'Los Achotes', 'Santa Cruz', 'Capulín Chocolate', 'El Capulin'
       ],
       continuations: [],
       notes: 'Circuito secuencial de 15 comunidades de la llanura de San Agustín Cuilutla.'
@@ -754,9 +754,9 @@
       stops: [
         'Vista Hermosa (1)', 'Vista Hermosa', 'Milpillas', 'Comaltepec', 'Charco de la Puerta',
         'Las Iguanas', 'Piedra Boluda', 'Piedra Labrada', 'La Guadalupe', 'La Catalina',
-        'Chicapilla', 'La Culebra', 'Vista Hermosa (2)', 'Cañada del Totomoxtle', 'Camotinchán',
+        'Chicapilla', 'La Culebra', 'Vista Hermosa (2)', 'Cañada del Totomoxtla', 'Camotinchán',
         'Tierra Blanca', 'Piedra Ancha', 'Tamarindo la Libertad', 'El Terrero', 'Barajillas',
-        'Llano Grande', 'La Culebra', 'Tecoyame', 'Punta Maldonado (El Faro)', 'El Cacalote',
+        'Llano Grande', 'La Culebra', 'Tecoyame', 'Punta Maldonado (El Faro)', 'Cascalote',
         'Maldonado', 'Tierra Colorada', 'Buenos Aires'
       ],
       continuations: [],
@@ -769,9 +769,9 @@
       type: 'recorrido',
       mapsUrl: 'https://maps.app.goo.gl/KEGvf6FAjEB6k5Qw6',
       stops: [
-        'Encino Prieto', 'Paso Real', 'Atoyaquillo', 'Las Pulgas', 'Barrio la Laja',
-        'Hierba Santa', 'Compuertas', 'Barrio Nuevo Progreso', 'San Isidro', 'La Remontita',
-        'La Felicidad de los Rosales', 'Los Huajes', 'El Porvenir', 'Las Lomitas', 'El Terrero',
+        'Encino Prieto', 'Paso Real', 'Atoyaquillo', 'La Laja / Pulgas', 'La Laja / Pulgas',
+        'Hierba Santa', 'Compuertas', 'Barrio Nuevo del Progreso', 'San Isidro', 'La Remontita',
+        'La Felicidad de los Rosales', 'El Huaje', 'El Porvenir', 'Las Lomitas', 'El Terrero',
         'Nopales', 'Huertecillas', 'El Huamúchil'
       ],
       continuations: [],
@@ -839,7 +839,33 @@
   root.saveCustomPresetRoutes = saveCustomPresetRoutes;
 
   /**
-   * Retorna todas las rutas recomendadas combinando las base con las personalizadas/editadas
+   * Normaliza los títulos de rutas y continuidades para que los nombres de los pueblos
+   * coincidan exactamente con los pueblos registrados en el sistema.
+   */
+  function normalizeTitleWithRegisteredTowns(title) {
+    if (!title) return title;
+    const prefixMatch = title.match(/^(Ruta\s+Anexada|Ruta|Recorrido|Continuidad)\s+/i);
+    const prefix = prefixMatch ? prefixMatch[0] : '';
+    const body = prefix ? title.slice(prefix.length) : title;
+
+    // Segmentos separados por ' - ', ' / ', ' y '
+    const segments = body.split(/(\s*(?:[-–/]|(?:\s+y\s+))\s*)/);
+    const normalizedSegments = segments.map(seg => {
+      if (/^\s*(?:[-–/]|(?:\s+y\s+))\s*$/.test(seg)) return seg;
+      const cleanSeg = seg.trim();
+      const m = findSystemLocationMatch(cleanSeg);
+      if (m && m.type === 'node' && m.town && m.nodeId) {
+        return m.town;
+      }
+      return seg;
+    });
+    return prefix + normalizedSegments.join('');
+  }
+
+  /**
+   * Retorna todas las rutas recomendadas combinando las base con las personalizadas/editadas.
+   * Normaliza tanto los nombres de los planes/rutas como los de cada una de sus paradas
+   * para que coincidan exactamente con los pueblos registrados.
    */
   root.getAllPresetRoutes = function () {
     const custom = getCustomPresetRoutes();
@@ -848,7 +874,47 @@
     PRESET_ROUTES.forEach(r => map.set(r.id, { ...r }));
     // 2. Rutas personalizadas o editadas (sobreescriben o agregan)
     custom.forEach(c => map.set(c.id, { ...c }));
-    return Array.from(map.values());
+
+    const routes = Array.from(map.values());
+
+    // Asegurar que tanto el nombre de la ruta como las paradas coincidan con los de los pueblos registrados
+    return routes.map(route => {
+      const normalizedTitle = normalizeTitleWithRegisteredTowns(route.name);
+
+      const normalizedStops = (route.stops || []).map(s => {
+        const m = findSystemLocationMatch(s);
+        if (m && m.type === 'node' && m.town) {
+          return m.town;
+        }
+        return s;
+      });
+
+      const normalizedContinuations = (route.continuations || []).map(cont => ({
+        ...cont,
+        name: normalizeTitleWithRegisteredTowns(cont.name),
+        stops: (cont.stops || []).map(s => {
+          const m = findSystemLocationMatch(s);
+          if (m && m.type === 'node' && m.town) {
+            return m.town;
+          }
+          return s;
+        }),
+        triggerStops: (cont.triggerStops || []).map(s => {
+          const m = findSystemLocationMatch(s);
+          if (m && m.type === 'node' && m.town) {
+            return m.town;
+          }
+          return s;
+        })
+      }));
+
+      return {
+        ...route,
+        name: normalizedTitle,
+        stops: normalizedStops,
+        continuations: normalizedContinuations
+      };
+    });
   };
 
   /**
@@ -918,40 +984,261 @@
   /**
    * Busca equipos o nodos en el state actual para vincular coordenadas
    */
-  function findSystemLocationMatch(stopName) {
-    const targetNorm = normalizeGeoText(stopName);
-    if (!targetNorm) return null;
+  const SYSTEM_LOCATION_ALIASES = {
+    'chilpancingo': 'wifimex',
+    'nuevobalzamar': 'nuevobalsamar',
+    'balzamar': 'balsamar',
+    'elahuacatito': 'aguacatito',
+    'ahuacatito': 'aguacatito',
+    'xoyacuautla': 'xoyacautla',
+    'cuahuilotla': 'coahuilotla',
+    'lasbovedas': 'laboveda',
+    'bovedas': 'laboveda',
+    'pumarosa': 'pomarosa',
+    'tlalchocohuite': 'tlachocohuite',
+    'tlalchocohuites': 'tlachocohuite',
+    'elpelillo': 'elpellillo',
+    'pelillo': 'elpellillo',
+    'tecruz': 'tecruz',
+    'mezcalapa': 'mexcalapa',
+    'coacoyulicnan': 'coacuyulichan',
+    'coacoyulichan': 'coacuyulichan',
+    'coloniahidalgo': 'colhidalgo',
+    'hidalgo': 'colhidalgo',
+    'pascaladeloro': 'pazcaladeloro',
+    'coloniapascaladeloro': 'pazcaladeloro',
+    'barrionuevodelosmuertos': 'barrionuevodosmuertos',
+    'barriodelosmuertos': 'barrionuevodosmuertos',
+    'cerrodeltoropando': 'barrionuevotoropando',
+    'toropando': 'barrionuevotoropando',
+    'esteroverde': 'estereoverde',
+    'cuatrobancos': '4bancos',
+    'elpapayo': 'elpapayito',
+    'papayo': 'elpapayito',
+    'charcodelpozo': 'pozodelcharco',
+    'elcacalote': 'cascalote',
+    'cacalote': 'cascalote',
+    'canadadeltotomoxtle': 'canadadeltotomoxtla',
+    'laspulgas': 'lalajapulgas',
+    'pulgas': 'lalajapulgas',
+    'barrionuevolalaja': 'lalajapulgas',
+    'barriolalaja': 'lalajapulgas',
+    'lasparotas': 'laparota',
+    'parotas': 'laparota',
+    'loshuajes': 'elhuaje',
+    'huajes': 'elhuaje',
+    'ochuapa': 'ochoapa',
+    'tlayoyotepec': 'teyoyotepec',
+    'alcalmani': 'acalmani',
+    'arroyomixtecolpa': 'mixtecolapa',
+    'plandejacarandas': 'planjacaranda',
+    'planjacarandas': 'planjacaranda',
+    'santiopan': 'xantiopan',
+    'atlixco': 'atrixco',
+    'sanjosecapulin': 'elcapulin',
+    'sanjoseelcapulin': 'elcapulin',
+    'juquila': 'sanmigueltenazapajuquilita',
+    'tenamazapa': 'sanmigueltenazapajuquilita',
+    'chautipa': 'chautipan',
+    'elcerrito': 'elcerropesqueria',
+    'cerrito': 'elcerropesqueria',
+    'sanjuandelospinos': 'sanjuanlospinos',
+    'altoventura': 'altodeventura',
+    'crucerolasgrutas': 'crucerodegrutas',
+    'altodelcamaron': 'altodecamaron',
+    'aguadelperro': 'aguadeperro',
+    'sanjuanelchico': 'sanjuanchico',
+    'sanjuanelgrande': 'sanjuangrande',
+    'barrionuevoprogreso': 'barrionuevodelprogreso',
+    'coloniaprogreso': 'barrionuevodelprogreso',
+    'barrancadeguadalupe': 'barrancaguadalupe',
+    'eldurazno': 'durazno',
+    'eltecorral': 'tecorral',
+    'tecorrales': 'tecorral',
+    'ayutlaregreso': 'ayutla',
+    'sanpedrolajunta': 'sanpedrodelajunta',
+    'yerbasanta': 'yerbasanta',
+    'puertobuenavista': 'puertobuenavista',
+    'cruzverde': 'santacruz',
+    'lasplayas': 'playalarga',
+    'lacoloniaderionexpa': 'lomitasdenexpan',
+    'rionexpa': 'maquinanexpan',
+    'huaxtitlan': 'ahuexotitlan',
+    'ahuetlixpa': 'ahuetlixpla',
+    'laera': 'lacalera',
+    'altavista': 'bellavista',
+    'barrancatecuani': 'barrancatecoani'
+  };
 
-    // 1. Buscar en antenas/torres registradas
-    const equipmentList = Array.isArray(root.state?.equipment) ? root.state.equipment : [];
-    for (const eq of equipmentList) {
-      if (eq.deletedAt) continue;
-      const eqNorm = normalizeGeoText(eq.name);
-      if (eqNorm.includes(targetNorm) || targetNorm.includes(eqNorm)) {
+  function compactGeoText(str) {
+    return String(str || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '');
+  }
+
+  function stripEqPrefix(str) {
+    return String(str || '').replace(/^(troncal\s*)?(c\d+r\d+|r\d+|c\d+|b|s\d+)[-_.]*/i, '');
+  }
+
+  function stripStopwords(str) {
+    return String(str || '').replace(/\b(de|del|de la|de los|de las|el|la|los|las)\b/gi, ' ');
+  }
+
+  /**
+   * Busca equipos o nodos en el state actual para vincular coordenadas
+   */
+  function findSystemLocationMatch(stopName) {
+    if (!stopName) return null;
+    const rawClean = compactGeoText(stopName);
+    if (!rawClean) return null;
+    const targetClean = SYSTEM_LOCATION_ALIASES[rawClean] || rawClean;
+    const targetNoStopwords = compactGeoText(stripStopwords(stopName));
+    const targetNorm = normalizeGeoText(stopName);
+
+    const stateRef = (typeof state !== 'undefined' && state) || (typeof window !== 'undefined' && window.state) || root.state || {};
+    const equipmentList = Array.isArray(stateRef.equipment) ? stateRef.equipment : [];
+    const nodesList = Array.isArray(stateRef.nodes) ? stateRef.nodes : [];
+
+    // Prioridad 0: Si es WiFi-Mex o alias de central, retornar antena WiFi-Mex
+    if (targetClean === 'wifimex' || rawClean === 'wifimex') {
+      const wm = equipmentList.find(e => !e.deletedAt && (e.id === 'eqmr9qmpr81rc' || compactGeoText(e.name) === 'wifimex'));
+      if (wm) {
         return {
           type: 'equipment',
-          equipmentId: eq.id,
-          name: eq.name,
-          lat: Number(eq.lat),
-          lng: Number(eq.lng),
-          region: eq.region || ''
+          equipmentId: wm.id,
+          name: wm.name,
+          lat: Number(wm.lat),
+          lng: Number(wm.lng),
+          region: wm.region || ''
         };
       }
     }
 
-    // 2. Buscar en pueblos/nodos registrados
-    const nodesList = Array.isArray(root.state?.nodes) ? root.state.nodes : [];
+    // Prioridad 1: Buscar en pueblos/nodos registrados (priorizar pueblos sobre antenas)
+    // Pase 1.1: Coincidencia EXACTA (directa o por alias)
     for (const node of nodesList) {
       if (node.deletedAt) continue;
-      const nodeNorm = normalizeGeoText(node.name || node.n);
-      if (nodeNorm.includes(targetNorm) || targetNorm.includes(nodeNorm)) {
+      const nodeTown = String(node.town || node.name || node.n || node.pueblo || node.nombre || '').trim();
+      const nodeRaw = compactGeoText(nodeTown);
+      const nodeNorm = normalizeGeoText(nodeTown);
+
+      if (nodeRaw === targetClean || nodeRaw === rawClean || (nodeNorm && targetNorm && nodeNorm === targetNorm)) {
         return {
           type: 'node',
           nodeId: node.id,
-          name: node.name || node.n,
+          name: nodeTown || stopName,
+          town: nodeTown || stopName,
           lat: Number(node.lat),
           lng: Number(node.lng),
-          region: node.zone || node.region || ''
+          region: node.zone || node.region || '',
+          equipmentId: node.equipmentId || ''
+        };
+      }
+    }
+
+    // Pase 1.2: Coincidencia exacta sin stopwords (artículos / preposiciones)
+    if (targetNoStopwords) {
+      for (const node of nodesList) {
+        if (node.deletedAt) continue;
+        const nodeTown = String(node.town || node.name || node.n || node.pueblo || node.nombre || '').trim();
+        const nodeNoStop = compactGeoText(stripStopwords(nodeTown));
+        if (nodeNoStop && nodeNoStop === targetNoStopwords) {
+          return {
+            type: 'node',
+            nodeId: node.id,
+            name: nodeTown || stopName,
+            town: nodeTown || stopName,
+            lat: Number(node.lat),
+            lng: Number(node.lng),
+            region: node.zone || node.region || '',
+            equipmentId: node.equipmentId || ''
+          };
+        }
+      }
+    }
+
+    // Pase 1.3: Subcadenas / inclusión parcial en nodos (solo si no hubo coincidencia exacta)
+    let bestPartialNode = null;
+    let bestPartialNodeScore = 0;
+    for (const node of nodesList) {
+      if (node.deletedAt) continue;
+      const nodeTown = String(node.town || node.name || node.n || node.pueblo || node.nombre || '').trim();
+      const nodeRaw = compactGeoText(nodeTown);
+      const nodeNorm = normalizeGeoText(nodeTown);
+
+      if (
+        (targetClean.length >= 4 && (nodeRaw.includes(targetClean) || (nodeRaw.length >= 4 && targetClean.includes(nodeRaw)))) ||
+        (nodeNorm && targetNorm && (nodeNorm.includes(targetNorm) || targetNorm.includes(nodeNorm)))
+      ) {
+        // Puntuamos por cercanía de longitud para preferir la opción más similar
+        const lenDiff = Math.abs(nodeRaw.length - targetClean.length);
+        const score = 100 - lenDiff;
+        if (score > bestPartialNodeScore) {
+          bestPartialNodeScore = score;
+          bestPartialNode = {
+            type: 'node',
+            nodeId: node.id,
+            name: nodeTown || stopName,
+            town: nodeTown || stopName,
+            lat: Number(node.lat),
+            lng: Number(node.lng),
+            region: node.zone || node.region || '',
+            equipmentId: node.equipmentId || ''
+          };
+        }
+      }
+    }
+    if (bestPartialNode) {
+      return bestPartialNode;
+    }
+
+    // Prioridad 2: Buscar en antenas/torres registradas. Si coincide, vincular al pueblo o resolver como pueblo con sus coordenadas
+    for (const eq of equipmentList) {
+      if (eq.deletedAt) continue;
+      const eqRaw = compactGeoText(eq.name);
+      const eqStripped = compactGeoText(stripEqPrefix(eq.name));
+      const eqNoStop = compactGeoText(stripStopwords(stripEqPrefix(eq.name)));
+      const eqNorm = normalizeGeoText(eq.name);
+
+      if (
+        eqRaw === targetClean ||
+        eqStripped === targetClean ||
+        (eqNoStop && targetNoStopwords && eqNoStop === targetNoStopwords) ||
+        (targetClean.length >= 4 && (eqRaw.includes(targetClean) || eqStripped.includes(targetClean) || (eqStripped.length >= 4 && targetClean.includes(eqStripped)))) ||
+        (eqNorm && targetNorm && (eqNorm.includes(targetNorm) || targetNorm.includes(eqNorm)))
+      ) {
+        // Si la antena tiene un pueblo vinculado en el catálogo, priorizar ese pueblo
+        const linkedNode = nodesList.find(n => !n.deletedAt && (
+          (Array.isArray(eq.linkedNodeIds) && eq.linkedNodeIds.includes(n.id)) ||
+          n.equipmentId === eq.id
+        ));
+        if (linkedNode) {
+          const lTown = String(linkedNode.town || linkedNode.name || linkedNode.n || linkedNode.pueblo || linkedNode.nombre || '').trim();
+          return {
+            type: 'node',
+            nodeId: linkedNode.id,
+            name: lTown || stopName,
+            town: lTown || stopName,
+            lat: Number(linkedNode.lat || eq.lat),
+            lng: Number(linkedNode.lng || eq.lng),
+            region: linkedNode.zone || linkedNode.region || eq.region || '',
+            equipmentId: eq.id
+          };
+        }
+
+        // Si la antena no tiene nodo explícito pero la parada es una comunidad de ruta, priorizar pueblo con las coordenadas de la torre
+        const cleanTownFromStop = String(stopName || '').trim();
+        return {
+          type: 'node',
+          nodeId: null,
+          name: cleanTownFromStop,
+          town: cleanTownFromStop,
+          lat: Number(eq.lat),
+          lng: Number(eq.lng),
+          region: eq.region || '',
+          equipmentId: eq.id
         };
       }
     }
@@ -1018,7 +1305,8 @@
 
     nodesList.forEach(node => {
       if (node.deletedAt) return;
-      const nodeNorm = normalizeGeoText(node.name || node.n);
+      const nodeTown = String(node.town || node.name || node.n || node.pueblo || node.nombre || '').trim();
+      const nodeNorm = normalizeGeoText(nodeTown);
       if (nodeNorm && (nodeNorm.includes(targetNorm) || targetNorm.includes(nodeNorm))) {
         matchedNodeIds.add(String(node.id));
         matchedNames.add(nodeNorm);
@@ -1049,7 +1337,8 @@
         if (node.deletedAt) return;
         if (node.equipmentId && matchedEqIds.has(String(node.equipmentId))) {
           matchedNodeIds.add(String(node.id));
-          matchedNames.add(normalizeGeoText(node.name || node.n));
+          const nodeTown = String(node.town || node.name || node.n || node.pueblo || node.nombre || '').trim();
+          if (nodeTown) matchedNames.add(normalizeGeoText(nodeTown));
         }
       });
     }
@@ -1114,85 +1403,97 @@
   /**
    * Construye un objeto de parada con coordenadas vinculadas a antenas o nodos
    */
+  root.findSystemLocationMatch = findSystemLocationMatch;
+  root.buildStopObject = buildStopObject;
+
   function buildStopObject(stopName, idx = 0, notesPrefix = '') {
     const match = findSystemLocationMatch(stopName);
-    if (match && match.type === 'equipment') {
+    const cleanStopName = String(stopName || '').trim();
+    const isWiFiMexBase = compactGeoText(cleanStopName) === 'wifimex' ||
+      (match && (match.equipmentId === 'eqmr9qmpr81rc' || compactGeoText(match.name) === 'wifimex'));
+
+    // Solo la base / antena central WiFi-Mex se asigna como antena
+    if (match && match.type === 'equipment' && isWiFiMexBase) {
       return {
         id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
         type: 'equipment',
         equipmentId: match.equipmentId,
         linkedNodeIds: (typeof getEquipmentLinkedNodeIds === 'function' ? getEquipmentLinkedNodeIds(match.equipmentId) : []),
         includeLinkedNodeDetails: false,
-        name: match.name,
+        name: match.name || 'WiFi-Mex',
         lat: match.lat,
         lng: match.lng,
         detailIds: [],
-        notes: notesPrefix ? `${notesPrefix}: ${match.name}` : `Parada ${idx + 1}`,
-        materialPlanned: '',
-        assignedTechId: '',
-        siteStatus: 'pendiente',
-        createdAt: new Date().toISOString()
-      };
-    } else if (match && match.type === 'node') {
-      return {
-        id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
-        type: 'node',
-        nodeId: match.nodeId,
-        name: match.name,
-        lat: match.lat,
-        lng: match.lng,
-        region: match.region || '',
-        detailIds: [],
-        notes: notesPrefix ? `${notesPrefix}: ${match.name} (Pueblo registrado)` : `Parada ${idx + 1} (Pueblo registrado)`,
-        materialPlanned: '',
-        assignedTechId: '',
-        siteStatus: 'pendiente',
-        createdAt: new Date().toISOString()
-      };
-    } else {
-      const stateRef = (typeof state !== 'undefined' && state) || (typeof window !== 'undefined' && window.state) || root.state || {};
-      const newTownName = String(stopName || '').trim();
-      let newNodeId = null;
-
-      // Si es un nombre de pueblo no registrado, registrarlo automáticamente como nuevo pueblo en el catálogo de nodos
-      if (newTownName && Array.isArray(stateRef.nodes)) {
-        const nextCodeNum = (stateRef.nodes.length || 0) + 1;
-        const autoCode = 'R' + nextCodeNum;
-        const newNode = {
-          id: (typeof gid === 'function' ? gid('nd') : 'nd_' + Date.now() + '_' + idx),
-          nodeCode: autoCode,
-          town: newTownName,
-          name: newTownName,
-          zone: 'general',
-          lat: 17.5500 + (idx * 0.015),
-          lng: -99.5000 + (idx * 0.015),
-          status: 'activo',
-          notes: 'Registrado automáticamente desde catálogo de rutas',
-          createdAt: new Date().toISOString()
-        };
-        stateRef.nodes.push(newNode);
-        if (typeof saveRecord === 'function') {
-          saveRecord('nodes', newNode).catch(() => {});
-        }
-        newNodeId = newNode.id;
-      }
-
-      return {
-        id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
-        type: 'node',
-        nodeId: newNodeId,
-        name: newTownName || `Pueblo ${idx + 1}`,
-        lat: 17.5500 + (idx * 0.015),
-        lng: -99.5000 + (idx * 0.015),
-        region: '',
-        detailIds: [],
-        notes: notesPrefix ? `${notesPrefix}: ${newTownName}` : `Parada ${idx + 1}`,
+        notes: notesPrefix ? `${notesPrefix}: ${match.name}` : 'Salida / Base Central WiFi-Mex',
         materialPlanned: '',
         assignedTechId: '',
         siteStatus: 'pendiente',
         createdAt: new Date().toISOString()
       };
     }
+
+    // En todas las demás paradas de rutas recomendadas se priorizan y asignan pueblos
+    let cleanTown = String(match?.town || match?.name || cleanStopName || '').trim();
+    if (!cleanTown || cleanTown.toLowerCase() === 'undefined') {
+      cleanTown = (cleanStopName && cleanStopName.toLowerCase() !== 'undefined') ? cleanStopName : 'Pueblo registrado';
+    }
+    const stateRef = (typeof state !== 'undefined' && state) || (typeof window !== 'undefined' && window.state) || root.state || {};
+    let assignedNodeId = (match && match.type === 'node') ? match.nodeId : null;
+
+    if (!assignedNodeId && cleanTown && Array.isArray(stateRef.nodes)) {
+      const existingNode = stateRef.nodes.find(n => !n.deletedAt && (
+        compactGeoText(n.town || n.name) === compactGeoText(cleanTown) ||
+        (match && match.equipmentId && (n.equipmentId === match.equipmentId || (Array.isArray(n.linkedEquipmentIds) && n.linkedEquipmentIds.includes(match.equipmentId))))
+      ));
+      if (existingNode) {
+        assignedNodeId = existingNode.id;
+      } else {
+        const nextCodeNum = (stateRef.nodes.length || 0) + 1;
+        const autoCode = 'R' + nextCodeNum;
+        const latCoord = match ? match.lat : (17.5500 + (idx * 0.015));
+        const lngCoord = match ? match.lng : (-99.5000 + (idx * 0.015));
+        const newNode = {
+          id: (typeof gid === 'function' ? gid('nd') : 'nd_' + Date.now() + '_' + idx),
+          nodeCode: autoCode,
+          town: cleanTown,
+          name: cleanTown,
+          zone: match?.region || 'general',
+          lat: latCoord,
+          lng: lngCoord,
+          equipmentId: (match && match.equipmentId) ? match.equipmentId : '',
+          status: 'activo',
+          notes: 'Pueblo registrado automáticamente desde catálogo de rutas',
+          createdAt: new Date().toISOString()
+        };
+        stateRef.nodes.push(newNode);
+        if (typeof saveRecord === 'function') {
+          saveRecord('nodes', newNode).catch(() => {});
+        }
+        assignedNodeId = newNode.id;
+      }
+    }
+
+    const lat = match ? match.lat : (17.5500 + (idx * 0.015));
+    const lng = match ? match.lng : (-99.5000 + (idx * 0.015));
+    const region = match?.region || '';
+
+    return {
+      id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_' + idx),
+      type: 'node',
+      nodeId: assignedNodeId,
+      name: cleanTown,
+      town: cleanTown,
+      lat: lat,
+      lng: lng,
+      region: region,
+      equipmentId: (match && match.equipmentId) ? match.equipmentId : '',
+      detailIds: [],
+      notes: notesPrefix ? `${notesPrefix}: ${cleanTown} (Pueblo registrado)` : `Parada ${idx + 1}: ${cleanTown} (Pueblo registrado)`,
+      materialPlanned: '',
+      assignedTechId: '',
+      siteStatus: 'pendiente',
+      createdAt: new Date().toISOString()
+    };
   }
 
   /**
@@ -1301,6 +1602,40 @@
         builtStops.push(stopObj);
       }
     });
+
+    // Enforce: todos los planes deben de comenzar en la antena como "WiFi-Mex" en lugar de Palmar
+    const wifiMexMatch = findSystemLocationMatch('WiFi-Mex');
+    const wifiMexStopObj = {
+      id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_start'),
+      type: 'equipment',
+      equipmentId: wifiMexMatch?.equipmentId || 'eqmr9qmpr81rc',
+      linkedNodeIds: (typeof getEquipmentLinkedNodeIds === 'function' && wifiMexMatch ? getEquipmentLinkedNodeIds(wifiMexMatch.equipmentId) : []),
+      includeLinkedNodeDetails: false,
+      name: wifiMexMatch?.name || 'WiFi-Mex',
+      lat: Number(wifiMexMatch?.lat) || 17.5288335,
+      lng: Number(wifiMexMatch?.lng) || -99.4977258,
+      detailIds: [],
+      notes: 'Salida / Base Central WiFi-Mex',
+      materialPlanned: '',
+      assignedTechId: '',
+      siteStatus: 'pendiente',
+      createdAt: new Date().toISOString()
+    };
+
+    if (builtStops.length === 0) {
+      builtStops.push(wifiMexStopObj);
+    } else {
+      const firstStopClean = compactGeoText(builtStops[0].name || '');
+      if (firstStopClean !== 'wifimex') {
+        if (firstStopClean.includes('palmar')) {
+          // Reemplazar El Palmar por la antena WiFi-Mex
+          builtStops[0] = { ...wifiMexStopObj, id: builtStops[0].id || wifiMexStopObj.id };
+        } else {
+          // Anteponer WiFi-Mex como parada 1 de salida
+          builtStops.unshift(wifiMexStopObj);
+        }
+      }
+    }
 
     if (asNewPlan) {
       // Crear un nuevo plan con el nombre de la ruta o el nombre personalizado
@@ -1555,28 +1890,26 @@
                 <span class="preset-category-badge">${escapeHtml(route.category)}</span>
                 <span class="preset-count-badge">${route.stops.length} paradas</span>
                 <span class="preset-details-badge ${routeTotalDetails.length > 0 ? 'has-details' : 'zero-details'}" title="Total de detalles registrados en las antenas y pueblos vinculados de esta ruta">
-                  ⚡ ${routeTotalDetails.length} detalle${routeTotalDetails.length === 1 ? '' : 's'}
+                  ⚡ ${routeTotalDetails.length}
                 </span>
                 ${route.isCustom ? '<span class="preset-confirm-badge badge-node">Personalizada</span>' : ''}
               </div>
               <div class="preset-route-card-actions-top">
                 ${canManage ? `
                   <button type="button" class="btn bsm preset-edit-btn" onclick="openEditPresetRouteModal('${escapeAttr(route.id)}')" title="Editar ruta recomendada">
-                    ✏️ Editar
+                    Editar
                   </button>
                 ` : ''}
                 ${route.mapsUrl ? `
                   <a href="${route.mapsUrl}" target="_blank" rel="noopener noreferrer" class="preset-maps-btn" title="Ver trayecto en Google Maps">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
-                    <span>Google Maps</span>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <span>Maps</span>
                   </a>
                 ` : ''}
               </div>
             </div>
             <h3 class="preset-route-title">${escapeHtml(route.name)}</h3>
           </div>
-
-          ${route.notes ? `<p class="preset-route-notes">${escapeHtml(route.notes)}</p>` : ''}
 
           <div class="preset-stops-flow">
             ${stopsHtml}
@@ -1586,12 +1919,12 @@
 
           ${!isTech ? `
           <div class="preset-card-actions">
-            <button type="button" class="btn bc bsm preset-attach-btn" onclick="attachPresetRouteToPlan('${route.id}', true)">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 5v14M5 12h14"/></svg>
-              <span>Adjuntar a una ruta nueva</span>
+            <button type="button" class="btn bc bsm preset-attach-btn" onclick="attachPresetRouteToPlan('${route.id}', true)" title="Crear un nuevo plan con las paradas de esta ruta">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+              <span>Crear plan</span>
             </button>
-            <button type="button" class="btn bgh bsm preset-append-btn" onclick="attachPresetRouteToPlan('${route.id}', false)" title="Agregar estas paradas al plan que se encuentra abierto actualmente">
-              <span>+ Al plan actual</span>
+            <button type="button" class="btn bgh bsm preset-append-btn" onclick="attachPresetRouteToPlan('${route.id}', false)" title="Adjuntar estas paradas al plan que tienes seleccionado">
+              <span>+ Adjuntar</span>
             </button>
           </div>
           ` : ''}
@@ -1640,14 +1973,14 @@
         newCount++;
       }
 
-      let badgeLabel = 'Manual';
-      let badgeClass = 'badge-manual';
-      if (match && match.type === 'equipment') {
+      let badgeLabel = 'Pueblo';
+      let badgeClass = 'badge-node';
+      if (stopObj && stopObj.type === 'equipment') {
         badgeLabel = 'Antena';
         badgeClass = 'badge-eq';
-      } else if (match && match.type === 'node') {
-        badgeLabel = 'Pueblo';
-        badgeClass = 'badge-node';
+      } else if (stopObj && stopObj.type === 'manual') {
+        badgeLabel = 'Manual';
+        badgeClass = 'badge-manual';
       }
 
       const stopDetails = root.getStopRegisteredDetails(stopName);
@@ -2117,14 +2450,14 @@
         newCount++;
       }
 
-      let badgeLabel = 'Manual';
-      let badgeClass = 'badge-manual';
-      if (match && match.type === 'equipment') {
+      let badgeLabel = 'Pueblo';
+      let badgeClass = 'badge-node';
+      if (stopObj && stopObj.type === 'equipment') {
         badgeLabel = 'Antena';
         badgeClass = 'badge-eq';
-      } else if (match && match.type === 'node') {
-        badgeLabel = 'Pueblo';
-        badgeClass = 'badge-node';
+      } else if (stopObj && stopObj.type === 'manual') {
+        badgeLabel = 'Manual';
+        badgeClass = 'badge-manual';
       }
 
       const stopDetails = root.getStopRegisteredDetails(stopName);
@@ -2302,12 +2635,12 @@
                 </svg>
               </span>
               <div>
-                <h2>Catálogo de Rutas y Recorridos Preestablecidos</h2>
-                <p>Corredores troncales, enlaces de Google Maps y continuidades geográficas. Da clic en <strong>Adjuntar a una ruta nueva</strong> para cargarla inmediatamente.</p>
+                <h2>Rutas Recomendadas</h2>
+                <p>Elige una ruta para crear un plan nuevo o adjuntar sus paradas al plan actual.</p>
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;">
-              <button type="button" id="preset-add-new-btn" class="preset-new-route-btn" style="display:none;" onclick="openCreatePresetRouteModal()">+ Nueva ruta recomendada</button>
+              <button type="button" id="preset-add-new-btn" class="preset-new-route-btn" style="display:none;" onclick="openCreatePresetRouteModal()">+ Nueva ruta</button>
               <button type="button" class="preset-dialog-close" onclick="CM('preset-routes-mo')" aria-label="Cerrar">✕</button>
             </div>
           </div>
@@ -2361,61 +2694,16 @@
 
   /**
    * Revisa si el plan actual tiene paradas que activan recomendaciones de continuidad
-   * Exclusivo para administradores y soporte; nunca se muestra a técnicos
+   * Desactivado / Removido a petición del usuario ("quita lo de agregar continuidad")
    */
   root.checkPlanContinuityRecommendations = function () {
     if (typeof document === 'undefined') return;
     const banner = document.getElementById('plan-continuity-recommendations-banner');
-    if (!banner) return;
-
-    // Solo permitido para administradores y soporte; técnicos y otros roles NO deben verlo
-    const isTech = (typeof isTechnicianPlanView === 'function' && isTechnicianPlanView()) ||
-                   (typeof userHasRole === 'function' && userHasRole('tecnico'));
-    const isSoporteOrAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin', 'soporte');
-
-    if (isTech || !isSoporteOrAdmin) {
+    if (banner) {
       banner.style.display = 'none';
       banner.innerHTML = '';
-      return;
     }
-
-    if (typeof getPlanStopsRef !== 'function') {
-      banner.style.display = 'none';
-      return;
-    }
-
-    const stops = getPlanStopsRef();
-    if (!stops || !stops.length) {
-      banner.style.display = 'none';
-      banner.innerHTML = '';
-      return;
-    }
-
-    const stopNames = stops.map(s => s.name || '').filter(Boolean);
-    const recommendations = root.findContinuityRecommendations(stopNames);
-
-    if (!recommendations.length) {
-      banner.style.display = 'none';
-      banner.innerHTML = '';
-      return;
-    }
-
-    // Tomar la primera recomendación más relevante
-    const rec = recommendations[0];
-    banner.style.display = 'flex';
-    banner.innerHTML = `
-      <div class="plan-continuity-left">
-        <span class="plan-continuity-icon">💡</span>
-        <div class="plan-continuity-text">
-          <strong>Recomendación de continuidad: ${escapeHtml(rec.name)}</strong>
-          <p>Este plan incluye paradas de <em>${escapeHtml(rec.parentRoute)}</em>. Pueblos sugeridos para continuar ruta: <strong>${escapeHtml(rec.missingStops.slice(0, 6).join(', '))}${rec.missingStops.length > 6 ? '...' : ''}</strong></p>
-        </div>
-      </div>
-      <div class="plan-continuity-actions">
-        ${rec.mapsUrl ? `<a href="${rec.mapsUrl}" target="_blank" rel="noopener noreferrer" class="preset-maps-btn" title="Ver trayecto en Google Maps">🗺️ Maps</a>` : ''}
-        <button type="button" class="btn bc bsm" onclick="addContinuityStopsToCurrentPlan('${escapeHtml(rec.name)}')">+ Agregar continuidad al plan</button>
-      </div>
-    `;
+    return;
   };
 
   /**

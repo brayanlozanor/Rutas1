@@ -12,11 +12,11 @@ const antenasJsPath = path.join(__dirname, '..', 'public', 'assets', 'js', 'ante
 const nodosJsPath = path.join(__dirname, '..', 'public', 'assets', 'js', 'nodos.js');
 const cssPath = path.join(__dirname, '..', 'public', 'assets', 'css', 'orders-design-v2.css');
 
-const commonJs = fs.readFileSync(commonJsPath, 'utf8');
-const ordenesJs = fs.readFileSync(ordenesJsPath, 'utf8');
-const antenasJs = fs.readFileSync(antenasJsPath, 'utf8');
-const nodosJs = fs.readFileSync(nodosJsPath, 'utf8');
-const css = fs.readFileSync(cssPath, 'utf8');
+const commonJs = fs.readFileSync(commonJsPath, 'utf8').replace(/\r\n/g, '\n');
+const ordenesJs = fs.readFileSync(ordenesJsPath, 'utf8').replace(/\r\n/g, '\n');
+const antenasJs = fs.readFileSync(antenasJsPath, 'utf8').replace(/\r\n/g, '\n');
+const nodosJs = fs.readFileSync(nodosJsPath, 'utf8').replace(/\r\n/g, '\n');
+const css = fs.readFileSync(cssPath, 'utf8').replace(/\r\n/g, '\n');
 
 // 1. Verify function existence and exports
 console.log('1. Checking function definitions and exports...');
