@@ -129,10 +129,10 @@ vm.runInContext(
 
   planCtx.renderTechnicianRouteOverview();
   assert.strictEqual(els['tech-route-overview-title'].textContent, 'Cargando tu ruta...', 'Route overview must show loading title');
-  assert.ok(els['tech-route-stop-names'].innerHTML.includes('Cargando tu ruta y detalles...'), 'Route overview must show loading skeleton');
+  assert.ok(els['tech-route-stop-names'].innerHTML.includes('Cargando ruta y detalles...'), 'Route overview must show loading skeleton');
 
   planCtx.renderPlanDays();
-  assert.ok(els['plan-days'].innerHTML.includes('Cargando tu ruta y detalles...'), 'Plan days must show animated loading state');
+  assert.ok(els['plan-days'].innerHTML.includes('Cargando ruta y detalles...'), 'Plan days must show animated loading state');
   assert.ok(els['plan-days'].innerHTML.includes('tech-mobile-loading-bar'), 'Plan days loading must include indeterminate bar');
   assert.ok(!els['plan-days'].innerHTML.includes('No tienes planes'), 'Plan days must NOT show empty state while loading');
 

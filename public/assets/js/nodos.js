@@ -157,9 +157,10 @@ function resetNodeForm() {
 
 async function saveNode() {
   const location = parseLocationCoordinates(document.getElementById('node-location').value);
+  const toUpperTown = v => String(v || '').trim().toLocaleUpperCase('es-MX');
   const payload = {
-    nodeCode: document.getElementById('node-code').value.trim(),
-    town: document.getElementById('node-town').value.trim(),
+    nodeCode: toUpperTown(document.getElementById('node-code').value),
+    town: toUpperTown(document.getElementById('node-town').value),
     zone: document.getElementById('node-zone').value,
     lat: location?.lat ?? NaN,
     lng: location?.lng ?? NaN,

@@ -8,7 +8,7 @@
 // ==========================================================================
 // INYECCIÓN AUTOMÁTICA DE THEME-PRO.CSS, PERFIL.JS Y PREFERENCIAS DESKTOP
 // ==========================================================================
-const NETOPS_THEME_PRO_VERSION = '20261124-theme-pro-v7';
+const NETOPS_THEME_PRO_VERSION = '20261125-theme-pro-v9';
 const NETOPS_PERFIL_JS_VERSION = '20261124-perfil-v3';
 const NETOPS_UI_PREFS_PREFIX = 'netops_user_ui_prefs_v1:';
 const NETOPS_DEFAULT_ACCENT = '#0b6ef3';

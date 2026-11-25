@@ -1426,9 +1426,36 @@ async function handleProtectedDelete({ targetType, targetId, targetName, applyDe
     notify('La solicitud esta pendiente de aprobacion por administrador.', 'err');
     return false;
 }
+function formatTownUpper(value) {
+    return value === undefined || value === null ? '' : String(value).trim().toLocaleUpperCase('es-MX');
+}
+window.formatTownUpper = formatTownUpper;
+
+function normalizeNodesUppercase() {
+    if (Array.isArray(state.nodes)) {
+        state.nodes.forEach(node => {
+            if (!node || typeof node !== 'object') return;
+            if (node.nodeCode !== undefined) node.nodeCode = formatTownUpper(node.nodeCode);
+            if (node.code !== undefined) node.code = formatTownUpper(node.code);
+            if (node.town !== undefined) node.town = formatTownUpper(node.town);
+            if (node.name !== undefined) node.name = formatTownUpper(node.name);
+        });
+    }
+    if (Array.isArray(state.workOrders)) {
+        state.workOrders.forEach(w => {
+            if (!w || typeof w !== 'object') return;
+            if (w.nodeCode) w.nodeCode = formatTownUpper(w.nodeCode);
+            if (w.town) w.town = formatTownUpper(w.town);
+            if (w.nodeName && (w.nodeId || w.nodeCode || w.town)) w.nodeName = formatTownUpper(w.nodeName);
+        });
+    }
+}
+
 function getNodeLabel(node) {
     if (!node) return '';
-    return `${node.nodeCode || node.code || ''}${node.town ? ' · ' + node.town : ''}`.trim();
+    const code = formatTownUpper(node.nodeCode || node.code || '');
+    const town = formatTownUpper(node.town || node.name || '');
+    return `${code}${town ? (code ? ' · ' : '') + town : ''}`.trim();
 }
 
 function normalizeEquipmentData() {
@@ -2124,6 +2151,7 @@ function applyStateData(data) {
     state.prepChecked = data.prepChecked || {};
     state.syncMeta    = data.syncMeta || {};
     normalizeStateTextEncoding(state);
+    normalizeNodesUppercase();
     if (state.syncMeta.debug) {
         console.log('DEBUG WORKER LOG:', state.syncMeta.debug);
     }

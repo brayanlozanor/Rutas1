@@ -1,6 +1,6 @@
 // Service Worker de WiFiMex para Notificaciones en Celular, Escritorio, Background y Resiliencia Offline
-const CACHE_NAME = 'wifimex-netops-sw-v5';
-const STATIC_CACHE_NAME = 'wifimex-netops-static-v6';
+const CACHE_NAME = 'wifimex-netops-sw-v6';
+const STATIC_CACHE_NAME = 'wifimex-netops-static-v7';
 const CORE_STATIC_ASSETS = [
   '/assets/css/style.css',
   '/assets/css/sidebar-compact.css',
@@ -61,7 +61,10 @@ self.addEventListener('fetch', (event) => {
   event.respondWith((async () => {
     const cache = await caches.open(STATIC_CACHE_NAME);
     try {
-      const networkResponse = await fetch(request);
+      const fetchReq = request.mode === 'navigate'
+        ? new Request(request, { cache: 'no-cache' })
+        : request;
+      const networkResponse = await fetch(fetchReq);
       if (networkResponse && networkResponse.ok && (networkResponse.type === 'basic' || networkResponse.type === 'cors')) {
         cache.put(request, networkResponse.clone()).catch(() => {});
       }

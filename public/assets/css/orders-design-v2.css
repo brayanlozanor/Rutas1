@@ -233,6 +233,8 @@
 }
 
 .orders-page .orders-filter-card {
+  position: relative !important;
+  z-index: 60 !important;
   display: block !important;
   margin: 0 0 10px !important;
   padding: 8px 12px !important;
@@ -393,8 +395,8 @@
 
 .orders-page .order-filter-menu {
   position: absolute;
-  z-index: 40;
-  top: 43px;
+  z-index: 120;
+  top: calc(100% + 6px);
   left: 0;
   display: none;
   box-sizing: border-box;
@@ -542,6 +544,8 @@
 }
 
 .orders-page .orders-table-card {
+  position: relative;
+  z-index: 1;
   margin: 0 !important;
   padding: 0 !important;
   border: 1px solid #e1e9f1 !important;
@@ -6769,20 +6773,31 @@ body.orders-page[data-detail-kind="physical"] .order-table tr.order-row-waiting-
 /* 16. Badge visible "Enviado a físicos" en Detalles de red */
 .order-sent-physical-badge {
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 9px;
+  border-radius: 12px;
   background: linear-gradient(135deg, #f3e8ff, #ede9fe);
   color: #5b21b6;
   border: 1px solid #c4b5fd;
   font-size: 10.5px;
   font-weight: 800;
-  line-height: 1.25;
-  white-space: nowrap;
+  line-height: 1.2;
+  white-space: normal;
   max-width: 100%;
   box-sizing: border-box;
+  text-align: center;
   box-shadow: 0 1px 2px rgba(91, 33, 182, 0.08);
+}
+
+.order-sent-physical-badge .order-sent-physical-main {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .order-sent-physical-badge .order-sent-physical-icon {
@@ -6797,9 +6812,13 @@ body.orders-page[data-detail-kind="physical"] .order-table tr.order-row-waiting-
 }
 
 .order-sent-physical-badge .order-sent-physical-date {
-  font-weight: 600;
+  display: block;
+  font-weight: 700;
   color: #6d28d9;
-  font-size: 10px;
+  font-size: 9px;
+  line-height: 1.15;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 
 .order-sent-physical-badge .order-sent-physical-target {
@@ -6826,4 +6845,182 @@ body.orders-page[data-detail-kind="physical"] .order-table tr.order-row-waiting-
   gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+/* ==========================================================================
+   17. CHAT DE DETALLES DE RED: COMPOSER + BOTONES FIJOS HASTA ABAJO
+   ========================================================================== */
+.order-tech-report-card.is-network-chat-card {
+  display: flex !important;
+  flex-direction: column !important;
+  height: min(880px, calc(100dvh - 36px)) !important;
+  max-height: calc(100dvh - 36px) !important;
+  overflow: hidden !important;
+  padding: 18px 26px 14px !important;
+}
+
+.order-tech-report-card.is-network-chat-card > .order-report-head {
+  flex-shrink: 0 !important;
+  margin-bottom: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+.order-tech-report-card.is-network-chat-card > .order-chat-scroll-body {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.order-tech-report-card.is-network-chat-card .order-chat-section {
+  flex: 1 1 auto !important;
+  min-height: 220px !important;
+  margin-top: 2px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.order-tech-report-card.is-network-chat-card .order-chat-messages {
+  flex: 1 1 auto !important;
+  min-height: 160px !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+}
+
+.order-tech-report-card.is-network-chat-card > .order-chat-fixed-bottom {
+  flex-shrink: 0 !important;
+  background: #ffffff !important;
+  border-top: 1px solid #dbe5f0 !important;
+  margin-top: 8px !important;
+  padding-top: 10px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  z-index: 45 !important;
+  box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.05) !important;
+}
+
+.order-tech-report-card.is-network-chat-card .order-chat-fixed-bottom .order-chat-composer-wrap {
+  padding: 0 !important;
+  border-top: 0 !important;
+  background: transparent !important;
+}
+
+.order-tech-report-card.is-network-chat-card .order-chat-fixed-bottom .order-report-footer-actions {
+  position: static !important;
+  bottom: auto !important;
+  margin-top: 0 !important;
+  padding: 8px 0 0 !important;
+  border-top: 1px solid #edf2f7 !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 768px) {
+  .order-tech-report-card.is-network-chat-card {
+    height: calc(100dvh - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+    padding: 12px 14px 10px !important;
+  }
+}
+
+/* ==========================================================================
+   18. DIVISORES DE SECCIÓN EN DETALLES DE RED (TU ACCIÓN vs OTRA ÁREA)
+   ========================================================================== */
+.orders-page .order-table tbody tr.order-turn-divider-row,
+.orders-page .order-table tbody tr.order-turn-divider-row:hover {
+  background: transparent !important;
+  cursor: default !important;
+}
+
+.orders-page .order-table tbody tr.order-turn-divider-row > td {
+  padding: 10px 14px 8px !important;
+  border-bottom: 0 !important;
+  background: #f8fafc !important;
+  border-top: 2px solid #e2e8f0 !important;
+}
+
+.orders-page .order-table tbody tr.order-turn-divider-row:first-child > td {
+  border-top: 0 !important;
+}
+
+.orders-page .order-table tbody tr.order-turn-divider-row.is-my_action > td {
+  background: linear-gradient(90deg, #eff6ff 0%, #f8fbff 100%) !important;
+  border-left: 4px solid #0b6ef3 !important;
+}
+
+.orders-page .order-table tbody tr.order-turn-divider-row.is-other_area > td {
+  background: linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%) !important;
+  border-top: 2px dashed #cbd5e1 !important;
+  border-left: 4px solid #64748b !important;
+}
+
+.orders-page .order-table tbody tr.order-turn-divider-row.is-done > td {
+  background: linear-gradient(90deg, #f0fdf4 0%, #f8fafc 100%) !important;
+  border-top: 2px solid #bbf7d0 !important;
+  border-left: 4px solid #16a34a !important;
+}
+
+.order-turn-divider-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.order-turn-divider-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.order-turn-divider-pill.is-my_action {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+}
+
+.order-turn-divider-pill.is-other_area {
+  background: #e2e8f0;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.order-turn-divider-pill.is-done {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.order-turn-divider-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 10.5px;
+  font-weight: 900;
+}
+
+.order-turn-divider-sub {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.order-turn-divider-line {
+  flex: 1 1 80px;
+  height: 1px;
+  background: linear-gradient(90deg, #cbd5e1 0%, transparent 100%);
 }

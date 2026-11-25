@@ -802,7 +802,7 @@
    BOTÓN LLAMATIVO Y RECORDATORIO DE MATERIAL DE TORRE EN PLANIFICAR
    ========================================================================== */
 
-/* Botón llamativo al lado del detalle (para que no se pierda en la vista) */
+/* Botón de acceso a material de torre junto al detalle */
 .btn-tower-callout {
   display: inline-flex !important;
   align-items: center !important;

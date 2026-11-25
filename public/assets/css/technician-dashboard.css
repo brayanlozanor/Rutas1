@@ -362,6 +362,7 @@ body:has(.tech-bottom-nav) button.floating-notification-bell {
   body.plan-technician-view .plan-initial-loader.is-hidden,
   html.is-technician-env .plan-initial-loader.is-hidden,
   html[data-role="tecnico"] .plan-initial-loader.is-hidden {
+    display: none !important;
     opacity: 0 !important;
     visibility: hidden !important;
     pointer-events: none !important;
@@ -502,6 +503,7 @@ html[data-role="tecnico"] #netops-loading.loading-centered {
 body.plan-technician-view .plan-initial-loader.is-hidden,
 html.is-technician-env .plan-initial-loader.is-hidden,
 html[data-role="tecnico"] .plan-initial-loader.is-hidden {
+  display: none !important;
   opacity: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
@@ -2332,6 +2334,74 @@ select.is-invalid-input {
   background: linear-gradient(90deg, #eef2f7 25%, #e2e8f0 50%, #eef2f7 75%);
   background-size: 220% 100%;
   animation: techSkeletonShimmer 1.35s ease-in-out infinite;
+}
+
+/* Barra compacta de sincronización visible en celular incluso cuando ya hay datos en caché */
+.tech-mobile-syncing-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 14px 10px;
+  margin: 0 0 12px 0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f0f7ff 100%);
+  border: 1.5px solid #bfdbfe;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+.tech-mobile-syncing-strip-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tech-mobile-syncing-strip .tech-mobile-loader-ring {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-width: 3px;
+}
+
+.tech-mobile-syncing-strip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.tech-mobile-syncing-strip-text strong {
+  font-size: 13px;
+  font-weight: 800;
+  color: #1e3a8a;
+  line-height: 1.2;
+}
+
+.tech-mobile-syncing-strip-text small {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  line-height: 1.25;
+}
+
+.tech-mobile-syncing-strip .tech-mobile-loading-bar {
+  height: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tech-mobile-loader-ring {
+    animation: techLoaderSpin 0.85s linear infinite !important;
+  }
+  .tech-mobile-loading-bar span,
+  .tech-mobile-loading-bar-fill {
+    animation: techIndeterminateSlide 1.35s cubic-bezier(0.4, 0, 0.2, 1) infinite !important;
+  }
+  .tech-mobile-pulse-dot {
+    animation: techPulseDot 1.15s ease-in-out infinite !important;
+  }
+  .tech-skeleton-line,
+  .tech-skeleton-pill {
+    animation: techSkeletonShimmer 1.3s ease-in-out infinite !important;
+  }
 }
 
 

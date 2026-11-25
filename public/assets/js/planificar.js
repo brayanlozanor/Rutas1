@@ -29,9 +29,14 @@ let planFullscreenRouteLayer = null;
 let planFullscreenDirectRouteLayer = null;
 let planFullscreenLinkLayer = null;
 let planFullscreenMarkerLayer = null;
+let planFullscreenEntityMarkers = [];
+let planFullscreenLabelRaf = 0;
 let planFullscreenRouteRenderId = 0;
 let planFullscreenNamesVisible = false;
 let planFullscreenStopNamesVisible = false;
+let planFullscreenIconsMode = false;
+const planRoadRouteCache = new Map();
+const planRoadRouteInFlight = new Map();
 let captureMap = null;
 let captureMarker = null;
 let editingStopContext = null;
@@ -130,41 +135,56 @@ function getLoggedTechnicianId() {
     const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
     const username = normalizeName(user?.username || '');
     const userDisplayName = normalizeName(user?.name || '');
+    const userFirstName = userDisplayName.split(' ')[0] || '';
     const userId = String(user?.id || '').trim();
 
-    // 1. Buscar en técnicos registrados
-    let technician = (state.technicians || []).find(tech =>
-        !tech.deletedAt && (
+    const generalPlans = (state.weekPlan?.[SHARED_PLAN_ID]?._generalPlans || []).filter(p => p && !p.deletedAt);
+    const planHasTechId = id => {
+        const clean = String(id || '').trim();
+        if (!clean) return false;
+        return generalPlans.some(p =>
+            String(p.assignedTechId || '').trim() === clean ||
+            (Array.isArray(p.assignedTechIds) && p.assignedTechIds.map(String).includes(clean))
+        );
+    };
+
+    // 1. Buscar TODOS los registros de técnicos que correspondan al usuario logueado
+    const matchingTechs = (state.technicians || []).filter(tech => {
+        if (!tech || tech.deletedAt) return false;
+        const tName = normalizeName(tech.nombre || tech.name || '');
+        const tUser = normalizeName(tech.usuario || '');
+        return (
             (userId && String(tech.userId || '') === userId) ||
             (tech.id && String(tech.id) === userId) ||
-            (username && normalizeName(tech.usuario || '') === username) ||
+            (username && tUser === username) ||
             (username && normalizeName(tech.nombre || tech.name || '') === username) ||
             (userDisplayName && normalizeName(tech.nombre || tech.name || '') === userDisplayName) ||
-            (userDisplayName && normalizeName(tech.nombre || tech.name || '').includes(userDisplayName)) ||
-            (userDisplayName && userDisplayName.includes(normalizeName(tech.nombre || tech.name || '')))
-        )
-    );
+            (userDisplayName && userDisplayName.length >= 3 && tName && (tName.includes(userDisplayName) || userDisplayName.includes(tName))) ||
+            (userFirstName && userFirstName.length >= 3 && tName && (tName === userFirstName || tName.startsWith(`${userFirstName} `)))
+        );
+    });
 
-    // 2. Si no se encontró en técnicos, buscar en planes generales asignados
-    if (!technician) {
-        const matchingPlan = (state.generalPlans || []).find(plan => {
-            if (!plan || plan.deletedAt) return false;
-            const pAssignedId = String(plan.assignedTechId || '');
-            if (userId && pAssignedId === userId) return true;
-            const pName = normalizeName(plan.name || '');
-            const pTechName = normalizeName(plan.assignedTechName || plan.technician || '');
-            return (username && (pName.includes(username) || pTechName.includes(username))) ||
-                (userDisplayName && (pName.includes(userDisplayName) || pTechName.includes(userDisplayName)));
-        });
-        if (matchingPlan && matchingPlan.assignedTechId) {
-            technician = (state.technicians || []).find(t => String(t.id) === String(matchingPlan.assignedTechId));
-            if (!technician) {
-                return String(matchingPlan.assignedTechId);
-            }
-        }
+    // Si hay múltiples registros para el mismo técnico, priorizar el que realmente tiene un plan asignado
+    if (matchingTechs.length > 0) {
+        const withAssignedPlan = matchingTechs.find(t => planHasTechId(t.id) || (t.userId && planHasTechId(t.userId)));
+        const chosen = withAssignedPlan || matchingTechs[0];
+        if (chosen && chosen.id) return String(chosen.id);
     }
 
-    if (technician && technician.id) return String(technician.id);
+    // 2. Si no se encontró en técnicos, buscar en planes generales reales (weekPlan.__shared__._generalPlans)
+    const matchingPlan = generalPlans.find(plan => {
+        const assignedIds = [plan.assignedTechId, ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])].filter(Boolean).map(String);
+        if (userId && assignedIds.includes(userId)) return true;
+        const pName = normalizeName(plan.name || '');
+        const pTechName = normalizeName(plan.assignedTechName || plan.technician || '');
+        return (username && (pName.includes(username) || pTechName.includes(username))) ||
+            (userDisplayName && userDisplayName.length >= 3 && (pName.includes(userDisplayName) || pTechName.includes(userDisplayName))) ||
+            (userFirstName && userFirstName.length >= 3 && (pName.includes(userFirstName) || pTechName.includes(userFirstName)));
+    });
+    if (matchingPlan) {
+        const assignedId = String(matchingPlan.assignedTechId || (Array.isArray(matchingPlan.assignedTechIds) ? matchingPlan.assignedTechIds[0] : '') || '').trim();
+        if (assignedId) return assignedId;
+    }
 
     // 3. Fallback seguro: para técnico logueado nunca devolver cadena vacía
     return userId || user?.username || user?.name || 'tecnico';
@@ -558,6 +578,8 @@ function mergeGlobalWorkOrdersCacheIntoPlanState() {
 }
 
 let _planInitialCloudLoading = true;
+let _planCloudSyncing = true;
+let _planificarInitStarted = false;
 let _knownTechPendingDetailIds = null;
 
 function collectCurrentTechnicianPendingDetails() {
@@ -603,7 +625,7 @@ function notifyNewTechnicianDetailsIfAny() {
     return newlyAdded.length;
 }
 
-function renderTechnicianMobileLoadingHtml(titleText = 'Cargando tu ruta y detalles...', subText = 'Consultando tus paradas asignadas, espera un momento...') {
+function renderTechnicianMobileLoadingHtml(titleText = 'Cargando ruta y detalles...', subText = 'Consultando paradas asignadas...') {
     return `
         <div class="tech-mobile-loading-state" role="status" aria-live="polite" aria-label="Cargando ruta y detalles">
             <div class="tech-mobile-loading-banner">
@@ -615,7 +637,7 @@ function renderTechnicianMobileLoadingHtml(titleText = 'Cargando tu ruta y detal
                         <span>${escapeHtml(subText)}</span>
                     </div>
                 </div>
-                <div class="tech-mobile-loading-bar" aria-hidden="true"><span></span></div>
+                <div class="tech-mobile-loading-bar" aria-hidden="true"><span class="tech-mobile-loading-bar-fill"></span></div>
             </div>
             <div class="tech-skeleton-card" aria-hidden="true">
                 <div class="tech-skeleton-line is-title"></div>
@@ -639,6 +661,21 @@ function renderTechnicianMobileLoadingHtml(titleText = 'Cargando tu ruta y detal
     `;
 }
 
+function renderTechnicianMobileSyncingStripHtml(titleText = 'Sincronizando datos...', subText = 'Buscando actualizaciones y nuevos detalles en tu ruta') {
+    return `
+        <div class="tech-mobile-syncing-strip" role="status" aria-live="polite" aria-label="Sincronizando datos">
+            <div class="tech-mobile-syncing-strip-row">
+                <span class="tech-mobile-loader-ring" aria-hidden="true"></span>
+                <div class="tech-mobile-syncing-strip-text">
+                    <strong>${escapeHtml(titleText)}</strong>
+                    <small>${escapeHtml(subText)}</small>
+                </div>
+            </div>
+            <div class="tech-mobile-loading-bar" aria-hidden="true"><span class="tech-mobile-loading-bar-fill"></span></div>
+        </div>
+    `;
+}
+
 function renderDesktopPlanLoadingHtml() {
     return `
         <div class="plan-desktop-loading-state" role="status" aria-live="polite" aria-label="Cargando plan y paradas">
@@ -648,7 +685,7 @@ function renderDesktopPlanLoadingHtml() {
                     <div class="tech-mobile-loading-copy">
                         <span class="tech-mobile-loading-pill"><i class="tech-mobile-pulse-dot" aria-hidden="true"></i>Cargando información</span>
                         <strong>Cargando plan y paradas asignadas...</strong>
-                        <span>Obteniendo rutas, pueblos y detalles actualizados del servidor.</span>
+                        <span>Consultando rutas, pueblos y detalles actualizados.</span>
                     </div>
                 </div>
                 <div class="tech-mobile-loading-bar" aria-hidden="true"><span></span></div>
@@ -671,8 +708,8 @@ function renderTechnicianConnectionErrorHtml() {
     return `
         <div class="tech-connection-retry-card" role="alert">
             <div class="tech-connection-retry-icon" aria-hidden="true">📡</div>
-            <strong>No pudimos cargar tu ruta todavía</strong>
-            <p>Parece que tu conexión está lenta o inestable. Tus datos siguen seguros; intenta recargar en cuanto tengas señal.</p>
+            <strong>No fue posible cargar la ruta</strong>
+            <p>No se pudo establecer conexión con el servidor. Intente recargar en unos momentos.</p>
             <button type="button" class="btn bc tech-connection-retry-btn" onclick="retryTechnicianPlanLoad()">Reintentar carga</button>
         </div>
     `;
@@ -680,6 +717,7 @@ function renderTechnicianConnectionErrorHtml() {
 
 async function retryTechnicianPlanLoad() {
     _planInitialCloudLoading = true;
+    _planCloudSyncing = true;
     const board = document.getElementById('plan-days');
     if (board) board.innerHTML = isTechnicianPlanView() ? renderTechnicianMobileLoadingHtml('Reintentando conexión...', 'Descargando tu ruta y detalles desde el servidor...') : renderDesktopPlanLoadingHtml();
     renderTechnicianPlanBanner();
@@ -689,6 +727,7 @@ async function retryTechnicianPlanLoad() {
     try {
         await loadDB({ showOverlay: false, preferCache: false, globalFeedback: false });
         _planInitialCloudLoading = false;
+        _planCloudSyncing = false;
         if (isTechnicianPlanView()) ensureLoggedTechnicianRecord();
         normalizeWeekPlan();
         initPlanSelectors();
@@ -699,6 +738,7 @@ async function retryTechnicianPlanLoad() {
         snapshotKnownTechPendingDetails();
     } catch (err) {
         _planInitialCloudLoading = false;
+        _planCloudSyncing = false;
         console.warn('Reintento de carga fallido:', err);
         updatePlanOfflineIndicator(true);
         renderTechnicianPlanBanner();
@@ -709,8 +749,11 @@ async function retryTechnicianPlanLoad() {
 window.retryTechnicianPlanLoad = retryTechnicianPlanLoad;
 
 async function initPlanificarPage() {
+    if (_planificarInitStarted) return;
+    _planificarInitStarted = true;
     if (!checkAuth()) return;
     _planInitialCloudLoading = true;
+    _planCloudSyncing = true;
     initCommon();
     const isTechView = isTechnicianPlanView();
     if (isTechView) {
@@ -780,6 +823,7 @@ async function initPlanificarPage() {
     const isOfflineNow = typeof navigator !== 'undefined' && navigator.onLine === false;
     if (isOfflineNow) {
         _planInitialCloudLoading = false;
+        _planCloudSyncing = false;
         updatePlanOfflineIndicator(true);
         dismissPlanInitialLoader();
         if (!hydratedFromCache) {
@@ -789,6 +833,8 @@ async function initPlanificarPage() {
                 configureTechnicianDashboard();
                 renderPlan();
             } catch (_) { }
+        } else {
+            try { renderPlanDays(); } catch (_) { }
         }
         return;
     }
@@ -800,26 +846,45 @@ async function initPlanificarPage() {
     const backupBeforeLoad = capturePlanStateBackup();
     try {
         await loadDB({ showOverlay: false, preferCache: true, globalFeedback: false });
-        _planInitialCloudLoading = false;
-        const restored = restorePlanBackupIfNeeded(backupBeforeLoad);
+        let restored = restorePlanBackupIfNeeded(backupBeforeLoad);
         mergeGlobalWorkOrdersCacheIntoPlanState();
+        if (isTechnicianPlanView()) {
+            ensureLoggedTechnicianRecord();
+        }
+        normalizeWeekPlan();
+        initPlanSelectors();
+
+        // Si en vista técnico aún no aparece ningún plan asignado tras la primera lectura,
+        // hacer 1 reintento fresco sin caché manteniendo la tarjeta animada de carga antes de declarar vacío.
+        if (isTechnicianPlanView() && !getVisibleGeneralPlansForRole().length && navigator.onLine !== false) {
+            try {
+                await new Promise(resolve => setTimeout(resolve, 750));
+                await loadDB({ showOverlay: false, preferCache: false, globalFeedback: false });
+                restored = restorePlanBackupIfNeeded(backupBeforeLoad) || restored;
+                mergeGlobalWorkOrdersCacheIntoPlanState();
+                ensureLoggedTechnicianRecord();
+                normalizeWeekPlan();
+                initPlanSelectors();
+            } catch (retryErr) {
+                console.warn('Reintento automático de plan técnico falló:', retryErr);
+            }
+        }
+
+        _planInitialCloudLoading = false;
+        _planCloudSyncing = false;
         if (restored || (typeof window !== 'undefined' && window.netopsCloudLoadOk === false)) {
             updatePlanOfflineIndicator(true);
         } else {
             updatePlanOfflineIndicator(false);
             savePlanificarOfflineSnapshot();
         }
-        if (isTechnicianPlanView()) {
-            ensureLoggedTechnicianRecord();
-        }
-        normalizeWeekPlan();
-        initPlanSelectors();
         configureTechnicianDashboard();
         renderPlan();
         snapshotKnownTechPendingDetails();
         setTimeout(initPlanMap, 100);
     } catch (err) {
         _planInitialCloudLoading = false;
+        _planCloudSyncing = false;
         console.warn('Error durante la carga inicial de Planificar:', err);
         restorePlanBackupIfNeeded(backupBeforeLoad);
         mergeGlobalWorkOrdersCacheIntoPlanState();
@@ -834,9 +899,16 @@ async function initPlanificarPage() {
         } catch (_) { }
     } finally {
         _planInitialCloudLoading = false;
+        _planCloudSyncing = false;
         clearTimeout(safetyHideTimer);
         dismissPlanInitialLoader();
     }
+}
+
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('DOMContentLoaded', () => {
+        try { initPlanificarPage(); } catch (_) { }
+    });
 }
 
 let _lastPlanWakeTime = 0;
@@ -1143,7 +1215,7 @@ function renderTechnicianPlanBanner() {
             <span class="tech-plan-banner-icon">⚠️</span>
             <div class="tech-plan-banner-text">
                 <strong style="font-size:13px;color:#92400e;">Sin ruta asignada</strong>
-                <small style="font-size:11px;color:#b45309;">Tu supervisor te asignará un plan de trabajo pronto.</small>
+                <small style="font-size:11px;color:#b45309;">Actualmente no hay un plan de trabajo asignado.</small>
             </div>
         `;
         banner.style.display = 'flex';
@@ -2094,16 +2166,17 @@ function renderTechnicianDayMap() {
         targetStops = allStops;
     }
     targetStops.forEach(stop => {
-        if (stop.equipmentId) {
+        if (stop.equipmentId && !stop.nodeId) {
             const equipment = (state.equipment || []).find(item => item.id === stop.equipmentId && !item.deletedAt);
             const lat = safeFloat(equipment?.lat);
             const lng = safeFloat(equipment?.lng);
-            if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng, name: `Antena de "${equipment?.name || stop.name || 'Sin nombre'}"`, stop, isAntenna: true });
+            if (!isNaN(lat) && !isNaN(lng)) points.push({ lat, lng, name: equipment?.name || stop.name || 'Sin nombre', stop, isAntenna: true });
         }
         const stopLat = safeFloat(stop.lat);
         const stopLng = safeFloat(stop.lng);
         if (!isNaN(stopLat) && !isNaN(stopLng) && !(stopLat === 0 && stopLng === 0)) {
-            points.push({ lat: stopLat, lng: stopLng, name: `Parada: ${stop.name || 'Sin nombre'}`, stop });
+            const stopDisplay = typeof getPlanMapStopDisplayName === 'function' ? getPlanMapStopDisplayName(stop) : (stop.name || 'Sin nombre');
+            points.push({ lat: stopLat, lng: stopLng, name: stopDisplay, stop, isAntenna: Boolean(stop.equipmentId && !stop.nodeId) });
         }
         getStopDetails(stop).forEach(detail => {
             const parsed = typeof parseOptionalLocation === 'function' ? parseOptionalLocation(detail.detailLocation || '') : {};
@@ -2118,7 +2191,10 @@ function renderTechnicianDayMap() {
     });
     const routedPoints = ensureRoutePointsStartAtWiFiMex(points);
     routedPoints.forEach((point, index) => {
-        const marker = L.marker([point.lat, point.lng]).bindTooltip(point.isOrigin ? `Base · ${point.name}` : `${index + 1}. ${point.name}`).addTo(technicianDayMapLayer);
+        const markerOpts = typeof makePlanStopMarkerIcon === 'function'
+            ? { icon: makePlanStopMarkerIcon(point.detail ? { ...point.stop, isDetail: true } : (point.isOrigin ? point : { ...(point.stop || {}), isAntenna: point.isAntenna }), index + 1) }
+            : {};
+        const marker = L.marker([point.lat, point.lng], markerOpts).bindTooltip(point.isOrigin ? `Base · ${point.name}` : `${index + 1}. ${point.name}`).addTo(technicianDayMapLayer);
         if (point.isOrigin) {
             marker.bindPopup(`
                 <div class="plan-map-popup">
@@ -2433,35 +2509,72 @@ function isPlanAssignedToTech(plan, techId) {
     if (String(plan.assignedTechId || '').trim() === targetId) return true;
     if (Array.isArray(plan.assignedTechIds) && plan.assignedTechIds.map(String).includes(targetId)) return true;
 
-    const tech = (state.technicians || []).find(t => !t.deletedAt && (
-        String(t.id || '') === targetId ||
-        String(t.userId || '') === targetId ||
-        normalizeName(t.usuario || '') === normalizeName(targetId) ||
-        normalizeName(t.nombre || t.name || '') === normalizeName(targetId)
-    ));
-
     const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
     const isLoggedTech = isTechnicianPlanView();
+    const targetNorm = normalizeName(targetId);
+    const userIdStr = isLoggedTech && user?.id ? String(user.id).trim() : '';
+    const userNameNorm = isLoggedTech ? normalizeName(user?.name || '') : '';
+    const userUsernameNorm = isLoggedTech ? normalizeName(user?.username || '') : '';
+    const userFirstNorm = userNameNorm.split(' ')[0] || '';
 
-    const techNames = [
-        tech?.nombre,
-        tech?.name,
-        tech?.usuario,
+    const matchingTechs = (state.technicians || []).filter(t => {
+        if (!t || t.deletedAt) return false;
+        const tId = String(t.id || '').trim();
+        const tUid = String(t.userId || '').trim();
+        const tUser = normalizeName(t.usuario || '');
+        const tName = normalizeName(t.nombre || t.name || '');
+        if (tId === targetId || (tUid && tUid === targetId)) return true;
+        if (targetNorm && (tUser === targetNorm || tName === targetNorm)) return true;
+        if (isLoggedTech) {
+            if (userIdStr && (tId === userIdStr || tUid === userIdStr)) return true;
+            if (userUsernameNorm && (tUser === userUsernameNorm || tName === userUsernameNorm)) return true;
+            if (userNameNorm && tName && (tName === userNameNorm || (userNameNorm.length >= 3 && (tName.includes(userNameNorm) || userNameNorm.includes(tName))))) return true;
+            if (userFirstNorm && userFirstNorm.length >= 3 && tName && (tName === userFirstNorm || tName.startsWith(`${userFirstNorm} `))) return true;
+        }
+        return false;
+    });
+    const tech = matchingTechs[0] || null;
+
+    const techNames = [...new Set([
+        ...matchingTechs.flatMap(t => [t?.nombre, t?.name, t?.usuario]),
         isLoggedTech ? user?.name : null,
         isLoggedTech ? user?.username : null
-    ].filter(Boolean).map(normalizeName);
+    ].filter(Boolean).map(normalizeName))];
 
-    const techIds = [
+    const techIds = [...new Set([
         targetId,
-        tech?.id ? String(tech.id) : null,
-        tech?.userId ? String(tech.userId) : null,
+        ...matchingTechs.flatMap(t => [t?.id ? String(t.id) : null, t?.userId ? String(t.userId) : null]),
         isLoggedTech && user?.id ? String(user.id) : null,
         isLoggedTech && user?.username ? String(user.username) : null
-    ].filter(Boolean);
+    ].filter(Boolean))];
+
+    const namesMatchPerson = (candidateName) => {
+        const c = normalizeName(candidateName || '');
+        if (!c) return false;
+        return techNames.some(tName =>
+            tName === c ||
+            (tName.length >= 3 && c.length >= 3 && (c.includes(tName) || tName.includes(c)))
+        );
+    };
 
     const explicitIds = [...new Set([plan.assignedTechId, ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])].filter(Boolean).map(String))];
     if (explicitIds.length > 0) {
-        return explicitIds.some(id => techIds.includes(id));
+        if (explicitIds.some(id => techIds.includes(id))) return true;
+        // También resolver si alguno de los IDs asignados pertenece a otro registro del mismo técnico/usuario
+        const resolvedByPerson = explicitIds.some(assignedId => {
+            const assignedTech = (state.technicians || []).find(t => t && (String(t.id || '') === assignedId || String(t.userId || '') === assignedId));
+            if (assignedTech) {
+                if (assignedTech.userId && techIds.includes(String(assignedTech.userId))) return true;
+                if (namesMatchPerson(assignedTech.nombre || assignedTech.name) || namesMatchPerson(assignedTech.usuario)) return true;
+            }
+            const assignedUser = (state.users || []).find(u => u && String(u.id || '') === assignedId);
+            if (assignedUser) {
+                if (techIds.includes(String(assignedUser.id))) return true;
+                if (namesMatchPerson(assignedUser.name) || namesMatchPerson(assignedUser.username)) return true;
+            }
+            return false;
+        });
+        return resolvedByPerson;
     }
 
     if (plan.explicitlyUnassigned === true) {
@@ -2494,9 +2607,21 @@ function getVisibleGeneralPlansForRole() {
     if (!isPlanReadOnly()) return plans;
     if (isTechnicianPlanView()) {
         const technicianId = getLoggedTechnicianId();
-        return technicianId
+        const assigned = technicianId
             ? plans.filter(plan => !plan.deletedAt && isPlanAssignedToTech(plan, technicianId))
             : [];
+        if (assigned.length > 0) return assigned;
+        // Si quien abre en celular es administrador/soporte/atención (no rol técnico) y no tiene plan propio,
+        // permitirle ver los planes activos con paradas en lugar de bloquear con "No tienes planes asignados".
+        const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+        const role = typeof normalizeRole === 'function' ? normalizeRole(user?.role) : String(user?.role || '').toLowerCase().trim();
+        const isActualTech = role === 'tecnico' || (typeof userHasRole === 'function' && userHasRole('tecnico'));
+        if (!isActualTech) {
+            const activeWithStops = plans.filter(plan => !plan.deletedAt && Array.isArray(plan.stops) && plan.stops.some(s => !s.deletedAt));
+            if (activeWithStops.length) return activeWithStops;
+            return plans.filter(plan => !plan.deletedAt);
+        }
+        return [];
     }
     return plans.filter(plan => !plan.deletedAt && (plan.assignedTechId || (Array.isArray(plan.assignedTechIds) && plan.assignedTechIds.length)));
 }
@@ -2930,6 +3055,7 @@ function renderPlan() {
 
 function ensurePlanReadyAfterSync() {
     _planInitialCloudLoading = false;
+    _planCloudSyncing = false;
     if (isTechnicianPlanView()) {
         ensureLoggedTechnicianRecord();
         if (!selectedTechId) selectedTechId = getLoggedTechnicianId();
@@ -4621,7 +4747,7 @@ function renderPlanDays() {
         if (isPlanReadOnly() && !getSelectedGeneralPlan()) {
             board.innerHTML = (isTechnicianPlanView() && typeof window !== 'undefined' && window.netopsCloudLoadOk === false && getPlanStopsForView('general').length === 0)
                 ? renderTechnicianConnectionErrorHtml()
-                : `<div class="plan-empty">${isTechnicianPlanView() ? '<p>No tienes planes de trabajo asignados actualmente.</p>' : 'No hay planes asignados a tecnicos todavia.'}</div>`;
+                : `<div class="plan-empty">${isTechnicianPlanView() ? '<p>No tienes planes de trabajo asignados actualmente.</p>' : 'No hay planes asignados a tecnicos todavia.'}${isTechnicianPlanView() ? '<button type="button" class="btn bsm bc" onclick="retryTechnicianPlanLoad()" style="margin-top:12px;font-weight:700;">Actualizar ruta</button>' : ''}</div>`;
             return;
         }
         selectedDay = 'general';
@@ -4703,7 +4829,7 @@ function renderPlanDays() {
             // 3. Card HTML
             const cardHtml = renderStopCard(activeStop, 'general', activePlanCardIndex);
 
-            // 4. Transit connector to next site (matches user image!)
+            // 4. Conector de traslado hacia el siguiente sitio
             let transitConnectorHtml = '';
             if (!isLast) {
                 const nextStop = visible[activePlanCardIndex + 1];
@@ -4807,7 +4933,8 @@ function renderPlanDays() {
             return `<div class="day-col ${key && key < today ? 'plan-overdue-group' : ''}"><div class="day-head"><span>${escapeHtml(label)}</span>${dayTravelBadge}</div><div class="day-body">${stopsHtml}</div></div>`;
         }).join('');
         const placesIntelligenceHtml = !isTechnicianPlanView() ? renderPlanPlacesIntelligence(visible) : '';
-        board.innerHTML = listModeBanner + (daysHtml ? (daysHtml + placesIntelligenceHtml) : `<div class="plan-empty">${isTechnicianPlanView() ? `No tienes paradas asignadas para ${formatCalendarDate(selectedCalendarDate || today)}.` : 'No hay paradas en esta fecha.'}</div>`);
+        const techSyncStripHtml = (isTechnicianPlanView() && _planCloudSyncing) ? renderTechnicianMobileSyncingStripHtml() : '';
+        board.innerHTML = techSyncStripHtml + listModeBanner + (daysHtml ? (daysHtml + placesIntelligenceHtml) : `<div class="plan-empty">${isTechnicianPlanView() ? `No tienes paradas asignadas para ${formatCalendarDate(selectedCalendarDate || today)}.` : 'No hay paradas en esta fecha.'}</div>`);
         updateStopsWeatherBadges(visible);
 
         if (!isTechnicianPlanView()) {
@@ -6365,11 +6492,12 @@ async function renderAdminWeekRouteMap() {
     }
     stops.forEach(stop => {
         const progress = getStopProgress(stop);
+        const stopLabel = getPlanMapStopDisplayName(stop);
         const marker = L.marker([stop.lat, stop.lng], {
-            icon: L.divIcon({ html: `<div class="route-map-marker">${stop.order}</div>`, className: '', iconSize: [28, 28], iconAnchor: [14, 14] })
+            icon: makePlanStopMarkerIcon(stop, stop.order)
         }).addTo(adminWeekRouteLayer);
-        marker.bindTooltip(`${stop.order}. ${escapeHtml(stop.name || 'Parada')}`, { direction: 'top', offset: [0, -12] });
-        marker.bindPopup(`<div style="min-width:190px"><strong>${stop.order}. ${escapeHtml(stop.name || 'Parada')}</strong><div class="map-detail-stats"><strong>${progress.total}<small>detalles</small></strong><span class="pending">${progress.pending} pendientes</span><span class="resolved">${progress.done} resueltos</span></div></div>`);
+        marker.bindTooltip(`${stop.isOrigin ? 'Base · ' : `${stop.order}. `}${escapeHtml(stopLabel)}`, { direction: 'top', offset: [0, -14] });
+        marker.bindPopup(`<div style="min-width:190px"><strong>${stop.isOrigin ? 'Base · ' : `${stop.order}. `}${escapeHtml(stopLabel)}</strong><div class="map-detail-stats"><strong>${progress.total}<small>detalles</small></strong><span class="pending">${progress.pending} pendientes</span><span class="resolved">${progress.done} resueltos</span></div></div>`);
     });
     adminWeekRouteMap.fitBounds(latLngs, { padding: [28, 28], maxZoom: 15 });
     setTimeout(() => adminWeekRouteMap?.invalidateSize(), 80);
@@ -8031,8 +8159,8 @@ function openRegisterStopAsNodeModal(stopId) {
     const coordsInput = document.getElementById('reg-node-coords');
 
     if (stopIdInput) stopIdInput.value = stop.id;
-    if (townInput) townInput.value = initialTown;
-    if (codeInput) codeInput.value = nextCode;
+    if (townInput) townInput.value = String(initialTown || '').trim().toLocaleUpperCase('es-MX');
+    if (codeInput) codeInput.value = String(nextCode || '').trim().toLocaleUpperCase('es-MX');
     if (coordsInput) coordsInput.value = (lat && lng) ? `${lat}, ${lng}` : '';
 
     const eqSelect = document.getElementById('reg-node-eq');
@@ -8049,8 +8177,8 @@ function openRegisterStopAsNodeModal(stopId) {
 async function saveNewNodeFromStop() {
     if (!canManagePlanStops()) return notify('Solo un administrador o soporte puede registrar nuevos pueblos', 'err');
     const stopId = document.getElementById('reg-node-stop-id')?.value;
-    const town = document.getElementById('reg-node-town')?.value?.trim();
-    const nodeCode = document.getElementById('reg-node-code')?.value?.trim();
+    const town = String(document.getElementById('reg-node-town')?.value || '').trim().toLocaleUpperCase('es-MX');
+    const nodeCode = String(document.getElementById('reg-node-code')?.value || '').trim().toLocaleUpperCase('es-MX');
     const zone = document.getElementById('reg-node-zone')?.value || 'general';
     const coordsRaw = document.getElementById('reg-node-coords')?.value?.trim();
     const eqId = document.getElementById('reg-node-eq')?.value || null;
@@ -8097,9 +8225,9 @@ async function saveNewNodeFromStop() {
 
     const newNode = {
         id: (typeof gid === 'function' ? gid('nd') : 'nd_' + Date.now()),
-        nodeCode: nodeCode.toUpperCase(),
-        town,
-        name: town,
+        nodeCode: nodeCode.toLocaleUpperCase('es-MX'),
+        town: town.toLocaleUpperCase('es-MX'),
+        name: town.toLocaleUpperCase('es-MX'),
         zone,
         lat,
         lng,
@@ -8192,8 +8320,8 @@ async function renderPlanMap() {
     planMarkers = [];
     planAntennaMarkers.forEach(m => planMap.removeLayer(m));
     planAntennaMarkers = [];
-    if (!isTechnicianPlanView()) renderPlanAntennaMarkers();
 
+    // En "Vista del plan" solo se muestran las antenas y pueblos/nodos pertenecientes a este plan.
     const rawPoints = getPlanMapStops()
         .filter(s => !isNaN(safeFloat(s.lat)) && !isNaN(safeFloat(s.lng)))
         .map(s => ({
@@ -8202,6 +8330,8 @@ async function renderPlanMap() {
             name: s.name,
             id: s.id,
             equipmentId: s.equipmentId || '',
+            nodeId: s.nodeId || '',
+            type: s.type || '',
             day: s.mapDay || selectedDay,
             index: s.mapIndex,
             mapLabel: s.mapLabel || s.name,
@@ -8210,37 +8340,33 @@ async function renderPlanMap() {
     const points = ensureRoutePointsStartAtWiFiMex(rawPoints);
 
     if (!points.length) {
-        if (isTechnicianPlanView()) planMap.setView([17.55, -99.50], 8);
-        else fitPlanMapToAntennas();
+        planMap.setView([17.55, -99.50], 8);
         return;
     }
 
     points.forEach((p, i) => {
+        const stopRef = p.stop || p;
+        const stopLabel = p.isOrigin ? (p.name || 'WiFi-Mex') : getPlanMapStopDisplayName(stopRef);
         const marker = L.marker([p.lat, p.lng], {
-            icon: L.divIcon({
-                html: `<div style="background:${p.isOrigin ? '#0f766e' : 'var(--cy)'};color:#fff;border:2px solid #fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-weight:900;box-shadow:0 4px 12px rgba(0,0,0,.25)">${p.isOrigin ? '★' : (i + 1)}</div>`,
-                className: '',
-                iconSize: [26, 26],
-                iconAnchor: [13, 13]
-            })
+            icon: makePlanStopMarkerIcon(p.isOrigin ? p : stopRef, i + 1)
         }).addTo(planMap);
         marker._planStopId = p.id;
-        marker.bindTooltip(p.mapLabel || `${i + 1}. ${p.name || 'Parada'}`);
+        marker.bindTooltip(p.isOrigin ? `Base · ${stopLabel}` : `${i + 1}. ${stopLabel}`, { direction: 'top', offset: [0, -16] });
         marker.bindPopup(p.isOrigin ? `
             <div class="plan-map-popup">
-                <strong>${escapeHtml(p.name || 'WiFi-Mex')}</strong>
+                <strong>${escapeHtml(stopLabel)}</strong>
                 <div style="font-size:11px;color:#0f766e;font-weight:700;margin-top:3px">Parada principal · Base de salida</div>
                 <div style="font-size:11px;color:#64748b;margin-top:2px">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div>
             </div>
         ` : (isTechnicianPlanView() ? `
             <div class="plan-map-popup plan-map-popup-wide">
-                <strong>${escapeHtml(p.mapLabel || p.name || 'Parada')}</strong>
+                <strong>${i + 1}. ${escapeHtml(stopLabel)}</strong>
                 <div style="font-size:11px;color:#64748b;margin:5px 0 9px">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</div>
                 ${renderFullscreenStopDetails(p.stop)}
             </div>
         ` : `
             <div class="plan-map-popup">
-                <strong>${escapeHtml(p.name || 'Parada')}</strong>
+                <strong>${escapeHtml(stopLabel)}</strong>
                 ${renderMapStopDetailStats(p.stop)}
                 <label>Orden</label>
                 <div class="plan-popup-row">
@@ -8490,15 +8616,23 @@ function formatTimeAgoCustom(dateString) {
     return `Hace ${diffYears} año${diffYears === 1 ? '' : 's'}`;
 }
 
+function isPhysicalCoverageOrder(w) {
+    if (!w || w.deletedAt) return false;
+    if (w.detailKind === 'network' || w.detail_kind === 'network') return false;
+    const cat = String(w.category || '').trim().toLowerCase();
+    if (/_red$|^red_/.test(cat)) return false;
+    return true;
+}
+
 function calculateTownCoverageData() {
     const nodes = (state.nodes || []).filter(n => n && !n.deletedAt);
-    const workOrders = (state.workOrders || []).filter(w => w && !w.deletedAt);
+    const workOrders = (state.workOrders || []).filter(isPhysicalCoverageOrder);
 
-    // Mapeo por ID de nodo
+    // Mapeo por ID de nodo (solo detalles físicos, nunca de red)
     const townStats = nodes.map(node => {
         const id = node.id;
-        const code = node.nodeCode || '';
-        const townName = node.town || node.name || code || 'Pueblo sin nombre';
+        const code = String(node.nodeCode || '').trim().toLocaleUpperCase('es-MX');
+        const townName = String(node.town || node.name || code || 'PUEBLO SIN NOMBRE').trim().toLocaleUpperCase('es-MX');
         const zone = node.zone || node.region || '';
 
         // 1. Obtener detalles directamente asociados en memoria
@@ -8675,7 +8809,7 @@ function renderTownsCoverageSection() {
                     </div>
                     <div>
                         <div class="plan-towns-coverage-title">Cobertura y Atención de Pueblos</div>
-                        <div class="plan-towns-coverage-subtitle">Pueblos con >80% de detalles cubiertos y localidades esperando atención</div>
+                        <div class="plan-towns-coverage-subtitle">Pueblos con >80% de detalles físicos cubiertos y localidades esperando atención física</div>
                     </div>
                 </div>
                 <div class="plan-towns-coverage-header-actions">
@@ -8735,7 +8869,7 @@ function renderTownsCoverageSection() {
                     <div class="plan-towns-cards-list">
                         ${previewUnattended.length ? previewUnattended.map(item => renderCard(item, false)).join('') : `
                             <div class="plan-towns-col-empty">
-                                <span>🎉 ¡Excelente! No hay pueblos con detalles pendientes sin atención.</span>
+                                <span>No hay pueblos con detalles pendientes sin atención.</span>
                             </div>
                         `}
                     </div>
@@ -8767,7 +8901,7 @@ function ensureTownsCoverageModalMarkup() {
                         </div>
                         <div>
                             <h2>Cobertura de Pueblos</h2>
-                            <p>Monitoreo operativo de pueblos atendidos y pendientes de atención por urgencia</p>
+                            <p>Seguimiento operativo de detalles físicos por pueblo</p>
                         </div>
                     </div>
                     <button type="button" class="plan-dialog-close" onclick="CM('towns-coverage-mo')" aria-label="Cerrar ventana">✕</button>
@@ -9367,17 +9501,13 @@ async function renderRouteFullMap(stops) {
     routedStops.forEach((stop, index) => {
         const orderNum = index + 1;
         const dayAbbr = stop.scheduledDate ? formatCalendarDate(stop.scheduledDate).slice(0, 3) : '';
+        const stopLabel = stop.isOrigin ? (stop.name || 'WiFi-Mex') : getPlanMapStopDisplayName(stop);
         const marker = L.marker([stop.lat, stop.lng], {
-            icon: L.divIcon({
-                html: `<div class="route-map-marker" style="${stop.isOrigin ? 'background:#0f766e;' : ''}${dayAbbr && weeklyRouteSelectedDay === 'all' ? 'height:34px;width:34px;font-size:11px;' : ''}">${stop.isOrigin ? '★' : orderNum}${dayAbbr && weeklyRouteSelectedDay === 'all' ? `<span style="display:block;font-size:7px;line-height:1;opacity:.85">${escapeHtml(dayAbbr)}</span>` : ''}</div>`,
-                className: '',
-                iconSize: [34, 34],
-                iconAnchor: [17, 17]
-            }),
+            icon: makePlanStopMarkerIcon(stop, orderNum, { dayAbbr: weeklyRouteSelectedDay === 'all' ? dayAbbr : '' }),
             zIndexOffset: 1000
         }).addTo(routeFullMap);
-        marker.bindTooltip(`${stop.isOrigin ? 'Base · ' : `${orderNum}. `}${escapeHtml(stop.name || 'Parada')}${dayAbbr ? ` (${dayAbbr})` : ''}`, { permanent: true, direction: 'right', offset: [12, 0], className: 'plan-map-stop-label' });
-        marker.bindPopup(stop.isOrigin ? `<div class="plan-map-popup"><strong>${escapeHtml(stop.name || 'WiFi-Mex')}</strong><div style="font-size:11px;color:#0f766e;font-weight:700;">Parada principal · Base de salida</div></div>` : getRouteFullPopupHtml({ ...stop, order: orderNum }), { maxWidth: 420, className: 'route-map-popup' });
+        marker.bindTooltip(`${stop.isOrigin ? 'Base · ' : `${orderNum}. `}${escapeHtml(stopLabel)}${dayAbbr ? ` (${dayAbbr})` : ''}`, { permanent: true, direction: 'right', offset: [16, 0], className: 'plan-map-stop-label' });
+        marker.bindPopup(stop.isOrigin ? `<div class="plan-map-popup"><strong>${escapeHtml(stopLabel)}</strong><div style="font-size:11px;color:#0f766e;font-weight:700;">Parada principal · Base de salida</div></div>` : getRouteFullPopupHtml({ ...stop, name: stopLabel, order: orderNum }), { maxWidth: 420, className: 'route-map-popup' });
         routeFullMarkers.push(marker);
     });
 
@@ -9464,22 +9594,20 @@ function fitPlanMapToAntennas() {
 
 function renderPlanAntennaMarkers() {
     (state.equipment || []).forEach(eq => {
+        if (!eq || eq.deletedAt) return;
         const lat = safeFloat(eq.lat);
         const lng = safeFloat(eq.lng);
         if (isNaN(lat) || isNaN(lng)) return;
 
         const st = getPlanningMapStatus('equipment', eq.id);
-        const marker = L.circleMarker([lat, lng], {
-            radius: 5,
-            color: '#fff',
-            weight: 2,
-            fillColor: st.color,
-            fillOpacity: 0.92
+        const marker = L.marker([lat, lng], {
+            icon: makePlanPointIcon(st.color, '', 'tower'),
+            zIndexOffset: 80
         }).addTo(planMap);
 
         marker.bindTooltip(`${eq.name}${eq.ip ? ` · ${eq.ip}` : ''}`, {
             direction: 'top',
-            offset: [0, -8]
+            offset: [0, -12]
         });
 
         marker.on('click', () => {
@@ -9517,19 +9645,57 @@ function fitPlanMapToAntennas() {
 }
 
 function fitPlanMapView(routePoints) {
-    if (planMapExpanded) return;
-    const antennaPoints = (state.equipment || [])
-        .filter(eq => !isNaN(safeFloat(eq.lat)) && !isNaN(safeFloat(eq.lng)))
-        .map(eq => [safeFloat(eq.lat), safeFloat(eq.lng)]);
+    if (planMapExpanded || !planMap) return;
     const routeLatLngs = (routePoints || [])
         .map(point => [safeFloat(point.lat), safeFloat(point.lng)])
         .filter(([lat, lng]) => !isNaN(lat) && !isNaN(lng));
-    const allPoints = [...antennaPoints, ...routeLatLngs];
-    if (!allPoints.length) {
+    if (!routeLatLngs.length) {
         planMap.setView([17.55, -99.50], 8);
         return;
     }
-    planMap.fitBounds(allPoints, { padding: [25, 25] });
+    if (routeLatLngs.length === 1) {
+        planMap.setView(routeLatLngs[0], 12);
+        return;
+    }
+    planMap.fitBounds(routeLatLngs, { padding: [30, 30], maxZoom: 13 });
+}
+
+function getRoadRouteCacheKey(points) {
+    const valid = (points || [])
+        .map(point => ({ lat: safeFloat(point.lat), lng: safeFloat(point.lng) }))
+        .filter(point => !isNaN(point.lat) && !isNaN(point.lng));
+    if (valid.length < 2) return '';
+    return valid.map(p => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
+}
+
+function cacheRoadRoute(key, route) {
+    if (!key || !route || route.isDirectFallback) return;
+    if (planRoadRouteCache.size >= 60) {
+        const oldestKey = planRoadRouteCache.keys().next().value;
+        if (oldestKey) planRoadRouteCache.delete(oldestKey);
+    }
+    planRoadRouteCache.set(key, route);
+}
+
+function buildDirectRouteResult(validPoints) {
+    const features = [];
+    for (let i = 0; i < validPoints.length - 1; i++) {
+        const from = validPoints[i];
+        const to = validPoints[i + 1];
+        features.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: [[from.lng, from.lat], [to.lng, to.lat]] },
+            properties: { kind: 'direct' }
+        });
+    }
+    return {
+        geometry: { type: 'FeatureCollection', features },
+        distance: 0,
+        duration: 0,
+        partial: true,
+        directLegs: features.length,
+        isDirectFallback: true
+    };
 }
 
 async function fetchOsrmRoute(points) {
@@ -9539,30 +9705,39 @@ async function fetchOsrmRoute(points) {
     if (validPoints.length < 2) throw new Error('Sin puntos suficientes');
 
     const coords = validPoints.map(point => `${point.lng},${point.lat}`).join(';');
-    const baseUrl = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=false&continue_straight=false`;
+    const baseUrl = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=simplified&geometries=geojson&steps=false&continue_straight=false`;
     const unlimited = validPoints.map(() => 'unlimited').join(';');
-    const radiuses = validPoints.map(() => 100000).join(';');
-    const urls = [`${baseUrl}&radiuses=${unlimited}`, `${baseUrl}&radiuses=${radiuses}`, baseUrl];
+    const urls = [`${baseUrl}&radiuses=${unlimited}`, baseUrl];
 
     let lastError = null;
     for (const url of urls) {
-        // Si la URL es demasiado larga el servidor la puede rechazar, omitir
         if (url.length > 8000) {
             lastError = new Error('URL demasiado larga para OSRM');
             continue;
         }
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
         try {
             const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
             clearTimeout(timeoutId);
-            if (!res.ok) throw new Error(`OSRM ${res.status}`);
+            if (!res.ok) {
+                const err = new Error(`OSRM ${res.status}`);
+                err.status = res.status;
+                // Solo reintentar otro formato de URL si OSRM rechazó los parámetros (400).
+                if (res.status !== 400) throw err;
+                lastError = err;
+                continue;
+            }
             const data = await res.json();
             if (data.routes && data.routes[0]) return data.routes[0];
             lastError = new Error('Sin ruta por carretera');
         } catch (e) {
             clearTimeout(timeoutId);
             lastError = e;
+            // Si hubo timeout, caída de red, 429 o 5xx, no insistir contra el mismo servidor.
+            if (e?.name === 'AbortError' || (e?.status && e.status !== 400) || !e?.status) {
+                break;
+            }
         }
     }
     throw lastError || new Error('OSRM no disponible');
@@ -9576,49 +9751,81 @@ async function fetchRoadRoute(points, maxPoints = 25) {
     if (validPoints.length < 2) throw new Error('Sin puntos suficientes');
 
     const routedPoints = validPoints.length > maxPoints ? thinRoutePoints(validPoints, maxPoints) : validPoints;
-    try {
-        const fullRoute = await fetchOsrmRoute(routedPoints);
-        return { ...fullRoute, partial: false, directLegs: 0 };
-    } catch (e) {
-        // Si una parada rompe la ruta completa, calculamos carretera tramo por tramo.
+    const cacheKey = getRoadRouteCacheKey(routedPoints);
+    if (cacheKey && planRoadRouteCache.has(cacheKey)) {
+        return planRoadRouteCache.get(cacheKey);
+    }
+    if (cacheKey && planRoadRouteInFlight.has(cacheKey)) {
+        return planRoadRouteInFlight.get(cacheKey);
     }
 
-    const features = [];
-    let distance = 0;
-    let duration = 0;
-    let roadLegs = 0;
-    let directLegs = 0;
-    const maxLegAttempts = Math.min(routedPoints.length - 1, 6);
-
-    for (let i = 0; i < routedPoints.length - 1; i++) {
-        const from = routedPoints[i];
-        const to = routedPoints[i + 1];
-        if (i < maxLegAttempts) {
-            try {
-                const leg = await fetchOsrmRoute([from, to]);
-                features.push({ type: 'Feature', geometry: leg.geometry, properties: { kind: 'road' } });
-                distance += Number(leg.distance || 0);
-                duration += Number(leg.duration || 0);
-                roadLegs++;
-                continue;
-            } catch (e) { }
+    const work = (async () => {
+        try {
+            const fullRoute = await fetchOsrmRoute(routedPoints);
+            const result = { ...fullRoute, partial: false, directLegs: 0, isDirectFallback: false };
+            cacheRoadRoute(cacheKey, result);
+            return result;
+        } catch (e) {
+            // Si OSRM no responde (timeout / red / 429 / 5xx), regresar trazo directo al instante sin bloquear.
+            const isRoutingRejection = e?.status === 400 || String(e?.message || '').includes('Sin ruta');
+            if (!isRoutingRejection || routedPoints.length <= 2) {
+                return buildDirectRouteResult(routedPoints);
+            }
         }
-        features.push({
-            type: 'Feature',
-            geometry: { type: 'LineString', coordinates: [[from.lng, from.lat], [to.lng, to.lat]] },
-            properties: { kind: 'direct' }
-        });
-        directLegs++;
-    }
 
-    // Si todos los tramos fallan, no lanzamos error. Retornamos las lineas directas.
-    return {
-        geometry: { type: 'FeatureCollection', features },
-        distance,
-        duration,
-        partial: directLegs > 0,
-        directLegs
-    };
+        // Solo si OSRM rechazó una parada específica, resolver tramos en paralelo (máx. 6 tramos).
+        const legCount = routedPoints.length - 1;
+        const maxLegAttempts = Math.min(legCount, 6);
+        const legResults = await Promise.all(
+            Array.from({ length: legCount }, async (_, i) => {
+                const from = routedPoints[i];
+                const to = routedPoints[i + 1];
+                if (i < maxLegAttempts) {
+                    try {
+                        const leg = await fetchOsrmRoute([from, to]);
+                        return {
+                            feature: { type: 'Feature', geometry: leg.geometry, properties: { kind: 'road' } },
+                            distance: Number(leg.distance || 0),
+                            duration: Number(leg.duration || 0),
+                            isRoad: true
+                        };
+                    } catch (err) { }
+                }
+                return {
+                    feature: {
+                        type: 'Feature',
+                        geometry: { type: 'LineString', coordinates: [[from.lng, from.lat], [to.lng, to.lat]] },
+                        properties: { kind: 'direct' }
+                    },
+                    distance: 0,
+                    duration: 0,
+                    isRoad: false
+                };
+            })
+        );
+
+        const features = legResults.map(r => r.feature);
+        const distance = legResults.reduce((acc, r) => acc + r.distance, 0);
+        const duration = legResults.reduce((acc, r) => acc + r.duration, 0);
+        const roadLegs = legResults.filter(r => r.isRoad).length;
+        const directLegs = legResults.length - roadLegs;
+        const result = {
+            geometry: { type: 'FeatureCollection', features },
+            distance,
+            duration,
+            partial: directLegs > 0,
+            directLegs,
+            isDirectFallback: roadLegs === 0
+        };
+        if (roadLegs > 0) cacheRoadRoute(cacheKey, result);
+        return result;
+    })();
+
+    if (cacheKey) {
+        planRoadRouteInFlight.set(cacheKey, work);
+        work.finally(() => planRoadRouteInFlight.delete(cacheKey));
+    }
+    return work;
 }
 
 async function fetchRoadRouteChunked(points, chunkSize = 24) {
@@ -9626,22 +9833,33 @@ async function fetchRoadRouteChunked(points, chunkSize = 24) {
         .map(point => ({ lat: safeFloat(point.lat), lng: safeFloat(point.lng) }))
         .filter(point => !isNaN(point.lat) && !isNaN(point.lng));
     if (validPoints.length < 2) throw new Error('Sin puntos suficientes');
+
+    const fullKey = getRoadRouteCacheKey(validPoints);
+    if (fullKey && planRoadRouteCache.has(fullKey)) {
+        return planRoadRouteCache.get(fullKey);
+    }
     if (validPoints.length <= chunkSize) return fetchRoadRoute(validPoints, chunkSize);
 
+    const segments = [];
+    for (let start = 0; start < validPoints.length - 1; start += chunkSize - 1) {
+        const segment = validPoints.slice(start, Math.min(start + chunkSize, validPoints.length));
+        if (segment.length >= 2) segments.push(segment);
+    }
+
+    const routes = await Promise.all(segments.map(seg => fetchRoadRoute(seg, chunkSize)));
     const features = [];
     let distance = 0;
     let duration = 0;
     let partial = false;
     let directLegs = 0;
+    let anyRoad = false;
 
-    for (let start = 0; start < validPoints.length - 1; start += chunkSize - 1) {
-        const segment = validPoints.slice(start, Math.min(start + chunkSize, validPoints.length));
-        if (segment.length < 2) continue;
-        const route = await fetchRoadRoute(segment, chunkSize);
+    for (const route of routes) {
         distance += Number(route.distance || 0);
         duration += Number(route.duration || 0);
         partial = partial || !!route.partial;
         directLegs += Number(route.directLegs || 0);
+        if (!route.isDirectFallback) anyRoad = true;
         if (route.geometry?.type === 'FeatureCollection') {
             features.push(...(route.geometry.features || []));
         } else if (route.geometry) {
@@ -9650,46 +9868,91 @@ async function fetchRoadRouteChunked(points, chunkSize = 24) {
     }
 
     if (!features.length) throw new Error('Sin ruta por carretera');
-    return {
+    const combined = {
         geometry: { type: 'FeatureCollection', features },
         distance,
         duration,
         partial,
-        directLegs
+        directLegs,
+        isDirectFallback: !anyRoad
     };
+    if (anyRoad) cacheRoadRoute(fullKey, combined);
+    return combined;
+}
+
+function renderPlanMapRouteLayer(route, latLngs) {
+    if (!planMap) return;
+    if (planRouteLayer) {
+        planMap.removeLayer(planRouteLayer);
+        planRouteLayer = null;
+    }
+    planRouteLayer = L.layerGroup().addTo(planMap);
+    if (route && route.geometry && !route.isDirectFallback) {
+        L.geoJSON(route.geometry, {
+            style: { color: '#ffffff', weight: 9, opacity: 0.92, lineCap: 'round', lineJoin: 'round' },
+            interactive: false
+        }).addTo(planRouteLayer);
+        L.geoJSON(route.geometry, {
+            style: { color: '#0b63ce', weight: 5, opacity: 0.96, lineCap: 'round', lineJoin: 'round' },
+            interactive: false
+        }).addTo(planRouteLayer);
+        L.geoJSON(route.geometry, {
+            style: { color: '#38bdf8', weight: 2, opacity: 0.9, lineCap: 'round', lineJoin: 'round' },
+            interactive: false
+        }).addTo(planRouteLayer);
+        return;
+    }
+    if (Array.isArray(latLngs) && latLngs.length >= 2) {
+        L.polyline(latLngs, {
+            color: '#ffffff',
+            weight: 8,
+            opacity: 0.9,
+            lineCap: 'round',
+            lineJoin: 'round',
+            interactive: false
+        }).addTo(planRouteLayer);
+        L.polyline(latLngs, {
+            color: '#0b63ce',
+            weight: 4.5,
+            opacity: 0.9,
+            dashArray: '10 8',
+            lineCap: 'round',
+            lineJoin: 'round',
+            interactive: false
+        }).addTo(planRouteLayer);
+    }
 }
 
 async function drawRoadRoute(points, renderId = planRouteRenderId) {
-    const fallback = () => {
-        if (renderId !== planRouteRenderId) return;
-        planRouteLayer = L.polyline(points.map(p => [p.lat, p.lng]), {
-            color: '#0984e3',
-            weight: 4,
-            opacity: 0.7,
-            dashArray: '10 8'
-        }).addTo(planMap);
+    if (!planMap) return;
+    const latLngs = (points || [])
+        .map(p => [safeFloat(p.lat), safeFloat(p.lng)])
+        .filter(([lat, lng]) => !isNaN(lat) && !isNaN(lng));
+    if (latLngs.length < 2) {
         fitPlanMapView(points);
-    };
+        return;
+    }
+
+    const cacheKey = getRoadRouteCacheKey(points);
+    const cachedRoute = cacheKey ? planRoadRouteCache.get(cacheKey) : null;
+    if (cachedRoute) {
+        renderPlanMapRouteLayer(cachedRoute, latLngs);
+        fitPlanMapView(points);
+        return;
+    }
+
+    // Trazar de inmediato el camino visible (0ms) mientras se obtiene la carretera real en segundo plano.
+    renderPlanMapRouteLayer(null, latLngs);
+    fitPlanMapView(points);
 
     try {
-        const route = await fetchRoadRoute(points, 25);
-        if (renderId !== planRouteRenderId) return;
-
-        planRouteLayer = L.layerGroup().addTo(planMap);
-        L.geoJSON(route.geometry, {
-            style: { color: '#ffffff', weight: 9, opacity: 0.92, lineCap: 'round', lineJoin: 'round' }
-        }).addTo(planRouteLayer);
-        L.geoJSON(route.geometry, {
-            style: { color: '#0b63ce', weight: 5, opacity: 0.96, lineCap: 'round', lineJoin: 'round' }
-        }).addTo(planRouteLayer);
-        fitPlanMapView(points);
-
-        const km = (route.distance / 1000).toFixed(1);
-        const min = Math.round(route.duration / 60);
+        const route = await fetchRoadRouteChunked(points, 24);
+        if (renderId !== planRouteRenderId || !planMap) return;
+        if (route && !route.isDirectFallback) {
+            renderPlanMapRouteLayer(route, latLngs);
+        }
     } catch (e) {
-        if (renderId !== planRouteRenderId) return;
-        fallback();
-        if (!planMapExpanded && !isTechnicianPlanView()) notify('No se pudo calcular carretera; se trazo directo', 'err');
+        // El trazo directo ya quedó dibujado y visible; no mostrar errores intrusivos.
     }
 }
 
@@ -9718,10 +9981,11 @@ function ensurePlanFullscreenModal() {
             <div class="plan-fullscreen-head">
                 <div>
                     <h2>Mapa del plan</h2>
-                    <p id="plan-fullscreen-route-info">Arrastra, haz zoom y revisa paradas/antenas sin recargar la página.</p>
+                    <p id="plan-fullscreen-route-info">Vista general de paradas, antenas y pueblos del plan.</p>
                     <span id="plan-fullscreen-catalog-info" class="plan-fullscreen-catalog-info"></span>
                 </div>
                 <div class="plan-fullscreen-actions">
+                    <button class="btn bgh" id="plan-fullscreen-icons-btn" type="button" onclick="togglePlanFullscreenIcons()">Ver iconos</button>
                     <button class="btn bgh" id="plan-fullscreen-names-btn" type="button" onclick="togglePlanFullscreenNames()">Ver nombres</button>
                     <button class="btn bgh" id="plan-fullscreen-stop-names-btn" type="button" onclick="togglePlanFullscreenStopNames()">Ver nombres de paradas</button>
                     <button class="btn bc" type="button" onclick="renderPlanFullscreenMap(true)">Ajustar</button>
@@ -9731,8 +9995,8 @@ function ensurePlanFullscreenModal() {
             <div id="plan-fullscreen-map" class="plan-fullscreen-map"></div>
             <div class="plan-map-legend plan-fullscreen-legend">
                 <span><i style="background:#0984e3"></i> Ruta del plan</span>
-                <span><i class="plan-legend-square"></i> Antena</span>
-                <span><i class="plan-legend-circle"></i> Nodo / pueblo</span>
+                <span><i class="plan-legend-icon is-tower" aria-hidden="true">${PLAN_TOWER_ICON_SVG}</i> Antena / Torre</span>
+                <span><i class="plan-legend-icon is-town" aria-hidden="true">${PLAN_TOWN_ICON_SVG}</i> Pueblo / Nodo</span>
                 <span><i class="plan-legend-link"></i> Conexión vinculada</span>
                 <span><i style="background:#ef4444"></i> Crítico</span>
                 <span><i style="background:#f59e0b"></i> Atención</span>
@@ -9758,22 +10022,32 @@ function ensurePlanFullscreenPanes() {
     if (!planFullscreenMap) return;
     if (!planFullscreenMap.getPane('planFullscreenRouteGlowPane')) {
         const pane = planFullscreenMap.createPane('planFullscreenRouteGlowPane');
-        pane.style.zIndex = 640;
+        pane.style.zIndex = 440;
         pane.style.pointerEvents = 'none';
     }
     if (!planFullscreenMap.getPane('planFullscreenRoutePane')) {
         const pane = planFullscreenMap.createPane('planFullscreenRoutePane');
-        pane.style.zIndex = 650;
+        pane.style.zIndex = 450;
         pane.style.pointerEvents = 'none';
+    }
+    // Con preferCanvas:true, Leaflet requiere un renderer dedicado por cada pane personalizado
+    // para que las rutas se pinten siempre visibles y sin desfase sobre el canvas de conexiones.
+    if (!planFullscreenMap._routeGlowRenderer && typeof L !== 'undefined' && typeof L.svg === 'function') {
+        planFullscreenMap._routeGlowRenderer = L.svg({ pane: 'planFullscreenRouteGlowPane', padding: 0.5 });
+    }
+    if (!planFullscreenMap._routeMainRenderer && typeof L !== 'undefined' && typeof L.svg === 'function') {
+        planFullscreenMap._routeMainRenderer = L.svg({ pane: 'planFullscreenRoutePane', padding: 0.5 });
     }
 }
 
 function openPlanFullscreenMap() {
     const modal = ensurePlanFullscreenModal();
-    // Cada apertura empieza limpia: los nombres se pueden activar despues sin
-    // tapar los puntos mientras Leaflet ajusta todas las ubicaciones.
+    // Cada apertura empieza limpia: circulos por defecto y nombres ocultos
+    // para que el mapa se vea despejado; el usuario puede activar iconos o nombres con un clic.
     planFullscreenNamesVisible = false;
     planFullscreenStopNamesVisible = false;
+    planFullscreenIconsMode = false;
+    updatePlanFullscreenIconsButton();
     modal.style.display = '';
     modal.style.pointerEvents = '';
     modal.classList.add('open');
@@ -9782,7 +10056,8 @@ function openPlanFullscreenMap() {
     setTimeout(() => {
         if (!planFullscreenMap) {
             planFullscreenMap = L.map('plan-fullscreen-map', {
-                zoomControl: true
+                zoomControl: true,
+                preferCanvas: true
             }).setView([17.55, -99.50], 8);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap',
@@ -9793,6 +10068,15 @@ function openPlanFullscreenMap() {
             planFullscreenLayerGroup = planFullscreenRouteLayer;
             planFullscreenLinkLayer = L.layerGroup().addTo(planFullscreenMap);
             planFullscreenMarkerLayer = L.layerGroup().addTo(planFullscreenMap);
+            if (typeof planFullscreenMap.on === 'function') {
+                planFullscreenMap.on('zoomstart', () => {
+                    document.getElementById('plan-fullscreen-map')?.classList.add('plan-is-zooming');
+                });
+                planFullscreenMap.on('zoomend moveend', () => {
+                    document.getElementById('plan-fullscreen-map')?.classList.remove('plan-is-zooming');
+                    if (planFullscreenNamesVisible) schedulePlanFullscreenViewportLabels();
+                });
+            }
         } else {
             ensurePlanFullscreenPanes();
             if (!planFullscreenRouteLayer) planFullscreenRouteLayer = L.layerGroup().addTo(planFullscreenMap);
@@ -9822,6 +10106,11 @@ function closePlanFullMap() {
     planFullscreenDirectRouteLayer = null;
     planFullscreenLinkLayer = null;
     planFullscreenMarkerLayer = null;
+    planFullscreenEntityMarkers = [];
+    if (planFullscreenLabelRaf && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(planFullscreenLabelRaf);
+        planFullscreenLabelRaf = 0;
+    }
     planFullscreenRouteRenderId++;
     if (modal && modal.parentNode) modal.parentNode.removeChild(modal);
     resetPlanMapScrollLock();
@@ -9869,7 +10158,48 @@ function renderFullscreenStopDetails(stop) {
 
 function setFullscreenRouteInfo(message) {
     const el = document.getElementById('plan-fullscreen-route-info');
-    if (el) el.textContent = message || 'Arrastra, haz zoom y revisa paradas/antenas sin recargar la página.';
+    if (el) el.textContent = message || 'Vista general de paradas, antenas y pueblos del plan.';
+}
+
+function syncPlanFullscreenViewportLabels() {
+    planFullscreenLabelRaf = 0;
+    if (!planFullscreenMap || !planFullscreenNamesVisible || !planFullscreenEntityMarkers.length) return;
+    const hasBounds = typeof planFullscreenMap.getBounds === 'function';
+    const bounds = hasBounds ? planFullscreenMap.getBounds()?.pad?.(0.12) : null;
+    const zoom = typeof planFullscreenMap.getZoom === 'function' ? Number(planFullscreenMap.getZoom() || 10) : 12;
+    const canProject = typeof planFullscreenMap.latLngToContainerPoint === 'function';
+    // Cuando el mapa está muy alejado, evitamos encimar cientos de etiquetas en el mismo píxel
+    // (ahorra >80% de tiempo de pintado y mantiene el mapa legible). Al acercar se ven todas.
+    const declutter = canProject && zoom < 12;
+    const cellW = zoom <= 8 ? 128 : (zoom === 9 ? 112 : (zoom === 10 ? 92 : 70));
+    const cellH = zoom <= 9 ? 26 : 22;
+    const occupied = declutter ? new Set() : null;
+
+    for (let i = 0; i < planFullscreenEntityMarkers.length; i++) {
+        const entry = planFullscreenEntityMarkers[i];
+        const el = typeof entry.marker?.getElement === 'function' ? entry.marker.getElement() : null;
+        if (!el) continue;
+        let show = !bounds || (typeof bounds.contains === 'function' ? bounds.contains([entry.lat, entry.lng]) : true);
+        if (show && declutter) {
+            const pt = planFullscreenMap.latLngToContainerPoint([entry.lat, entry.lng]);
+            const cellKey = `${Math.floor(pt.x / cellW)}:${Math.floor(pt.y / cellH)}`;
+            if (occupied.has(cellKey)) {
+                show = false;
+            } else {
+                occupied.add(cellKey);
+            }
+        }
+        el.classList.toggle('label-in-view', show);
+    }
+}
+
+function schedulePlanFullscreenViewportLabels() {
+    if (planFullscreenLabelRaf) return;
+    if (typeof requestAnimationFrame === 'function') {
+        planFullscreenLabelRaf = requestAnimationFrame(syncPlanFullscreenViewportLabels);
+    } else {
+        syncPlanFullscreenViewportLabels();
+    }
 }
 
 function applyPlanFullscreenNamesVisibility() {
@@ -9877,23 +10207,20 @@ function applyPlanFullscreenNamesVisibility() {
     if (mapEl) {
         mapEl.classList.toggle('plan-entity-names-hidden', !planFullscreenNamesVisible);
         mapEl.classList.toggle('plan-stop-names-hidden', !planFullscreenStopNamesVisible);
+        mapEl.classList.toggle('plan-icons-mode', planFullscreenIconsMode);
     }
     const btn = document.getElementById('plan-fullscreen-names-btn');
-    if (btn) btn.textContent = planFullscreenNamesVisible ? 'Ocultar nombres' : 'Ver nombres';
+    if (btn) {
+        btn.textContent = planFullscreenNamesVisible ? 'Ocultar nombres' : 'Ver nombres';
+        btn.classList.toggle('is-active', planFullscreenNamesVisible);
+    }
     const stopBtn = document.getElementById('plan-fullscreen-stop-names-btn');
-    if (stopBtn) stopBtn.textContent = planFullscreenStopNamesVisible ? 'Ocultar nombres de paradas' : 'Ver nombres de paradas';
-    if (planFullscreenMarkerLayer && typeof planFullscreenMarkerLayer.eachLayer === 'function') {
-        planFullscreenMarkerLayer.eachLayer(marker => {
-            if (!marker?.getTooltip) return;
-            if (marker._planLabelType === 'entity') {
-                if (planFullscreenNamesVisible) marker.openTooltip();
-                else marker.closeTooltip();
-            }
-            if (marker._planLabelType === 'stop') {
-                if (planFullscreenStopNamesVisible) marker.openTooltip();
-                else marker.closeTooltip();
-            }
-        });
+    if (stopBtn) {
+        stopBtn.textContent = planFullscreenStopNamesVisible ? 'Ocultar nombres de paradas' : 'Ver nombres de paradas';
+        stopBtn.classList.toggle('is-active', planFullscreenStopNamesVisible);
+    }
+    if (planFullscreenNamesVisible) {
+        schedulePlanFullscreenViewportLabels();
     }
 }
 
@@ -9907,7 +10234,25 @@ function togglePlanFullscreenStopNames() {
     applyPlanFullscreenNamesVisibility();
 }
 
+function updatePlanFullscreenIconsButton() {
+    const btn = document.getElementById('plan-fullscreen-icons-btn');
+    if (btn) {
+        btn.textContent = planFullscreenIconsMode ? 'Ver círculos' : 'Ver iconos';
+        btn.classList.toggle('is-active', planFullscreenIconsMode);
+    }
+    const mapEl = document.getElementById('plan-fullscreen-map');
+    if (mapEl) {
+        mapEl.classList.toggle('plan-icons-mode', planFullscreenIconsMode);
+    }
+}
+
+function togglePlanFullscreenIcons() {
+    planFullscreenIconsMode = !planFullscreenIconsMode;
+    updatePlanFullscreenIconsButton();
+}
+
 function addFullscreenRouteLine(layer) {
+    if (!planFullscreenMap) return layer;
     if (!planFullscreenRouteLayer) planFullscreenRouteLayer = L.layerGroup().addTo(planFullscreenMap);
     layer.addTo(planFullscreenRouteLayer);
     if (typeof layer.bringToFront === 'function') layer.bringToFront();
@@ -9920,26 +10265,37 @@ function addFullscreenRouteLine(layer) {
 }
 
 function setFullscreenDirectRoute(latLngs) {
-    if (!planFullscreenMap || !latLngs?.length) return;
+    if (!planFullscreenMap) return;
+    ensurePlanFullscreenPanes();
     if (planFullscreenDirectRouteLayer) {
         planFullscreenMap.removeLayer(planFullscreenDirectRouteLayer);
         planFullscreenDirectRouteLayer = null;
     }
+    if (!Array.isArray(latLngs) || latLngs.length < 2) return;
+    const glowRenderer = planFullscreenMap._routeGlowRenderer || undefined;
+    const mainRenderer = planFullscreenMap._routeMainRenderer || undefined;
     planFullscreenDirectRouteLayer = L.layerGroup().addTo(planFullscreenMap);
     L.polyline(latLngs, {
+        pane: 'planFullscreenRouteGlowPane',
+        renderer: glowRenderer,
         color: '#ffffff',
-        weight: 13,
-        opacity: 0.98,
+        weight: 10,
+        opacity: 0.92,
+        lineCap: 'round',
+        lineJoin: 'round',
         interactive: false
     }).addTo(planFullscreenDirectRouteLayer);
     L.polyline(latLngs, {
-        color: '#0b84d8',
-        weight: 7,
-        opacity: 1,
-        dashArray: '10 7',
+        pane: 'planFullscreenRoutePane',
+        renderer: mainRenderer,
+        color: '#0b63ce',
+        weight: 5,
+        opacity: 0.95,
+        dashArray: '10 8',
+        lineCap: 'round',
+        lineJoin: 'round',
         interactive: false
     }).addTo(planFullscreenDirectRouteLayer);
-    if (typeof planFullscreenDirectRouteLayer.bringToFront === 'function') planFullscreenDirectRouteLayer.bringToFront();
 }
 
 function getDrivingDirectionsUrl(stops) {
@@ -9961,12 +10317,118 @@ function getDrivingDirectionsUrl(stops) {
     return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
 
-function makePlanPointIcon(color, label = '', shape = 'circle') {
+const PLAN_TOWER_ICON_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v16"/><path d="M7.5 21 12 7l4.5 14"/><path d="M9 15h6"/><path d="M8 19h8"/><circle cx="12" cy="5" r="1.4" fill="currentColor"/><path d="M8.5 2.8a5 5 0 0 0 0 5.4"/><path d="M15.5 2.8a5 5 0 0 1 0 5.4"/></svg>';
+const PLAN_TOWN_ICON_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 3l9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10"/><path d="M9.5 21v-6h5v6"/></svg>';
+const PLAN_ORIGIN_ICON_SVG = '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="m12 2 2.9 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l7.1-1.01L12 2z"/></svg>';
+
+function isPlanStopTower(stop) {
+    if (!stop) return false;
+    if (stop.isOrigin) return false;
+    if (stop.isAntenna) return true;
+    if (stop.type === 'equipment' || stop.type === 'tower' || stop.type === 'antenna') return true;
+    return Boolean(stop.equipmentId && !stop.nodeId);
+}
+
+function formatPlanNodeMapLabel(node, fallbackName = '') {
+    const toUpper = v => String(v || '').trim().toLocaleUpperCase('es-MX');
+    if (!node) return toUpper(fallbackName || 'PUEBLO');
+    const code = toUpper(node.nodeCode || node.code || '');
+    const town = toUpper(node.town || node.name || fallbackName || '');
+    if (!code) return town || 'PUEBLO';
+    if (!town) return code;
+    if (town === code || town.startsWith(`${code} `) || town.startsWith(`${code}·`) || town.startsWith(`${code} ·`)) {
+        return town.replace(/\s*·\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+    return `${code} ${town}`;
+}
+
+function getPlanMapStopDisplayName(stop) {
+    if (!stop) return 'Parada';
+    if (stop.isOrigin) return stop.name || 'WiFi-Mex';
+    if (isPlanStopTower(stop)) {
+        const eq = stop.equipmentId ? (state.equipment || []).find(e => e && !e.deletedAt && e.id === stop.equipmentId) : null;
+        return (eq?.name || stop.name || 'Antena').trim();
+    }
+    let node = stop.nodeId ? (state.nodes || []).find(n => n && !n.deletedAt && n.id === stop.nodeId) : null;
+    if (!node && stop.name) {
+        const norm = typeof normalizeName === 'function' ? normalizeName(stop.name) : String(stop.name).trim().toLowerCase();
+        node = (state.nodes || []).find(n => n && !n.deletedAt && (
+            (typeof normalizeName === 'function' ? normalizeName(n.town || n.name) : String(n.town || n.name || '').trim().toLowerCase()) === norm ||
+            (typeof normalizeName === 'function' ? normalizeName(getNodeLabel(n)) : String(getNodeLabel(n) || '').trim().toLowerCase()) === norm
+        )) || null;
+    }
+    if (node) return formatPlanNodeMapLabel(node, stop.name || '');
+    const rawCode = String(stop.nodeCode || '').trim().toLocaleUpperCase('es-MX');
+    const rawName = String(stop.name || 'PUEBLO').trim().toLocaleUpperCase('es-MX');
+    if (rawCode && !rawName.startsWith(rawCode)) return `${rawCode} ${rawName}`;
+    return rawName;
+}
+
+function makePlanPointIcon(color, label = '', shape = 'circle', useIcons = true) {
+    const isTower = shape === 'square' || shape === 'tower' || shape === 'antenna';
+    if (!useIcons) {
+        return L.divIcon({
+            html: `<div class="plan-fullscreen-point-marker plan-point-circle is-dot" style="--point-color:${escapeAttr(color || '#22c55e')}">${label ? `<span class="plan-point-micro-label">${escapeHtml(label)}</span>` : ''}</div>`,
+            className: '',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
+    }
+    const svg = isTower ? PLAN_TOWER_ICON_SVG : PLAN_TOWN_ICON_SVG;
+    const size = isTower ? 26 : 24;
+    const anchor = Math.round(size / 2);
     return L.divIcon({
-        html: `<div class="plan-fullscreen-point-marker plan-point-${shape === 'square' ? 'square' : 'circle'}" style="--point-color:${escapeAttr(color || '#22c55e')}">${escapeHtml(label || '')}</div>`,
+        html: `<div class="plan-fullscreen-point-marker plan-map-entity-icon ${isTower ? 'plan-point-square is-tower' : 'plan-point-circle is-town'}" style="--point-color:${escapeAttr(color || '#22c55e')}">${svg}${label ? `<span class="plan-point-micro-label">${escapeHtml(label)}</span>` : ''}</div>`,
         className: '',
-        iconSize: [16, 16],
-        iconAnchor: [8, 8]
+        iconSize: [size, size],
+        iconAnchor: [anchor, anchor]
+    });
+}
+
+function makePlanFullscreenStopCircleIcon(orderNum) {
+    return L.divIcon({
+        html: `<div class="plan-fullscreen-stop-marker">${escapeHtml(String(orderNum || ''))}</div>`,
+        className: '',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
+    });
+}
+
+function makePlanFullscreenFastEntityIcon(color, kind, labelText) {
+    const isTower = kind === 'tower' || kind === 'square' || kind === 'antenna';
+    return L.divIcon({
+        html: `<div class="plan-fs-node ${isTower ? 'is-tower' : 'is-town'}" style="--point-color:${escapeAttr(color || '#22c55e')}"><span class="plan-fast-label">${escapeHtml(labelText || '')}</span></div>`,
+        className: 'plan-fs-marker',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+    });
+}
+
+function makePlanFullscreenFastStopIcon(stop, orderNum, labelText) {
+    const isOrigin = Boolean(stop?.isOrigin);
+    const isTower = !isOrigin && isPlanStopTower(stop);
+    const kindClass = isOrigin ? 'is-origin' : (isTower ? 'is-tower' : 'is-town');
+    const badge = isOrigin ? '★' : String(orderNum || '');
+    return L.divIcon({
+        html: `<div class="plan-fs-stop ${kindClass}"><span class="plan-fs-stop-glyph" aria-hidden="true"></span><span class="plan-fs-stop-num">${escapeHtml(badge)}</span><span class="plan-fast-stop-label">${escapeHtml(labelText || '')}</span></div>`,
+        className: 'plan-fs-marker plan-fs-stop-wrap',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+    });
+}
+
+function makePlanStopMarkerIcon(stop, orderNum, options = {}) {
+    const isOrigin = Boolean(stop?.isOrigin);
+    const isTower = !isOrigin && isPlanStopTower(stop);
+    const dayAbbr = String(options.dayAbbr || '').trim();
+    const kindClass = isOrigin ? 'is-origin' : (isTower ? 'is-tower' : 'is-town');
+    const svg = isOrigin ? PLAN_ORIGIN_ICON_SVG : (isTower ? PLAN_TOWER_ICON_SVG : PLAN_TOWN_ICON_SVG);
+    const badge = isOrigin ? '★' : String(orderNum || '');
+    return L.divIcon({
+        html: `<div class="plan-stop-icon ${kindClass}">${svg}<span class="plan-stop-icon-num">${escapeHtml(badge)}</span>${dayAbbr ? `<span class="plan-stop-icon-day">${escapeHtml(dayAbbr)}</span>` : ''}</div>`,
+        className: '',
+        iconSize: [34, 34],
+        iconAnchor: [17, 17]
     });
 }
 
@@ -10001,72 +10463,101 @@ function renderPlanFullscreenConnections(bounds = []) {
     });
 }
 
+function renderFullscreenRoadGeometry(route, stopsCount) {
+    if (!planFullscreenMap || !route?.geometry) return null;
+    planFullscreenRouteLayer.clearLayers();
+    if (planFullscreenDirectRouteLayer) {
+        planFullscreenMap.removeLayer(planFullscreenDirectRouteLayer);
+        planFullscreenDirectRouteLayer = null;
+    }
+
+    ensurePlanFullscreenPanes();
+    const glowRenderer = planFullscreenMap._routeGlowRenderer || undefined;
+    const mainRenderer = planFullscreenMap._routeMainRenderer || undefined;
+    const roadOutline = addFullscreenRouteLine(L.geoJSON(route.geometry, {
+        pane: 'planFullscreenRouteGlowPane',
+        renderer: glowRenderer,
+        style: {
+            pane: 'planFullscreenRouteGlowPane',
+            renderer: glowRenderer,
+            color: '#ffffff',
+            weight: 12,
+            opacity: 0.95,
+            lineCap: 'round',
+            lineJoin: 'round'
+        },
+        interactive: false
+    }));
+    addFullscreenRouteLine(L.geoJSON(route.geometry, {
+        pane: 'planFullscreenRoutePane',
+        renderer: mainRenderer,
+        style: {
+            pane: 'planFullscreenRoutePane',
+            renderer: mainRenderer,
+            color: '#075eaa',
+            weight: 6.5,
+            opacity: 0.98,
+            lineCap: 'round',
+            lineJoin: 'round'
+        },
+        interactive: false
+    }));
+    addFullscreenRouteLine(L.geoJSON(route.geometry, {
+        pane: 'planFullscreenRoutePane',
+        renderer: mainRenderer,
+        style: {
+            pane: 'planFullscreenRoutePane',
+            renderer: mainRenderer,
+            color: '#00a3ff',
+            weight: 2.8,
+            opacity: 1,
+            lineCap: 'round',
+            lineJoin: 'round'
+        },
+        interactive: false
+    }));
+    const km = (Number(route.distance || 0) / 1000).toFixed(1);
+    const min = Math.round(Number(route.duration || 0) / 60);
+    setFullscreenRouteInfo(`Ruta por carretera en orden de numeración: ${km} km · ${min} min · ${stopsCount} paradas.`);
+    const roadBounds = roadOutline?.getBounds?.();
+    return roadBounds?.isValid?.() ? roadBounds : null;
+}
+
 async function drawFullscreenOrderedRoute(stops, renderId) {
-    if (!planFullscreenMap) return;
+    if (!planFullscreenMap) return null;
     ensurePlanFullscreenPanes();
     if (!planFullscreenRouteLayer) planFullscreenRouteLayer = L.layerGroup().addTo(planFullscreenMap);
     if (!stops || stops.length < 2) {
         setFullscreenRouteInfo(stops?.length ? 'Una sola parada en el plan.' : 'Sin paradas para trazar ruta.');
-        return;
+        return null;
     }
 
     const latLngs = stops
         .map(stop => [safeFloat(stop.lat), safeFloat(stop.lng)])
         .filter(([lat, lng]) => !isNaN(lat) && !isNaN(lng));
-    if (latLngs.length < 2) return;
+    if (latLngs.length < 2) return null;
 
-    setFullscreenRouteInfo(`Calculando ruta por carretera en orden de numeracion: ${stops.length} paradas...`);
+    const cacheKey = getRoadRouteCacheKey(stops);
+    const cachedRoute = cacheKey ? planRoadRouteCache.get(cacheKey) : null;
+    if (cachedRoute && !cachedRoute.isDirectFallback) {
+        return renderFullscreenRoadGeometry(cachedRoute, stops.length);
+    }
+
+    setFullscreenRouteInfo(`Trazando ruta en orden de numeración: ${stops.length} paradas...`);
     planFullscreenRouteLayer.clearLayers();
     setFullscreenDirectRoute(latLngs);
 
     try {
         const route = await fetchRoadRouteChunked(stops, 24);
-        if (renderId !== planFullscreenRouteRenderId) return;
-
-        planFullscreenRouteLayer.clearLayers();
-        if (planFullscreenDirectRouteLayer) {
-            planFullscreenMap.removeLayer(planFullscreenDirectRouteLayer);
-            planFullscreenDirectRouteLayer = null;
+        if (renderId !== planFullscreenRouteRenderId || !planFullscreenMap) return null;
+        if (route && !route.isDirectFallback) {
+            return renderFullscreenRoadGeometry(route, stops.length);
         }
-
-        const roadOutline = addFullscreenRouteLine(L.geoJSON(route.geometry, {
-            style: {
-                color: '#ffffff',
-                weight: 13,
-                opacity: 0.95,
-                lineCap: 'round',
-                lineJoin: 'round'
-            },
-            interactive: false
-        }));
-        addFullscreenRouteLine(L.geoJSON(route.geometry, {
-            style: {
-                color: '#075eaa',
-                weight: 7,
-                opacity: 0.98,
-                lineCap: 'round',
-                lineJoin: 'round'
-            },
-            interactive: false
-        }));
-        addFullscreenRouteLine(L.geoJSON(route.geometry, {
-            style: {
-                color: '#00a3ff',
-                weight: 3,
-                opacity: 1,
-                lineCap: 'round',
-                lineJoin: 'round'
-            },
-            interactive: false
-        }));
-        const km = (route.distance / 1000).toFixed(1);
-        const min = Math.round(route.duration / 60);
-        setFullscreenRouteInfo(`Ruta por carretera en orden de numeracion: ${km} km - ${min} min - ${stops.length} paradas.`);
-        const roadBounds = roadOutline?.getBounds?.();
-        return roadBounds?.isValid?.() ? roadBounds : null;
+        setFullscreenRouteInfo(`Ruta directa en orden de numeración · ${stops.length} paradas.`);
+        return L.latLngBounds(latLngs);
     } catch (e) {
-        if (renderId !== planFullscreenRouteRenderId) return;
-        setFullscreenRouteInfo('Ruta directa en orden de numeracion. No se pudo calcular carretera.');
+        if (renderId !== planFullscreenRouteRenderId) return null;
+        setFullscreenRouteInfo(`Ruta directa en orden de numeración · ${stops.length} paradas.`);
         return L.latLngBounds(latLngs);
     }
 }
@@ -10086,6 +10577,7 @@ async function renderPlanFullscreenMap(forceFit = false) {
     }
     planFullscreenLinkLayer.clearLayers();
     planFullscreenMarkerLayer.clearLayers();
+    planFullscreenEntityMarkers = [];
 
     const bounds = [];
     const addBound = (lat, lng) => {
@@ -10117,9 +10609,11 @@ async function renderPlanFullscreenMap(forceFit = false) {
         infoEl.insertAdjacentHTML('afterend', `<a class="btn bsm bc plan-drive-link" href="${escapeAttr(directionsUrl)}" target="_blank" rel="noopener">Abrir ruta en Google Maps</a>`);
     }
 
-    // Primero dibujamos la ruta en el orden exacto de la numeración saliendo siempre desde WiFi-Mex.
+    // Dibujamos primero conexiones, catálogo (antenas + pueblos) y paradas de inmediato,
+    // y en paralelo calculamos la ruta por carretera sin bloquear la aparición de marcadores.
+    updatePlanFullscreenIconsButton();
     const routedStops = ensureRoutePointsStartAtWiFiMex(stops);
-    const roadRouteBounds = await drawFullscreenOrderedRoute(routedStops, renderId);
+    const roadRoutePromise = drawFullscreenOrderedRoute(routedStops, renderId).catch(() => null);
     renderPlanFullscreenConnections(bounds);
 
     const mapEquipment = (state.equipment || []).filter(eq => eq && !eq.deletedAt && !isNaN(safeFloat(eq.lat)) && !isNaN(safeFloat(eq.lng)));
@@ -10133,13 +10627,14 @@ async function renderPlanFullscreenMap(forceFit = false) {
         const lng = safeFloat(eq.lng);
         if (isNaN(lat) || isNaN(lng)) return;
         const st = getPlanningMapStatus('equipment', eq.id);
+        const eqLabel = `${eq.name || 'Antena'}${eq.ip ? ` · ${eq.ip}` : ''}`;
         const marker = L.marker([lat, lng], {
-            icon: makePlanPointIcon(st.color, '', 'square'),
+            icon: makePlanFullscreenFastEntityIcon(st.color, 'tower', eqLabel),
             zIndexOffset: existingStop ? 900 : 100
         }).addTo(planFullscreenMarkerLayer);
         marker._planLabelType = 'entity';
-        marker.bindTooltip(`${eq.name || 'Antena'}${eq.ip ? ` · ${eq.ip}` : ''}`, { direction: 'top', offset: [0, -8], permanent: false, className: 'plan-map-name-label' });
-        marker.bindPopup(`
+        marker._planFastLabel = eqLabel;
+        marker.bindPopup(() => `
             <div style="min-width:220px;font-family:'Manrope',sans-serif">
                 <div style="font-weight:900;font-size:13px;margin-bottom:4px">${escapeHtml(eq.name || 'Antena')}</div>
                 <div class="mono" style="font-size:10px;color:#64748b">${escapeHtml(eq.ip || 'Sin IP')}</div>
@@ -10150,6 +10645,7 @@ async function renderPlanFullscreenMap(forceFit = false) {
                 : `<button class="btn bsm bc" style="margin-top:10px;width:100%" onclick="addEquipmentStopFromMap('${escapeAttr(eq.id)}'); setTimeout(() => renderPlanFullscreenMap(true), 180)">Agregar parada</button>`)}
             </div>
         `);
+        planFullscreenEntityMarkers.push({ marker, lat, lng });
         addBound(lat, lng);
     });
 
@@ -10159,15 +10655,16 @@ async function renderPlanFullscreenMap(forceFit = false) {
         const lng = safeFloat(node.lng);
         if (isNaN(lat) || isNaN(lng)) return;
         const st = getPlanningMapStatus('node', node.id);
+        const nodeMapLabel = formatPlanNodeMapLabel(node);
         const marker = L.marker([lat, lng], {
-            icon: makePlanPointIcon(st.color || '#22c55e', '', 'circle'),
+            icon: makePlanFullscreenFastEntityIcon(st.color || '#22c55e', 'town', nodeMapLabel || 'NODO'),
             zIndexOffset: existingStop ? 900 : 80
         }).addTo(planFullscreenMarkerLayer);
         marker._planLabelType = 'entity';
-        marker.bindTooltip(getNodeLabel(node) || 'Nodo', { direction: 'top', offset: [0, -8], permanent: false, className: 'plan-map-name-label' });
-        marker.bindPopup(`
+        marker._planFastLabel = nodeMapLabel || 'NODO';
+        marker.bindPopup(() => `
             <div style="min-width:220px;font-family:'Manrope',sans-serif">
-                <div style="font-weight:900;font-size:13px;margin-bottom:4px">${escapeHtml(getNodeLabel(node) || 'Nodo')}</div>
+                <div style="font-weight:900;font-size:13px;margin-bottom:4px">${escapeHtml(nodeMapLabel || 'NODO')}</div>
                 <div style="font-size:11px;color:#64748b">${escapeHtml(getZoneLabel(node.zone || node.region || ''))}</div>
                 <div style="margin:8px 0"><span class="badge" style="background:${st.color};color:#fff">${escapeHtml(st.label || 'Nodo')}</span></div>
                 ${renderMapEntityDetailStats('node', node.id)}
@@ -10176,29 +10673,26 @@ async function renderPlanFullscreenMap(forceFit = false) {
                 : `<button class="btn bsm bc" style="margin-top:10px;width:100%" onclick="addNodeStopFromMap('${escapeAttr(node.id)}'); setTimeout(() => renderPlanFullscreenMap(true), 180)">Agregar parada</button>`)}
             </div>
         `);
+        planFullscreenEntityMarkers.push({ marker, lat, lng });
         addBound(lat, lng);
     });
 
     stops.forEach((stop, index) => {
-        const detailsHtml = renderFullscreenStopDetails(stop);
+        const stopDisplayLabel = getPlanMapStopDisplayName(stop);
+        const stopFullLabel = `${index + 1}. ${stopDisplayLabel}`;
         const marker = L.marker([stop.lat, stop.lng], {
-            icon: L.divIcon({
-                html: `<div class="plan-fullscreen-stop-marker">${index + 1}</div>`,
-                className: '',
-                iconSize: [30, 30],
-                iconAnchor: [15, 15]
-            }),
+            icon: makePlanFullscreenFastStopIcon(stop, index + 1, stopFullLabel),
             zIndexOffset: 1100
         }).addTo(planFullscreenMarkerLayer);
         marker._planLabelType = 'stop';
-        marker.bindTooltip(`${index + 1}. ${escapeHtml(stop.name || 'Parada')}`, { permanent: true, direction: 'right', offset: [14, 0], className: 'plan-map-stop-label' });
-        marker.bindPopup(`
+        marker._planFastLabel = stopFullLabel;
+        marker.bindPopup(() => `
             <div class="plan-map-popup plan-map-popup-wide">
-                <strong>${index + 1}. ${escapeHtml(stop.name || 'Parada')}</strong>
+                <strong>${index + 1}. ${escapeHtml(stopDisplayLabel)}</strong>
                 <div style="font-size:11px;color:#64748b;margin-bottom:8px">${safeFloat(stop.lat).toFixed(5)}, ${safeFloat(stop.lng).toFixed(5)}</div>
                 ${stop.materialPlanned ? `<div class="plan-popup-material"><b>Material estimado:</b> ${escapeHtml(stop.materialPlanned)}</div>` : ''}
                 <label>Detalles de la parada</label>
-                ${detailsHtml}
+                ${renderFullscreenStopDetails(stop)}
                 <label style="margin-top:10px">Cambiar orden</label>
                 <div class="plan-popup-row">
                     <input id="fs-map-order-${escapeAttr(stop.id)}" class="stop-order-input" type="number" min="1" max="${stops.length}" value="${index + 1}">
@@ -10215,7 +10709,6 @@ async function renderPlanFullscreenMap(forceFit = false) {
         // "Ajustar" debe incluir todo lo visible, no solamente la carretera.
         // bounds contiene todas las antenas, pueblos y conexiones vinculadas.
         const completeBounds = L.latLngBounds([]);
-        if (roadRouteBounds?.isValid?.()) completeBounds.extend(roadRouteBounds);
         bounds.forEach(point => completeBounds.extend(point));
         routeBounds.forEach(point => completeBounds.extend(point));
         if (completeBounds.isValid()) {
@@ -10245,7 +10738,16 @@ async function renderPlanFullscreenMap(forceFit = false) {
         planFullscreenMarkerLayer.bringToFront();
     }
     applyPlanFullscreenNamesVisibility();
-    setTimeout(() => planFullscreenMap.invalidateSize(true), 60);
+    setTimeout(() => planFullscreenMap?.invalidateSize?.(true), 60);
+
+    const roadRouteBounds = await roadRoutePromise;
+    if (renderId !== planFullscreenRouteRenderId || !planFullscreenMap) return;
+    if (roadRouteBounds?.isValid?.() && forceFit && !bounds.length && !routeBounds.length) {
+        planFullscreenMap.fitBounds(roadRouteBounds, { padding: [40, 40], maxZoom: 12 });
+    }
+    if (planFullscreenMarkerLayer && typeof planFullscreenMarkerLayer.bringToFront === 'function') {
+        planFullscreenMarkerLayer.bringToFront();
+    }
 }
 
 function initCaptureMap() {
@@ -10455,7 +10957,10 @@ function getPlanMapStops() {
     return stops.map((stop, index) => {
         const equipment = stop.equipmentId ? (state.equipment || []).find(item => item.id === stop.equipmentId && !item.deletedAt) : null;
         const node = stop.nodeId ? (state.nodes || []).find(item => item.id === stop.nodeId && !item.deletedAt) : null;
-        return { ...stop, ...getStopCurrentPosition(stop), mapDay: day, mapIndex: index, mapLabel: `${index + 1}. ${isTechnicianPlanView() ? getTechnicianStopName(stop, equipment, node) : (stop.name || 'Parada')}` };
+        const stopName = isTechnicianPlanView()
+            ? (node ? formatPlanNodeMapLabel(node, stop.name || '') : getTechnicianStopName(stop, equipment, node))
+            : getPlanMapStopDisplayName(stop);
+        return { ...stop, ...getStopCurrentPosition(stop), mapDay: day, mapIndex: index, mapLabel: `${index + 1}. ${stopName}` };
     });
 }
 

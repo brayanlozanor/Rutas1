@@ -1,5 +1,5 @@
 /* ==========================================================================
-   WiFiMex · Theme Pro (Rediseño visual corporativo, animaciones y Mi Perfil)
+   WiFiMex · Estilos Corporativos y Perfil de Usuario
    Inyectado automáticamente en todas las páginas desde common.js
    ========================================================================== */
 
@@ -433,7 +433,7 @@ body.tech-route-body #sidebar-profile-btn {
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -460,7 +460,7 @@ body.tech-route-body #sidebar-profile-btn {
 body:not(.login-page) .page-shell > section,
 body:not(.login-page) .hero-panel,
 body:not(.login-page) .tech-day-block {
-  animation: netopsViewFadeIn 0.28s var(--pro-ease) both;
+  animation: netopsViewFadeIn 0.28s var(--pro-ease) backwards;
 }
 
 body:not(.login-page) .content-card,
@@ -1823,7 +1823,7 @@ html body.sidebar-collapsed .topbar.app-sidebar .sbar .btn.sbar-logout-btn:hover
    7. ACCESIBILIDAD: RESPETO A PREFERS-REDUCED-MOTION
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
-  *,
+  *:not(.tech-mobile-loader-ring):not(.tech-mobile-pulse-dot):not(.tech-mobile-loading-bar-fill):not(.tech-skeleton-line):not(.tech-skeleton-pill):not(.tech-plan-banner-spinner):not(.loading-ring),
   *::before,
   *::after {
     animation-duration: 0.01ms !important;

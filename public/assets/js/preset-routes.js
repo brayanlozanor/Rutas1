@@ -2782,7 +2782,7 @@
 
   /**
    * Revisa si el plan actual tiene paradas que activan recomendaciones de continuidad
-   * Desactivado / Removido a petición del usuario ("quita lo de agregar continuidad")
+   * Módulo de continuidad de ruta deshabilitado.
    */
   root.checkPlanContinuityRecommendations = function () {
     if (typeof document === 'undefined') return;

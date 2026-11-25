@@ -147,7 +147,7 @@ let activeOrderDetailKind = new URLSearchParams(window.location.search).get('det
 if (typeof window !== 'undefined') window.activeOrderDetailKind = activeOrderDetailKind;
 
 if (typeof window !== 'undefined' && typeof window.getZoneLabel !== 'function') {
-  window.getZoneLabel = function(id) {
+  window.getZoneLabel = function (id) {
     const regList = (typeof window !== 'undefined' && window.REGS) || (typeof REGS !== 'undefined' && REGS) || [];
     const found = regList.find(r => id && r.id === id);
     return found?.n || id || 'General';
@@ -155,7 +155,7 @@ if (typeof window !== 'undefined' && typeof window.getZoneLabel !== 'function') 
 }
 
 if (typeof window !== 'undefined' && typeof window.isOpenOrder !== 'function') {
-  window.isOpenOrder = function(order) {
+  window.isOpenOrder = function (order) {
     return !!order && !order.deletedAt && order.status !== 'completada' && order.status !== 'done';
   };
 }
@@ -232,7 +232,7 @@ function orderRemoteParams(page = orderCurrentPage) {
     q: document.getElementById('wo-search')?.value.trim() || '',
     sort: filters.sort,
     detailKind: activeOrderDetailKind,
-    includeMapCatalog:(state.nodes || []).length ? '' : '1'
+    includeMapCatalog: (state.nodes || []).length ? '' : '1'
   };
   if (requestedOrderCopyId) params.id = requestedOrderCopyId;
   ['status', 'type', 'zone', 'priority', 'category', 'creator', 'date', 'assignee'].forEach(key => {
@@ -250,7 +250,7 @@ window.netopsGetDataPartParams = part => part === 'operations' ? orderRemotePara
 async function loadOrderPage({ scroll = false } = {}) {
   const sequence = ++orderLoadSequence;
   const previousTableScrollLeft = document.querySelector('.orders-table-card .table-wrap')?.scrollLeft || 0;
-  const loadingOperation = beginLoadingOperation('Cargando ordenes','Consultando solo los registros visibles.', 500);
+  const loadingOperation = beginLoadingOperation('Cargando ordenes', 'Consultando solo los registros visibles.', 500);
   try {
     const params = orderRemoteParams();
     const data = await fetchDataPage('operations', params);
@@ -650,7 +650,7 @@ function initOrdenesPage() {
         }
       }
     }
-  } catch (_) {}
+  } catch (_) { }
   renderOrderFilterMenus();
   if (Array.isArray(state.workOrders) && state.workOrders.length > 0) {
     renderWOs();
@@ -666,7 +666,7 @@ function initOrdenesPage() {
         const navEntries = typeof performance !== 'undefined' && performance.getEntriesByType && performance.getEntriesByType('navigation');
         if (navEntries && navEntries[0]) return navEntries[0].type === 'reload';
         if (typeof performance !== 'undefined' && performance.navigation) return performance.navigation.type === 1;
-      } catch (e) {}
+      } catch (e) { }
       return false;
     })();
 
@@ -678,7 +678,7 @@ function initOrdenesPage() {
         cleanUrl.searchParams.delete('orderId');
         cleanUrl.searchParams.delete('id');
         window.history.replaceState({}, '', cleanUrl);
-      } catch (e) {}
+      } catch (e) { }
       if (!isReload) {
         void openOrderTechnicianReport(notificationOrderId);
       }
@@ -876,7 +876,7 @@ function selectOrderDetailKind(kind, force = false) {
     const url = new URL(window.location.href);
     url.searchParams.set('detailKind', next);
     window.history.replaceState({}, '', url);
-  } catch (e) {}
+  } catch (e) { }
   try {
     const rawCached = typeof localStorage !== 'undefined' ? localStorage.getItem('netops_cached_work_orders_' + next) : null;
     if (rawCached) {
@@ -889,7 +889,7 @@ function selectOrderDetailKind(kind, force = false) {
         }
       }
     }
-  } catch (e) {}
+  } catch (e) { }
   if (typeof renderWOs === 'function') renderWOs();
   void loadOrderPage({ scroll: true });
 }
@@ -1417,7 +1417,7 @@ function ensureWOQuickNodeModal() {
   modal.innerHTML = `
     <div class="md town-create-modal">
       <div class="modal-head"><div><h2>Agregar pueblo</h2><p>Registra el pueblo y su ubicación igual que en la sección Pueblos.</p></div><button class="btn bgh" type="button" onclick="CM('wo-quick-node-mo')">Cerrar</button></div>
-      <div class="modal-grid"><div class="fi"><label>Clave del pueblo</label><input id="wo-qnode-code" placeholder="R114" oninput="renderWOQuickNodeWarnings()"></div><div class="fi"><label>Pueblo / colonia</label><input id="wo-qnode-town" placeholder="Barrio Guadalupe" oninput="renderWOQuickNodeWarnings()"></div></div>
+      <div class="modal-grid"><div class="fi"><label>Clave del pueblo</label><input id="wo-qnode-code" placeholder="R114" style="text-transform:uppercase" oninput="this.value=this.value.toLocaleUpperCase('es-MX');renderWOQuickNodeWarnings()"></div><div class="fi"><label>Pueblo / colonia</label><input id="wo-qnode-town" placeholder="BARRIO GUADALUPE" style="text-transform:uppercase" oninput="this.value=this.value.toLocaleUpperCase('es-MX');renderWOQuickNodeWarnings()"></div></div>
       <div id="wo-qnode-warnings" class="node-warnings"></div>
       <div class="modal-grid"><div class="fi"><label>Zona</label><select id="wo-qnode-zone"></select></div><div class="fi"><label>Estado</label><select id="wo-qnode-status"><option value="activo">Activo</option><option value="inactivo">Inactivo</option></select></div></div>
       <div class="fi town-location-field"><label>Ubicación</label><input id="wo-qnode-location" class="mono" placeholder="17.000000, -99.000000 o pega un enlace de Google Maps"><small>Pega latitud y longitud juntas; también se acepta un enlace de Maps.</small></div>
@@ -1432,7 +1432,7 @@ function openWOQuickNodeModal(name = '') {
   ensureWOQuickNodeModal();
   document.getElementById('wo-qnode-zone').innerHTML = `<option value="">Selecciona zona</option>${REGS.map(region => `<option value="${region.id}">${orderEscape(region.n)}</option>`).join('')}`;
   document.getElementById('wo-qnode-code').value = '';
-  document.getElementById('wo-qnode-town').value = String(name || '').trim();
+  document.getElementById('wo-qnode-town').value = String(name || '').trim().toLocaleUpperCase('es-MX');
   document.getElementById('wo-qnode-zone').value = document.getElementById('wo-zone')?.value || '';
   document.getElementById('wo-qnode-status').value = 'activo';
   document.getElementById('wo-qnode-location').value = '';
@@ -1462,9 +1462,10 @@ function renderWOQuickNodeWarnings() {
 
 async function saveWOQuickNode() {
   const location = parseLocationCoordinates(document.getElementById('wo-qnode-location').value);
+  const toUpperTown = v => String(v || '').trim().toLocaleUpperCase('es-MX');
   const payload = {
-    nodeCode: document.getElementById('wo-qnode-code').value.trim(),
-    town: document.getElementById('wo-qnode-town').value.trim(),
+    nodeCode: toUpperTown(document.getElementById('wo-qnode-code').value),
+    town: toUpperTown(document.getElementById('wo-qnode-town').value),
     zone: document.getElementById('wo-qnode-zone').value,
     lat: location?.lat ?? NaN,
     lng: location?.lng ?? NaN,
@@ -2379,6 +2380,52 @@ function orderFilters() {
   };
 }
 
+function getNetworkOrderTurnGroup(order) {
+  const status = String(order?.status || 'pendiente').toLowerCase();
+  if (status === 'completada' || status === 'concluido' || status === 'done') {
+    return { group: 'done', rank: 2, label: 'Concluidos' };
+  }
+  const kind = typeof getOrderDetailKind === 'function' ? getOrderDetailKind(order) : (order?.detailKind || 'physical');
+  if (kind !== 'network') {
+    return { group: 'my_action', rank: 0, label: 'Activos' };
+  }
+
+  const pendingAction = typeof getOrderPendingUserAction === 'function'
+    ? getOrderPendingUserAction(order)
+    : (typeof getNetworkPendingActionMeta === 'function' ? getNetworkPendingActionMeta(order) : null);
+
+  if (pendingAction?.requiresMyAction) {
+    return { group: 'my_action', rank: 0, label: 'Pendientes de tu acción' };
+  }
+  if (pendingAction?.waitingOther) {
+    return { group: 'other_area', rank: 1, label: 'Corresponde a otra área' };
+  }
+
+  const isSoporte = typeof userHasRole === 'function' && userHasRole('soporte');
+  const isAtencion = typeof userHasRole === 'function' && userHasRole('atencion_clientes');
+  const isAdmin = typeof userHasRole === 'function' && userHasRole('administrador', 'admin');
+  const isSentToAttention = typeof isNetworkSupportToAttention === 'function' ? isNetworkSupportToAttention(order) : false;
+  const assignedArea = typeof getOrderAssignedAreaRole === 'function' ? getOrderAssignedAreaRole(order) : '';
+  const belongsToAttention = assignedArea ? (assignedArea === 'atencion_clientes') : isSentToAttention;
+
+  if (isAtencion && !isSoporte && !isAdmin) {
+    return belongsToAttention
+      ? { group: 'my_action', rank: 0, label: 'Pendientes de tu acción' }
+      : { group: 'other_area', rank: 1, label: 'Corresponde a otra área (Soporte técnico)' };
+  }
+  if (isSoporte && !isAtencion && !isAdmin) {
+    return !belongsToAttention
+      ? { group: 'my_action', rank: 0, label: 'Pendientes de tu acción' }
+      : { group: 'other_area', rank: 1, label: 'Corresponde a otra área (Atención a clientes)' };
+  }
+
+  // Administrador ve los activos que requieren atención arriba y en espera abajo
+  if (status === 'resuelto_soporte' || status === 'no_realizado' || status === 'revisado') {
+    return { group: 'other_area', rank: 1, label: 'En espera de confirmación' };
+  }
+  return { group: 'my_action', rank: 0, label: 'Pendientes de atención' };
+}
+
 function getOrderLifecycleRank(order) {
   const status = String(order?.status || 'pendiente').toLowerCase();
   // 3° Al final de todo: Concluidos
@@ -2388,13 +2435,24 @@ function getOrderLifecycleRank(order) {
     ? getOrderPendingUserAction(order)
     : (typeof getNetworkPendingActionMeta === 'function' ? getNetworkPendingActionMeta(order) : null);
 
+  const kind = typeof getOrderDetailKind === 'function' ? getOrderDetailKind(order) : (order?.detailKind || 'physical');
+  if (kind === 'network') {
+    const turn = getNetworkOrderTurnGroup(order);
+    if (turn.group === 'my_action') {
+      return pendingAction?.requiresMyAction ? 0 : 1;
+    }
+    if (turn.group === 'other_area') {
+      return 2;
+    }
+    return 3;
+  }
+
   // 2° En medio: los que faltan por responder/confirmar de la otra parte
   if (pendingAction?.waitingOther || status === 'resuelto_soporte' || status === 'no_realizado' || status === 'revisado') {
     return 2;
   }
 
   // 1° Al inicio: los que faltan por resolver (acción requerida por mí, pendientes, en revisión o devueltos)
-  // Subordenamos internamente: acción requerida (0) vs en atención / pendiente (1)
   if (pendingAction?.requiresMyAction) return 0;
   return 1;
 }
@@ -2406,6 +2464,15 @@ function getOrderStatusSortRank(order) {
   const pendingAction = typeof getOrderPendingUserAction === 'function'
     ? getOrderPendingUserAction(order)
     : (typeof getNetworkPendingActionMeta === 'function' ? getNetworkPendingActionMeta(order) : null);
+
+  const kind = typeof getOrderDetailKind === 'function' ? getOrderDetailKind(order) : (order?.detailKind || 'physical');
+  if (kind === 'network') {
+    const turn = getNetworkOrderTurnGroup(order);
+    if (turn.group === 'other_area') return 3;
+    if (pendingAction?.requiresMyAction) return 0;
+    if (status === 'devuelto_soporte') return 1;
+    return 2;
+  }
 
   if (pendingAction?.waitingOther || status === 'resuelto_soporte' || status === 'no_realizado' || status === 'revisado') {
     return 3;
@@ -2680,8 +2747,8 @@ async function markWODone(id) {
       return true;
     }, w.detailKind === 'network' ? {
       forceInformation: true,
-      freshEvidence:true,
-      requireEvidence:true,
+      freshEvidence: true,
+      requireEvidence: true,
       hideSolution: true,
       subtitle: 'Adjunta una captura donde el cliente confirme que el servicio mejoró antes de solucionar.',
       evidenceTitle: 'Captura de confirmación del cliente <span>Obligatoria</span>',
@@ -2957,7 +3024,7 @@ function closeOrderReportModalDirectly() {
       curUrl.searchParams.delete('id');
       window.history.replaceState({}, '', curUrl);
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function getOrderCurrentUserClosureAction(order) {
@@ -3120,7 +3187,7 @@ async function saveOrderReviewDecision(attendNow) {
     order.reviewOpenedById = actor.id || '';
     order.reviewOpenedByName = actor.name || actor.username || 'Administrador';
     order.reviewOpenedByUsername = actor.username || '';
-    appendOrderFollowUp(order,'review_opened','En revisión');
+    appendOrderFollowUp(order, 'review_opened', 'En revisión');
     setUpdatedAudit(order, 'confirmó que atenderá el detalle');
   } else {
     setUpdatedAudit(order, 'pospuso la revisión del detalle');
@@ -3524,11 +3591,13 @@ function renderSentToPhysicalBadge(order, options = {}) {
   const showTarget = Boolean(options.showTarget && targetSummary);
   const showDate = options.showDate !== false && Boolean(info.formattedDate);
 
-  return `<span class="order-sent-physical-badge" title="${titleAttr}" data-sent-physical="1">`
+  return `<span class="order-sent-physical-badge${showDate ? ' has-date' : ''}" title="${titleAttr}" data-sent-physical="1">`
+    + `<span class="order-sent-physical-main">`
     + `<svg class="order-sent-physical-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`
     + `<span>Enviado a físicos</span>`
     + (showTarget ? `<span class="order-sent-physical-target">· ${orderEscape(targetSummary)}</span>` : '')
-    + (showDate ? `<span class="order-sent-physical-date">· ${orderEscape(info.formattedDate)}</span>` : '')
+    + `</span>`
+    + (showDate ? `<span class="order-sent-physical-date">${orderEscape(info.formattedDate)}</span>` : '')
     + `</span>`;
 }
 
@@ -3655,27 +3724,27 @@ function ensureInsertPhysicalRecordModal() {
             <div id="insert-phys-pueblo-group" class="insert-phys-selector-box">
               <div class="insert-phys-selector-head">
                 <label>Pueblo de destino</label>
-                <span class="insert-phys-target-pill">🔒 Fijo del reporte</span>
+                <span class="insert-phys-target-pill">Asociado al reporte</span>
               </div>
               <div id="insert-phys-pueblo-locked" class="insert-phys-locked-value">
                 <span aria-hidden="true">🏘️</span>
                 <strong id="insert-phys-pueblo-locked-name">Pueblo del reporte</strong>
               </div>
               <select id="insert-phys-node-select" class="fi-select" style="display:none;" disabled aria-hidden="true" tabindex="-1"></select>
-              <div id="insert-phys-pueblo-hint" class="insert-phys-target-hint">Mismo pueblo del reporte de red (no modificable).</div>
+              <div id="insert-phys-pueblo-hint" class="insert-phys-target-hint">Pueblo asignado al reporte de origen.</div>
             </div>
 
             <div id="insert-phys-torre-group" class="insert-phys-selector-box" style="display:none;">
               <div class="insert-phys-selector-head">
                 <label>Torre / Antena asociada</label>
-                <span class="insert-phys-target-pill is-tower">🔒 Fija del reporte</span>
+                <span class="insert-phys-target-pill is-tower">Asociada al reporte</span>
               </div>
               <div id="insert-phys-torre-locked" class="insert-phys-locked-value">
                 <span aria-hidden="true">🗼</span>
                 <strong id="insert-phys-torre-locked-name">Torre asociada al reporte</strong>
               </div>
               <select id="insert-phys-equipment-select" class="fi-select" style="display:none;width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px;" onchange="onInsertPhysEquipmentChange()" disabled></select>
-              <div id="insert-phys-torre-hint" class="insert-phys-target-hint">Torre asociada al pueblo del reporte (no modificable).</div>
+              <div id="insert-phys-torre-hint" class="insert-phys-target-hint">Torre vinculada al reporte de origen.</div>
             </div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" class="insert-phys-grid">
@@ -3887,8 +3956,8 @@ function populateInsertPhysNodeSelect(order) {
   const hintEl = document.getElementById('insert-phys-pueblo-hint');
   if (hintEl) {
     hintEl.textContent = hasNode
-      ? 'Mismo pueblo del reporte de red (no modificable).'
-      : 'Este reporte no tiene un pueblo registrado.';
+      ? 'Pueblo asignado al reporte de origen.'
+      : 'Este reporte no cuenta con un pueblo registrado.';
   }
 }
 
@@ -3940,11 +4009,11 @@ function populateInsertPhysEquipmentSelect(order, _preferredEquipmentId = '', _f
   const hintEl = document.getElementById('insert-phys-torre-hint');
   if (hintEl) {
     if (selectedId) {
-      hintEl.textContent = 'Misma torre asociada al reporte (no modificable).';
+      hintEl.textContent = 'Torre vinculada al reporte de origen.';
     } else if (isLoading) {
-      hintEl.textContent = 'Consultando torre vinculada al pueblo del reporte...';
+      hintEl.textContent = 'Consultando torre vinculada al reporte...';
     } else {
-      hintEl.textContent = 'Este reporte / pueblo no tiene una torre vinculada; regístralo en el pueblo del reporte.';
+      hintEl.textContent = 'Este reporte no tiene una torre vinculada; regístrelo en el pueblo del reporte.';
     }
   }
 }
@@ -3959,13 +4028,13 @@ async function loadInsertPhysRemoteTargets(order, _preferredNodeId = '', preferr
     tasks.push(
       fetchDataPage('equipment', { nodeIds: registeredNode.nodeId, paged: '1', windowed: '1', limit: 30, offset: 0 })
         .then(data => mergeOrderLookupRecords('equipment', data?.equipment))
-        .catch(() => {})
+        .catch(() => { })
     );
     if (!(state.nodes || []).some(n => String(n.id) === String(registeredNode.nodeId))) {
       tasks.push(
         fetchDataPage('nodes', { id: registeredNode.nodeId, limit: 1 })
           .then(data => mergeOrderLookupRecords('nodes', data?.nodes))
-          .catch(() => {})
+          .catch(() => { })
       );
     }
   }
@@ -3974,7 +4043,7 @@ async function loadInsertPhysRemoteTargets(order, _preferredNodeId = '', preferr
     tasks.push(
       fetchDataPage('equipment', { id: explicitEqId, limit: 1 })
         .then(data => mergeOrderLookupRecords('equipment', data?.equipment))
-        .catch(() => {})
+        .catch(() => { })
     );
   }
 
@@ -5125,10 +5194,11 @@ function renderOrderChatComposerInnerHtml(order) {
   `;
 }
 
-function renderOrderChat(order) {
+function renderOrderChat(order, options = {}) {
   const statusBadgeHtml = getOrderChatStatusBadgeHtml(order);
   const messagesHtml = renderOrderChatMessagesHtml(order);
-  const composerHtml = renderOrderChatComposerInnerHtml(order);
+  const includeComposer = options.includeComposer !== false;
+  const composerHtml = includeComposer ? renderOrderChatComposerInnerHtml(order) : '';
 
   return `
     <section class="order-chat-section">
@@ -5149,9 +5219,7 @@ function renderOrderChat(order) {
       <div id="order-chat-messages" class="order-chat-messages">
         ${messagesHtml}
       </div>
-      <div class="order-chat-composer-wrap">
-        ${composerHtml}
-      </div>
+      ${includeComposer ? `<div class="order-chat-composer-wrap">${composerHtml}</div>` : ''}
     </section>
   `;
 }
@@ -6096,7 +6164,7 @@ async function loadNotificationOrder(orderId) {
       try {
         const fallbackData = await fetchDataPage('operations', { id: cleanStripped, limit: 1, offset: 0 });
         order = (fallbackData.workOrders || []).find(matchesTarget) || (fallbackData.workOrders || [])[0];
-      } catch (e) {}
+      } catch (e) { }
     }
     if (!order || order.deletedAt) {
       notify('Este detalle ya no está disponible. Puedes revisar los demás en la lista.', 'warn');
@@ -6168,6 +6236,7 @@ async function openOrderTechnicianReport(orderId) {
     // El chat va al frente de inmediato con el seguimiento adjunto como eventos resaltados.
     // Los metadatos completos y las fotos van ocultos bajo "Ver todos los detalles y fotos".
     bodyContent = `
+      <div class="order-chat-scroll-body">
       <div class="order-report-essential-bar">
         <div class="essential-bar-item">
           <small>CLIENTE</small>
@@ -6264,8 +6333,14 @@ async function openOrderTechnicianReport(orderId) {
         </div>
       </details>
 
-      ${renderOrderChat(order)}
-      ${renderOrderFooterActions(order)}
+      ${renderOrderChat(order, { includeComposer: false })}
+      </div>
+      <div class="order-chat-fixed-bottom">
+        <div class="order-chat-composer-wrap">
+          ${renderOrderChatComposerInnerHtml(order)}
+        </div>
+        ${renderOrderFooterActions(order)}
+      </div>
     `;
   } else {
     // Vista para detalles físicos de infraestructura (antenas y nodos)
@@ -6320,6 +6395,9 @@ async function openOrderTechnicianReport(orderId) {
     : (completed ? 'Reporte del técnico' : 'Detalle de la orden');
   const headerIcon = orderReportIcon(order.detailKind === 'physical' ? 'work' : 'clipboard');
 
+  if (card && card.classList) {
+    card.classList.toggle('is-network-chat-card', order.detailKind === 'network');
+  }
   card.innerHTML = `<div class="modal-head order-report-head"><div class="order-report-head-main"><span class="order-report-title-icon">${headerIcon}</span><div><h2>${modalHeaderTitle}</h2><p>${orderReportIcon('pin')}<span>${orderEscape(getOrderPlace(order))}</span><em>${orderEscape(getOrderFolio(order))}</em>${order.detailKind === 'network' && reopenCount > 0 ? `<span class="order-reopened-badge" style="margin-left:6px;" title="${reopenTitle}"><svg class="order-reopened-icon" viewBox="0 0 24 24"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> ${reopenLabel}</span>` : ''}${sentPhysicalInfo.sent ? renderSentToPhysicalBadge(order, { compact: true }) : ''}</p></div></div><button type="button" class="order-report-close" aria-label="Cerrar" onclick="requestCloseOrderReport()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     ${bodyContent}`;
   OM('order-tech-report-mo');
@@ -6403,6 +6481,23 @@ function renderWOs() {
     rows = allRows.slice(rangeStart, rangeEnd);
   }
 
+  const networkGroupCounts = activeOrderDetailKind === 'network'
+    ? rows.reduce((acc, w) => {
+      const g = getNetworkOrderTurnGroup(w).group;
+      acc[g] = (acc[g] || 0) + 1;
+      return acc;
+    }, { my_action: 0, other_area: 0, done: 0 })
+    : null;
+  const showTurnDividers = Boolean(
+    activeOrderDetailKind === 'network' &&
+    networkGroupCounts &&
+    ((networkGroupCounts.my_action > 0 && (networkGroupCounts.other_area > 0 || networkGroupCounts.done > 0)) ||
+      (networkGroupCounts.other_area > 0 && networkGroupCounts.done > 0) ||
+      networkGroupCounts.my_action > 0 ||
+      networkGroupCounts.other_area > 0)
+  );
+  let lastRenderedTurnGroup = '';
+
   wrap.innerHTML = `
     <div class="table-wrap clean">
       <table class="table order-table">
@@ -6421,6 +6516,33 @@ function renderWOs() {
         </thead>
         <tbody>
           ${rows.map(w => {
+    let dividerRowHtml = '';
+    if (showTurnDividers) {
+      const turnMeta = getNetworkOrderTurnGroup(w);
+      if (turnMeta.group !== lastRenderedTurnGroup) {
+        lastRenderedTurnGroup = turnMeta.group;
+        const count = networkGroupCounts[turnMeta.group] || 0;
+        const icon = turnMeta.group === 'my_action' ? '⚡' : (turnMeta.group === 'other_area' ? '↔' : '✓');
+        const subText = turnMeta.group === 'my_action'
+          ? 'Requieren respuesta o acción de tu parte'
+          : (turnMeta.group === 'other_area' ? 'En atención o espera de confirmación de otra área' : 'Casos finalizados');
+        dividerRowHtml = `
+          <tr class="order-turn-divider-row is-${turnMeta.group}" data-turn-group="${turnMeta.group}">
+            <td colspan="9">
+              <div class="order-turn-divider-inner">
+                <span class="order-turn-divider-pill is-${turnMeta.group}">
+                  <span class="order-turn-divider-icon" aria-hidden="true">${icon}</span>
+                  <strong>${orderEscape(turnMeta.label)}</strong>
+                  <span class="order-turn-divider-count">${count}</span>
+                </span>
+                <span class="order-turn-divider-sub">${orderEscape(subText)}</span>
+                <span class="order-turn-divider-line" aria-hidden="true"></span>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+    }
     const target = getOrderTarget(w);
     const rowReported = w.status === 'completada' || w.status === 'no_realizado';
     const rowStatus = getOrderStatusMeta(w);
@@ -6507,7 +6629,7 @@ function renderWOs() {
       isNetworkRow && pendingAction.waitingOther ? 'order-row-waiting-counterparty' : ''
     ].filter(Boolean).join(' ');
 
-    return `
+    return `${dividerRowHtml}
               <tr data-order-id="${orderEscape(w.id)}" onclick="selectOrderRow('${w.id}', event)" class="${trClasses}">
                 <td data-label="Folio">
                   <div class="order-folio-cell">
@@ -8209,12 +8331,12 @@ function renderAdminNetworkStatsContent() {
         <span class="admin-stats-toolbar-label">Periodo:</span>
         <div class="admin-stats-pill-group">
           ${[
-            ['all', 'Todo el historial'],
-            ['today', 'Hoy'],
-            ['last7', 'Últimos 7 días'],
-            ['last30', 'Últimos 30 días'],
-            ['this_month', 'Este mes']
-          ].map(([val, lbl]) => `
+      ['all', 'Todo el historial'],
+      ['today', 'Hoy'],
+      ['last7', 'Últimos 7 días'],
+      ['last30', 'Últimos 30 días'],
+      ['this_month', 'Este mes']
+    ].map(([val, lbl]) => `
             <button type="button" class="admin-stats-filter-pill ${adminStatsFilterPeriod === val ? 'is-active' : ''}" onclick="setAdminStatsFilter('period','${val}')">${lbl}</button>
           `).join('')}
         </div>
@@ -8223,11 +8345,11 @@ function renderAdminNetworkStatsContent() {
         <span class="admin-stats-toolbar-label">Área:</span>
         <div class="admin-stats-pill-group">
           ${[
-            ['all', 'Soporte y Atención (Todas)'],
-            ['soporte', 'Soporte Técnico'],
-            ['atencion_clientes', 'Atención a Clientes'],
-            ['administrador', 'Supervisión Admin']
-          ].map(([val, lbl]) => `
+      ['all', 'Soporte y Atención (Todas)'],
+      ['soporte', 'Soporte Técnico'],
+      ['atencion_clientes', 'Atención a Clientes'],
+      ['administrador', 'Supervisión Admin']
+    ].map(([val, lbl]) => `
             <button type="button" class="admin-stats-filter-pill ${adminStatsFilterArea === val ? 'is-active' : ''}" onclick="setAdminStatsFilter('area','${val}')">${lbl}</button>
           `).join('')}
         </div>
@@ -8293,16 +8415,16 @@ function renderAdminNetworkStatsContent() {
       </div>
       <div class="admin-stats-areas-grid">
         ${[areaStats.soporte, areaStats.atencion_clientes]
-          .filter(a => adminStatsFilterArea === 'all' || a.code === adminStatsFilterArea)
-          .map(area => {
-            const membersTotal = areaMembersCount[area.code] || 0;
-            const membersActive = areaActiveMembersCount[area.code] || 0;
-            const effRate = area.assigned > 0 ? Math.round((area.solved / area.assigned) * 100) : (area.solved > 0 ? 100 : 0);
-            const closeRate = area.assigned > 0 ? Math.round((area.completed / area.assigned) * 100) : 0;
-            const fcrAreaRate = area.solved > 0 ? Math.round((area.firstContactSolved / area.solved) * 100) : 100;
-            const avgResTime = formatAdminStatsDuration(area.resolutionTimesMs);
-            const avgRespTime = formatAdminStatsDuration(area.responseTimesMs);
-            return `
+      .filter(a => adminStatsFilterArea === 'all' || a.code === adminStatsFilterArea)
+      .map(area => {
+        const membersTotal = areaMembersCount[area.code] || 0;
+        const membersActive = areaActiveMembersCount[area.code] || 0;
+        const effRate = area.assigned > 0 ? Math.round((area.solved / area.assigned) * 100) : (area.solved > 0 ? 100 : 0);
+        const closeRate = area.assigned > 0 ? Math.round((area.completed / area.assigned) * 100) : 0;
+        const fcrAreaRate = area.solved > 0 ? Math.round((area.firstContactSolved / area.solved) * 100) : 100;
+        const avgResTime = formatAdminStatsDuration(area.resolutionTimesMs);
+        const avgRespTime = formatAdminStatsDuration(area.responseTimesMs);
+        return `
               <div class="admin-stats-area-card" style="border-top: 4px solid ${area.color};">
                 <div class="admin-stats-area-head" style="background:${area.accentBg};">
                   <div>
@@ -8362,7 +8484,7 @@ function renderAdminNetworkStatsContent() {
                 </div>
               </div>
             `;
-          }).join('')}
+      }).join('')}
         ${(adminStatsFilterArea === 'all' || adminStatsFilterArea === 'administrador') ? `
           <div class="admin-stats-admin-unified-bar">
             <div class="admin-stats-admin-unified-bar-info">
@@ -8400,15 +8522,15 @@ function renderAdminNetworkStatsContent() {
           </div>
           <div class="admin-stats-donut-legend">
             ${statusSegments.map(seg => {
-              const pct = total > 0 ? Math.round((seg.count / total) * 100) : 0;
-              return `
+        const pct = total > 0 ? Math.round((seg.count / total) * 100) : 0;
+        return `
                 <div class="admin-stats-legend-item">
                   <span class="admin-stats-legend-dot" style="background:${seg.color};"></span>
                   <span class="admin-stats-legend-name">${orderEscape(seg.label)}</span>
                   <strong class="admin-stats-legend-val">${seg.count} <small>(${pct}%)</small></strong>
                 </div>
               `;
-            }).join('')}
+      }).join('')}
           </div>
         </div>
       </div>
@@ -8427,14 +8549,14 @@ function renderAdminNetworkStatsContent() {
             <span><i style="background:#d97706;"></i> Activos/Pend.</span>
           </div>
           ${[areaStats.soporte, areaStats.atencion_clientes]
-            .filter(a => adminStatsFilterArea === 'all' || a.code === adminStatsFilterArea)
-            .map(area => {
-            const wCreated = Math.round((area.created / maxAreaMetric) * 100);
-            const wAssigned = Math.round((area.assigned / maxAreaMetric) * 100);
-            const wSolved = Math.round((area.solved / maxAreaMetric) * 100);
-            const activeLoad = area.inAttention + area.pending;
-            const wActive = Math.round((activeLoad / maxAreaMetric) * 100);
-            return `
+      .filter(a => adminStatsFilterArea === 'all' || a.code === adminStatsFilterArea)
+      .map(area => {
+        const wCreated = Math.round((area.created / maxAreaMetric) * 100);
+        const wAssigned = Math.round((area.assigned / maxAreaMetric) * 100);
+        const wSolved = Math.round((area.solved / maxAreaMetric) * 100);
+        const activeLoad = area.inAttention + area.pending;
+        const wActive = Math.round((activeLoad / maxAreaMetric) * 100);
+        return `
               <div class="admin-stats-comp-group">
                 <div class="admin-stats-comp-header">
                   <strong>${orderEscape(area.title)}</strong>
@@ -8464,7 +8586,7 @@ function renderAdminNetworkStatsContent() {
                 </div>
               </div>
             `;
-          }).join('')}
+      }).join('')}
           <div class="admin-stats-comp-admin-footer">
             <span>🛡️ <b>Administración (Supervisión Unificada):</b> ${areaStats.administrador.created} casos creados · ${areaStats.administrador.assigned} reasignaciones · ${areaStats.administrador.completed} cierres</span>
             <span style="font-weight:700;color:#0f172a;">${areaActiveMembersCount.administrador} supervisor(es)</span>
@@ -8526,15 +8648,15 @@ function renderAdminNetworkStatsContent() {
         <div class="admin-stats-priority-breakdown">
           <div class="admin-stats-subhead">Efectividad según Nivel de Prioridad</div>
           ${Object.values(priorityStats).map(p => {
-            const pRate = p.total > 0 ? Math.round((p.solved / p.total) * 100) : 0;
-            return `
+        const pRate = p.total > 0 ? Math.round((p.solved / p.total) * 100) : 0;
+        return `
               <div class="admin-stats-prio-row">
                 <span class="admin-stats-prio-label"><i style="background:${p.color};"></i> ${p.label}</span>
                 <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill" style="width:${pRate}%;background:${p.color};"></div></div>
                 <strong class="admin-stats-prio-val">${p.solved}/${p.total} (${pRate}%)</strong>
               </div>
             `;
-          }).join('')}
+      }).join('')}
         </div>
       </div>
     </div>
@@ -8570,13 +8692,13 @@ function renderAdminNetworkStatsContent() {
           </thead>
           <tbody>
             ${resolversList.length ? resolversList.map((r, idx) => {
-              const isAdmin = r.areaCode === 'administrador';
-              const pctTotal = solvedOrCompleted > 0 ? Math.round((r.solved / solvedOrCompleted) * 100) : (completed > 0 ? Math.round((r.solved / completed) * 100) : 0);
-              const workloadBase = Math.max(r.assigned, r.solved + r.inProgress + r.pending);
-              const effIndividual = workloadBase > 0 ? Math.round((r.solved / workloadBase) * 100) : (r.solved > 0 ? 100 : 0);
-              const avgUserTime = formatAdminStatsDuration(r.resolutionTimesMs);
-              const roleBadgeClass = isAdmin ? 'is-admin' : (r.areaCode === 'atencion_clientes' ? 'is-atencion' : 'is-soporte');
-              return `
+        const isAdmin = r.areaCode === 'administrador';
+        const pctTotal = solvedOrCompleted > 0 ? Math.round((r.solved / solvedOrCompleted) * 100) : (completed > 0 ? Math.round((r.solved / completed) * 100) : 0);
+        const workloadBase = Math.max(r.assigned, r.solved + r.inProgress + r.pending);
+        const effIndividual = workloadBase > 0 ? Math.round((r.solved / workloadBase) * 100) : (r.solved > 0 ? 100 : 0);
+        const avgUserTime = formatAdminStatsDuration(r.resolutionTimesMs);
+        const roleBadgeClass = isAdmin ? 'is-admin' : (r.areaCode === 'atencion_clientes' ? 'is-atencion' : 'is-soporte');
+        return `
                 <tr class="${isAdmin ? 'is-admin-row' : ''}">
                   <td style="font-weight:700;color:#64748b;">${idx + 1}</td>
                   <td>
@@ -8608,7 +8730,7 @@ function renderAdminNetworkStatsContent() {
                   </td>
                 </tr>
               `;
-            }).join('') : `<tr><td colspan="13" style="text-align:center;color:#64748b;padding:18px;">Sin registros para los filtros seleccionados.</td></tr>`}
+      }).join('') : `<tr><td colspan="13" style="text-align:center;color:#64748b;padding:18px;">Sin registros para los filtros seleccionados.</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -8624,11 +8746,11 @@ function renderAdminNetworkStatsContent() {
       </div>
       <div class="admin-stats-profiles-grid">
         ${resolversList.length ? resolversList.map(r => {
-          const isAdmin = r.areaCode === 'administrador';
-          const lastActLabel = r.lastActivityAt ? new Date(r.lastActivityAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : 'Sin actividad reciente';
+        const isAdmin = r.areaCode === 'administrador';
+        const lastActLabel = r.lastActivityAt ? new Date(r.lastActivityAt).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : 'Sin actividad reciente';
 
-          if (isAdmin) {
-            return `
+        if (isAdmin) {
+          return `
               <div class="admin-stats-profile-card is-admin-profile" style="border-top: 3px solid #0f172a; background: #f8fafc;">
                 <div class="admin-stats-profile-top">
                   <div>
@@ -8650,20 +8772,20 @@ function renderAdminNetworkStatsContent() {
                 </div>
               </div>
             `;
-          }
+        }
 
-          const workloadBase = Math.max(1, r.solved + r.inProgress + r.pending);
-          const wSolved = Math.round((r.solved / workloadBase) * 100);
-          const wInProg = Math.round((r.inProgress / workloadBase) * 100);
-          const wPend = Math.max(0, 100 - wSolved - wInProg);
-          const effInd = (r.assigned > 0 || r.solved > 0) ? Math.round((r.solved / Math.max(r.assigned, r.solved + r.inProgress + r.pending)) * 100) : 0;
-          const topCats = Object.entries(r.categories).sort((a, b) => b[1] - a[1]).slice(0, 3);
-          const topZones = Object.entries(r.zones).sort((a, b) => b[1] - a[1]).slice(0, 3);
-          const avgRes = formatAdminStatsDuration(r.resolutionTimesMs);
-          const avgResp = formatAdminStatsDuration(r.firstResponseTimesMs);
-          const loadStatus = (r.inProgress + r.pending) >= 5 ? ['Carga Alta', 'is-high'] : ((r.inProgress + r.pending) >= 1 ? ['En atención', 'is-medium'] : (r.solved > 0 || r.created > 0 ? ['Al día', 'is-ok'] : ['Sin pendientes', 'is-idle']));
+        const workloadBase = Math.max(1, r.solved + r.inProgress + r.pending);
+        const wSolved = Math.round((r.solved / workloadBase) * 100);
+        const wInProg = Math.round((r.inProgress / workloadBase) * 100);
+        const wPend = Math.max(0, 100 - wSolved - wInProg);
+        const effInd = (r.assigned > 0 || r.solved > 0) ? Math.round((r.solved / Math.max(r.assigned, r.solved + r.inProgress + r.pending)) * 100) : 0;
+        const topCats = Object.entries(r.categories).sort((a, b) => b[1] - a[1]).slice(0, 3);
+        const topZones = Object.entries(r.zones).sort((a, b) => b[1] - a[1]).slice(0, 3);
+        const avgRes = formatAdminStatsDuration(r.resolutionTimesMs);
+        const avgResp = formatAdminStatsDuration(r.firstResponseTimesMs);
+        const loadStatus = (r.inProgress + r.pending) >= 5 ? ['Carga Alta', 'is-high'] : ((r.inProgress + r.pending) >= 1 ? ['En atención', 'is-medium'] : (r.solved > 0 || r.created > 0 ? ['Al día', 'is-ok'] : ['Sin pendientes', 'is-idle']));
 
-          return `
+        return `
             <div class="admin-stats-profile-card">
               <div class="admin-stats-profile-top">
                 <div>
@@ -8718,7 +8840,7 @@ function renderAdminNetworkStatsContent() {
               </div>
             </div>
           `;
-        }).join('') : `<div style="grid-column:1/-1;text-align:center;color:#64748b;padding:20px;">Sin integrantes para este filtro.</div>`}
+      }).join('') : `<div style="grid-column:1/-1;text-align:center;color:#64748b;padding:20px;">Sin integrantes para este filtro.</div>`}
       </div>
     </div>
 
@@ -8728,10 +8850,10 @@ function renderAdminNetworkStatsContent() {
         <div class="admin-stats-section-title"><span>📊</span> Distribución por categoría</div>
         <div class="admin-stats-cat-list">
           ${categoriesList.length ? categoriesList.map(([cat, count]) => {
-            const catPct = total > 0 ? Math.round((count / total) * 100) : 0;
-            const det = categoriesDetailMap[cat] || { solved: 0, pending: 0, returned: 0 };
-            const effCat = count > 0 ? Math.round((det.solved / count) * 100) : 0;
-            return `
+        const catPct = total > 0 ? Math.round((count / total) * 100) : 0;
+        const det = categoriesDetailMap[cat] || { solved: 0, pending: 0, returned: 0 };
+        const effCat = count > 0 ? Math.round((det.solved / count) * 100) : 0;
+        return `
               <div class="admin-stats-cat-row">
                 <div class="admin-stats-cat-header">
                   <span>${orderEscape(cat)}</span>
@@ -8744,7 +8866,7 @@ function renderAdminNetworkStatsContent() {
                 <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill" style="width:${catPct}%;"></div></div>
               </div>
             `;
-          }).join('') : '<div style="color:#64748b;font-size:12px;">Sin datos de categorías.</div>'}
+      }).join('') : '<div style="color:#64748b;font-size:12px;">Sin datos de categorías.</div>'}
         </div>
       </div>
 
@@ -8752,10 +8874,10 @@ function renderAdminNetworkStatsContent() {
         <div class="admin-stats-section-title"><span>📍</span> Distribución por zona / región</div>
         <div class="admin-stats-cat-list">
           ${zonesList.length ? zonesList.map(([zone, count]) => {
-            const zonePct = total > 0 ? Math.round((count / total) * 100) : 0;
-            const det = zonesDetailMap[zone] || { solved: 0, pending: 0 };
-            const effZone = count > 0 ? Math.round((det.solved / count) * 100) : 0;
-            return `
+        const zonePct = total > 0 ? Math.round((count / total) * 100) : 0;
+        const det = zonesDetailMap[zone] || { solved: 0, pending: 0 };
+        const effZone = count > 0 ? Math.round((det.solved / count) * 100) : 0;
+        return `
               <div class="admin-stats-cat-row">
                 <div class="admin-stats-cat-header">
                   <span>${orderEscape(zone)}</span>
@@ -8768,7 +8890,7 @@ function renderAdminNetworkStatsContent() {
                 <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill zone" style="width:${zonePct}%;"></div></div>
               </div>
             `;
-          }).join('') : '<div style="color:#64748b;font-size:12px;">Sin datos de zonas.</div>'}
+      }).join('') : '<div style="color:#64748b;font-size:12px;">Sin datos de zonas.</div>'}
         </div>
       </div>
 
@@ -8776,9 +8898,9 @@ function renderAdminNetworkStatsContent() {
         <div class="admin-stats-section-title"><span>🏘️</span> Localidades con Mayor Incidencia</div>
         <div class="admin-stats-cat-list">
           ${townsList.length ? townsList.map(([town, info]) => {
-            const townPct = total > 0 ? Math.round((info.total / total) * 100) : 0;
-            const effTown = info.total > 0 ? Math.round((info.solved / info.total) * 100) : 0;
-            return `
+        const townPct = total > 0 ? Math.round((info.total / total) * 100) : 0;
+        const effTown = info.total > 0 ? Math.round((info.solved / info.total) * 100) : 0;
+        return `
               <div class="admin-stats-cat-row">
                 <div class="admin-stats-cat-header">
                   <span>${orderEscape(town)} <small style="color:#64748b;">(${orderEscape(info.zone)})</small></span>
@@ -8791,7 +8913,7 @@ function renderAdminNetworkStatsContent() {
                 <div class="admin-stats-bar-track"><div class="admin-stats-bar-fill" style="width:${townPct}%;background:#7c3aed;"></div></div>
               </div>
             `;
-          }).join('') : '<div style="color:#64748b;font-size:12px;">Sin datos de localidades.</div>'}
+      }).join('') : '<div style="color:#64748b;font-size:12px;">Sin datos de localidades.</div>'}
         </div>
       </div>
     </div>

@@ -654,7 +654,7 @@
   transform: translateY(-1px) !important;
 }
 
-/* Banner de recomendación de continuidad en el planificador (removido / oculto permanentemente a peticion de usuario) */
+/* Banner de continuidad de ruta (deshabilitado) */
 #plan-continuity-recommendations-banner,
 .plan-continuity-banner {
   display: none !important;

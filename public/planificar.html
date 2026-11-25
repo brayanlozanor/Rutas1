@@ -19,9 +19,9 @@
   <link rel="stylesheet" href="assets/css/plan-stop-cards.css?v=20260902-plan-status-v1">
   <link rel="stylesheet" href="assets/css/plan-stop-detail-grid.css?v=20261111-no-overlap-v1">
   <link rel="stylesheet" href="assets/css/plan-stop-card-exact.css?v=20261124-stop-buttons-v3">
-  <link rel="stylesheet" href="assets/css/technician-dashboard.css?v=20261124-mobile-loader-v4">
+  <link rel="stylesheet" href="assets/css/technician-dashboard.css?v=20261125-mobile-loader-v5">
   <link rel="stylesheet" href="assets/css/technician-view-modes.css?v=20261119-tech-day-map-restored-v1">
-  <link rel="stylesheet" href="assets/css/plan-ui-v2.css?v=20261124-left-menu-v3">
+  <link rel="stylesheet" href="assets/css/plan-ui-v2.css?v=20261125-plan-map-perf-v7">
   <link rel="stylesheet" href="assets/css/tower-material-modal.css?v=20261116-chat-fluidity-v1">
   <link rel="stylesheet" href="assets/css/material-dispatches.css?v=20261030-v2">
   <link rel="stylesheet" href="assets/css/preset-routes.css?v=20261116-simple-assign-v2">
@@ -49,6 +49,159 @@
       } catch (e) { }
     })();
   </script>
+  <style id="tech-mobile-loading-critical-css">
+    @keyframes techLoaderSpin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes techIndeterminateSlide {
+      0% {
+        transform: translateX(-110%);
+      }
+
+      55% {
+        transform: translateX(70%);
+      }
+
+      100% {
+        transform: translateX(240%);
+      }
+    }
+
+    @keyframes techPulseDot {
+
+      0%,
+      100% {
+        transform: scale(0.85);
+        opacity: 0.55;
+      }
+
+      50% {
+        transform: scale(1.2);
+        opacity: 1;
+      }
+    }
+
+    @keyframes techSkeletonShimmer {
+      0% {
+        background-position: -220% 0;
+      }
+
+      100% {
+        background-position: 220% 0;
+      }
+    }
+
+    html.is-technician-env #plan-initial-loader,
+    body.plan-technician-view #plan-initial-loader,
+    html[data-role="tecnico"] #plan-initial-loader {
+      display: none !important;
+      opacity: 0 !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+
+    .tech-mobile-loading-state {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 6px 2px 16px;
+    }
+
+    .tech-mobile-loading-banner {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 18px 18px 16px;
+      border-radius: 16px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      border: 1.5px solid #bfdbfe;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
+    }
+
+    .tech-mobile-loading-top {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .tech-mobile-loader-ring {
+      width: 36px;
+      height: 36px;
+      flex: 0 0 36px;
+      border-radius: 50%;
+      border: 3.5px solid #dbeafe;
+      border-top-color: #0b6ef3;
+      border-right-color: #0b6ef3;
+      animation: techLoaderSpin 0.78s linear infinite;
+    }
+
+    .tech-mobile-loading-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .tech-mobile-loading-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      width: fit-content;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1d4ed8;
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .tech-mobile-pulse-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #0b6ef3;
+      animation: techPulseDot 1.15s ease-in-out infinite;
+    }
+
+    .tech-mobile-loading-copy strong {
+      font-size: 16px;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.25;
+    }
+
+    .tech-mobile-loading-copy span {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #475569;
+      line-height: 1.35;
+    }
+
+    .tech-mobile-loading-bar {
+      position: relative;
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      overflow: hidden;
+    }
+
+    .tech-mobile-loading-bar span,
+    .tech-mobile-loading-bar-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 42%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #0b6ef3 0%, #38bdf8 55%, #0b6ef3 100%);
+      animation: techIndeterminateSlide 1.35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+  </style>
 </head>
 
 <body class="planificar-page" onload="initPlanificarPage()">
@@ -66,7 +219,7 @@
     })();
   </script>
 
-  <!-- Pantalla de carga inicial limpia y formal con tarjeta de marca WiFiMex -->
+  <!-- Indicador de carga inicial -->
   <div id="plan-initial-loader" class="plan-initial-loader"
     style="position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;opacity:1;visibility:visible;"
     aria-live="polite" aria-label="Cargando plan general">
@@ -82,11 +235,9 @@
               el.style.backdropFilter = 'none';
               el.style.webkitBackdropFilter = 'none';
               el.style.pointerEvents = 'none';
-              // En vista técnico nunca bloquear la pantalla si ya existe caché local
-              if (localStorage.getItem('netops_planificar_offline_snapshot_v1') || localStorage.getItem('netops_last_good_state_v1:planning')) {
-                el.classList.add('is-hidden');
-                el.style.display = 'none';
-              }
+              // En celular/técnico nunca cubrir la tarjeta animada de "Cargando tu ruta y detalles..."
+              el.classList.add('is-hidden');
+              el.style.display = 'none';
             } else {
               el.style.background = 'rgba(244, 247, 250, 0.55)';
               el.style.backdropFilter = 'blur(1.5px)';
@@ -115,7 +266,8 @@
           class="loading-brand-logo">
       </div>
       <div class="loading-copy"><strong id="plan-initial-loader-title">Cargando datos</strong><span
-          id="plan-initial-loader-desc">Consultando paradas y agenda</span><span style="display:none">Cargando plan general...</span><i class="loading-progress"></i></div>
+          id="plan-initial-loader-desc">Consultando paradas y agenda</span><span style="display:none">Cargando plan
+          general...</span><i class="loading-progress"></i></div>
     </div>
   </div>
 
@@ -274,7 +426,8 @@
             <div class="tech-progress-mini-pills" id="tech-progress-mini-pills">
               <span class="tech-mini-pill is-done"><strong id="tech-stat-done-count">0</strong> completados</span>
               <span class="tech-mini-pill is-pending"><strong id="tech-stat-pending-count">0</strong> pendientes</span>
-              <span class="tech-mini-pill is-nodone" id="tech-stat-nodone-pill"><strong id="tech-stat-nodone-count">0</strong> no realizados</span>
+              <span class="tech-mini-pill is-nodone" id="tech-stat-nodone-pill"><strong
+                  id="tech-stat-nodone-count">0</strong> no realizados</span>
             </div>
           </section>
 
@@ -356,7 +509,10 @@
                     </div>
                     <div class="tech-search-input-wrap">
                       <span class="tech-search-icon">
-                        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                        <svg viewBox="0 0 24 24">
+                          <circle cx="11" cy="11" r="8" />
+                          <path d="m21 21-4.3-4.3" />
+                        </svg>
                       </span>
                       <input type="text" id="tech-plan-search-input" placeholder="Buscar técnico o plan..."
                         oninput="renderTechPlanSearchList()" class="tech-plan-search-input" autocomplete="off">
@@ -369,8 +525,8 @@
               </div>
             </div>
 
-            <button class="btn bc bfu plan-action-button" data-admin-only
-              onclick="openPlanStopModal()"><span class="plan-action-icon"><svg viewBox="0 0 24 24">
+            <button class="btn bc bfu plan-action-button" data-admin-only onclick="openPlanStopModal()"><span
+                class="plan-action-icon"><svg viewBox="0 0 24 24">
                   <path d="M12 21s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12Z" />
                   <path d="M12 6v6M9 9h6" />
                 </svg></span><span>Agregar parada</span></button>
@@ -379,8 +535,7 @@
                   <path d="M4 6l5-2 6 2 5-2v14l-5 2-6-2-5 2zM9 4v14M15 6v14" />
                 </svg></span><span>Ver ruta semanal</span></button>
             <button class="btn bc bfu plan-action-button plan-week-action" data-admin-only
-              onclick="openAdminWeekPlanner()"><span class="plan-action-icon"><svg
-                  viewBox="0 0 24 24">
+              onclick="openAdminWeekPlanner()"><span class="plan-action-icon"><svg viewBox="0 0 24 24">
                   <path d="M4 6h16v14H4zM8 3v5M16 3v5M4 10h16M8 14h3M13 14h3" />
                 </svg></span><span>Organizar por semana</span></button>
             <select id="plan-day" onchange="selectPlanDay(this.value)" hidden aria-hidden="true">
@@ -425,8 +580,7 @@
             </div>
 
             <!-- Clima en la Zona del Sitio Activo (solo visible en modo tarjetas) -->
-            <div id="plan-weather-box" class="plan-weather-box is-hidden"
-              style="display:none !important;">
+            <div id="plan-weather-box" class="plan-weather-box is-hidden" style="display:none !important;">
               <div class="weather-box-head">
                 <span id="weather-icon" class="weather-icon"></span>
                 <div>
@@ -504,17 +658,20 @@
             <div id="plan-continuity-recommendations-banner" style="display:none !important;" aria-hidden="true"></div>
             <div id="plan-day-intel-strip" class="plan-day-intel-strip" style="display:none"></div>
             <div id="plan-days" class="plan-days">
-              <div class="day-col plan-desktop-loading-state" id="plan-skeleton-placeholder" role="status" aria-live="polite" aria-label="Cargando plan y paradas">
+              <div class="day-col plan-desktop-loading-state" id="plan-skeleton-placeholder" role="status"
+                aria-live="polite" aria-label="Cargando plan y paradas">
                 <div class="tech-mobile-loading-banner">
                   <div class="tech-mobile-loading-top">
                     <span class="tech-mobile-loader-ring" aria-hidden="true"></span>
                     <div class="tech-mobile-loading-copy">
-                      <span class="tech-mobile-loading-pill"><i class="tech-mobile-pulse-dot" aria-hidden="true"></i>Cargando información</span>
+                      <span class="tech-mobile-loading-pill"><i class="tech-mobile-pulse-dot"
+                          aria-hidden="true"></i>Cargando información</span>
                       <strong>Cargando plan y paradas asignadas...</strong>
-                      <span>Obteniendo rutas, pueblos y detalles actualizados del servidor.</span>
+                      <span>Consultando rutas, pueblos y detalles actualizados.</span>
                     </div>
                   </div>
-                  <div class="tech-mobile-loading-bar" aria-hidden="true"><span></span></div>
+                  <div class="tech-mobile-loading-bar" aria-hidden="true"><span
+                      class="tech-mobile-loading-bar-fill"></span></div>
                 </div>
                 <div class="tech-skeleton-card" aria-hidden="true">
                   <div class="tech-skeleton-line is-title"></div>
@@ -530,17 +687,20 @@
 
               <!-- Esqueleto para celular (técnico) -->
               <div class="tech-skeleton-placeholder" id="tech-skeleton-placeholder">
-                <div class="tech-mobile-loading-state" role="status" aria-live="polite" aria-label="Cargando ruta y detalles">
+                <div class="tech-mobile-loading-state" role="status" aria-live="polite"
+                  aria-label="Cargando ruta y detalles">
                   <div class="tech-mobile-loading-banner">
                     <div class="tech-mobile-loading-top">
                       <span class="tech-mobile-loader-ring" aria-hidden="true"></span>
                       <div class="tech-mobile-loading-copy">
-                        <span class="tech-mobile-loading-pill"><i class="tech-mobile-pulse-dot" aria-hidden="true"></i>Sincronizando datos</span>
-                        <strong>Cargando tu ruta y detalles...</strong>
-                        <span id="tech-skeleton-empty-text">Consultando tus paradas asignadas, espera un momento...</span>
+                        <span class="tech-mobile-loading-pill"><i class="tech-mobile-pulse-dot"
+                            aria-hidden="true"></i>Sincronizando datos</span>
+                        <strong>Cargando ruta y detalles...</strong>
+                        <span id="tech-skeleton-empty-text">Consultando paradas asignadas...</span>
                       </div>
                     </div>
-                    <div class="tech-mobile-loading-bar" aria-hidden="true"><span></span></div>
+                    <div class="tech-mobile-loading-bar" aria-hidden="true"><span
+                        class="tech-mobile-loading-bar-fill"></span></div>
                   </div>
                   <div class="tech-skeleton-card" aria-hidden="true">
                     <div class="tech-skeleton-line is-title"></div>
@@ -571,7 +731,8 @@
               <strong>Mapa de hoy</strong>
               <small id="tech-day-map-date"></small>
             </div>
-            <div class="tech-map-privacy-notice" id="tech-map-privacy-notice" style="display:none !important;" aria-hidden="true"></div>
+            <div class="tech-map-privacy-notice" id="tech-map-privacy-notice" style="display:none !important;"
+              aria-hidden="true"></div>
             <div id="tech-day-map" class="tech-day-map"></div>
             <div id="tech-locations-sheet" class="tech-map-locations-sheet" style="display:none;"></div>
           </section>
@@ -579,8 +740,22 @@
             <div class="plan-map-panel-head"><strong>Vista del plan</strong></div>
             <div id="plan-map" class="plan-map"></div>
             <div class="plan-map-legend">
-              <span><i style="background:#0984e3"></i> Parada</span>
-              <span><i style="background:#2ecc71"></i> Sitio / Antena</span>
+              <span><i class="plan-legend-icon is-town" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.2">
+                    <path d="M3 11 12 3l9 8" />
+                    <path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10" />
+                    <path d="M9.5 21v-6h5v6" />
+                  </svg></i> Pueblo / Nodo</span>
+              <span><i class="plan-legend-icon is-tower" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2.1">
+                    <path d="M12 5v16" />
+                    <path d="M7.5 21 12 7l4.5 14" />
+                    <path d="M9 15h6" />
+                    <path d="M8 19h8" />
+                    <circle cx="12" cy="5" r="1.4" fill="currentColor" />
+                    <path d="M8.5 2.8a5 5 0 0 0 0 5.4" />
+                    <path d="M15.5 2.8a5 5 0 0 1 0 5.4" />
+                  </svg></i> Antena / Torre</span>
               <span><i style="background:#94a3b8"></i> Ruta planificada</span>
             </div>
           </aside>
@@ -1014,7 +1189,7 @@
         </span>
         <div>
           <h2>Duplicar Plan General</h2>
-          <p id="plan-duplicate-subtitle">Crea una copia exacta del plan actual para asignar a otro técnico.</p>
+          <p id="plan-duplicate-subtitle">Genera una copia del plan actual para asignarla a otro técnico.</p>
         </div>
         <button type="button" class="plan-dialog-close" aria-label="Cerrar" onclick="CM('plan-duplicate-mo')">
           <svg viewBox="0 0 24 24">
@@ -1110,12 +1285,14 @@
         <input type="hidden" id="reg-node-stop-id">
         <label class="plan-dialog-field" for="reg-node-town">
           <span>Nombre del pueblo o comunidad</span>
-          <input id="reg-node-town" placeholder="Ej. El Palmar, Tecruz, Sasamulco..." required>
+          <input id="reg-node-town" placeholder="Ej. EL PALMAR, TECRUZ, SASAMULCO..." style="text-transform:uppercase"
+            oninput="this.value=this.value.toLocaleUpperCase('es-MX')" required>
         </label>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
           <label class="plan-dialog-field" for="reg-node-code">
             <span>Clave del pueblo (nodo)</span>
-            <input id="reg-node-code" placeholder="Ej. R225" required>
+            <input id="reg-node-code" placeholder="Ej. R225" style="text-transform:uppercase"
+              oninput="this.value=this.value.toLocaleUpperCase('es-MX')" required>
           </label>
           <label class="plan-dialog-field" for="reg-node-zone">
             <span>Zona / Región</span>
@@ -1271,10 +1448,10 @@
 
   <div class="nt" id="nt"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="assets/js/api.js?v=20261124-live-sync-v4"></script>
-  <script src="assets/js/common.js?v=20261124-live-sync-v5"></script>
+  <script src="assets/js/api.js?v=20261125-towns-upper-v1"></script>
+  <script src="assets/js/common.js?v=20261125-mobile-loader-v7"></script>
   <script src="assets/js/preset-routes.js?v=20261124-wifimex-v3"></script>
-  <script src="assets/js/planificar.js?v=20261124-live-sync-v5"></script>
+  <script src="assets/js/planificar.js?v=20261125-clean-copy-v15"></script>
 </body>
 
 </html>

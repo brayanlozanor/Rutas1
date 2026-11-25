@@ -397,9 +397,41 @@ async function ensurePerformanceIndices(env) {
   }
 }
 
-const RELATIONAL_SCHEMA_VERSION = 'v3.9-fast-20261124';
+const RELATIONAL_SCHEMA_VERSION = 'v3.10-nodes-upper-20261125';
 const RELATIONAL_SCHEMA_KEY = 'relational_schema_version';
 let schemaEnsured = false;
+
+function upperTownText(value) {
+  return value === undefined || value === null ? '' : String(value).trim().toLocaleUpperCase('es-MX');
+}
+
+async function ensureNodesUppercase(env) {
+  const migrationKey = 'nodes_uppercase_v1';
+  try {
+    if (await first(env, 'SELECT value_json FROM app_settings WHERE key=?', [migrationKey])) return;
+  } catch (_) {}
+  try {
+    const rows = await all(env, 'SELECT id, node_code, town FROM nodes');
+    const stmts = [];
+    for (const row of rows || []) {
+      const nextCode = upperTownText(row.node_code);
+      const nextTown = upperTownText(row.town);
+      if (nextCode !== String(row.node_code ?? '') || nextTown !== String(row.town ?? '')) {
+        stmts.push(env.DB.prepare('UPDATE nodes SET node_code=?, town=? WHERE id=?').bind(nextCode, nextTown, row.id));
+      }
+    }
+    if (stmts.length) {
+      await batchChunks(env, stmts, 80);
+    }
+    await run(
+      env,
+      `INSERT INTO app_settings(key,value_json,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at`,
+      [migrationKey, JSON.stringify({ updated: stmts.length }), new Date().toISOString()]
+    );
+  } catch (e) {
+    console.warn('[ensureNodesUppercase]', e);
+  }
+}
 
 export function isRelationalSchemaReady() {
   return schemaEnsured;
@@ -474,6 +506,7 @@ export async function ensureRelationalSchema(env) {
   ]);
   await ensurePerformanceIndices(env).catch(e => console.warn('[ensureRelationalSchema] indices:', e));
   await ensureWorkOrderRelationRecovery(env).catch(e => console.warn('[ensureRelationalSchema] recovery:', e));
+  await ensureNodesUppercase(env).catch(e => console.warn('[ensureRelationalSchema] nodes uppercase:', e));
   try {
     await run(
       env,
@@ -836,7 +869,7 @@ async function loadNodes(env, ctx, page = null) {
   const rows = await all(env, `SELECT n.*, z.code AS zone_code FROM nodes n LEFT JOIN zones z ON z.id=n.zone_id${priorityJoin}${where} ORDER BY n.rowid${pagination}`, binds);
   if (!ctx.audit) ctx.audit = await getLatestAuditMap(env, rows.map(row => row.id));
   return rows.map(row => {
-    const out = { id:row.id, createdAt:row.created_at||'', nodeCode:row.node_code, town:row.town, zone:row.zone_code||'', lat:row.lat ?? '', lng:row.lng ?? '', status:row.status||'', notes:row.notes||'' };
+    const out = { id:row.id, createdAt:row.created_at||'', nodeCode:upperTownText(row.node_code), town:upperTownText(row.town), zone:row.zone_code||'', lat:row.lat ?? '', lng:row.lng ?? '', status:row.status||'', notes:row.notes||'' };
     if (row.updated_at) out.updatedAt = row.updated_at;
     if (row.deleted_at) out.deletedAt = row.deleted_at;
     addActorFields(out,'createdBy',ctx.users.get(row.created_by));
@@ -869,7 +902,7 @@ async function loadPlanningMapCatalog(env) {
           COUNT(*) AS detail_total,
           SUM(CASE WHEN COALESCE(w.status,'pendiente') IN ('completada','no_realizado','done') THEN 1 ELSE 0 END) AS detail_resolved
         FROM work_orders w LEFT JOIN (SELECT DISTINCT work_order_id FROM plan_stop_orders) planned ON planned.work_order_id=w.id
-        WHERE w.deleted_at IS NULL AND w.node_id IS NULL GROUP BY w.equipment_id
+        WHERE w.deleted_at IS NULL AND w.node_id IS NULL AND COALESCE(w.detail_kind,'physical') <> 'network' AND lower(COALESCE(w.category,'')) NOT LIKE '%_red' AND lower(COALESCE(w.category,'')) NOT LIKE 'red_%' GROUP BY w.equipment_id
       ) p ON p.entity_id=e.id
       WHERE e.deleted_at IS NULL AND e.lat IS NOT NULL AND e.lng IS NOT NULL ORDER BY e.rowid`),
     all(env,`SELECT n.id,n.node_code,n.town,n.lat,n.lng,n.status,n.notes,z.code AS zone,
@@ -894,7 +927,7 @@ async function loadPlanningMapCatalog(env) {
           MAX(CASE WHEN COALESCE(w.status,'pendiente') IN ('completada','no_realizado','done') THEN COALESCE(w.updated_at, w.created_at) ELSE NULL END) AS latest_resolved_at,
           SUM(CASE WHEN COALESCE(w.status,'pendiente') NOT IN ('completada','no_realizado','done') THEN 1 ELSE 0 END) AS unattended_count
         FROM work_orders w LEFT JOIN (SELECT DISTINCT work_order_id FROM plan_stop_orders) planned ON planned.work_order_id=w.id
-        WHERE w.deleted_at IS NULL AND w.node_id IS NOT NULL GROUP BY w.node_id
+        WHERE w.deleted_at IS NULL AND w.node_id IS NOT NULL AND COALESCE(w.detail_kind,'physical') <> 'network' AND lower(COALESCE(w.category,'')) NOT LIKE '%_red' AND lower(COALESCE(w.category,'')) NOT LIKE 'red_%' GROUP BY w.node_id
       ) p ON p.entity_id=n.id
       WHERE n.deleted_at IS NULL AND n.lat IS NOT NULL AND n.lng IS NOT NULL ORDER BY n.rowid`),
     all(env,`SELECT en.equipment_id,en.node_id FROM equipment_nodes en JOIN equipment e ON e.id=en.equipment_id JOIN nodes n ON n.id=en.node_id WHERE e.deleted_at IS NULL AND n.deleted_at IS NULL ORDER BY en.equipment_id,en.position,en.node_id`)
@@ -914,7 +947,7 @@ async function loadPlanningMapCatalog(env) {
       mapVeryHigh:Number(row.map_very_high)||0,mapHigh:Number(row.map_high)||0,mapMedium:Number(row.map_medium)||0,mapLow:Number(row.map_low)||0,mapPlannedOpen:Number(row.map_planned_open)||0,mapDetailTotal:Number(row.map_detail_total)||0,mapDetailResolved:Number(row.map_detail_resolved)||0
     })),
     nodes:nodeRows.map(row=>({
-      id:row.id,nodeCode:row.node_code||'',town:row.town||'',lat:row.lat,lng:row.lng,status:row.status||'',notes:row.notes||'',zone:row.zone||'',
+      id:row.id,nodeCode:upperTownText(row.node_code),town:upperTownText(row.town),lat:row.lat,lng:row.lng,status:row.status||'',notes:row.notes||'',zone:row.zone||'',
       mapVeryHigh:Number(row.map_very_high)||0,mapHigh:Number(row.map_high)||0,mapMedium:Number(row.map_medium)||0,mapLow:Number(row.map_low)||0,
       mapPlannedOpen:Number(row.map_planned_open)||0,mapDetailTotal:Number(row.map_detail_total)||0,mapDetailResolved:Number(row.map_detail_resolved)||0,
       mapOldestPendingAt:row.map_oldest_pending_at||'',mapLatestResolvedAt:row.map_latest_resolved_at||'',mapUnattendedCount:Number(row.map_unattended_count)||0
@@ -1618,15 +1651,47 @@ async function loadWeekPlan(env,page={}) {
   const viewerId=viewerIds[0]||'';
   let scopedTechnicianId='';
   if(viewerRole==='tecnico'&&viewerId){
-    let technician=null;
-    for(const vid of viewerIds){
-      technician=await first(env,'SELECT id, name FROM technicians WHERE (user_id=? OR id=? OR username_legacy=? OR username_legacy=(SELECT username FROM users WHERE id=?)) AND deleted_at IS NULL',[vid,vid,vid,vid]);
-      if(technician) break;
+    const normTechText = v => String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+    const viewerNorms = [...new Set(viewerIds.map(normTechText).filter(Boolean))];
+    const viewerFirstNames = [...new Set(viewerNorms.map(n => n.split(' ')[0]).filter(t => t && t.length >= 3))];
+    const allActiveTechs = await all(env, 'SELECT id, user_id, name, username_legacy FROM technicians WHERE deleted_at IS NULL ORDER BY rowid');
+    const userRow = viewerId ? await first(env, 'SELECT id, username, name FROM users WHERE id=?', [viewerId]) : null;
+    if (userRow) {
+      if (userRow.username) viewerNorms.push(normTechText(userRow.username));
+      if (userRow.name) {
+        const un = normTechText(userRow.name);
+        viewerNorms.push(un);
+        const fn = un.split(' ')[0];
+        if (fn && fn.length >= 3) viewerFirstNames.push(fn);
+      }
     }
-    scopedTechnicianId=technician?.id||viewerId;
-    const techFirstName = (technician?.name || viewerIds[2] || viewerIds[1] || '').trim().split(/\s+/)[0].toLowerCase();
+    const viewerIdSet = new Set(viewerIds.filter(Boolean));
+    const viewerNormSet = new Set(viewerNorms.filter(Boolean));
+    const matchedTechs = (allActiveTechs || []).filter(t => {
+      if (!t) return false;
+      if (viewerIdSet.has(String(t.id || '')) || viewerIdSet.has(String(t.user_id || ''))) return true;
+      const tUser = normTechText(t.username_legacy);
+      const tName = normTechText(t.name);
+      if (tUser && viewerNormSet.has(tUser)) return true;
+      if (tName && viewerNormSet.has(tName)) return true;
+      if (tName && [...viewerNormSet].some(vn => vn.length >= 3 && (tName.includes(vn) || vn.includes(tName)))) return true;
+      return false;
+    });
+    const matchedTechIds = [...new Set([...matchedTechs.map(t => String(t.id)), ...matchedTechs.map(t => String(t.user_id || '')), ...viewerIds].filter(Boolean))];
+    scopedTechnicianId = matchedTechs[0]?.id || viewerId;
+    const techFirstName = (matchedTechs[0]?.name || userRow?.name || viewerIds[2] || viewerIds[1] || '').trim().split(/\s+/)[0].toLowerCase();
     const nameMatch = techFirstName ? `%${techFirstName}%` : '__no_match__';
-    plans=scopedTechnicianId?await all(env,"SELECT DISTINCT p.* FROM plans p LEFT JOIN plan_assignments a ON a.plan_id=p.id WHERE COALESCE(p.scope_key,p.technician_id,'') IN (?,'','__shared__') OR a.technician_id=? OR lower(p.name) LIKE ? ORDER BY p.rowid",[scopedTechnicianId,scopedTechnicianId,nameMatch]):[];
+    if (matchedTechIds.length) {
+      const scopeMarks = matchedTechIds.map(() => '?').join(',');
+      const assignMarks = matchedTechIds.map(() => '?').join(',');
+      plans = await all(
+        env,
+        `SELECT DISTINCT p.* FROM plans p LEFT JOIN plan_assignments a ON a.plan_id=p.id WHERE COALESCE(p.scope_key,p.technician_id,'') IN (${scopeMarks},'','__shared__') OR a.technician_id IN (${assignMarks}) OR lower(p.name) LIKE ? ORDER BY p.rowid`,
+        [...matchedTechIds, ...matchedTechIds, nameMatch]
+      );
+    } else {
+      plans = [];
+    }
   }else plans=await all(env,'SELECT * FROM plans ORDER BY rowid');
   const planIds=plans.map(plan=>plan.id);
   const assignments=[];
@@ -1968,9 +2033,9 @@ export async function loadStatePart(env, part, page = {}) {
       ...chunkValues(equipmentIds).map(idsChunk => loadAllWorkOrderPages(env,usersMap,{equipmentIds:idsChunk.join(','),openOnly:'1',includeNoRealizado:'1'})),
       ...chunkValues(allNodeIdsForOrders).map(idsChunk => loadAllWorkOrderPages(env,usersMap,{nodeIds:idsChunk.join(','),openOnly:'1',includeNoRealizado:'1'}))
     ];
-    const viewerId = nullableText(page?.viewerId);
-    if (viewerId) {
-      workOrderTasks.push(loadAllWorkOrderPages(env,usersMap,{assignee:viewerId,openOnly:'1',includeNoRealizado:'1'}));
+    const primaryViewerId = csvValues(page?.viewerId)[0] || '';
+    if (primaryViewerId) {
+      workOrderTasks.push(loadAllWorkOrderPages(env,usersMap,{assignee:primaryViewerId,openOnly:'1',includeNoRealizado:'1'}));
     }
     const [woBatches, rawDeletionRequests, materialMovements, technicians, userRows] = await Promise.all([
       Promise.all(workOrderTasks),
@@ -2076,7 +2141,7 @@ async function upsertNode(env,rec) {
   ]);
   await run(env, `INSERT INTO nodes(id,node_code,town,zone_id,lat,lng,status,notes,created_at,updated_at,deleted_at,created_by,updated_by,deleted_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
    ON CONFLICT(id) DO UPDATE SET node_code=excluded.node_code,town=excluded.town,zone_id=excluded.zone_id,lat=excluded.lat,lng=excluded.lng,status=excluded.status,notes=excluded.notes,created_at=COALESCE(nodes.created_at,excluded.created_at),updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,created_by=COALESCE(nodes.created_by,excluded.created_by),updated_by=COALESCE(excluded.updated_by,nodes.updated_by),deleted_by=COALESCE(excluded.deleted_by,nodes.deleted_by)`,
-   [rec.id,text(rec.nodeCode),text(rec.town || rec.name),zoneId,nullableNumber(rec.lat),nullableNumber(rec.lng),text(rec.status,'activo'),text(rec.notes),rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,createdBy,updatedBy,deletedBy]);
+   [rec.id,upperTownText(rec.nodeCode),upperTownText(rec.town || rec.name),zoneId,nullableNumber(rec.lat),nullableNumber(rec.lng),text(rec.status,'activo'),text(rec.notes),rec.createdAt??null,rec.updatedAt??null,rec.deletedAt??null,createdBy,updatedBy,deletedBy]);
 }
 
 async function upsertWorkOrder(env,rec) {

@@ -37,7 +37,7 @@ body.admin-analytics-page{min-height:100dvh;background:#f4f7fb;color:var(--analy
 @media(max-width:850px){.dashboard-page .dashboard-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:540px){.dashboard-page .analytics-filter-heading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.dashboard-page .analytics-filter-heading>.btn{width:auto}.dashboard-page .analytics-filter-heading small{display:none}.dashboard-page .dashboard-filter-grid{grid-template-columns:1fr}}
 
-/* Dashboard de referencia: superficie clara, tarjetas amplias y jerarquia compacta. */
+/* Estilos del panel de Dashboard: superficie clara, tarjetas amplias y jerarquia compacta. */
 body.dashboard-page{background:radial-gradient(circle at 55% -12%,#fff 0,#f7faff 36%,#f3f7fc 72%,#f0f5fb 100%)!important}
 .dashboard-shell{max-width:1840px;padding:28px 34px 44px!important}
 .dashboard-heading{display:flex;min-height:108px;align-items:center;justify-content:space-between;gap:24px;margin-bottom:15px}
@@ -197,7 +197,7 @@ body.dashboard-page{background:radial-gradient(circle at 55% -12%,#fff 0,#f7faff
 @media(max-width:430px){.dashboard-heading h1{font-size:24px}.dashboard-primary-kpis{grid-template-columns:1fr}.dashboard-kpi-card{grid-template-columns:52px minmax(0,1fr)}.dashboard-period-kpis{grid-template-columns:1fr}.dashboard-period-kpis article,.dashboard-period-kpis article:nth-child(n){padding:12px 16px;border-right:0;border-bottom:1px solid #e2e9f2}.dashboard-period-kpis article:last-child{border-bottom:0}.dashboard-panel>header{align-items:flex-start;padding:15px;flex-direction:column}.dashboard-panel>header button{align-self:flex-end;margin-top:-42px}.dashboard-tech-head,.dashboard-tech-row{grid-template-columns:80px minmax(0,1fr) 28px}.dashboard-performance-panel .analytics-bar-chart{padding-right:12px;padding-left:12px}}
 @media(max-width:540px){.dashboard-distribution-chart{grid-template-columns:1fr;justify-items:center;gap:16px}.dashboard-distribution-legend{width:100%}}
 
-/* Historial de referencia. */
+/* Estilos del Historial */
 body.history-page{background:radial-gradient(circle at 55% -12%,#fff 0,#f7faff 36%,#f3f7fc 72%,#f0f5fb 100%)!important}
 .history-shell{max-width:1840px;padding:24px 30px 44px!important}
 .history-heading{display:flex;min-height:164px;align-items:center;justify-content:space-between;gap:26px;margin-bottom:16px;padding:24px 34px;border:1px solid #dfe7f1;border-radius:15px;background:rgba(255,255,255,.9);box-shadow:0 8px 25px rgba(16,43,80,.045)}
