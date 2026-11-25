@@ -416,9 +416,236 @@ async function postWorkOrderReportToCloud(workOrder) {
     }
 }
 
+// ==================== CACHE OFFLINE DE RESPUESTAS GET ====================
+const OFFLINE_GET_CACHE_PREFIX = 'netops_get_cache_v1:';
+const OFFLINE_GET_CACHE_INDEX_KEY = 'netops_get_cache_index_v1';
+const OFFLINE_GET_CACHE_MAX_ENTRIES = 28;
+const OFFLINE_IDB_NAME = 'netops_offline_cache_v1';
+const OFFLINE_IDB_STORE = 'responses';
+const OFFLINE_SECRET_KEYS = new Set([
+    'password', 'passwordHash', 'password_hash', 'password_legacy',
+    'currentPassword', 'newPassword', 'confirmPassword',
+    'token', 'sessionToken', 'authSecret', 'secret'
+]);
+let _offlineIdbPromise = null;
+
+function sanitizeDataForOfflineCache(value, depth = 0) {
+    if (value === null || value === undefined || typeof value !== 'object' || depth > 8) return value;
+    if (Array.isArray(value)) {
+        return value.map(item => sanitizeDataForOfflineCache(item, depth + 1));
+    }
+    const clean = {};
+    for (const [k, v] of Object.entries(value)) {
+        if (OFFLINE_SECRET_KEYS.has(k)) continue;
+        clean[k] = sanitizeDataForOfflineCache(v, depth + 1);
+    }
+    return clean;
+}
+
+function buildOfflineCacheUrlKey(path, params = null) {
+    const cleanPath = String(path || '').split('?')[0];
+    const entries = [];
+    if (params instanceof URLSearchParams) {
+        params.forEach((v, k) => {
+            if (k !== 't' && k !== 'ts' && k !== '_' && v !== '') entries.push([k, v]);
+        });
+    } else if (params && typeof params === 'object') {
+        Object.entries(params).forEach(([k, v]) => {
+            if (k !== 't' && k !== 'ts' && k !== '_' && v !== undefined && v !== null && String(v) !== '') {
+                entries.push([k, String(v)]);
+            }
+        });
+    } else if (String(path || '').includes('?')) {
+        const qs = new URLSearchParams(String(path).split('?')[1] || '');
+        qs.forEach((v, k) => {
+            if (k !== 't' && k !== 'ts' && k !== '_' && v !== '') entries.push([k, v]);
+        });
+    }
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
+    const normalizedQs = new URLSearchParams(entries).toString();
+    return normalizedQs ? `${cleanPath}?${normalizedQs}` : cleanPath;
+}
+
+function isOfflineOrNetworkFailure(error) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+    const status = Number(error?.httpStatus || 0);
+    if (status === 400 || status === 401 || status === 403 || status === 404 || status === 422) return false;
+    if (status >= 502 && status <= 504) return true;
+    if (error?.syncType === 'CONEXION' || error?.syncType === 'TIEMPO_DE_ESPERA') return true;
+    if (error?.name === 'AbortError' || error instanceof TypeError) return true;
+    const msg = String(error?.message || error || '');
+    return /failed to fetch|networkerror|network request|load failed|offline|sin conexion|tiempo de espera|aborted/i.test(msg);
+}
+
+function openOfflineCacheDB() {
+    if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+    if (_offlineIdbPromise) return _offlineIdbPromise;
+    _offlineIdbPromise = new Promise(resolve => {
+        try {
+            const req = indexedDB.open(OFFLINE_IDB_NAME, 1);
+            req.onupgradeneeded = () => {
+                const db = req.result;
+                if (!db.objectStoreNames.contains(OFFLINE_IDB_STORE)) {
+                    db.createObjectStore(OFFLINE_IDB_STORE, { keyPath: 'key' });
+                }
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(null);
+        } catch (e) {
+            resolve(null);
+        }
+    });
+    return _offlineIdbPromise;
+}
+
+async function idbSetOfflineCache(key, entry) {
+    try {
+        const db = await openOfflineCacheDB();
+        if (!db) return false;
+        return await new Promise(resolve => {
+            try {
+                const tx = db.transaction(OFFLINE_IDB_STORE, 'readwrite');
+                tx.objectStore(OFFLINE_IDB_STORE).put({ key, ...entry });
+                tx.oncomplete = () => resolve(true);
+                tx.onerror = () => resolve(false);
+            } catch (e) {
+                resolve(false);
+            }
+        });
+    } catch (e) {
+        return false;
+    }
+}
+
+async function idbGetOfflineCache(key) {
+    try {
+        const db = await openOfflineCacheDB();
+        if (!db) return null;
+        return await new Promise(resolve => {
+            try {
+                const tx = db.transaction(OFFLINE_IDB_STORE, 'readonly');
+                const req = tx.objectStore(OFFLINE_IDB_STORE).get(key);
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => resolve(null);
+            } catch (e) {
+                resolve(null);
+            }
+        });
+    } catch (e) {
+        return null;
+    }
+}
+
+function _pruneOfflineLocalStorageIndex(newKey) {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        let index = JSON.parse(localStorage.getItem(OFFLINE_GET_CACHE_INDEX_KEY) || '[]');
+        if (!Array.isArray(index)) index = [];
+        index = index.filter(item => item && item.key && item.key !== newKey);
+        index.push({ key: newKey, at: Date.now() });
+        while (index.length > OFFLINE_GET_CACHE_MAX_ENTRIES) {
+            const oldest = index.shift();
+            if (oldest?.key) {
+                try { localStorage.removeItem(OFFLINE_GET_CACHE_PREFIX + oldest.key); } catch (e) {}
+            }
+        }
+        localStorage.setItem(OFFLINE_GET_CACHE_INDEX_KEY, JSON.stringify(index));
+    } catch (e) {}
+}
+
+function saveOfflineGetCache(cacheKey, data) {
+    if (!cacheKey || !data || typeof data !== 'object') return;
+    const sanitized = sanitizeDataForOfflineCache(data);
+    const entry = { savedAt: new Date().toISOString(), data: sanitized };
+    const fullKey = OFFLINE_GET_CACHE_PREFIX + cacheKey;
+    if (typeof localStorage !== 'undefined') {
+        const serialized = JSON.stringify(entry);
+        try {
+            localStorage.setItem(fullKey, serialized);
+            _pruneOfflineLocalStorageIndex(cacheKey);
+        } catch (err) {
+            // Si localStorage alcanzó cuota, liberar entradas viejas de caché GET y reintentar
+            try {
+                let index = JSON.parse(localStorage.getItem(OFFLINE_GET_CACHE_INDEX_KEY) || '[]');
+                if (Array.isArray(index) && index.length) {
+                    const dropCount = Math.max(4, Math.ceil(index.length / 2));
+                    const dropped = index.splice(0, dropCount);
+                    dropped.forEach(item => {
+                        if (item?.key) localStorage.removeItem(OFFLINE_GET_CACHE_PREFIX + item.key);
+                    });
+                    localStorage.setItem(OFFLINE_GET_CACHE_INDEX_KEY, JSON.stringify(index));
+                    localStorage.setItem(fullKey, serialized);
+                    _pruneOfflineLocalStorageIndex(cacheKey);
+                }
+            } catch (e) {}
+        }
+    }
+    // Respaldo asíncrono en IndexedDB para respuestas más grandes
+    void idbSetOfflineCache(fullKey, entry);
+}
+
+async function readOfflineGetCache(cacheKey) {
+    if (!cacheKey) return null;
+    const fullKey = OFFLINE_GET_CACHE_PREFIX + cacheKey;
+    if (typeof localStorage !== 'undefined') {
+        try {
+            const raw = localStorage.getItem(fullKey);
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.data && typeof parsed.data === 'object') {
+                    return parsed;
+                }
+            }
+        } catch (e) {}
+    }
+    const idbEntry = await idbGetOfflineCache(fullKey);
+    if (idbEntry && idbEntry.data && typeof idbEntry.data === 'object') {
+        return idbEntry;
+    }
+    return null;
+}
+
+async function fetchJsonWithOfflineCache(urlOrPath, { timeoutMs = 10000, cacheKey = '', headers = {}, silent = false } = {}) {
+    const resolvedUrl = /^https?:\/\//i.test(urlOrPath) ? urlOrPath : `${API}${urlOrPath}`;
+    const key = cacheKey || buildOfflineCacheUrlKey(urlOrPath);
+    const isSilentUrl = silent || /\/api\/(ping|sync-meta|session)/i.test(key);
+    const subtlePart = key.includes('/api/profile') ? 'profile' : (key.includes('dashboard') ? 'dashboard' : 'sync');
+    const subtleToken = (!isSilentUrl && typeof window !== 'undefined' && window.NetopsSubtleLoader)
+        ? window.NetopsSubtleLoader.start(subtlePart)
+        : null;
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), Math.max(4000, Number(timeoutMs) || 10000));
+    try {
+        const res = await fetch(resolvedUrl, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache', ...headers },
+            signal: ctrl.signal
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw createApiError(res, data, `la consulta de ${key}`);
+        saveOfflineGetCache(key, data);
+        return data;
+    } catch (error) {
+        if (isOfflineOrNetworkFailure(error)) {
+            const cached = await readOfflineGetCache(key);
+            if (cached?.data) {
+                setSyncStatus('Sin conexión (caché local)', 'warn');
+                return { ...cached.data, __fromOfflineCache: true, __cachedAt: cached.savedAt };
+            }
+        }
+        throw error;
+    } finally {
+        clearTimeout(tid);
+        if (subtleToken && typeof window !== 'undefined' && window.NetopsSubtleLoader) {
+            window.NetopsSubtleLoader.end(subtleToken);
+        }
+    }
+}
+
 async function fetchRemoteSyncMeta(timeoutMs = 5000) {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), timeoutMs);
+    const cacheKey = '/api/sync-meta';
     try {
         const res = await fetch(`${API}/api/sync-meta?t=${Date.now()}`, {
             cache: 'no-store',
@@ -427,7 +654,16 @@ async function fetchRemoteSyncMeta(timeoutMs = 5000) {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.ok !== true) throw createApiError(res, data, 'la consulta de sincronizacion');
+        saveOfflineGetCache(cacheKey, data);
         return data;
+    } catch (error) {
+        if (isOfflineOrNetworkFailure(error)) {
+            const cached = await readOfflineGetCache(cacheKey);
+            if (cached?.data) {
+                return { ...cached.data, __fromOfflineCache: true, __cachedAt: cached.savedAt };
+            }
+        }
+        throw error;
     } finally {
         clearTimeout(tid);
     }
@@ -436,11 +672,18 @@ async function fetchRemoteSyncMeta(timeoutMs = 5000) {
 async function fetchDataPage(part, params = {}, timeoutMs = 10000) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), Math.max(5000, Number(timeoutMs) || 10000));
+    const query = new URLSearchParams({ part:String(part || ''), paged:'1', t:String(Date.now()) });
+    Object.entries(params || {}).forEach(([key,value]) => {
+        if (key === '__backgroundPoll' || key === 'silent') return;
+        if (value !== undefined && value !== null && String(value) !== '') query.set(key,String(value));
+    });
+    const isSilentBackground = Boolean(params && (params.silent === true || params.silent === '1' || params.__backgroundPoll));
+    const subtleKey = (params && params.adminStats === '1') ? 'dashboard' : String(part || '');
+    const subtleToken = (!isSilentBackground && typeof window !== 'undefined' && window.NetopsSubtleLoader)
+        ? window.NetopsSubtleLoader.start(subtleKey)
+        : null;
+    const cacheKey = buildOfflineCacheUrlKey('/api/data', query);
     try {
-        const query = new URLSearchParams({ part:String(part || ''), paged:'1', t:String(Date.now()) });
-        Object.entries(params || {}).forEach(([key,value]) => {
-            if (value !== undefined && value !== null && String(value) !== '') query.set(key,String(value));
-        });
         const response = await fetch(`${API}/api/data?${query}`, {
             signal:controller.signal,
             cache:'no-store',
@@ -448,9 +691,23 @@ async function fetchDataPage(part, params = {}, timeoutMs = 10000) {
         });
         const body = await response.json().catch(() => ({}));
         if (!response.ok) throw createApiError(response,body,`la consulta de ${part}`);
+        saveOfflineGetCache(cacheKey, body);
         return body;
+    } catch (error) {
+        if (isOfflineOrNetworkFailure(error)) {
+            const cached = await readOfflineGetCache(cacheKey);
+            if (cached?.data) {
+                window.netopsUsingCachedState = true;
+                setSyncStatus('Sin conexión (caché local)', 'warn');
+                return { ...cached.data, __fromOfflineCache: true, __cachedAt: cached.savedAt };
+            }
+        }
+        throw error;
     } finally {
         clearTimeout(timeoutId);
+        if (subtleToken && typeof window !== 'undefined' && window.NetopsSubtleLoader) {
+            window.NetopsSubtleLoader.end(subtleToken);
+        }
     }
 }
 
@@ -467,9 +724,10 @@ function getSyncTokenFromState(data = state) {
 
 async function autoSyncTick({ force = false, silent = true } = {}) {
     if (syncBusy || document.hidden) return false;
-    if (!force && (isLocalDirty() || isUserEditingNow())) return false;
+    if (!force && isLocalDirty()) return false;
     try {
         const meta = await fetchRemoteSyncMeta(5000);
+        if (meta?.__fromOfflineCache) return false;
         const token = String(meta.updatedAt || '');
         if (!token) return false;
         if (!lastSyncToken) {
@@ -482,7 +740,7 @@ async function autoSyncTick({ force = false, silent = true } = {}) {
         // `force` permite comprobar al volver a la pestaña, pero nunca debe
         // descargar toda la pantalla si D1 no cambió.
         if (token === lastSyncToken) return false;
-        const changed = await syncFromCloud({ silent, force: true });
+        const changed = await syncFromCloud({ silent, force: false });
         if (changed) lastSyncToken = token;
         return changed;
     } catch (e) {
@@ -1333,7 +1591,7 @@ function mergeRecordVersions(current, incoming) {
     const incomingHasNewReport = next.technicianReport && !prev.technicianReport;
     const incomingHasNewerReport = nextTechTime > prevTechTime;
     
-    const nextIsNewer = incomingHasNewReport || incomingHasNewerReport || (getRecordUpdatedAt(next) > getRecordUpdatedAt(prev));
+    const nextIsNewer = incomingHasNewReport || incomingHasNewerReport || (getRecordUpdatedAt(next) >= getRecordUpdatedAt(prev));
     
     const merged = nextIsNewer ? { ...prev, ...next } : { ...next, ...prev };
     
@@ -1385,7 +1643,13 @@ function mergeGeneralPlans(remotePlans, localPlans) {
         const remote = (remotePlans || []).find(item => recordKey(item, 'generalPlan') === key) || {};
         const local = (localPlans || []).find(item => recordKey(item, 'generalPlan') === key) || {};
         const stops = plan.deletedAt ? (Array.isArray(local.stops) ? local.stops : remote.stops) : mergeRecords(remote.stops, local.stops, 'planStop');
-        return { ...plan, stops };
+        const out = { ...plan, stops };
+        if (Array.isArray(out.assignedTechIds)) {
+            const cleanIds = [...new Set(out.assignedTechIds.filter(Boolean).map(String))];
+            out.assignedTechIds = cleanIds;
+            out.assignedTechId = cleanIds[0] || '';
+        }
+        return out;
     });
 }
 
@@ -1474,13 +1738,37 @@ function getLastGoodCloudState(parts = null) {
 
 function saveLastGoodCloudState(data, parts = null) {
     try {
-        localStorage.setItem(getStateCacheKey(parts || data?.__loadedParts), JSON.stringify({
+        const key = getStateCacheKey(parts || data?.__loadedParts);
+        const cleanData = typeof sanitizeDataForOfflineCache === 'function' ? sanitizeDataForOfflineCache(data) : data;
+        const entry = {
             savedAt: new Date().toISOString(),
-            data
-        }));
+            data: cleanData
+        };
+        try {
+            localStorage.setItem(key, JSON.stringify(entry));
+        } catch (lsErr) {
+            console.warn('localStorage lleno para ultima copia de nube; usando IndexedDB.', lsErr);
+        }
+        if (typeof idbSetOfflineCache === 'function') {
+            void idbSetOfflineCache(key, entry);
+        }
     } catch(e) {
         console.warn('No se pudo conservar la ultima copia de nube.', e);
     }
+}
+
+async function getLastGoodCloudStateAsync(parts = null) {
+    const syncCached = getLastGoodCloudState(parts);
+    if (syncCached?.data) return syncCached;
+    if (typeof idbGetOfflineCache === 'function') {
+        const key = getStateCacheKey(parts);
+        const idbEntry = await idbGetOfflineCache(key);
+        if (idbEntry && idbEntry.data && typeof idbEntry.data === 'object') return idbEntry;
+        const legacyPlanKey = `${LAST_GOOD_STATE_KEY}:materials,people,planning`;
+        const legacyEntry = await idbGetOfflineCache(legacyPlanKey);
+        if (legacyEntry && legacyEntry.data && typeof legacyEntry.data === 'object') return legacyEntry;
+    }
+    return null;
 }
 
 function stableJson(value) {
@@ -1613,6 +1901,11 @@ async function fetchRemoteState(timeoutMs = 5000, options = {}) {
     const requestedParts = getPageDataParts(options.parts);
     const currentRoute = (location.pathname.split('/').pop() || '').toLowerCase();
     const currentPage = currentRoute && !currentRoute.includes('.') ? `${currentRoute}.html` : currentRoute;
+    const isSilentStateLoad = Boolean(options?.silent || options?.__backgroundPoll);
+    const subtlePartKey = requestedParts[0] || (currentPage === 'dashboard.html' ? 'dashboard' : (currentPage === 'mapa.html' ? 'infrastructure' : 'sync'));
+    const subtleToken = (!isSilentStateLoad && typeof window !== 'undefined' && window.NetopsSubtleLoader)
+        ? window.NetopsSubtleLoader.start(subtlePartKey)
+        : null;
     let d = {};
     const pageMeta = {};
     try {
@@ -1620,22 +1913,43 @@ async function fetchRemoteState(timeoutMs = 5000, options = {}) {
         const syncMetaPart = requestedParts.includes('planning') ? '' : (requestedParts[0] || '');
         const requestPart = async (part, offset = 0, limit = PAGE_SIZE, params = {}, includeSyncMeta = false) => {
             let lastError;
+            const cacheParams = { part, offset:String(offset), limit:String(limit), paged:'1', ...(params || {}) };
+            const partCacheKey = typeof buildOfflineCacheUrlKey === 'function' ? buildOfflineCacheUrlKey('/api/data', cacheParams) : '';
             for (let attempt = 0; attempt < 4; attempt += 1) {
                 const query = new URLSearchParams({ part, offset:String(offset), limit:String(limit), paged:'1', t:String(Date.now()) });
                 if (includeSyncMeta) query.set('includeSyncMeta','1');
                 Object.entries(params || {}).forEach(([key,value]) => {
                     if (value !== undefined && value !== null && String(value) !== '') query.set(key,String(value));
                 });
-                const res = await fetch(`${API}/api/data?${query}`, {
-                    signal: controller.signal,
-                    cache: 'no-store',
-                    headers: { 'Cache-Control': 'no-cache' }
-                });
-                const body = await res.json().catch(() => ({}));
-                if (res.ok) return body;
-                lastError = createApiError(res, body, `la carga de ${part}`);
-                if (res.status !== 503 || attempt === 3) throw lastError;
-                await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+                try {
+                    const res = await fetch(`${API}/api/data?${query}`, {
+                        signal: controller.signal,
+                        cache: 'no-store',
+                        headers: { 'Cache-Control': 'no-cache' }
+                    });
+                    const body = await res.json().catch(() => ({}));
+                    if (res.ok) {
+                        if (partCacheKey && typeof saveOfflineGetCache === 'function') {
+                            saveOfflineGetCache(partCacheKey, body);
+                        }
+                        return body;
+                    }
+                    lastError = createApiError(res, body, `la carga de ${part}`);
+                    if (res.status !== 503 || attempt === 3) throw lastError;
+                    await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+                } catch (err) {
+                    lastError = err;
+                    if (attempt === 3 || (typeof isOfflineOrNetworkFailure === 'function' && !isOfflineOrNetworkFailure(err))) {
+                        if (partCacheKey && typeof readOfflineGetCache === 'function' && (typeof isOfflineOrNetworkFailure !== 'function' || isOfflineOrNetworkFailure(err))) {
+                            const cached = await readOfflineGetCache(partCacheKey);
+                            if (cached?.data) {
+                                return { ...cached.data, __fromOfflineCache: true, __cachedAt: cached.savedAt };
+                            }
+                        }
+                        throw err;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+                }
             }
             throw lastError;
         };
@@ -1689,7 +2003,17 @@ async function fetchRemoteState(timeoutMs = 5000, options = {}) {
             people: () => loadPagedOrWindowed('people','users'),
             activity: () => requestPart('activity'),
             audit: () => loadPagedOrWindowed('audit','auditLog'),
-            planning: () => requestPart('planning',0,PAGE_SIZE,currentPage === 'planificar.html' ? {includeMapCatalog:'1'} : {})
+            planning: () => {
+                let viewerId = '';
+                try {
+                    const user = JSON.parse(localStorage.getItem('user') || '{}');
+                    viewerId = String(user?.id || '').trim();
+                } catch (_) {}
+                const planningParams = {};
+                if (currentPage === 'planificar.html') planningParams.includeMapCatalog = '1';
+                if (viewerId) planningParams.viewerId = viewerId;
+                return requestPart('planning',0,PAGE_SIZE,planningParams);
+            }
         };
         const tasks = requestedParts.map(part => taskByPart[part]).filter(Boolean);
         const results = new Array(tasks.length);
@@ -1732,6 +2056,9 @@ async function fetchRemoteState(timeoutMs = 5000, options = {}) {
         throw error;
     } finally {
         clearTimeout(timeoutId);
+        if (subtleToken && typeof window !== 'undefined' && window.NetopsSubtleLoader) {
+            window.NetopsSubtleLoader.end(subtleToken);
+        }
     }
     const remoteState = {
         equipment: safeParse(d.equipment),
@@ -1904,7 +2231,10 @@ function renderAfterSync() {
 
     // renderPlan: refrescar solo si no hay modal de plan abierto en planificar.js
     const planModalOpen = !!document.querySelector('#plan-stop-mo.open, #plan-detail-mo.open, #plan-general-mo.open');
-    if (!planModalOpen && typeof renderPlan === 'function') {
+    if (planModalOpen) {
+        window._planPendingSyncRender = true;
+    } else if (typeof renderPlan === 'function') {
+        window._planPendingSyncRender = false;
         try {
             if (typeof refreshPlanAfterSync === 'function') refreshPlanAfterSync();
             else renderPlan();
@@ -1973,7 +2303,7 @@ function isUserEditingNow() {
     const editableFocused = ['input', 'textarea', 'select'].includes(tag) || active?.isContentEditable;
     const modalOpen = !!document.querySelector('.mo.open');
     if (page === 'tecnico-ruta.html') return editableFocused || modalOpen;
-    const fieldFocused = editableFocused || tag === 'button';
+    const fieldFocused = editableFocused;
     const expandedMapOpen = !!document.querySelector('.map-expanded');
     const leafletPopupOpen = !!document.querySelector('.leaflet-popup');
     // Tambien proteger cuando el mapa de planificacion este abierto (el usuario puede estar navegando)
@@ -1996,6 +2326,11 @@ async function syncFromCloud({ silent = true, force = false, parts = null } = {}
     syncBusy = true;
     try {
         const remoteState = await fetchRemoteState(8000, { parts });
+        if (remoteState?.__fromOfflineCache) {
+            window.netopsUsingCachedState = true;
+            setSyncStatus('Sin conexión (caché local)', 'warn');
+            return false;
+        }
         const remoteFingerprint = getDataFingerprint(remoteState);
         if (remoteFingerprint && remoteFingerprint === lastCloudFingerprint) return false;
 
@@ -2097,11 +2432,21 @@ async function checkAppVersion({ force = false } = {}) {
 
 function startAutoSync() {
     if (syncTimer) clearInterval(syncTimer);
-    // Un minuto conserva actualizacion cercana a tiempo real y reduce 67 %
-    // del sondeo inactivo frente al intervalo anterior de 20 segundos.
-    syncTimer = setInterval(() => {
-        autoSyncTick({ silent: true });
-    }, 60000);
+    const currentPage = (location.pathname.split('/').pop() || '').toLowerCase();
+    const isPlanLivePage = currentPage === 'planificar.html' || currentPage === 'tecnico-ruta.html';
+    if (isPlanLivePage) {
+        // En vista de planificacion y tecnico revisamos /api/sync-meta cada 15s (1 consulta minima).
+        // Solo se descarga el plan si realmente cambio algo en D1 (p. ej. un detalle nuevo).
+        syncTimer = setInterval(() => {
+            autoSyncTick({ silent: true });
+        }, 15000);
+    } else {
+        // Un minuto conserva actualizacion cercana a tiempo real y reduce 67 %
+        // del sondeo inactivo frente al intervalo anterior de 20 segundos.
+        syncTimer = setInterval(() => {
+            autoSyncTick({ silent: true });
+        }, 60000);
+    }
     if (!syncListenersBound) {
         syncListenersBound = true;
         const scheduleWakeSync = ({ silent = true, force = true, delay = 1200 } = {}) => {
@@ -2153,38 +2498,49 @@ async function loadDB(options = {}) {
             remoteState = await fetchRemoteState(20000, { parts: options.parts });
         }
 
-        // Un guardado fallido deja deltas en el navegador. Nunca aceptar el
-        // estado remoto (que puede haber quedado parcial) ni borrar esa cola
-        // antes de intentar recuperarla.
-        const pendingChanges = getPendingChanges();
-        if (pendingChanges.length) {
-            setSyncStatus('Recuperando cambios...', 'warn');
-            await postChangesToCloud(pendingChanges);
+        if (remoteState?.__fromOfflineCache) {
+            applyStateData(remoteState);
+            _previousStateSaved = cloneData(state);
+            window.netopsCloudLoadOk = false;
+            window.netopsUsingCachedState = true;
+            setSyncStatus('Sin conexión (caché local)', 'warn');
+            if (typeof notify === 'function') {
+                notify('Sin conexión a internet. Mostrando los últimos datos guardados en caché local.', 'warn');
+            }
+        } else {
+            // Un guardado fallido deja deltas en el navegador. Nunca aceptar el
+            // estado remoto (que puede haber quedado parcial) ni borrar esa cola
+            // antes de intentar recuperarla.
+            const pendingChanges = getPendingChanges();
+            if (pendingChanges.length) {
+                setSyncStatus('Recuperando cambios...', 'warn');
+                await postChangesToCloud(pendingChanges);
+                localStorage.removeItem(PENDING_CHANGES_KEY);
+                clearLocalDirty();
+                remoteState = await fetchRemoteState(20000, { parts: options.parts });
+            }
+            applyStateData(remoteState);
+            saveLastGoodCloudState(remoteState, options.parts);
+            window.netopsCloudLoadOk = true;
+            window.netopsUsingCachedState = false;
+            localStorage.removeItem(BACKUP_KEY);
             localStorage.removeItem(PENDING_CHANGES_KEY);
             clearLocalDirty();
-            remoteState = await fetchRemoteState(20000, { parts: options.parts });
+            clearCloudOfflineStatus();
+            lastCloudFingerprint = getDataFingerprint(state);
+            lastSyncToken = getSyncTokenFromState(state);
+            // IMPORTANTE: la referencia de cambios debe partir del estado recién
+            // cargado desde D1. Sin esto, el primer guardado compara contra {} y
+            // considera modificadas todas las colecciones.
+            _previousStateSaved = cloneData(state);
+            allowMutations();
+            setSyncStatus('Sincronizado', 'ok');
         }
-        applyStateData(remoteState);
-        saveLastGoodCloudState(remoteState, options.parts);
-        window.netopsCloudLoadOk = true;
-        window.netopsUsingCachedState = false;
-        localStorage.removeItem(BACKUP_KEY);
-        localStorage.removeItem(PENDING_CHANGES_KEY);
-        clearLocalDirty();
-        clearCloudOfflineStatus();
-        lastCloudFingerprint = getDataFingerprint(state);
-        lastSyncToken = getSyncTokenFromState(state);
-        // IMPORTANTE: la referencia de cambios debe partir del estado recién
-        // cargado desde D1. Sin esto, el primer guardado compara contra {} y
-        // considera modificadas todas las colecciones.
-        _previousStateSaved = cloneData(state);
-        allowMutations();
-        setSyncStatus('Sincronizado', 'ok');
     } catch(e) {
         console.log('No se pudo cargar desde Cloudflare/D1.', e);
         setSyncStatus('Error de sincronizacion', 'warn');
         window.netopsCloudLoadOk = false;
-        const cached = getLastGoodCloudState(options.parts);
+        const cached = await getLastGoodCloudStateAsync(options.parts);
         if (cached?.data) {
             applyStateData(cached.data);
             _previousStateSaved = cloneData(state);
@@ -2502,5 +2858,10 @@ window.hasPendingLocalChanges = hasPendingLocalChanges;
 window.postWorkOrderReportToCloud = postWorkOrderReportToCloud;
 window.checkAppVersion = checkAppVersion;
 window.startAutoSync = startAutoSync;
+window.fetchJsonWithOfflineCache = fetchJsonWithOfflineCache;
+window.readOfflineGetCache = readOfflineGetCache;
+window.saveOfflineGetCache = saveOfflineGetCache;
+window.sanitizeDataForOfflineCache = sanitizeDataForOfflineCache;
+window.buildOfflineCacheUrlKey = buildOfflineCacheUrlKey;
 
 console.log("api.js cargado correctamente");

@@ -1,3 +1,43 @@
+    const WIFIMEX_ROUTE_REGEX = /wifi[\s_-]*mex/i;
+    const WIFIMEX_ROUTE_FALLBACK = { lat: 17.5288335, lng: -99.4977258, name: 'WiFi-Mex' };
+
+    function getWiFiMexRouteOrigin() {
+      if (typeof findWiFiMexOrigin === 'function') {
+        const found = findWiFiMexOrigin();
+        if (found && Number.isFinite(Number(found.lat)) && Number.isFinite(Number(found.lng))) {
+          return { lat: Number(found.lat), lng: Number(found.lng), name: found.name || 'WiFi-Mex' };
+        }
+      }
+      const eqList = Array.isArray(state?.equipment) ? state.equipment : [];
+      const wmEq = eqList.find(e => e && !e.deletedAt && (e.id === 'eqmr9qmpr81rc' || WIFIMEX_ROUTE_REGEX.test(String(e.name || ''))));
+      if (wmEq && Number.isFinite(Number(wmEq.lat)) && Number.isFinite(Number(wmEq.lng))) {
+        return { lat: Number(wmEq.lat), lng: Number(wmEq.lng), name: wmEq.name || 'WiFi-Mex' };
+      }
+      const nodeList = Array.isArray(state?.nodes) ? state.nodes : [];
+      const wmNode = nodeList.find(n => n && !n.deletedAt && WIFIMEX_ROUTE_REGEX.test(String(n.town || n.name || '')));
+      if (wmNode && Number.isFinite(Number(wmNode.lat)) && Number.isFinite(Number(wmNode.lng))) {
+        return { lat: Number(wmNode.lat), lng: Number(wmNode.lng), name: wmNode.town || wmNode.name || 'WiFi-Mex' };
+      }
+      return { ...WIFIMEX_ROUTE_FALLBACK };
+    }
+
+    function ensureRouteCoordsStartAtWiFiMex(coords) {
+      const list = Array.isArray(coords) ? coords.slice() : [];
+      const origin = getWiFiMexRouteOrigin();
+      if (!list.length) return [origin];
+      const firstName = String(list[0]?.name || '').trim();
+      if (WIFIMEX_ROUTE_REGEX.test(firstName)) {
+        list[0] = { ...list[0], name: list[0].name || origin.name, lat: Number.isFinite(Number(list[0].lat)) ? Number(list[0].lat) : origin.lat, lng: Number.isFinite(Number(list[0].lng)) ? Number(list[0].lng) : origin.lng };
+        return list;
+      }
+      if (/palmar/i.test(firstName)) {
+        list[0] = origin;
+        return list;
+      }
+      list.unshift(origin);
+      return list;
+    }
+
     let routeCurrentPage=1;
     const routePageSize=20;
     let routeLoadSequence=0;
@@ -50,8 +90,9 @@
       document.getElementById('rr-count').textContent = `${total} Rutas Guardadas`;
 
       const html = list.map(r => {
-        const pueblos = r.coords && r.coords.length 
-          ? r.coords.map(c => c.name || 'Punto').join(', ') 
+        const displayCoords = ensureRouteCoordsStartAtWiFiMex(r.coords);
+        const pueblos = displayCoords.length 
+          ? displayCoords.map(c => c.name || 'Punto').join(', ') 
           : 'Sin puntos';
 
         return `
@@ -114,10 +155,12 @@
         }
       });
 
-      if (coords.length < 2) {
-        notify("Se necesitan al menos 2 puntos válidos", "err");
+      if (coords.length < 1) {
+        notify("Se necesita al menos 1 punto válido además de WiFi-Mex", "err");
         return;
       }
+
+      coords = ensureRouteCoordsStartAtWiFiMex(coords);
 
       const newRoute={
         id: gid('r'),

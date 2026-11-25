@@ -29,6 +29,191 @@
     let pendingTechEvidencePhotos = [];
     let techLiveTimer = null;
     const SHARED_ROUTE_ID = '__shared__';
+    const TECH_ROUTE_OFFLINE_SNAPSHOT_KEY = 'netops_tecnico_ruta_offline_snapshot_v1';
+    const TECH_WIFIMEX_REGEX = /wifi[\s_-]*mex/i;
+    const TECH_WIFIMEX_FALLBACK = { id: 'wifimex-origin', name: 'WiFi-Mex', lat: 17.5288335, lng: -99.4977258, dayLabel: 'Base principal', isOrigin: true };
+
+    function getTechWiFiMexOrigin() {
+      const eqList = Array.isArray(state?.equipment) ? state.equipment : [];
+      const wmEq = eqList.find(e => e && !e.deletedAt && (e.id === 'eqmr9qmpr81rc' || TECH_WIFIMEX_REGEX.test(String(e.name || ''))));
+      if (wmEq && !isNaN(safeFloat(wmEq.lat)) && !isNaN(safeFloat(wmEq.lng))) {
+        return {
+          id: wmEq.id,
+          equipmentId: wmEq.id,
+          name: wmEq.name || 'WiFi-Mex',
+          lat: safeFloat(wmEq.lat),
+          lng: safeFloat(wmEq.lng),
+          dayLabel: 'Base principal',
+          isOrigin: true
+        };
+      }
+      const nodeList = Array.isArray(state?.nodes) ? state.nodes : [];
+      const wmNode = nodeList.find(n => n && !n.deletedAt && TECH_WIFIMEX_REGEX.test(String(n.town || n.name || '')));
+      if (wmNode && !isNaN(safeFloat(wmNode.lat)) && !isNaN(safeFloat(wmNode.lng))) {
+        return {
+          id: wmNode.id,
+          nodeId: wmNode.id,
+          name: wmNode.town || wmNode.name || 'WiFi-Mex',
+          lat: safeFloat(wmNode.lat),
+          lng: safeFloat(wmNode.lng),
+          dayLabel: 'Base principal',
+          isOrigin: true
+        };
+      }
+      return { ...TECH_WIFIMEX_FALLBACK };
+    }
+
+    function ensureTechStopsStartAtWiFiMex(stops) {
+      const valid = (Array.isArray(stops) ? stops : []).filter(s => s && !isNaN(safeFloat(s.lat)) && !isNaN(safeFloat(s.lng)));
+      if (!valid.length) return [];
+      const firstName = String(valid[0].name || '');
+      if (TECH_WIFIMEX_REGEX.test(firstName) || valid[0].equipmentId === 'eqmr9qmpr81rc') return valid;
+      const origin = getTechWiFiMexOrigin();
+      if (/palmar/i.test(firstName)) {
+        return [{ ...valid[0], ...origin }, ...valid.slice(1)];
+      }
+      return [origin, ...valid];
+    }
+
+    function hasLoadedTechRouteData(s = state) {
+      if (!s || typeof s !== 'object') return false;
+      const hasPlans = s.weekPlan && typeof s.weekPlan === 'object' && Object.keys(s.weekPlan).length > 0;
+      const hasOrders = Array.isArray(s.workOrders) && s.workOrders.length > 0;
+      const hasNodes = Array.isArray(s.nodes) && s.nodes.length > 0;
+      const hasEq = Array.isArray(s.equipment) && s.equipment.length > 0;
+      return Boolean(hasPlans || hasOrders || hasNodes || hasEq);
+    }
+
+    function saveTechRouteOfflineSnapshot() {
+      try {
+        if (typeof localStorage === 'undefined' || !hasLoadedTechRouteData(state)) return;
+        const payload = {
+          savedAt: new Date().toISOString(),
+          techRouteId,
+          techRouteScope,
+          techRouteGeneralPlanId,
+          weekPlan: state.weekPlan || {},
+          workOrders: (state.workOrders || []).slice(0, 1500),
+          nodes: state.nodes || [],
+          equipment: state.equipment || [],
+          technicians: state.technicians || [],
+          routes: state.routes || [],
+          materials: state.materials || []
+        };
+        try {
+          localStorage.setItem(TECH_ROUTE_OFFLINE_SNAPSHOT_KEY, JSON.stringify(payload));
+        } catch (_) {
+          // Si excede cuota, guardar sin fotos base64 grandes
+          const compactOrders = (payload.workOrders || []).map(w => {
+            if (!w || !w.technicianReport) return w;
+            const rep = { ...w.technicianReport };
+            if (typeof rep.evidencePhoto === 'string' && rep.evidencePhoto.length > 16000) rep.evidencePhoto = '';
+            if (Array.isArray(rep.evidencePhotos)) rep.evidencePhotos = rep.evidencePhotos.filter(p => typeof p === 'string' && p.length <= 16000);
+            return { ...w, technicianReport: rep };
+          });
+          localStorage.setItem(TECH_ROUTE_OFFLINE_SNAPSHOT_KEY, JSON.stringify({ ...payload, workOrders: compactOrders }));
+        }
+      } catch (e) {
+        console.warn('No se pudo guardar caché offline de ruta técnica:', e);
+      }
+    }
+
+    function loadTechRouteOfflineSnapshot() {
+      try {
+        if (typeof localStorage === 'undefined') return null;
+        const raw = localStorage.getItem(TECH_ROUTE_OFFLINE_SNAPSHOT_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function hydrateTechRouteFromOfflineSnapshot() {
+      const snap = loadTechRouteOfflineSnapshot();
+      if (!snap) return false;
+      if (snap.weekPlan && typeof snap.weekPlan === 'object' && Object.keys(snap.weekPlan).length) {
+        state.weekPlan = snap.weekPlan;
+      }
+      if (Array.isArray(snap.workOrders) && snap.workOrders.length) {
+        const existingMap = new Map((state.workOrders || []).map(w => [w.id, w]));
+        for (const ord of snap.workOrders) {
+          if (ord?.id && !existingMap.has(ord.id)) {
+            if (!Array.isArray(state.workOrders)) state.workOrders = [];
+            state.workOrders.push(ord);
+            existingMap.set(ord.id, ord);
+          }
+        }
+      }
+      if (Array.isArray(snap.nodes) && snap.nodes.length && !(state.nodes || []).length) state.nodes = snap.nodes;
+      if (Array.isArray(snap.equipment) && snap.equipment.length && !(state.equipment || []).length) state.equipment = snap.equipment;
+      if (Array.isArray(snap.technicians) && snap.technicians.length && !(state.technicians || []).length) state.technicians = snap.technicians;
+      if (Array.isArray(snap.routes) && snap.routes.length && !(state.routes || []).length) state.routes = snap.routes;
+      if (Array.isArray(snap.materials) && snap.materials.length && !(state.materials || []).length) state.materials = snap.materials;
+      return true;
+    }
+
+    function updateTechRouteOfflineIndicator(isOffline) {
+      try {
+        if (typeof document === 'undefined' || !document.body) return;
+        let pill = document.getElementById('tech-offline-pill');
+        if (!isOffline) {
+          if (pill) pill.style.display = 'none';
+          return;
+        }
+        if (!pill) {
+          pill = document.createElement('div');
+          pill.id = 'tech-offline-pill';
+          pill.className = 'tech-offline-pill';
+          pill.innerHTML = '<span class="tech-offline-dot"></span><span>Sin conexión · Datos guardados</span>';
+          document.body.appendChild(pill);
+        }
+        pill.style.display = 'inline-flex';
+      } catch (_) { }
+    }
+
+    function mergeGlobalWorkOrdersIntoState() {
+      if (typeof getGlobalWorkOrdersCache !== 'function') return;
+      const cached = getGlobalWorkOrdersCache() || {};
+      const cachedList = Object.values(cached);
+      if (!cachedList.length) return;
+      if (!Array.isArray(state.workOrders) || state.workOrders.length === 0) {
+        state.workOrders = cachedList;
+      } else {
+        const map = new Map(state.workOrders.map(w => [w.id, w]));
+        for (const ord of cachedList) {
+          if (ord?.id && !map.has(ord.id)) {
+            state.workOrders.push(ord);
+            map.set(ord.id, ord);
+          }
+        }
+      }
+    }
+
+    function captureTechRouteStateBackup() {
+      if (!hasLoadedTechRouteData(state)) return null;
+      return {
+        weekPlan: typeof cloneData === 'function' ? cloneData(state.weekPlan) : JSON.parse(JSON.stringify(state.weekPlan || {})),
+        workOrders: typeof cloneData === 'function' ? cloneData(state.workOrders || []) : JSON.parse(JSON.stringify(state.workOrders || [])),
+        nodes: typeof cloneData === 'function' ? cloneData(state.nodes || []) : JSON.parse(JSON.stringify(state.nodes || [])),
+        equipment: typeof cloneData === 'function' ? cloneData(state.equipment || []) : JSON.parse(JSON.stringify(state.equipment || [])),
+        technicians: typeof cloneData === 'function' ? cloneData(state.technicians || []) : JSON.parse(JSON.stringify(state.technicians || []))
+      };
+    }
+
+    function restoreTechRouteBackupIfNeeded(backup) {
+      if (!backup) return;
+      const cloudFailed = typeof window !== 'undefined' && window.netopsCloudLoadOk === false;
+      const lostData = !hasLoadedTechRouteData(state) || ((backup.workOrders?.length || 0) > 0 && !(state.workOrders || []).length);
+      if (cloudFailed || lostData) {
+        if (backup.weekPlan && Object.keys(backup.weekPlan).length) state.weekPlan = backup.weekPlan;
+        if (backup.workOrders?.length) state.workOrders = backup.workOrders;
+        if (backup.nodes?.length) state.nodes = backup.nodes;
+        if (backup.equipment?.length) state.equipment = backup.equipment;
+        if (backup.technicians?.length) state.technicians = backup.technicians;
+      }
+    }
 
     async function initTechRoutePage() {
       const token = localStorage.getItem('token');
@@ -41,57 +226,73 @@
         return;
       }
 
-      await loadDB();
-      if (typeof getGlobalWorkOrdersCache === 'function') {
-        const cached = getGlobalWorkOrdersCache();
-        const cachedList = Object.values(cached);
-        if (cachedList.length > 0) {
-          if (!Array.isArray(state.workOrders) || state.workOrders.length === 0) {
-            state.workOrders = cachedList;
-          } else {
-            const map = new Map(state.workOrders.map(w => [w.id, w]));
-            for (const ord of cachedList) {
-              if (!map.has(ord.id)) {
-                state.workOrders.push(ord);
-                map.set(ord.id, ord);
-              }
-            }
-          }
-        }
-      }
-      if (typeof window !== 'undefined' && !window._techRouteWakeBound) {
-        window._techRouteWakeBound = true;
-        const onWake = () => {
-          if (typeof getGlobalWorkOrdersCache === 'function') {
-            const cached = getGlobalWorkOrdersCache();
-            const cachedList = Object.values(cached);
-            if (cachedList.length > 0) {
-              if (!Array.isArray(state.workOrders) || state.workOrders.length === 0) {
-                state.workOrders = cachedList;
-              } else {
-                const map = new Map(state.workOrders.map(w => [w.id, w]));
-                for (const ord of cachedList) {
-                  if (!map.has(ord.id)) {
-                    state.workOrders.push(ord);
-                    map.set(ord.id, ord);
-                  }
-                }
-              }
-            }
-          }
-          if (typeof renderTechRoute === 'function') renderTechRoute();
-        };
-        window.addEventListener('pageshow', onWake);
-        document.addEventListener('visibilitychange', () => { if (!document.hidden) onWake(); });
-        window.addEventListener('focus', onWake);
-      }
       const params = new URLSearchParams(location.search);
       techRouteScope = params.get('plan') === 'general' ? 'general' : 'tech';
       techRouteId = params.get('tech') || '';
       techRouteGeneralPlanId = params.get('generalPlan') || '';
 
+      // Hidratación inmediata desde caché local para carga rápida y soporte sin internet
+      let renderedFromCache = false;
+      if (hydrateTechRouteFromOfflineSnapshot()) {
+        mergeGlobalWorkOrdersIntoState();
+        const cachedTech = findTechFromAppUser(appUser);
+        if (cachedTech && canTechOpenCurrentRoute(cachedTech.id)) {
+          loggedTech = cachedTech;
+          techRouteId = techRouteScope === 'general' ? cachedTech.id : (techRouteId || cachedTech.id);
+          if (techRouteScope === 'general') getGeneralPlanForTechRoute(cachedTech.id);
+          showTechRouteApp();
+          renderedFromCache = true;
+        }
+      }
+
+      if (typeof window !== 'undefined' && !window._techRouteWakeBound) {
+        window._techRouteWakeBound = true;
+        const onWake = () => {
+          mergeGlobalWorkOrdersIntoState();
+          if (typeof renderTechRoute === 'function' && loggedTech) renderTechRoute();
+          if (typeof navigator !== 'undefined' && navigator.onLine) {
+            updateTechRouteOfflineIndicator(false);
+            checkTechRouteUpdates();
+          }
+        };
+        window.addEventListener('pageshow', onWake);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) onWake(); });
+        window.addEventListener('focus', onWake);
+        window.addEventListener('offline', () => {
+          saveTechRouteOfflineSnapshot();
+          updateTechRouteOfflineIndicator(true);
+        });
+        window.addEventListener('online', () => {
+          updateTechRouteOfflineIndicator(false);
+          checkTechRouteUpdates();
+        });
+      }
+
+      const isOfflineNow = typeof navigator !== 'undefined' && navigator.onLine === false;
+      if (isOfflineNow) {
+        updateTechRouteOfflineIndicator(true);
+        if (renderedFromCache) return;
+      }
+
+      const backup = captureTechRouteStateBackup();
+      try {
+        await loadDB({ showOverlay: false, preferCache: true, globalFeedback: false });
+      } catch (e) {
+        console.warn('Error de red en initTechRoutePage:', e);
+      }
+      restoreTechRouteBackupIfNeeded(backup);
+      mergeGlobalWorkOrdersIntoState();
+
+      if (window.netopsCloudLoadOk === false || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+        updateTechRouteOfflineIndicator(true);
+      } else {
+        updateTechRouteOfflineIndicator(false);
+        saveTechRouteOfflineSnapshot();
+      }
+
       const appTech = findTechFromAppUser(appUser);
       if (!appTech || !canTechOpenCurrentRoute(appTech.id)) {
+        if (renderedFromCache) return;
         if (window.netopsCloudLoadOk === false) {
           showTechCloudUnavailable(appTech);
           return;
@@ -105,6 +306,7 @@
       if (techRouteScope === 'general') getGeneralPlanForTechRoute(appTech.id);
       saveTechSession(appTech.id);
       registerTechAccess(appTech);
+      saveTechRouteOfflineSnapshot();
       showTechRouteApp();
     }
 
@@ -123,23 +325,24 @@
     }
 
     async function reloadTechRoute() {
-      await loadDB();
-      if (typeof getGlobalWorkOrdersCache === 'function') {
-        const cached = getGlobalWorkOrdersCache();
-        const cachedList = Object.values(cached);
-        if (cachedList.length > 0) {
-          if (!Array.isArray(state.workOrders) || state.workOrders.length === 0) {
-            state.workOrders = cachedList;
-          } else {
-            const map = new Map(state.workOrders.map(w => [w.id, w]));
-            for (const ord of cachedList) {
-              if (!map.has(ord.id)) {
-                state.workOrders.push(ord);
-                map.set(ord.id, ord);
-              }
-            }
-          }
-        }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        updateTechRouteOfflineIndicator(true);
+        notify('Sin conexión: mostrando los datos guardados en caché.', 'warn');
+        return;
+      }
+      const backup = captureTechRouteStateBackup();
+      try {
+        await loadDB({ showOverlay: false, preferCache: true, globalFeedback: false });
+      } catch (e) {
+        console.warn('Error al recargar ruta técnica:', e);
+      }
+      restoreTechRouteBackupIfNeeded(backup);
+      mergeGlobalWorkOrdersIntoState();
+      if (window.netopsCloudLoadOk === false) {
+        updateTechRouteOfflineIndicator(true);
+      } else {
+        updateTechRouteOfflineIndicator(false);
+        saveTechRouteOfflineSnapshot();
       }
       normalizeTechRoutePlan();
       renderTechRoute();
@@ -165,11 +368,19 @@
     }
 
     async function checkTechRouteUpdates() {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        updateTechRouteOfflineIndicator(true);
+        return;
+      }
       if (isTechBusyEditing() || document.hidden || (typeof hasPendingLocalChanges === 'function' && hasPendingLocalChanges())) return;
+      const backup = captureTechRouteStateBackup();
       try {
         const data = await fetchRemoteState(30000);
         const fingerprint = getTechRemoteFingerprint(data);
-        if (!fingerprint || fingerprint === techRemoteFingerprint) return;
+        if (!fingerprint || fingerprint === techRemoteFingerprint) {
+          updateTechRouteOfflineIndicator(false);
+          return;
+        }
         techRemoteFingerprint = fingerprint;
         applyStateData({
           equipment: data.equipment,
@@ -185,6 +396,10 @@
           prepChecked: data.prepChecked || {},
           syncMeta: data.syncMeta || {}
         });
+        restoreTechRouteBackupIfNeeded(backup);
+        mergeGlobalWorkOrdersIntoState();
+        updateTechRouteOfflineIndicator(false);
+        saveTechRouteOfflineSnapshot();
         normalizeTechRoutePlan();
         if (loggedTech && !canTechOpenCurrentRoute(loggedTech.id)) {
           showTechNoAccess();
@@ -194,6 +409,8 @@
         renderTechRoute();
       } catch (e) {
         console.log('No se pudo verificar actualización de ruta', e);
+        restoreTechRouteBackupIfNeeded(backup);
+        updateTechRouteOfflineIndicator(true);
       }
     }
 
@@ -598,10 +815,40 @@
       return result;
     }
 
+    function getTechDetailNoRealizadoAt(detail) {
+      if (!detail) return '';
+      const lastAttempt = Array.isArray(detail.incompleteHistory) && detail.incompleteHistory.length
+        ? detail.incompleteHistory[detail.incompleteHistory.length - 1]
+        : null;
+      return detail.technicianReport?.completedAt || lastAttempt?.at || detail.completedAt || detail.updatedAt || '';
+    }
+
+    function formatTechNoRealizadoBadge(detail) {
+      const at = getTechDetailNoRealizadoAt(detail);
+      if (!at) return 'No realizado';
+      const date = new Date(at);
+      if (Number.isNaN(date.getTime())) return 'No realizado';
+      const formatted = date.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }).replace(/\./g, '');
+      return `No realizado · ${formatted}`;
+    }
+
+    function wasTechNoRealizadoInStop(detail, stop) {
+      if (!detail || !stop || detail.status !== 'no_realizado') return false;
+      if (detail.technicianReport?.stopId) {
+        return String(detail.technicianReport.stopId) === String(stop.id);
+      }
+      const joinedAt = new Date(stop.planJoinedAt || stop.createdAt || '').getTime();
+      if (!Number.isFinite(joinedAt)) return false;
+      const completedAt = getTechDetailCompletionTime(detail);
+      return Number.isFinite(completedAt) && completedAt >= joinedAt;
+    }
+
     function getStopProgressForTech(stop) {
       const details = getStopDetailsForTech(stop);
-      const done = details.filter(d => d.status === 'completada' || d.status === 'no_realizado').length;
-      return { total: details.length, done, pending: details.length - done, complete: details.length ? done === details.length : stop.siteStatus === 'hecho' };
+      const completed = details.filter(d => d.status === 'completada').length;
+      const noRealizado = details.filter(d => wasTechNoRealizadoInStop(d, stop)).length;
+      const done = completed + noRealizado;
+      return { total: details.length, completed, noRealizado, done, pending: Math.max(0, details.length - done), complete: details.length ? done === details.length : stop.siteStatus === 'hecho' };
     }
 
     function getVisibleTechStopNotes(stop, details) {
@@ -707,12 +954,10 @@
       box.style.display = 'grid';
       box.innerHTML = `
         <div class="tech-plan-card">
-          <label>Plan asignado</label>
+          <label>Mi ruta</label>
           <strong>${escapeTech(current.name || 'Plan general')}</strong>
-          <small>${stopsCount} paradas asignadas · selección bloqueada por administrador</small>
+          <small>${stopsCount} parada${stopsCount === 1 ? '' : 's'}</small>
         </div>
-        <div class="tech-plan-pill">👷 ${escapeTech(loggedTech?.nombre || 'Técnico')}</div>
-        <div class="tech-plan-pill">📦 ${getTechInventorySummary() ? escapeTech(getTechInventorySummary()) : 'Sin material asignado'}</div>
       `;
     }
 
@@ -729,22 +974,35 @@
         ? (activePlan?.name || 'Sin plan asignado')
         : (tech ? tech.nombre : 'Ruta no encontrada');
       if (techRouteScope === 'general' && !activePlan) {
-        document.getElementById('tech-route-sub').textContent = '0 paradas · 0 pendientes · 0 hechos';
-        document.getElementById('tech-route-summary').innerHTML = '<span>Sin plan asignado</span>';
-        document.getElementById('tech-route-list').innerHTML = '<div class="plan-empty tech-route-empty-callout"><b>No tienes plan asignado.</b><br>Cuando el administrador te asigne uno, aparecerá aquí automáticamente.</div>';
+        document.getElementById('tech-route-sub').textContent = '0 paradas · 0 pendientes · 0 completados';
+        document.getElementById('tech-route-summary').innerHTML = '<span>Sin ruta asignada</span>';
+        document.getElementById('tech-route-list').innerHTML = '<div class="plan-empty tech-route-empty-callout"><b>No tienes ruta asignada.</b><br>Cuando te asignen una ruta aparecerá aquí automáticamente.</div>';
         renderTechRouteMap([]);
         return;
       }
       const stops = getAllRouteStops();
-      const pending = stops.reduce((sum, stop) => sum + stop.progress.pending, 0);
-      const done = stops.reduce((sum, stop) => sum + stop.progress.done, 0);
-      document.getElementById('tech-route-sub').textContent = `${tech?.nombre || 'Técnico'} · ${stops.length} paradas · ${pending} pendientes · ${done} hechos`;
-      const planMaterial = getTechRoutePlanMaterial();
+      const uniqueDetails = new Map();
+      stops.forEach(stop => (stop.details || []).forEach(d => { if (d?.id) uniqueDetails.set(d.id, d); }));
+      const allDetails = Array.from(uniqueDetails.values());
+      const todayKey = new Date().toISOString().slice(0, 10);
+      const completed = allDetails.filter(d => d.status === 'completada').length;
+      const noRealizadoToday = allDetails.filter(d => {
+        if (d.status !== 'no_realizado') return false;
+        const at = getTechDetailNoRealizadoAt(d);
+        return at ? String(at).slice(0, 10) === todayKey : false;
+      }).length;
+      const pending = Math.max(0, allDetails.length - completed - noRealizadoToday);
+      const total = allDetails.length;
+      const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+      document.getElementById('tech-route-sub').textContent = `${pct}% completado · ${completed} completados · ${pending} pendientes${noRealizadoToday ? ` · ${noRealizadoToday} no realizados hoy` : ''}`;
       document.getElementById('tech-route-summary').innerHTML = `
-        <span>${stops.length} paradas</span>
-        <span>${pending} pendientes</span>
-        <span>${done} hechos</span>
-        ${planMaterial ? `<span class="tech-material-summary">📦 Material del plan: ${escapeTech(planMaterial)}</span>` : ''}
+        <div class="tech-clean-progress-summary">
+          <div class="tech-clean-progress-row">
+            <strong>Avance: ${pct}%</strong>
+            <span>${completed} completados · ${pending} pendientes · ${noRealizadoToday} no realizados hoy</span>
+          </div>
+          <div class="tech-clean-progress-track"><div class="tech-clean-progress-fill" style="width:${pct}%"></div></div>
+        </div>
       `;
 
       document.getElementById('tech-route-list').innerHTML = TECH_ROUTE_DAYS.map(day => {
@@ -857,9 +1115,10 @@
       const reportGallery = encodeURIComponent(JSON.stringify(reportPhotos));
       const done = detail.status === 'completada';
       const noDone = detail.status === 'no_realizado';
+      const noDoneLabel = noDone ? formatTechNoRealizadoBadge(detail) : '';
       const reportHtml = (report.solution || report.reason || report.materialUsed || report.completedAt) ? `
         <div class="tech-report-mini">
-          <b>${noDone ? 'No realizado' : 'Reporte'}:</b>
+          <b>${noDone ? escapeTech(noDoneLabel) : 'Reporte'}:</b>
           ${report.solution ? `<span>Solución: ${escapeTech(report.solution)}</span>` : ''}
           ${report.reason ? `<span>Motivo: ${escapeTech(report.reason)}</span>` : ''}
           ${report.materialUsed ? `<span>Material: ${escapeTech(report.materialUsed)}</span>` : ''}
@@ -868,7 +1127,7 @@
         </div>` : '';
       return `
         <div class="route-detail-line ${done ? 'done' : ''} ${noDone ? 'not-done' : ''}">
-          <span class="detail-status-line ${done ? 'done-status' : (noDone ? 'not-done-status' : '')}" style="border-color:${pc(detail.priority)}">${done ? 'Terminado' : (noDone ? 'No realizado' : `<span class="priority-badge priority-${escapeTech(detail.priority || 'media')}"><span class="priority-dot"></span>${escapeTech(pl(detail.priority || 'media'))}</span>`)}</span>
+          <span class="detail-status-line ${done ? 'done-status' : (noDone ? 'not-done-status' : '')}" style="border-color:${pc(detail.priority)}">${done ? 'Terminado' : (noDone ? escapeTech(noDoneLabel) : `<span class="priority-badge priority-${escapeTech(detail.priority || 'media')}"><span class="priority-dot"></span>${escapeTech(pl(detail.priority || 'media'))}</span>`)}</span>
           ${detail.clientName ? `<small class="detail-client-line"><b>Cliente:</b> ${escapeTech(detail.clientName)}</small>` : ''}
           ${(() => {
             const techClientPhone = String(detail.clientPhone || detail.phone || detail.telefono || detail.technicianReport?.phone || '').trim();
@@ -880,13 +1139,13 @@
           <strong class="detail-title-line">${escapeTech(detail.title || 'Detalle')}</strong>
           ${detail.desc ? `<small>${escapeTech(detail.desc)}</small>` : ''}          ${detailMapsUrl ? `<small><a class="order-location-link" href="${escapeTech(detailMapsUrl)}" target="_blank" rel="noopener">Abrir Maps</a> ${escapeTech(detailLocation)}</small>` : (detailLocation ? `<small>${escapeTech(detailLocation)}</small>` : '')}
           ${detail.materialPlanned ? `<small>📦 Material sugerido: ${escapeTech(detail.materialPlanned)}</small>` : ''}
-          ${noDone ? `<div class="tech-detail-no-done-note" style="display:inline-flex;align-items:center;gap:5px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;margin:4px 0 6px;"><span>⚠️ No realizado</span>${(report && report.reason) ? `<span>· ${escapeTech(report.reason)}</span>` : ''}</div>` : ''}
+          ${noDone ? `<div class="tech-detail-no-done-note" style="display:inline-flex;align-items:center;gap:5px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;margin:4px 0 6px;"><span>${escapeTech(noDoneLabel)}</span>${(report && report.reason) ? `<span>· ${escapeTech(report.reason)}</span>` : ''}</div>` : ''}
           ${reportHtml}
           <div class="tech-detail-actions">
             ${done
               ? `<span class="tech-locked-done">Reporte enviado</span>`
               : (noDone
-                ? `<button class="btn bsm bg2" onclick="openTechDetailReport('${escapeTech(detail.id)}','terminado')">Terminar detalle</button><span class="tech-locked-done" style="background:#fee2e2;color:#991b1b;border-color:#fecaca;">No realizado</span>`
+                ? `<button class="btn bsm bg2" onclick="openTechDetailReport('${escapeTech(detail.id)}','terminado')">Terminar detalle</button><button class="btn bsm ba" onclick="openTechDetailReport('${escapeTech(detail.id)}','no_realizado')">No lo hice</button>`
                 : `<button class="btn bsm bg2" onclick="openTechDetailReport('${escapeTech(detail.id)}','terminado')">Terminar</button><button class="btn bsm ba" onclick="openTechDetailReport('${escapeTech(detail.id)}','no_realizado')">No lo hice</button>`)}
           </div>
         </div>
@@ -1165,8 +1424,13 @@
         evidencePhotos: mode === 'terminado' ? evidencePhotos : [],
         completedBy: loggedTech?.id || techRouteId || '',
         completedByName: loggedTech?.nombre || '',
+        stopId: stopWithDetail?.id || '',
         completedAt
       };
+      if (mode === 'no_realizado') {
+        detail.incompleteHistory = [...(detail.incompleteHistory || []), { type: 'detalle', reason, at: completedAt, stopId: stopWithDetail?.id || '', byId: loggedTech?.id || techRouteId || '', byName: loggedTech?.nombre || '' }];
+      }
+      saveTechRouteOfflineSnapshot();
       if (typeof recordAudit === 'function') {
         recordAudit(detail.lastAction, detail, {
           byId: loggedTech?.id || techRouteId || '',
@@ -1392,8 +1656,9 @@
 
     async function renderTechRouteMap(stops) {
       if (!techRouteMap) return;
-      techLastMapStops = cloneData(stops || []);
-      const fingerprint = getTechRouteMapFingerprint(stops);
+      const routedStops = ensureTechStopsStartAtWiFiMex(stops);
+      techLastMapStops = cloneData(routedStops || []);
+      const fingerprint = getTechRouteMapFingerprint(routedStops);
       if (fingerprint && fingerprint === techRouteMapFingerprint) {
         setTimeout(() => techRouteMap.invalidateSize(), 80);
         return;
@@ -1405,31 +1670,30 @@
       }
       techRouteMarkers.forEach(marker => techRouteMap.removeLayer(marker));
       techRouteMarkers = [];
-      if (!stops.length) return;
-      stops.forEach((stop, index) => {
+      if (!routedStops.length) return;
+      routedStops.forEach((stop, index) => {
         const marker = L.marker([stop.lat, stop.lng], {
           icon: L.divIcon({
-            html: `<div class="route-map-marker">${index + 1}</div>`,
+            html: `<div class="route-map-marker${stop.isOrigin ? ' is-origin' : ''}">${index + 1}</div>`,
             className: '',
             iconSize: [30, 30],
             iconAnchor: [15, 15]
           })
         }).addTo(techRouteMap);
-        marker.bindPopup(`<div style="min-width:190px"><strong>${escapeTech(stop.name)}</strong><br>${escapeTech(stop.dayLabel)}${renderMapStopDetailStats(stop)}</div>`);
+        marker.bindPopup(`<div style="min-width:190px"><strong>${escapeTech(stop.name)}</strong><br>${escapeTech(stop.dayLabel || '')}${stop.isOrigin ? '<br><small>Parada principal</small>' : renderMapStopDetailStats(stop)}</div>`);
         techRouteMarkers.push(marker);
       });
-      if (stops.length > 1) {
+      if (routedStops.length > 1) {
         try {
-          const route = await fetchTechRoadRoute(stops, 24);
+          const route = await fetchTechRoadRoute(routedStops, 24);
           techRouteLayer = L.geoJSON(route.geometry, {
             style: { color: '#0984e3', weight: 6, opacity: .9 }
           }).addTo(techRouteMap);
         } catch (e) {
-          techRouteLayer = L.polyline(stops.map(stop => [stop.lat, stop.lng]), { color: '#0984e3', weight: 5, dashArray: '10 8' }).addTo(techRouteMap);
-          notify('No se pudo calcular carretera; se trazo directo', 'err');
+          techRouteLayer = L.polyline(routedStops.map(stop => [stop.lat, stop.lng]), { color: '#0984e3', weight: 5, dashArray: '10 8' }).addTo(techRouteMap);
         }
       }
-      techRouteMap.fitBounds(stops.map(stop => [stop.lat, stop.lng]), { padding: [28, 28] });
+      techRouteMap.fitBounds(routedStops.map(stop => [stop.lat, stop.lng]), { padding: [28, 28] });
       setTimeout(() => techRouteMap.invalidateSize(), 80);
     }
 
@@ -1474,7 +1738,7 @@
       }
       techRouteFullMarkers.forEach(marker => techRouteFullMap.removeLayer(marker));
       techRouteFullMarkers = [];
-      const visible = (stops || []).filter(stop => !isNaN(safeFloat(stop.lat)) && !isNaN(safeFloat(stop.lng)));
+      const visible = ensureTechStopsStartAtWiFiMex(stops);
       if (!visible.length) return;
       visible.forEach((stop, index) => {
         const marker = L.marker([stop.lat, stop.lng], {
@@ -1537,4 +1801,10 @@
       window.getStopDetailsForTech = getStopDetailsForTech;
       window.renderTechStop = renderTechStop;
       window.renderTechDetail = renderTechDetail;
+      window.getTechWiFiMexOrigin = getTechWiFiMexOrigin;
+      window.ensureTechStopsStartAtWiFiMex = ensureTechStopsStartAtWiFiMex;
+      window.formatTechNoRealizadoBadge = formatTechNoRealizadoBadge;
+      window.saveTechRouteOfflineSnapshot = saveTechRouteOfflineSnapshot;
+      window.loadTechRouteOfflineSnapshot = loadTechRouteOfflineSnapshot;
+      window.hydrateTechRouteFromOfflineSnapshot = hydrateTechRouteFromOfflineSnapshot;
     }

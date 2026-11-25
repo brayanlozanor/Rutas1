@@ -222,6 +222,41 @@ function toggleHistoryAdvancedFilters() {
   document.querySelectorAll('.history-filter-trigger,.history-more-filters').forEach(button => button.classList.toggle('active',!panel.hidden));
 }
 
+function renderHistoryVisualBar(counts, total, techOnly = false) {
+  const bar = document.getElementById('history-visual-bar');
+  if (!bar) return;
+  const items = techOnly
+    ? [
+        { label: 'Completados', count: Number(counts.complete) || 0, color: '#05a8ac' },
+        { label: 'Agregados', count: Number(counts.create) || 0, color: '#10aa4d' },
+        { label: 'Otros', count: Math.max(0, (Number(total) || 0) - (Number(counts.complete) || 0) - (Number(counts.create) || 0)), color: '#0874f9' }
+      ]
+    : [
+        { label: 'Completados', count: Number(counts.complete) || 0, color: '#05a8ac' },
+        { label: 'Agregados', count: Number(counts.create) || 0, color: '#10aa4d' },
+        { label: 'Modificados', count: Number(counts.update) || 0, color: '#9540e9' },
+        { label: 'Eliminados', count: Number(counts.delete) || 0, color: '#ee2848' }
+      ];
+  const safeTotal = Math.max(1, items.reduce((sum, item) => sum + item.count, 0));
+  if (!total) {
+    bar.innerHTML = '';
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  bar.innerHTML = `<div class="history-vbar-track">` +
+    items.filter(item => item.count > 0).map(item => {
+      const pct = Math.round((item.count / safeTotal) * 100);
+      return `<span style="width:${Math.max(4, pct)}%;background:${item.color}" title="${historyEscape(item.label)}: ${item.count} (${pct}%)"></span>`;
+    }).join('') +
+    `</div><div class="history-vbar-legend">` +
+    items.filter(item => item.count > 0).map(item => {
+      const pct = Math.round((item.count / safeTotal) * 100);
+      return `<span><i style="background:${item.color}"></i>${historyEscape(item.label)} <b>${pct}%</b></span>`;
+    }).join('') +
+    `</div>`;
+}
+
 function renderHistory(keepPage = false) {
   if (!keepPage) historyPage = 1;
   const rows = getFilteredHistoryRows();
@@ -229,6 +264,7 @@ function renderHistory(keepPage = false) {
   rows.forEach(row => counts[historyActionType(row.action)]++);
   const set = (id,value) => { const el=document.getElementById(id); if(el) el.textContent=String(value); };
   set('history-kpi-total', rows.length); set('history-kpi-created', counts.create); set('history-kpi-updated', counts.update); set('history-kpi-completed', counts.complete); set('history-kpi-deleted', counts.delete);
+  renderHistoryVisualBar(counts, rows.length, isTechnicianHistoryView());
   const bounds = historyDateBounds();
   const format = key => new Date(`${key}T12:00:00`).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
   set('history-period-label', bounds.fromKey === bounds.toKey ? format(bounds.fromKey) : `${format(bounds.fromKey)} — ${format(bounds.toKey)}`);
@@ -254,6 +290,10 @@ function renderHistory(keepPage = false) {
 }
 
 function renderHistoryWindow() {
+  if (isTechnicianHistoryView() || isAttentionHistoryView()) {
+    renderHistory(true);
+    return;
+  }
   const requestedPage=historyPage;
   historyPage=1;
   renderHistory(true);
@@ -263,7 +303,14 @@ function renderHistoryWindow() {
   const stats=meta.stats||{};
   const offset=Number(meta.offset)||0;
   const set=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=String(value);};
-  set('history-kpi-total',total);set('history-kpi-created',Number(stats.created)||0);set('history-kpi-updated',Number(stats.updated)||0);set('history-kpi-completed',Number(stats.completed)||0);set('history-kpi-deleted',Number(stats.deleted)||0);
+  const counts = {
+    create: Number(stats.created)||0,
+    update: Number(stats.updated)||0,
+    complete: Number(stats.completed)||0,
+    delete: Number(stats.deleted)||0
+  };
+  set('history-kpi-total',total);set('history-kpi-created',counts.create);set('history-kpi-updated',counts.update);set('history-kpi-completed',counts.complete);set('history-kpi-deleted',counts.delete);
+  renderHistoryVisualBar(counts, total, false);
   set('history-results-label',`${total} movimiento${total===1?'':'s'} encontrado${total===1?'':'s'}`);
   set('history-page-label',total?`Mostrando ${offset+1}-${Math.min(offset+(state.auditLog||[]).length,total)} de ${total}`:'0 resultados');
   set('history-page-number',historyPage);
@@ -292,23 +339,27 @@ async function initHistoryPage() {
   document.getElementById('history-date').value = today;
   await loadDB({ loadingTitle:'Cargando historial', loadingSubtitle:'Consultando los movimientos registrados.' });
   rebuildHistoryTechnicianAliases();
-  if (isTechnicianHistoryView()) {
+  const techView = isTechnicianHistoryView();
+  document.body?.classList?.toggle('history-tech-mode', techView);
+  const userField = document.getElementById('history-user-field');
+  if (userField) userField.hidden = techView;
+  if (techView) {
     const eyebrow = document.querySelector('.history-eyebrow');
     const heading = document.querySelector('.history-heading h1');
     const copy = document.querySelector('.history-heading p');
     const search = document.getElementById('history-search');
-    if (eyebrow) eyebrow.textContent = 'Mi Actividad / Historial';
-    if (heading) heading.textContent = 'Mi historial de actividades';
-    if (copy) copy.textContent = 'Consulta los detalles completados y movimientos registrados en tu cuenta.';
+    if (eyebrow) eyebrow.textContent = 'Mi Actividad';
+    if (heading) heading.textContent = 'Mi historial';
+    if (copy) copy.textContent = 'Tu actividad registrada por día.';
     if (search) search.placeholder = 'Buscar folio, cliente o movimiento...';
   } else if (isAttentionHistoryView()) {
     const eyebrow = document.querySelector('.history-eyebrow');
     const heading = document.querySelector('.history-heading h1');
     const copy = document.querySelector('.history-heading p');
     const search = document.getElementById('history-search');
-    if (eyebrow) eyebrow.textContent = 'Operación / Detalles resueltos';
-    if (heading) heading.textContent = 'Historial de detalles completados';
-    if (copy) copy.textContent = 'Consulta los detalles completados por técnicos y los resueltos por soporte técnico.';
+    if (eyebrow) eyebrow.textContent = 'Operación';
+    if (heading) heading.textContent = 'Historial de detalles resueltos';
+    if (copy) copy.textContent = 'Detalles completados por técnicos y soporte.';
     if (search) search.placeholder = 'Buscar técnico, soporte, folio o cliente...';
   }
   populateHistoryFilters();

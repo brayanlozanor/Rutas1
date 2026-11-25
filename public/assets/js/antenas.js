@@ -956,10 +956,77 @@ async function removeNodeFromAntenna(nodeId) {
   notify('Pueblo desvinculado.', 'ok');
 }
 
+const ANTENNA_MAP_COINCIDENT_TOLERANCE = 0.0001;
+
+function dedupeAntennaLinkedNodes(nodes) {
+  const byId = new Map();
+  (Array.isArray(nodes) ? nodes : []).forEach((node, index) => {
+    if (!node || node.deletedAt) return;
+    const rawId = node.id !== undefined && node.id !== null ? String(node.id).trim() : '';
+    const key = rawId || `__node_${index}`;
+    const existing = byId.get(key);
+    if (!existing) {
+      byId.set(key, node);
+      return;
+    }
+    const existingHasCoords = !isNaN(safeFloat(existing.lat)) && !isNaN(safeFloat(existing.lng));
+    const currentHasCoords = !isNaN(safeFloat(node.lat)) && !isNaN(safeFloat(node.lng));
+    if (!existingHasCoords && currentHasCoords) byId.set(key, node);
+  });
+  return Array.from(byId.values());
+}
+
+function areAntennaCoordsCoincident(latA, lngA, latB, lngB, tolerance = ANTENNA_MAP_COINCIDENT_TOLERANCE) {
+  if ([latA, lngA, latB, lngB].some(v => typeof v !== 'number' || Number.isNaN(v))) return false;
+  return Math.abs(latA - latB) <= tolerance + 1e-9 && Math.abs(lngA - lngB) <= tolerance + 1e-9;
+}
+
+function groupAntennaLinkMapEntries(antenna, nodes, tolerance = ANTENNA_MAP_COINCIDENT_TOLERANCE) {
+  const rawEntries = [];
+  const seenKeys = new Set();
+  const antennaLat = safeFloat(antenna?.lat);
+  const antennaLng = safeFloat(antenna?.lng);
+  if (antenna && !isNaN(antennaLat) && !isNaN(antennaLng)) {
+    const aKey = `equipment:${String(antenna.id || '').trim()}`;
+    seenKeys.add(aKey);
+    rawEntries.push({ type: 'equipment', id: antenna.id, item: antenna, lat: antennaLat, lng: antennaLng });
+  }
+  dedupeAntennaLinkedNodes(nodes).forEach(node => {
+    const lat = safeFloat(node.lat);
+    const lng = safeFloat(node.lng);
+    if (isNaN(lat) || isNaN(lng)) return;
+    const nKey = `node:${String(node.id || '').trim()}`;
+    if (seenKeys.has(nKey)) return;
+    seenKeys.add(nKey);
+    rawEntries.push({ type: 'node', id: node.id, item: node, lat, lng });
+  });
+
+  const groups = [];
+  rawEntries.forEach(entry => {
+    const match = groups.find(group => areAntennaCoordsCoincident(entry.lat, entry.lng, group.lat, group.lng, tolerance));
+    if (match) {
+      match.entries.push(entry);
+      match.sumLat += entry.lat;
+      match.sumLng += entry.lng;
+      match.lat = match.sumLat / match.entries.length;
+      match.lng = match.sumLng / match.entries.length;
+    } else {
+      groups.push({ lat: entry.lat, lng: entry.lng, sumLat: entry.lat, sumLng: entry.lng, entries: [entry] });
+    }
+  });
+  return groups.map(group => ({
+    lat: group.lat,
+    lng: group.lng,
+    entries: group.entries,
+    hasAntenna: group.entries.some(e => e.type === 'equipment'),
+    nodes: group.entries.filter(e => e.type === 'node')
+  }));
+}
+
 function renderAntennaNodeLinks() {
   const list = document.getElementById('ant-node-link-list');
   if (!list) return;
-  const nodes = getEquipmentLinkedNodes(linkingAntennaId);
+  const nodes = dedupeAntennaLinkedNodes(getEquipmentLinkedNodes(linkingAntennaId));
   if (!nodes.length) {
     list.innerHTML = '<div class="ant-node-empty"><span>&#128279;</span><strong>Esta antena todavía no tiene pueblos vinculados.</strong><small>Los pueblos que asignes aparecerán aquí y sus conexiones se mostrarán en el mapa.</small></div>';
     renderAntennaNodeLinkSuggestions();
@@ -985,19 +1052,52 @@ function renderAntennaNodeLinkMap() {
   const antennaLng = safeFloat(antenna?.lng);
   const points = [];
   if (!isNaN(antennaLat) && !isNaN(antennaLng)) {
-    points.push([antennaLat, antennaLng]);
-    L.marker([antennaLat, antennaLng], {
-      icon:L.divIcon({ className:'', html:'<div class="ant-node-map-marker antenna"><img src="assets/icons/antenna-module-256-v1.png" alt=""></div>', iconSize:[38,38], iconAnchor:[19,19] })
-    }).bindPopup(`<strong>${antennaEscape(antenna?.name || 'Antena')}</strong>`).addTo(antennaNodeLinkLayer);
-    getEquipmentLinkedNodes(linkingAntennaId).forEach(node => {
-      const lat = safeFloat(node.lat);
-      const lng = safeFloat(node.lng);
-      if (isNaN(lat) || isNaN(lng)) return;
-      points.push([lat, lng]);
-      L.polyline([[antennaLat, antennaLng], [lat, lng]], { color:'#72839a', weight:2, dashArray:'7 7', opacity:.8 }).addTo(antennaNodeLinkLayer);
-      L.marker([lat, lng], {
-        icon:L.divIcon({ className:'', html:'<div class="ant-node-map-marker node"></div>', iconSize:[18,18], iconAnchor:[9,9] })
-      }).bindPopup(`<strong>${antennaEscape(getNodeLabel(node))}</strong><br><small>${antennaEscape(getZoneLabel(node.zone))}</small>`).addTo(antennaNodeLinkLayer);
+    const groups = groupAntennaLinkMapEntries(antenna, getEquipmentLinkedNodes(linkingAntennaId));
+    groups.forEach(group => {
+      points.push([group.lat, group.lng]);
+      if (!group.hasAntenna && !areAntennaCoordsCoincident(antennaLat, antennaLng, group.lat, group.lng)) {
+        L.polyline([[antennaLat, antennaLng], [group.lat, group.lng]], { color:'#72839a', weight:2, dashArray:'7 7', opacity:.8 }).addTo(antennaNodeLinkLayer);
+      }
+
+      if (group.entries.length === 1) {
+        const only = group.entries[0];
+        if (only.type === 'equipment') {
+          L.marker([group.lat, group.lng], {
+            icon:L.divIcon({ className:'', html:'<div class="ant-node-map-marker antenna"><img src="assets/icons/antenna-module-256-v1.png" alt=""></div>', iconSize:[38,38], iconAnchor:[19,19] })
+          }).bindPopup(`<strong>${antennaEscape(antenna?.name || 'Antena')}</strong>`).addTo(antennaNodeLinkLayer);
+        } else {
+          L.marker([group.lat, group.lng], {
+            icon:L.divIcon({ className:'', html:'<div class="ant-node-map-marker node"></div>', iconSize:[18,18], iconAnchor:[9,9] })
+          }).bindPopup(`<strong>${antennaEscape(getNodeLabel(only.item))}</strong><br><small>${antennaEscape(getZoneLabel(only.item.zone))}</small>`).addTo(antennaNodeLinkLayer);
+        }
+        return;
+      }
+
+      const icon = group.hasAntenna
+        ? L.divIcon({
+            className:'',
+            html:`<div class="ant-node-map-marker antenna" style="position:relative;overflow:visible"><img src="assets/icons/antenna-module-256-v1.png" alt="" style="border-radius:inherit"><span style="position:absolute;top:-6px;right:-6px;min-width:19px;height:19px;padding:0 4px;border-radius:999px;background:#0f2742;color:#fff;border:2px solid #fff;font:800 10px/15px Inter,sans-serif;text-align:center;box-shadow:0 2px 6px rgba(15,23,42,.35)">${group.entries.length}</span></div>`,
+            iconSize:[38,38],
+            iconAnchor:[19,19]
+          })
+        : L.divIcon({
+            className:'',
+            html:`<div class="ant-node-map-marker node" style="width:24px;height:24px;background:#0874e8;color:#fff;font:800 11px/1 Inter,sans-serif">${group.entries.length}</div>`,
+            iconSize:[24,24],
+            iconAnchor:[12,12]
+          });
+      const popupRows = group.entries.map(entry => {
+        if (entry.type === 'equipment') {
+          return `<div style="padding:4px 0;border-bottom:1px solid #e2e8f0"><strong>${antennaEscape(entry.item?.name || 'Antena')}</strong> <span class="badge zone">Mikrotik</span></div>`;
+        }
+        return `<div style="padding:4px 0;border-bottom:1px solid #e2e8f0"><strong>${antennaEscape(getNodeLabel(entry.item))}</strong> <span class="badge success">Pueblo</span><br><small style="color:#64748b">${antennaEscape(getZoneLabel(entry.item.zone))}</small></div>`;
+      }).join('');
+      const heading = group.hasAntenna
+        ? `Ubicación compartida (${group.entries.length})`
+        : `${group.entries.length} pueblos en esta ubicación`;
+      L.marker([group.lat, group.lng], { icon })
+        .bindPopup(`<div style="min-width:200px"><div style="font-size:11px;font-weight:800;color:#0f2742;margin-bottom:4px">${antennaEscape(heading)}</div>${popupRows}</div>`)
+        .addTo(antennaNodeLinkLayer);
     });
   }
   if (points.length > 1) antennaNodeLinkMap.fitBounds(points, { padding:[28,28], maxZoom:14 });

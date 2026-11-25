@@ -8,7 +8,9 @@ let dashboardLoadSequence=0;
 let dashboardMonthlyGoal=350;
 let dashboardSelectedPeriod='week';
 let dashboardSelectedDetailKind='physical';
+let dashboardTechPeriod='week';
 let dashboardGlobalStats={};
+let dashboardTooltipBound=false;
 const dashboardGlobal=typeof window!=='undefined'?window:globalThis;
 dashboardGlobal.dashboardSelectedDetailKind=dashboardSelectedDetailKind;
 const DASHBOARD_PHYSICAL_EXCLUDED_CATEGORIES=new Set(['instalacion','nueva_instalacion','instalacion_nueva','reubicacion_antena','reubicacion','resurtir_antena','surtir_antena','solicitud_respaldo','solicitud_de_respaldo']);
@@ -358,26 +360,143 @@ function countSolvedBetween(details,from,to) {
   return details.filter(detail => dashboardIsSolved(detail) && dashboardCompletionTime(detail)>=from && dashboardCompletionTime(detail)<=to).length;
 }
 
+function initDashboardTooltips() {
+  if (dashboardTooltipBound || typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+  dashboardTooltipBound = true;
+  const getTipEl = () => document.getElementById('dashboard-tooltip');
+
+  const positionTooltip = (tip, clientX, clientY) => {
+    if (!tip || !Number.isFinite(clientX) || !Number.isFinite(clientY)) return;
+    const vw = typeof window !== 'undefined' ? (window.innerWidth || 1280) : 1280;
+    const vh = typeof window !== 'undefined' ? (window.innerHeight || 720) : 720;
+    const rect = typeof tip.getBoundingClientRect === 'function' ? tip.getBoundingClientRect() : { width: 180, height: 64 };
+    const pad = 14;
+    let x = clientX + 14;
+    let y = clientY - rect.height - 14;
+    if (x + rect.width + pad > vw) x = Math.max(pad, clientX - rect.width - 14);
+    if (y < pad) y = Math.min(vh - rect.height - pad, clientY + 18);
+    tip.style.left = `${Math.round(x)}px`;
+    tip.style.top = `${Math.round(y)}px`;
+  };
+
+  const showFromTarget = (target, clientX, clientY) => {
+    const tip = getTipEl();
+    if (!tip || !target || typeof target.closest !== 'function') return;
+    const host = target.closest('[data-tip-title]');
+    if (!host) {
+      tip.hidden = true;
+      return;
+    }
+    const title = host.getAttribute('data-tip-title') || '';
+    const rawLines = host.getAttribute('data-tip-lines') || '';
+    const lines = rawLines ? rawLines.split('|').filter(Boolean) : [];
+    tip.innerHTML = `<strong>${dashboardEscape(title)}</strong>${lines.map(line => `<span>${dashboardEscape(line)}</span>`).join('')}`;
+    tip.hidden = false;
+    positionTooltip(tip, clientX, clientY);
+  };
+
+  document.addEventListener('pointermove', event => {
+    showFromTarget(event.target, event.clientX, event.clientY);
+  });
+
+  document.addEventListener('pointerover', event => {
+    const target = event.target;
+    if (!target || typeof target.closest !== 'function') return;
+    const sliceHost = target.closest('[data-slice-idx]');
+    if (sliceHost) {
+      const container = sliceHost.closest('.dashboard-distribution-chart, .tech-dash-donut-wrap');
+      const idx = sliceHost.getAttribute('data-slice-idx');
+      if (container && typeof container.querySelectorAll === 'function') {
+        container.querySelectorAll('[data-slice-idx]').forEach(node => {
+          node.classList?.toggle?.('is-highlighted', node.getAttribute('data-slice-idx') === idx);
+        });
+      }
+    }
+  });
+
+  document.addEventListener('pointerout', event => {
+    const target = event.target;
+    if (!target || typeof target.closest !== 'function') return;
+    const host = target.closest('[data-tip-title]');
+    if (host) {
+      const tip = getTipEl();
+      if (tip) tip.hidden = true;
+    }
+    const sliceHost = target.closest('[data-slice-idx]');
+    if (sliceHost) {
+      const container = sliceHost.closest('.dashboard-distribution-chart, .tech-dash-donut-wrap');
+      if (container && typeof container.querySelectorAll === 'function') {
+        container.querySelectorAll('[data-slice-idx]').forEach(node => {
+          node.classList?.remove?.('is-highlighted');
+        });
+      }
+    }
+  });
+}
+
 function renderDashboardDailyChart(details,bounds) {
   const box = document.getElementById('dashboard-daily-chart');
+  if (!box) return;
   const days = [];
   const cursor = new Date(`${bounds.fromKey}T12:00:00`);
   const end = new Date(`${bounds.toKey}T12:00:00`);
   while (cursor <= end && days.length < 120) { days.push(dashboardDateKey(cursor)); cursor.setDate(cursor.getDate()+1); }
-  const counts = days.map(key => details.filter(detail => dashboardIsSolved(detail) && dashboardDateKey(dashboardCompletionTime(detail))===key).length);
-  if(!days.length){box.innerHTML='<div class="analytics-empty">Sin días dentro del período.</div>';return;}
-  const max=Math.max(1,...counts);
-  const width=Math.max(560,80+(Math.max(1,days.length-1)*78));
-  const height=245; const left=38; const right=22; const top=28; const bottom=42;
-  const chartWidth=width-left-right; const chartHeight=height-top-bottom;
-  const pointX=index=>days.length===1?left+(chartWidth/2):left+(index/(days.length-1))*chartWidth;
-  const pointY=value=>top+chartHeight-((value/max)*chartHeight);
-  const points=counts.map((value,index)=>`${pointX(index).toFixed(1)},${pointY(value).toFixed(1)}`).join(' ');
-  const areaPoints=`${left},${top+chartHeight} ${points} ${width-right},${top+chartHeight}`;
-  const grid=[0,.25,.5,.75,1].map(ratio=>{const y=top+chartHeight-(ratio*chartHeight);const value=Math.round(max*ratio);return `<line x1="${left}" y1="${y}" x2="${width-right}" y2="${y}" class="dashboard-line-grid"/><text x="${left-9}" y="${y+3}" class="dashboard-line-axis" text-anchor="end">${value}</text>`;}).join('');
-  const nodes=days.map((key,index)=>{const date=new Date(`${key}T12:00:00`);const label=date.toLocaleDateString('es-MX',{day:'numeric',month:'short'});const x=pointX(index);const y=pointY(counts[index]);return `<g class="dashboard-line-node"><circle cx="${x}" cy="${y}" r="5"><title>${dashboardEscape(label)}: ${counts[index]} solucionados</title></circle><text x="${x}" y="${Math.max(13,y-11)}" class="dashboard-line-value" text-anchor="middle">${counts[index]}</text><text x="${x}" y="${height-15}" class="dashboard-line-label" text-anchor="middle">${dashboardEscape(label)}</text></g>`;}).join('');
-  box.innerHTML=`<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Detalles solucionados por día"><defs><linearGradient id="dashboard-line-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0874f9" stop-opacity=".2"/><stop offset="1" stop-color="#0874f9" stop-opacity="0"/></linearGradient></defs>${grid}<polygon points="${areaPoints}" class="dashboard-line-area"/><polyline points="${points}" class="dashboard-line-path"/>${nodes}</svg>`;
-  setDashboardValue('dashboard-daily-caption',`${days.length} día${days.length===1?'':'s'} analizado${days.length===1?'':'s'}`);
+  const solvedCounts = days.map(key => details.filter(detail => dashboardIsSolved(detail) && dashboardDateKey(dashboardCompletionTime(detail))===key).length);
+  const createdCounts = days.map(key => details.filter(detail => Number.isFinite(dashboardTime(detail.createdAt)) && dashboardDateKey(detail.createdAt)===key).length);
+  if(!days.length){box.innerHTML='<div class="analytics-empty">Sin días en el período.</div>';return;}
+
+  const isNetwork = dashboardSelectedDetailKind === 'network';
+  const accentColor = isNetwork ? '#7c3aed' : '#0874f9';
+  const max = Math.max(1, ...solvedCounts, ...createdCounts);
+  const stepWidth = days.length > 14 ? 46 : 74;
+  const width = Math.max(540, 74 + (Math.max(1, days.length - 1) * stepWidth));
+  const height = 248;
+  const left = 36; const right = 20; const top = 26; const bottom = 38;
+  const chartWidth = width - left - right;
+  const chartHeight = height - top - bottom;
+  const pointX = index => days.length === 1 ? left + (chartWidth / 2) : left + (index / (days.length - 1)) * chartWidth;
+  const pointY = value => top + chartHeight - ((value / max) * chartHeight);
+
+  const solvedPoints = solvedCounts.map((value,index)=>`${pointX(index).toFixed(1)},${pointY(value).toFixed(1)}`).join(' ');
+  const createdPoints = createdCounts.map((value,index)=>`${pointX(index).toFixed(1)},${pointY(value).toFixed(1)}`).join(' ');
+  const firstX = pointX(0).toFixed(1);
+  const lastX = pointX(days.length - 1).toFixed(1);
+  const areaPoints = `${firstX},${top+chartHeight} ${solvedPoints} ${lastX},${top+chartHeight}`;
+
+  const grid = [0, 0.25, 0.5, 0.75, 1].map(ratio => {
+    const y = top + chartHeight - (ratio * chartHeight);
+    const value = Math.round(max * ratio);
+    return `<line x1="${left}" y1="${y.toFixed(1)}" x2="${width-right}" y2="${y.toFixed(1)}" class="dashboard-line-grid"/><text x="${left-9}" y="${(y+3.5).toFixed(1)}" class="dashboard-line-axis" text-anchor="end">${value}</text>`;
+  }).join('');
+
+  const labelStep = days.length > 18 ? Math.ceil(days.length / 10) : (days.length > 10 ? 2 : 1);
+  const nodes = days.map((key, index) => {
+    const date = new Date(`${key}T12:00:00`);
+    const label = date.toLocaleDateString('es-MX',{day:'numeric',month:'short'});
+    const x = pointX(index);
+    const ys = pointY(solvedCounts[index]);
+    const yc = pointY(createdCounts[index]);
+    const showXLabel = index === 0 || index === days.length - 1 || index % labelStep === 0;
+    const tipLines = `Solucionados: ${solvedCounts[index]}|Creados: ${createdCounts[index]}`;
+    return `<g class="dashboard-line-node" data-tip-title="${dashboardEscape(label)}" data-tip-lines="${dashboardEscape(tipLines)}">` +
+      `<line x1="${x.toFixed(1)}" y1="${top}" x2="${x.toFixed(1)}" y2="${top+chartHeight}" class="dashboard-line-guide"/>` +
+      `<circle cx="${x.toFixed(1)}" cy="${yc.toFixed(1)}" r="3.2" class="dashboard-created-dot"/>` +
+      `<circle cx="${x.toFixed(1)}" cy="${ys.toFixed(1)}" r="5" class="dashboard-solved-dot"><title>${dashboardEscape(label)}: ${solvedCounts[index]} solucionados · ${createdCounts[index]} creados</title></circle>` +
+      `<circle cx="${x.toFixed(1)}" cy="${ys.toFixed(1)}" r="15" class="dashboard-hit-area"/>` +
+      `${solvedCounts[index] > 0 || days.length <= 10 ? `<text x="${x.toFixed(1)}" y="${Math.max(14, ys - 10).toFixed(1)}" class="dashboard-line-value" text-anchor="middle">${solvedCounts[index]}</text>` : ''}` +
+      `${showXLabel ? `<text x="${x.toFixed(1)}" y="${height - 13}" class="dashboard-line-label" text-anchor="middle">${dashboardEscape(label)}</text>` : ''}` +
+      `</g>`;
+  }).join('');
+
+  box.innerHTML = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Tendencia de solucionados y creados por día">` +
+    `<defs><linearGradient id="dashboard-line-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${accentColor}" stop-opacity=".22"/><stop offset="1" stop-color="${accentColor}" stop-opacity="0"/></linearGradient></defs>` +
+    `${grid}<polygon points="${areaPoints}" class="dashboard-line-area"/>` +
+    `<polyline points="${createdPoints}" class="dashboard-line-created"/>` +
+    `<polyline points="${solvedPoints}" class="dashboard-line-path" style="stroke:${accentColor}"/>${nodes}</svg>`;
+
+  const totalPeriodSolved = solvedCounts.reduce((a,b)=>a+b,0);
+  const totalPeriodCreated = createdCounts.reduce((a,b)=>a+b,0);
+  setDashboardValue('dashboard-daily-caption',`${days.length} día${days.length===1?'':'s'} · ${totalPeriodSolved} solucionados / ${totalPeriodCreated} creados`);
 }
 
 function dashboardWeekStart(value) {
@@ -458,66 +577,230 @@ function renderDashboardTechTable(details,bounds) {
 
   let rows = [...groups.values()].filter(row => row.solved > 0);
   if (!rows.length) {
-    rows = [...groups.values()].slice(0, 8);
+    rows = [...groups.values()].slice(0, 6);
   } else {
     rows.sort((a,b) => b.solved - a.solved || Number(b.office) - Number(a.office) || a.name.localeCompare(b.name));
-    rows = rows.slice(0, 10);
+    rows = rows.slice(0, 8);
   }
 
   const total = rows.reduce((sum, row) => sum + row.solved, 0);
-  const colors = ['#0874f9','#11ad55','#8f25ef','#f49b00','#08a9b7','#ef476f','#617493','#7c5cff','#e056fd','#ff793f'];
+  const maxRow = Math.max(1, ...rows.map(row => row.solved));
+  const colors = ['#0874f9','#10b981','#8b5cf6','#f59e0b','#06b6d4','#ec4899','#64748b','#6366f1'];
 
   rows.forEach((row, index) => {
     if (row.officeType === 'soporte') {
-      row.color = '#f49b00';
+      row.color = '#f59e0b';
     } else if (row.officeType === 'atencion') {
-      row.color = '#08a9b7';
+      row.color = '#06b6d4';
     } else {
       row.color = colors[index % colors.length];
     }
   });
 
-  let progress = 0;
-  const segments = rows.filter(row => row.solved > 0).map(row => {
-    const start = progress;
-    progress += (row.solved / Math.max(1, total)) * 360;
-    return `${row.color} ${start.toFixed(2)}deg ${progress.toFixed(2)}deg`;
-  });
-  const gradient = segments.length ? `conic-gradient(${segments.join(',')})` : '#edf2f8';
+  const radius = 58;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  const svgSlices = total > 0 ? rows.map((row, idx) => {
+    if (!row.solved) return '';
+    const share = row.solved / total;
+    const pct = Math.round(share * 100);
+    const dashLen = share * circumference;
+    const dashOffset = -offset;
+    offset += dashLen;
+    const tipLines = `${row.solved} solucionado${row.solved===1?'':'s'}|${pct}% del período`;
+    return `<circle class="dashboard-donut-arc" data-slice-idx="${idx}" data-tip-title="${dashboardEscape(row.name)}" data-tip-lines="${dashboardEscape(tipLines)}" cx="76" cy="76" r="${radius}" stroke="${row.color}" stroke-dasharray="${Math.max(1, dashLen - 1.5).toFixed(2)} ${circumference.toFixed(2)}" stroke-dashoffset="${dashOffset.toFixed(2)}"><title>${dashboardEscape(row.name)}: ${row.solved} (${pct}%)</title></circle>`;
+  }).join('') : `<circle class="dashboard-donut-empty" cx="76" cy="76" r="${radius}"/>`;
 
   const box = document.getElementById('dashboard-tech-table');
   if (!box) return;
 
-  const emptyMsg = total === 0 ? '<div class="analytics-empty" style="min-height:70px;padding:12px;font-size:10px;">Sin soluciones registradas en este período.</div>' : '';
+  const emptyMsg = total === 0 ? '<div class="analytics-empty dashboard-mini-empty">Sin soluciones en este período.</div>' : '';
 
-  box.innerHTML = `
-    <div class="dashboard-distribution-chart">
-      <div class="dashboard-distribution-donut" style="background:${gradient}">
-        <div>
-          <strong>${total}</strong>
-          <span>Solucionados</span>
-        </div>
-      </div>
-      <div class="dashboard-distribution-legend">
-        ${rows.map(row => `
-          <div>
-            <i style="background:${row.color}"></i>
-            <span title="${dashboardEscape(row.name)}">${dashboardEscape(row.name)}${isNetwork && row.area ? ` <small style="color:#788ea6;font-size:7px;">(${dashboardEscape(row.area)})</small>` : ''}</span>
-            <strong>${row.solved}</strong>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-    ${emptyMsg}
-  `;
+  box.innerHTML = `<div class="dashboard-distribution-chart">` +
+    `<div class="dashboard-distribution-donut">` +
+      `<svg class="dashboard-donut-svg" viewBox="0 0 152 152" role="img" aria-label="Distribución de soluciones">${svgSlices}</svg>` +
+      `<div class="dashboard-donut-center"><strong>${total}</strong><span>Solucionados</span></div>` +
+    `</div>` +
+    `<div class="dashboard-distribution-legend">` +
+      rows.map((row, idx) => {
+        const pct = total ? Math.round((row.solved / total) * 100) : 0;
+        const barW = total ? Math.max(4, Math.round((row.solved / maxRow) * 100)) : 0;
+        const tipLines = `${row.solved} solucionado${row.solved===1?'':'s'}|${pct}% del período`;
+        return `<div class="dashboard-dist-item" data-slice-idx="${idx}" data-tip-title="${dashboardEscape(row.name)}" data-tip-lines="${dashboardEscape(tipLines)}">` +
+          `<div class="dashboard-dist-top">` +
+            `<i style="background:${row.color}"></i>` +
+            `<span title="${dashboardEscape(row.name)}">${dashboardEscape(row.name)}${isNetwork && row.area ? ` <small>(${dashboardEscape(row.area)})</small>` : ''}</span>` +
+            `<strong>${row.solved}</strong>` +
+            `<em>${pct}%</em>` +
+          `</div>` +
+          `<div class="dashboard-dist-bar"><b style="width:${barW}%;background:${row.color}"></b></div>` +
+        `</div>`;
+      }).join('') +
+    `</div>` +
+  `</div>${emptyMsg}`;
+}
+
+function renderDashboardWeeklyChart(details) {
+  const box = document.getElementById('dashboard-weekly-chart');
+  if (!box) return;
+
+  const isNetwork = dashboardSelectedDetailKind === 'network';
+  const solvedColor = isNetwork ? '#7c3aed' : '#0874f9';
+  const createdColor = isNetwork ? '#c4b5fd' : '#93c5fd';
+  const currentWeekStart = dashboardWeekStart(new Date());
+  const weeks = [];
+
+  for (let i = 3; i >= 0; i--) {
+    const start = new Date(currentWeekStart);
+    start.setDate(start.getDate() - (i * 7));
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    const fromMs = start.getTime();
+    const toMs = end.getTime();
+    const created = details.filter(item => {
+      const t = dashboardTime(item.createdAt);
+      return Number.isFinite(t) && t >= fromMs && t <= toMs;
+    }).length;
+    const solved = countSolvedBetween(details, fromMs, toMs);
+    const shortLabel = i === 0 ? 'Esta sem.' : (i === 1 ? 'Sem. ant.' : `${start.toLocaleDateString('es-MX',{day:'numeric',month:'short'})}`);
+    const rangeLabel = `${start.toLocaleDateString('es-MX',{day:'numeric',month:'short'})} – ${end.toLocaleDateString('es-MX',{day:'numeric',month:'short'})}`;
+    weeks.push({ shortLabel, rangeLabel, created, solved });
+  }
+
+  const max = Math.max(1, ...weeks.map(w => Math.max(w.created, w.solved)));
+  const width = 520;
+  const height = 228;
+  const left = 36; const right = 18; const top = 26; const bottom = 38;
+  const chartW = width - left - right;
+  const chartH = height - top - bottom;
+  const groupW = chartW / weeks.length;
+  const barW = Math.min(28, groupW * 0.27);
+  const gap = 8;
+
+  const grid = [0, 0.25, 0.5, 0.75, 1].map(ratio => {
+    const y = top + chartH - (ratio * chartH);
+    const val = Math.round(max * ratio);
+    return `<line x1="${left}" y1="${y.toFixed(1)}" x2="${width - right}" y2="${y.toFixed(1)}" class="dashboard-line-grid"/><text x="${left - 8}" y="${(y + 3.5).toFixed(1)}" class="dashboard-line-axis" text-anchor="end">${val}</text>`;
+  }).join('');
+
+  const bars = weeks.map((week, idx) => {
+    const cx = left + (idx * groupW) + (groupW / 2);
+    const x1 = cx - barW - (gap / 2);
+    const x2 = cx + (gap / 2);
+    const h1 = (week.created / max) * chartH;
+    const h2 = (week.solved / max) * chartH;
+    const y1 = top + chartH - h1;
+    const y2 = top + chartH - h2;
+    const eff = week.created ? Math.round((week.solved / week.created) * 100) : (week.solved ? 100 : 0);
+    const tipLines = `Creados: ${week.created}|Solucionados: ${week.solved}|Balance: ${eff}%`;
+    return `<g class="dashboard-week-group" data-tip-title="${dashboardEscape(week.rangeLabel)}" data-tip-lines="${dashboardEscape(tipLines)}">` +
+      `<rect x="${(cx - groupW * 0.42).toFixed(1)}" y="${top}" width="${(groupW * 0.84).toFixed(1)}" height="${chartH}" rx="8" class="dashboard-week-hover-bg"/>` +
+      `<rect x="${x1.toFixed(1)}" y="${y1.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(2, h1).toFixed(1)}" rx="5" fill="${createdColor}" class="dashboard-bar-rect"><title>${dashboardEscape(week.rangeLabel)} · Creados: ${week.created}</title></rect>` +
+      `<text x="${(x1 + barW / 2).toFixed(1)}" y="${Math.max(14, y1 - 6).toFixed(1)}" class="dashboard-bar-val is-muted" text-anchor="middle">${week.created}</text>` +
+      `<rect x="${x2.toFixed(1)}" y="${y2.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(2, h2).toFixed(1)}" rx="5" fill="${solvedColor}" class="dashboard-bar-rect"><title>${dashboardEscape(week.rangeLabel)} · Solucionados: ${week.solved}</title></rect>` +
+      `<text x="${(x2 + barW / 2).toFixed(1)}" y="${Math.max(14, y2 - 6).toFixed(1)}" class="dashboard-bar-val" text-anchor="middle">${week.solved}</text>` +
+      `<text x="${cx.toFixed(1)}" y="${height - 12}" class="dashboard-line-label" text-anchor="middle">${dashboardEscape(week.shortLabel)}</text>` +
+    `</g>`;
+  }).join('');
+
+  box.innerHTML = `<svg viewBox="0 0 ${width} ${height}" class="dashboard-weekly-svg" role="img" aria-label="Comparativa semanal de creados y solucionados">${grid}${bars}</svg>`;
+}
+
+function renderDashboardStatusAndZonesChart(details, bounds) {
+  const box = document.getElementById('dashboard-status-chart');
+  if (!box) return;
+
+  const periodItems = details.filter(item => {
+    const ct = dashboardTime(item.createdAt);
+    const ft = dashboardCompletionTime(item);
+    const inCreated = Number.isFinite(ct) && ct >= bounds.from && ct <= bounds.to;
+    const inCompleted = Number.isFinite(ft) && ft >= bounds.from && ft <= bounds.to;
+    return inCreated || inCompleted;
+  });
+  const source = periodItems.length ? periodItems : details;
+
+  let solved = 0;
+  let pending = 0;
+  let notDone = 0;
+  source.forEach(item => {
+    if (dashboardIsSolved(item)) solved++;
+    else if (item?.status === 'no_realizado') notDone++;
+    else pending++;
+  });
+
+  const total = Math.max(1, solved + pending + notDone);
+  const solvedPct = Math.round((solved / total) * 100);
+  const pendingPct = Math.round((pending / total) * 100);
+  const notDonePct = Math.max(0, 100 - solvedPct - pendingPct);
+
+  const zonesMap = new Map();
+  source.forEach(item => {
+    const rawZone = dashboardDetailZone(item);
+    const label = rawZone
+      ? (typeof getZoneLabel === 'function' ? getZoneLabel(rawZone) : rawZone)
+      : ({ equipment: 'Antenas', node: 'Pueblos', manual: 'Generales' }[dashboardDetailOrigin(item)] || 'General');
+    const entry = zonesMap.get(label) || { name: label, total: 0, solved: 0 };
+    entry.total++;
+    if (dashboardIsSolved(item)) entry.solved++;
+    zonesMap.set(label, entry);
+  });
+
+  const topZones = [...zonesMap.values()].sort((a,b) => b.total - a.total || a.name.localeCompare(b.name)).slice(0, 5);
+  const maxZone = Math.max(1, ...topZones.map(z => z.total));
+  const isNetwork = dashboardSelectedDetailKind === 'network';
+  const barColor = isNetwork ? '#7c3aed' : '#0874f9';
+
+  const segments = [
+    { key: 'solved', label: 'Completados', count: solved, pct: solvedPct, color: '#10b981' },
+    { key: 'pending', label: 'Pendientes', count: pending, pct: pendingPct, color: '#f59e0b' },
+    { key: 'notdone', label: 'No realizados', count: notDone, pct: notDonePct, color: '#ef4444' }
+  ];
+
+  box.innerHTML = `<div class="dashboard-status-block">` +
+    `<div class="dashboard-seg-bar" role="img" aria-label="Proporción de estatus">` +
+      segments.filter(s => s.count > 0).map(s => `<span style="width:${Math.max(4, s.pct)}%;background:${s.color}" data-tip-title="${dashboardEscape(s.label)}" data-tip-lines="${s.count} registro${s.count===1?'':'s'}|${s.pct}% del total"></span>`).join('') +
+    `</div>` +
+    `<div class="dashboard-seg-pills">` +
+      segments.map(s => `<div class="dashboard-seg-pill" data-tip-title="${dashboardEscape(s.label)}" data-tip-lines="${s.count} registro${s.count===1?'':'s'}|${s.pct}%"><i style="background:${s.color}"></i><span>${dashboardEscape(s.label)}</span><strong>${s.count}</strong><em>${s.pct}%</em></div>`).join('') +
+    `</div>` +
+  `</div>` +
+  `<div class="dashboard-zones-block">` +
+    `<div class="dashboard-subchart-title">Top zonas con actividad</div>` +
+    (topZones.length
+      ? topZones.map(z => {
+          const w = Math.max(6, Math.round((z.total / maxZone) * 100));
+          const sw = z.total ? Math.round((z.solved / z.total) * 100) : 0;
+          const tipLines = `Total: ${z.total}|Solucionados: ${z.solved} (${sw}%)`;
+          return `<div class="dashboard-zone-row" data-tip-title="${dashboardEscape(z.name)}" data-tip-lines="${dashboardEscape(tipLines)}">` +
+            `<span class="dashboard-zone-name" title="${dashboardEscape(z.name)}">${dashboardEscape(z.name)}</span>` +
+            `<div class="dashboard-zone-track"><b style="width:${w}%;background:${barColor}"></b></div>` +
+            `<strong class="dashboard-zone-val">${z.total}</strong>` +
+          `</div>`;
+        }).join('')
+      : '<div class="analytics-empty dashboard-mini-empty">Sin datos de zonas en este período.</div>') +
+  `</div>`;
+
+  setDashboardValue('dashboard-status-caption', `${source.length} registro${source.length===1?'':'s'} en análisis`);
 }
 
 function renderDashboardCompliance(solved,total,rate) {
   setDashboardValue('dashboard-compliance-value',`${rate}%`);
   setDashboardValue('dashboard-compliance-count',`${solved} / ${total}`);
   setDashboardValue('dashboard-ring-goal',`Meta: ${total}`);
-  const ring=document.getElementById('dashboard-compliance-ring');
-  if(ring) ring.style.setProperty('--rate',`${Math.min(100,Math.max(0,rate))*3.6}deg`);
+  const clamped = Math.min(100, Math.max(0, rate));
+  const ring = document.getElementById('dashboard-compliance-ring');
+  if (ring) {
+    ring.style.setProperty('--rate',`${clamped * 3.6}deg`);
+    ring.classList?.toggle?.('is-achieved', rate >= 100);
+  }
+  const arc = document.getElementById('dashboard-compliance-arc');
+  if (arc && typeof arc.setAttribute === 'function') {
+    const circ = 2 * Math.PI * 76;
+    const offset = circ * (1 - (clamped / 100));
+    arc.setAttribute('stroke-dasharray', circ.toFixed(2));
+    arc.setAttribute('stroke-dashoffset', offset.toFixed(2));
+  }
 }
 
 function dashboardGoalForPeriod(bounds) {
@@ -583,38 +866,38 @@ function updateDashboardKindModeUI(kind) {
   const modePill = document.getElementById('dashboard-mode-pill');
   const modeText = document.getElementById('dashboard-mode-text');
   if (modePill) {
-    modePill.classList.toggle('is-network', isNetwork);
-    modePill.classList.toggle('is-physical', !isNetwork);
-    modePill.setAttribute('data-mode', kind);
+    modePill.classList?.toggle?.('is-network', isNetwork);
+    modePill.classList?.toggle?.('is-physical', !isNetwork);
+    modePill.setAttribute?.('data-mode', kind);
   }
   if (modeText) {
     modeText.textContent = isNetwork ? 'Detalles de Red' : 'Detalles Físicos';
   }
   if (typeof document !== 'undefined') {
     if (typeof document.querySelector === 'function') {
-      document.querySelector('.dashboard-shell')?.classList.toggle('is-network-mode', isNetwork);
+      document.querySelector('.dashboard-shell')?.classList?.toggle?.('is-network-mode', isNetwork);
     }
-    document.body?.classList?.toggle('dashboard-network-mode', isNetwork);
+    document.body?.classList?.toggle?.('dashboard-network-mode', isNetwork);
   }
 }
 
 function setDashboardDetailKind(kind, force = false) {
   if (kind !== 'network' && kind !== 'physical') kind = 'physical';
   if (dashboardSelectedDetailKind === kind && !force) {
-    document.getElementById('dashboard-tab-physical')?.classList.toggle('is-active', kind === 'physical');
-    document.getElementById('dashboard-tab-network')?.classList.toggle('is-active', kind === 'network');
-    document.getElementById('dashboard-tab-physical')?.setAttribute('aria-selected', String(kind === 'physical'));
-    document.getElementById('dashboard-tab-network')?.setAttribute('aria-selected', String(kind === 'network'));
+    document.getElementById('dashboard-tab-physical')?.classList?.toggle?.('is-active', kind === 'physical');
+    document.getElementById('dashboard-tab-network')?.classList?.toggle?.('is-active', kind === 'network');
+    document.getElementById('dashboard-tab-physical')?.setAttribute?.('aria-selected', String(kind === 'physical'));
+    document.getElementById('dashboard-tab-network')?.setAttribute?.('aria-selected', String(kind === 'network'));
     updateDashboardKindModeUI(kind);
     return;
   }
   dashboardSelectedDetailKind = kind;
   dashboardGlobal.dashboardSelectedDetailKind = kind;
 
-  document.getElementById('dashboard-tab-physical')?.classList.toggle('is-active', kind === 'physical');
-  document.getElementById('dashboard-tab-network')?.classList.toggle('is-active', kind === 'network');
-  document.getElementById('dashboard-tab-physical')?.setAttribute('aria-selected', String(kind === 'physical'));
-  document.getElementById('dashboard-tab-network')?.setAttribute('aria-selected', String(kind === 'network'));
+  document.getElementById('dashboard-tab-physical')?.classList?.toggle?.('is-active', kind === 'physical');
+  document.getElementById('dashboard-tab-network')?.classList?.toggle?.('is-active', kind === 'network');
+  document.getElementById('dashboard-tab-physical')?.setAttribute?.('aria-selected', String(kind === 'physical'));
+  document.getElementById('dashboard-tab-network')?.setAttribute?.('aria-selected', String(kind === 'network'));
   updateDashboardKindModeUI(kind);
 
   try {
@@ -625,8 +908,8 @@ function setDashboardDetailKind(kind, force = false) {
 
   const isNetwork = kind === 'network';
   setDashboardValue('dashboard-heading-desc', isNetwork
-    ? 'Monitorea detalles de red creados, solucionados y la distribución del personal de oficina.'
-    : 'Monitorea detalles físicos creados, solucionados y la distribución entre técnicos, soporte y atención a clientes.');
+    ? 'Resumen ejecutivo · Oficina y NOC'
+    : 'Resumen ejecutivo · Campo y soporte');
   setDashboardValue('dashboard-total-label', isNetwork ? 'Detalles de red totales' : 'Detalles físicos totales');
   setDashboardValue('dashboard-pending-label', isNetwork ? 'Pendientes de red actuales' : 'Pendientes físicos actuales');
   setDashboardValue('dashboard-tech-label', isNetwork ? 'Personal de oficina' : 'Técnico u oficina');
@@ -637,6 +920,7 @@ function setDashboardDetailKind(kind, force = false) {
 }
 
 function renderAdminDashboard() {
+  initDashboardTooltips();
   const bounds=dashboardBounds();
   const activeDetails=(state.workOrders||[]).filter(dashboardMatchesDetailKind);
   const details=activeDetails.filter(dashboardMatchesDimensions);
@@ -656,8 +940,8 @@ function renderAdminDashboard() {
   setDashboardValue('dashboard-done-today',todayCount);
   setDashboardValue('dashboard-done-week',weekCount);
   setDashboardValue('dashboard-done-month',monthCount);
-  renderDashboardTrend('dashboard-week-trend',weekCount,countSolvedBetween(details,previousWeekStart,previousWeekEnd),'semana anterior');
-  renderDashboardTrend('dashboard-month-trend',monthCount,countSolvedBetween(details,previousMonthStart,previousMonthEnd),'mes anterior');
+  renderDashboardTrend('dashboard-week-trend',weekCount,countSolvedBetween(details,previousWeekStart,previousWeekEnd),'sem. ant.');
+  renderDashboardTrend('dashboard-month-trend',monthCount,countSolvedBetween(details,previousMonthStart,previousMonthEnd),'mes ant.');
   setDashboardValue('dashboard-total-details',totalDetails);
   const periodSolved=details.filter(item=>dashboardIsSolved(item)&&dashboardCompletionTime(item)>=bounds.from&&dashboardCompletionTime(item)<=bounds.to);
   const periodGoal=dashboardGoalForPeriod(bounds);
@@ -665,19 +949,175 @@ function renderAdminDashboard() {
   setDashboardValue('dashboard-period-added',todayAdded); setDashboardValue('dashboard-period-solved',monthAdded); setDashboardValue('dashboard-period-pending',pendingCount); setDashboardValue('dashboard-period-rate',totalSolved);
   setDashboardValue('dashboard-period-goal-label','Histórico');
   setDashboardValue('dashboard-compliance-goal-label',`Meta ${dashboardGoalLabel()}`);
-  setDashboardValue('dashboard-goal-guidance',`Meta mensual: ${dashboardMonthlyGoal} · Meta semanal: ${Math.ceil(dashboardMonthlyGoal/4)} · Faltan ${Math.max(0,dashboardMonthlyGoal-monthCount)} este mes`);
+  setDashboardValue('dashboard-goal-guidance',`Mensual: ${dashboardMonthlyGoal} · Faltan ${Math.max(0,dashboardMonthlyGoal-monthCount)}`);
   setDashboardValue('dashboard-updated-at',new Date().toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}));
 
   const isNetwork = dashboardSelectedDetailKind === 'network';
   setDashboardValue('dashboard-heading-desc', isNetwork
-    ? 'Monitorea detalles de red creados, solucionados y la distribución del personal de oficina.'
-    : 'Monitorea detalles físicos creados, solucionados y la distribución entre técnicos, soporte y atención a clientes.');
+    ? 'Resumen ejecutivo · Oficina y NOC'
+    : 'Resumen ejecutivo · Campo y soporte');
   setDashboardValue('dashboard-total-label', isNetwork ? 'Detalles de red totales' : 'Detalles físicos totales');
   setDashboardValue('dashboard-pending-label', isNetwork ? 'Pendientes de red actuales' : 'Pendientes físicos actuales');
   setDashboardValue('dashboard-tech-label', isNetwork ? 'Personal de oficina' : 'Técnico u oficina');
   setDashboardValue('dashboard-distribution-title', isNetwork ? 'Distribución de oficina (Red)' : 'Distribución de soluciones');
 
-  renderDashboardDailyChart(details,bounds); renderDashboardCompliance(periodSolved.length,periodGoal,rate); renderDashboardTechTable(details,bounds);
+  renderDashboardDailyChart(details,bounds);
+  renderDashboardCompliance(periodSolved.length,periodGoal,rate);
+  renderDashboardTechTable(details,bounds);
+  renderDashboardWeeklyChart(details);
+  renderDashboardStatusAndZonesChart(details,bounds);
+}
+
+function isTechnicianDashboardView() {
+  const search = typeof window !== 'undefined' && window.location ? String(window.location.search || '') : '';
+  if (typeof URLSearchParams !== 'undefined' && search) {
+    const view = new URLSearchParams(search).get('view');
+    if (view === 'tecnico') return true;
+    if (view === 'admin') return false;
+  }
+  const currentUser = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+  const rawRole = typeof normalizeRole === 'function'
+    ? normalizeRole(currentUser?.role || '')
+    : String(currentUser?.role || '').trim().toLowerCase();
+  if (rawRole === 'tecnico') return true;
+  if (['administrador', 'admin', 'soporte', 'atencion_clientes', 'atencion'].includes(rawRole)) return false;
+  const isAdminLike = typeof userHasRole === 'function' && userHasRole('administrador', 'admin', 'soporte', 'atencion_clientes');
+  const isTech = typeof userHasRole === 'function' && userHasRole('tecnico');
+  return Boolean(isTech && !isAdminLike);
+}
+
+function dashboardCurrentTechAliases() {
+  const norm = v => (typeof normalizeName === 'function' ? normalizeName(v) : String(v || '').trim().toLowerCase());
+  const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  const aliases = new Set([user?.id, user?.userId, user?.username, user?.usuario, user?.name, user?.nombre].map(norm).filter(Boolean));
+  const tech = (state.technicians || []).find(t => !t.deletedAt && (
+    (user?.id && (String(t.userId || '') === String(user.id) || String(t.id || '') === String(user.id))) ||
+    (user?.username && (norm(t.usuario) === norm(user.username) || norm(t.nombre) === norm(user.username))) ||
+    (user?.name && norm(t.nombre) === norm(user.name))
+  ));
+  if (tech) {
+    [tech.id, tech.userId, tech.usuario, tech.username, tech.nombre, tech.name].map(norm).filter(Boolean).forEach(a => aliases.add(a));
+  }
+  return aliases;
+}
+
+function dashboardOrderBelongsToCurrentTech(order, aliases) {
+  if (!order || order.deletedAt) return false;
+  if (String(order.detailKind || '').toLowerCase() === 'network') return false;
+  const norm = v => (typeof normalizeName === 'function' ? normalizeName(v) : String(v || '').trim().toLowerCase());
+  const report = order.technicianReport || {};
+  const candidates = [
+    order.assignedTechId, order.technicianId, order.assignedUserId, order.assignedUserName,
+    order.assignedTechName, order.technicianName,
+    report.completedBy, report.completedById, report.completedByName,
+    order.updatedById, order.updatedByName
+  ].map(norm).filter(Boolean);
+  return candidates.some(c => aliases.has(c));
+}
+
+function setTechDashboardPeriod(period) {
+  dashboardTechPeriod = ['day', 'week', 'month'].includes(period) ? period : 'week';
+  if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
+    document.querySelectorAll('[data-tech-period]').forEach(btn => {
+      btn.classList?.toggle?.('is-active', btn.getAttribute('data-tech-period') === dashboardTechPeriod);
+    });
+  }
+  renderTechnicianDashboard();
+}
+
+function renderTechnicianDashboard() {
+  initDashboardTooltips();
+  const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+  const displayName = String(user?.name || user?.nombre || user?.username || 'Mi avance').trim();
+  setDashboardValue('tech-dash-name', displayName || 'Mi avance');
+
+  const aliases = dashboardCurrentTechAliases();
+  const myOrders = (state.workOrders || []).filter(order => dashboardOrderBelongsToCurrentTech(order, aliases));
+
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const todayEnd = todayStart + 86400000 - 1;
+  let fromMs = todayStart;
+  if (dashboardTechPeriod === 'week') fromMs = dashboardWeekStart(now).getTime();
+  if (dashboardTechPeriod === 'month') fromMs = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+  const completed = myOrders.filter(o => o.status === 'completada' && Number.isFinite(dashboardCompletionTime(o)) && dashboardCompletionTime(o) >= fromMs && dashboardCompletionTime(o) <= todayEnd).length;
+  const notDone = myOrders.filter(o => o.status === 'no_realizado' && Number.isFinite(dashboardCompletionTime(o) || dashboardTime(o.updatedAt)) && (dashboardCompletionTime(o) || dashboardTime(o.updatedAt)) >= fromMs && (dashboardCompletionTime(o) || dashboardTime(o.updatedAt)) <= todayEnd).length;
+  const pending = myOrders.filter(o => !['completada', 'no_realizado', 'resuelto_soporte'].includes(String(o.status || ''))).length;
+
+  const total = completed + pending + notDone;
+  const progress = total ? Math.round((completed / total) * 100) : 0;
+
+  setDashboardValue('tech-kpi-completed', completed);
+  setDashboardValue('tech-kpi-pending', pending);
+  setDashboardValue('tech-kpi-notdone', notDone);
+  setDashboardValue('tech-kpi-progress', `${progress}%`);
+  setDashboardValue('tech-dash-ratio-caption', `${completed} de ${total} trabajo${total===1?'':'s'}`);
+
+  const donutBox = document.getElementById('tech-dash-donut');
+  if (donutBox) {
+    const segs = [
+      { label: 'Completados', count: completed, color: '#10b981' },
+      { label: 'Pendientes', count: pending, color: '#f59e0b' },
+      { label: 'No realizados', count: notDone, color: '#ef4444' }
+    ];
+    const r = 58;
+    const circ = 2 * Math.PI * r;
+    let off = 0;
+    const arcs = total > 0 ? segs.map((s, idx) => {
+      if (!s.count) return '';
+      const len = (s.count / total) * circ;
+      const pct = Math.round((s.count / total) * 100);
+      const out = `<circle class="dashboard-donut-arc" data-slice-idx="${idx}" data-tip-title="${dashboardEscape(s.label)}" data-tip-lines="${s.count} trabajo${s.count===1?'':'s'}|${pct}%" cx="76" cy="76" r="${r}" stroke="${s.color}" stroke-dasharray="${Math.max(1, len - 1.5).toFixed(2)} ${circ.toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"/>`;
+      off += len;
+      return out;
+    }).join('') : `<circle class="dashboard-donut-empty" cx="76" cy="76" r="${r}"/>`;
+
+    donutBox.innerHTML = `<div class="tech-dash-donut-wrap">` +
+      `<div class="dashboard-distribution-donut">` +
+        `<svg class="dashboard-donut-svg" viewBox="0 0 152 152" role="img" aria-label="Progreso personal">${arcs}</svg>` +
+        `<div class="dashboard-donut-center"><strong>${progress}%</strong><span>Avance</span></div>` +
+      `</div>` +
+      `<div class="tech-dash-donut-legend">` +
+        segs.map((s, idx) => {
+          const pct = total ? Math.round((s.count / total) * 100) : 0;
+          return `<div class="tech-dash-legend-row" data-slice-idx="${idx}" data-tip-title="${dashboardEscape(s.label)}" data-tip-lines="${s.count} trabajo${s.count===1?'':'s'}|${pct}%"><i style="background:${s.color}"></i><span>${dashboardEscape(s.label)}</span><strong>${s.count}</strong><em>${pct}%</em></div>`;
+        }).join('') +
+      `</div>` +
+    `</div>`;
+  }
+
+  const barsBox = document.getElementById('tech-dash-bars');
+  if (barsBox) {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i, 12);
+      const key = dashboardDateKey(d);
+      const count = myOrders.filter(o => o.status === 'completada' && dashboardDateKey(dashboardCompletionTime(o)) === key).length;
+      const label = d.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', '');
+      const fullLabel = d.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'short' });
+      days.push({ key, label, fullLabel, count });
+    }
+    const max = Math.max(1, ...days.map(d => d.count));
+    const width = 420; const height = 190;
+    const left = 26; const right = 14; const top = 24; const bottom = 32;
+    const cw = width - left - right; const ch = height - top - bottom;
+    const slot = cw / days.length;
+    const bw = Math.min(28, slot * 0.56);
+
+    const barsSvg = days.map((d, i) => {
+      const cx = left + (i * slot) + (slot / 2);
+      const bh = (d.count / max) * ch;
+      const y = top + ch - bh;
+      return `<g class="dashboard-week-group" data-tip-title="${dashboardEscape(d.fullLabel)}" data-tip-lines="Completados: ${d.count}">` +
+        `<rect x="${(cx - bw / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(3, bh).toFixed(1)}" rx="6" fill="${d.count ? '#10b981' : '#e2e8f0'}" class="dashboard-bar-rect"/>` +
+        `<text x="${cx.toFixed(1)}" y="${Math.max(13, y - 6).toFixed(1)}" class="dashboard-bar-val" text-anchor="middle">${d.count}</text>` +
+        `<text x="${cx.toFixed(1)}" y="${height - 10}" class="dashboard-line-label" text-anchor="middle">${dashboardEscape(d.label)}</text>` +
+      `</g>`;
+    }).join('');
+
+    barsBox.innerHTML = `<svg viewBox="0 0 ${width} ${height}" class="dashboard-weekly-svg" role="img" aria-label="Completados en los últimos 7 días">${barsSvg}</svg>`;
+  }
 }
 
 function setDashboardPeriod(range) {
@@ -714,13 +1154,34 @@ function resetDashboardFilters() {
 
 async function initAdminDashboard() {
   initCommon();
+  initDashboardTooltips();
+  const techMode = isTechnicianDashboardView();
+  if (techMode) {
+    const adminView = document.getElementById('dashboard-admin-view');
+    const techView = document.getElementById('dashboard-tech-view');
+    if (adminView) adminView.hidden = true;
+    if (techView) techView.hidden = false;
+    document.body?.classList?.add('dashboard-tech-mode');
+    await loadDB({loadingTitle:'Cargando tu avance',loadingSubtitle:'Consultando tus trabajos recientes.'});
+    renderTechnicianDashboard();
+    return;
+  }
+
   if(!userHasRole('administrador','admin','soporte','atencion_clientes')){location.href='mapa.html';return;}
-  const urlKind=new URLSearchParams(window.location.search).get('detailKind');
+  const adminView = document.getElementById('dashboard-admin-view');
+  const techView = document.getElementById('dashboard-tech-view');
+  if (adminView) adminView.hidden = false;
+  if (techView) techView.hidden = true;
+
+  let urlKind = null;
+  if (typeof URLSearchParams !== 'undefined' && typeof window !== 'undefined' && window.location?.search) {
+    urlKind = new URLSearchParams(window.location.search).get('detailKind');
+  }
   if(urlKind==='network'||urlKind==='physical'){dashboardSelectedDetailKind=urlKind;}
-  document.getElementById('dashboard-tab-physical')?.classList.toggle('is-active',dashboardSelectedDetailKind==='physical');
-  document.getElementById('dashboard-tab-network')?.classList.toggle('is-active',dashboardSelectedDetailKind==='network');
-  document.getElementById('dashboard-tab-physical')?.setAttribute('aria-selected',String(dashboardSelectedDetailKind==='physical'));
-  document.getElementById('dashboard-tab-network')?.setAttribute('aria-selected',String(dashboardSelectedDetailKind==='network'));
+  document.getElementById('dashboard-tab-physical')?.classList?.toggle?.('is-active',dashboardSelectedDetailKind==='physical');
+  document.getElementById('dashboard-tab-network')?.classList?.toggle?.('is-active',dashboardSelectedDetailKind==='network');
+  document.getElementById('dashboard-tab-physical')?.setAttribute?.('aria-selected',String(dashboardSelectedDetailKind==='physical'));
+  document.getElementById('dashboard-tab-network')?.setAttribute?.('aria-selected',String(dashboardSelectedDetailKind==='network'));
   updateDashboardKindModeUI(dashboardSelectedDetailKind);
 
   const today=new Date(); const weekStart=dashboardWeekStart(today);
@@ -741,3 +1202,8 @@ dashboardGlobal.setDashboardDetailKind = setDashboardDetailKind;
 dashboardGlobal.populateDashboardFilters = populateDashboardFilters;
 dashboardGlobal.renderAdminDashboard = renderAdminDashboard;
 dashboardGlobal.loadDashboardData = loadDashboardData;
+dashboardGlobal.isTechnicianDashboardView = isTechnicianDashboardView;
+dashboardGlobal.renderTechnicianDashboard = renderTechnicianDashboard;
+dashboardGlobal.setTechDashboardPeriod = setTechDashboardPeriod;
+dashboardGlobal.renderDashboardWeeklyChart = renderDashboardWeeklyChart;
+dashboardGlobal.renderDashboardStatusAndZonesChart = renderDashboardStatusAndZonesChart;

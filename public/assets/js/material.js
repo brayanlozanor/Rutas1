@@ -4,6 +4,7 @@ let materialPageSize = 20;
 let materialLoadSequence = 0;
 let materialTechnicianDirectoryLoaded = false;
 let materialPhotoData = '';
+let materialPhotoSource = '';
 
 let dispatchCurrentPage = 1;
 const dispatchPageSize = 8;
@@ -933,12 +934,60 @@ async function initMaterialPage() {
 }
 
 function setupMaterialClipboardPaste() {
+  if (setupMaterialClipboardPaste._bound) return;
+  setupMaterialClipboardPaste._bound = true;
   document.addEventListener('paste', handleMaterialClipboardPaste);
+
+  const dropzone = document.getElementById('mat-foto-dropzone');
+  if (dropzone) {
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('drag-over');
+    });
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('drag-over');
+    });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('drag-over');
+      const files = e.dataTransfer?.files;
+      if (files && files.length) {
+        void seleccionarFotoMaterial(files, { source: 'file' });
+      }
+    });
+  }
+}
+
+function extractClipboardImageFile(clipboardData) {
+  if (!clipboardData) return null;
+  const items = Array.from(clipboardData.items || []);
+  for (const item of items) {
+    if (item && item.kind === 'file' && /^image\//i.test(item.type || '')) {
+      const file = typeof item.getAsFile === 'function' ? item.getAsFile() : null;
+      if (file) return file;
+    }
+  }
+  const files = Array.from(clipboardData.files || []);
+  const fallbackFile = files.find(f => f && /^image\//i.test(f.type || ''));
+  return fallbackFile || null;
 }
 
 function handleMaterialClipboardPaste(e) {
   const clipboardData = e.clipboardData || window.clipboardData;
   if (!clipboardData) return;
+
+  // 0. Pegar imagen con Ctrl+V cuando el modal de Agregar / Editar material está abierto
+  const materialModal = document.getElementById('material-mo');
+  const isMatModalOpen = materialModal && materialModal.classList.contains('open');
+  if (isMatModalOpen) {
+    const pastedImage = extractClipboardImageFile(clipboardData);
+    if (pastedImage) {
+      e.preventDefault();
+      void seleccionarFotoMaterial([pastedImage], { fromClipboard: true });
+      return;
+    }
+  }
+
   const pastedText = clipboardData.getData('text');
   if (!pastedText || !pastedText.trim()) return;
 
@@ -994,9 +1043,7 @@ function handleMaterialClipboardPaste(e) {
     }
   }
 
-  // 2. Detectar si estamos en el modal de nuevo/editar material ("#material-mo")
-  const materialModal = document.getElementById('material-mo');
-  const isMatModalOpen = materialModal && materialModal.classList.contains('open');
+  // 2. Detectar si estamos pegando texto tabular en el modal de nuevo/editar material ("#material-mo")
   const isTargetInMatModal = e.target && materialModal && materialModal.contains(e.target);
 
   if (isMatModalOpen && isTargetInMatModal) {
@@ -1214,8 +1261,174 @@ function renderMaterialViews() {
 }
 
 /* ==========================================================================
+   HELPERS DE FILTRADO (FECHAS / TEXTO / FOLIO) Y FLUJO DE ESTADOS
+   ========================================================================== */
+function parseLocalDateBound(dateStr, endOfDay = false) {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const match = dateStr.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const dt = endOfDay
+    ? new Date(year, month, day, 23, 59, 59, 999)
+    : new Date(year, month, day, 0, 0, 0, 0);
+  const ms = dt.getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function getDispatchTimestampMs(d) {
+  const raw = d?.at || d?.createdAt || d?.receivedAt || d?.updatedAt;
+  if (!raw) return null;
+  const ms = new Date(raw).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function matchesDispatchDateRange(d, dateFromStr, dateToStr) {
+  const fromMs = parseLocalDateBound(dateFromStr, false);
+  const toMs = parseLocalDateBound(dateToStr, true);
+  if (fromMs === null && toMs === null) return true;
+  const itemMs = getDispatchTimestampMs(d);
+  if (itemMs === null) return false;
+  if (fromMs !== null && itemMs < fromMs) return false;
+  if (toMs !== null && itemMs > toMs) return false;
+  return true;
+}
+
+function matchesDispatchTextAndFolio(d, search, folioFilter) {
+  const folios = getDispatchFolios(d);
+  const s = (search || '').toLowerCase().trim();
+  const f = (folioFilter || '').toLowerCase().trim();
+
+  const matchesFolio = !f ||
+    folios.current.toLowerCase().includes(f) ||
+    folios.delivery.toLowerCase().includes(f) ||
+    folios.receipt.toLowerCase().includes(f) ||
+    folios.number.includes(f) ||
+    (d.id && String(d.id).toLowerCase().includes(f));
+
+  if (!matchesFolio) return false;
+  if (!s) return true;
+
+  const itemsMatch = (d.items || []).some(it => (it.materialName || '').toLowerCase().includes(s));
+  return (d.materialName || '').toLowerCase().includes(s) ||
+    (d.technicianName || '').toLowerCase().includes(s) ||
+    (d.createdByName || '').toLowerCase().includes(s) ||
+    (d.reference || '').toLowerCase().includes(s) ||
+    (d.notes || '').toLowerCase().includes(s) ||
+    (d.receiveNotes || '').toLowerCase().includes(s) ||
+    folios.current.toLowerCase().includes(s) ||
+    folios.delivery.toLowerCase().includes(s) ||
+    folios.receipt.toLowerCase().includes(s) ||
+    folios.number.includes(s) ||
+    itemsMatch;
+}
+
+function getDispatchFlowMeta(d) {
+  const status = d?.status || 'pending_receipt';
+  const isPendingReceipt = status === 'pending_receipt';
+  const isRejectedDelivery = status === 'rejected_delivery';
+  const isReceived = status === 'received';
+  const isPendingHandover = status === 'pending_handover';
+  const isRejectedReceipt = status === 'rejected_receipt';
+  const isCompleted = status === 'completed';
+
+  const awaitingSupportReception = isPendingHandover && !!d.returnGiverSignature && !d.returnReceiverSignature;
+  const awaitingTechHandover = isPendingHandover && !d.returnGiverSignature;
+
+  let step = 1;
+  if (isReceived) step = 2;
+  else if (isPendingHandover || isRejectedReceipt) step = 3;
+  else if (isCompleted) step = 4;
+
+  const isRejected = isRejectedDelivery || isRejectedReceipt;
+
+  const adminStatusLabel = isPendingReceipt
+    ? '🟡 Pendiente de recibir'
+    : isRejectedDelivery
+    ? '🔴 Entrega devuelta'
+    : awaitingSupportReception
+    ? '🟠 Por recibir en almacén'
+    : awaitingTechHandover
+    ? '🟠 Esperando firma del técnico'
+    : isRejectedReceipt
+    ? '🔴 Recepción devuelta'
+    : isReceived
+    ? '🟢 En posesión del técnico'
+    : '🔵 Completado';
+
+  const techStatusLabel = isPendingReceipt
+    ? '🟡 Por recibir'
+    : isRejectedDelivery
+    ? '🔴 Devuelto a soporte'
+    : awaitingSupportReception
+    ? '🟠 Enviado a soporte'
+    : awaitingTechHandover
+    ? '🟠 Por confirmar entrega'
+    : isRejectedReceipt
+    ? '🔴 Recepción devuelta'
+    : isReceived
+    ? '🟢 En posesión'
+    : '🔵 Completado';
+
+  return {
+    status,
+    step,
+    isRejected,
+    isPendingReceipt,
+    isRejectedDelivery,
+    isReceived,
+    isPendingHandover,
+    isRejectedReceipt,
+    isCompleted,
+    awaitingSupportReception,
+    awaitingTechHandover,
+    adminStatusLabel,
+    techStatusLabel
+  };
+}
+
+function renderDispatchStepTracker(d) {
+  const meta = getDispatchFlowMeta(d);
+  const steps = [
+    { num: 1, label: 'Entregado' },
+    { num: 2, label: 'Recibido' },
+    { num: 3, label: 'Devolución' },
+    { num: 4, label: 'Cerrado' }
+  ];
+  return `
+    <div class="dispatch-step-tracker" aria-label="Progreso de la orden">
+      ${steps.map(st => {
+        const isDone = meta.isCompleted || st.num < meta.step;
+        const isCurrent = !meta.isCompleted && st.num === meta.step;
+        const cls = isDone
+          ? 'done'
+          : isCurrent
+          ? (meta.isRejected ? 'current rejected' : 'current')
+          : 'pending';
+        return `<span class="dispatch-step-item ${cls}"><i class="dispatch-step-dot">${isDone ? '✓' : st.num}</i><span>${st.label}</span></span>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+/* ==========================================================================
    VISTA DEL TÉCNICO (Móvil)
    ========================================================================== */
+function filtrarDispatchesTecnico() {
+  renderTechnicianMaterialView();
+}
+
+function limpiarFiltrosDispatchesTecnico() {
+  const searchEl = document.getElementById('tech-dispatch-search');
+  const fromEl = document.getElementById('tech-dispatch-date-from');
+  const toEl = document.getElementById('tech-dispatch-date-to');
+  if (searchEl) searchEl.value = '';
+  if (fromEl) fromEl.value = '';
+  if (toEl) toEl.value = '';
+  renderTechnicianMaterialView();
+}
+
 function renderTechnicianMaterialView() {
   const tech = getCurrentTechnician();
   const techId = tech?.id || '';
@@ -1227,7 +1440,7 @@ function renderTechnicianMaterialView() {
   const allDispatches = getAllDispatches();
 
   // Filtrar envíos asignados a este técnico
-  const myDispatches = allDispatches.filter(d => {
+  const myDispatchesAll = allDispatches.filter(d => {
     if (techId && d.technicianId === techId) return true;
     if (techUserId && d.technicianId === techUserId) return true;
     if (userId && d.technicianId === userId) return true;
@@ -1241,10 +1454,30 @@ function renderTechnicianMaterialView() {
     return false;
   });
 
+  const techSearch = (document.getElementById('tech-dispatch-search')?.value || '').trim();
+  const techDateFrom = (document.getElementById('tech-dispatch-date-from')?.value || '').trim();
+  const techDateTo = (document.getElementById('tech-dispatch-date-to')?.value || '').trim();
+  const hasTechFilters = Boolean(techSearch || techDateFrom || techDateTo);
+
+  const clearTechBtn = document.getElementById('tech-dispatch-clear-filters-btn');
+  if (clearTechBtn) {
+    clearTechBtn.disabled = !hasTechFilters;
+    clearTechBtn.classList.toggle('has-active', hasTechFilters);
+  }
+
+  const myDispatches = myDispatchesAll.filter(d =>
+    matchesDispatchTextAndFolio(d, techSearch, '') &&
+    matchesDispatchDateRange(d, techDateFrom, techDateTo)
+  );
+
   const pendingReceipt = myDispatches.filter(d => d.status === 'pending_receipt' || d.status === 'rejected_delivery');
   const inPossession = myDispatches.filter(d => d.status === 'received');
   const pendingHandover = myDispatches.filter(d => d.status === 'pending_handover' || d.status === 'rejected_receipt');
   const completed = myDispatches.filter(d => d.status === 'completed');
+
+  // Conteos pendientes reales para el banner (sin perder alertas por un filtro activo)
+  const pendingReceiptActionable = myDispatchesAll.filter(d => d.status === 'pending_receipt').length;
+  const pendingHandoverActionable = myDispatchesAll.filter(d => d.status === 'pending_handover' && !d.returnGiverSignature).length;
 
   // Actualizar badges
   const setBadge = (id, count) => {
@@ -1257,19 +1490,19 @@ function renderTechnicianMaterialView() {
   setBadge('tech-badge-received', inPossession.length);
   setBadge('tech-badge-pending-handover', pendingHandover.length);
 
-  // Banner de alerta
+  // Banner de alerta solo cuando el técnico tiene acciones que le corresponden
   const alertEl = document.getElementById('tech-pending-alert');
   const alertText = document.getElementById('tech-pending-alert-text');
   if (alertEl && alertText) {
-    if (pendingReceipt.length > 0 && pendingHandover.length > 0) {
+    if (pendingReceiptActionable > 0 && pendingHandoverActionable > 0) {
       alertEl.style.display = 'flex';
-      alertText.textContent = `Tienes ${pendingReceipt.length} entrega(s) por recibir y ${pendingHandover.length} entrega(s) por confirmar a soporte.`;
-    } else if (pendingReceipt.length > 0) {
+      alertText.textContent = `Tienes ${pendingReceiptActionable} entrega(s) por recibir y ${pendingHandoverActionable} devolución(es) por confirmar a soporte.`;
+    } else if (pendingReceiptActionable > 0) {
       alertEl.style.display = 'flex';
-      alertText.textContent = `Tienes ${pendingReceipt.length} entrega(s) de material entregada(s) por soporte pendiente(s) por recibir.`;
-    } else if (pendingHandover.length > 0) {
+      alertText.textContent = `Tienes ${pendingReceiptActionable} entrega(s) de material pendiente(s) por confirmar de recibido.`;
+    } else if (pendingHandoverActionable > 0) {
       alertEl.style.display = 'flex';
-      alertText.textContent = `Soporte registró material recibido. Tienes ${pendingHandover.length} confirmación(es) de entrega pendiente(s).`;
+      alertText.textContent = `Soporte registró material recibido. Tienes ${pendingHandoverActionable} confirmación(es) pendiente(s).`;
     } else {
       alertEl.style.display = 'none';
     }
@@ -1282,20 +1515,20 @@ function renderTechnicianMaterialView() {
 
   if (activeTechTab === 'pending_receipt') {
     currentList = pendingReceipt;
-    emptyTitle = 'Sin entregas pendientes por aceptar';
-    emptyDesc = 'Cuando soporte te entregue material, aparecerá aquí para que confirmes haberlo recibido.';
+    emptyTitle = hasTechFilters ? 'Sin coincidencias en Por Recibir' : 'Sin entregas pendientes por recibir';
+    emptyDesc = hasTechFilters ? 'Ajusta o limpia los filtros de búsqueda y fecha.' : 'Cuando soporte te entregue material, aparecerá aquí para que confirmes haberlo recibido.';
   } else if (activeTechTab === 'received') {
     currentList = inPossession;
-    emptyTitle = 'No tienes material en tu posesión';
-    emptyDesc = 'Solo el material que hayas aceptado recibir de soporte aparecerá aquí.';
+    emptyTitle = hasTechFilters ? 'Sin coincidencias en En Posesión' : 'No tienes material en tu posesión';
+    emptyDesc = hasTechFilters ? 'Ajusta o limpia los filtros de búsqueda y fecha.' : 'Solo el material que hayas confirmado de recibido aparecerá aquí.';
   } else if (activeTechTab === 'pending_handover') {
     currentList = pendingHandover;
-    emptyTitle = 'Sin entregas pendientes por confirmar';
-    emptyDesc = 'Cuando soporte registre material devuelto o utilizado de tu posesión, lo validarás aquí.';
+    emptyTitle = hasTechFilters ? 'Sin coincidencias en Por Confirmar Entrega' : 'Sin entregas pendientes por confirmar';
+    emptyDesc = hasTechFilters ? 'Ajusta o limpia los filtros de búsqueda y fecha.' : 'Cuando devuelvas material o soporte registre tu recepción, aparecerá aquí.';
   } else {
     currentList = completed;
-    emptyTitle = 'Sin historial de movimientos';
-    emptyDesc = 'Tus órdenes de entrega y devoluciones finalizadas se archivarán aquí.';
+    emptyTitle = hasTechFilters ? 'Sin coincidencias en Historial' : 'Sin historial de movimientos';
+    emptyDesc = hasTechFilters ? 'Ajusta o limpia los filtros de búsqueda y fecha.' : 'Tus órdenes de entrega y devoluciones finalizadas se archivarán aquí.';
   }
 
   const container = document.getElementById('technician-dispatches-grid');
@@ -1312,12 +1545,18 @@ function renderTechnicianMaterialView() {
 }
 
 function renderTechnicianDispatchCard(d) {
-  const isPendingReceipt = d.status === 'pending_receipt';
-  const isRejectedDelivery = d.status === 'rejected_delivery';
-  const isPendingHandover = d.status === 'pending_handover';
-  const isRejectedReceipt = d.status === 'rejected_receipt';
-  const isReceived = d.status === 'received';
-  const isCompleted = d.status === 'completed';
+  const meta = getDispatchFlowMeta(d);
+  const {
+    isPendingReceipt,
+    isRejectedDelivery,
+    isPendingHandover,
+    isRejectedReceipt,
+    isReceived,
+    isCompleted,
+    awaitingSupportReception,
+    awaitingTechHandover,
+    techStatusLabel
+  } = meta;
   const isEdited = !!d.isEdited;
 
   const folios = getDispatchFolios(d);
@@ -1326,27 +1565,17 @@ function renderTechnicianDispatchCard(d) {
   const itemsSummary = items.slice(0, 3).map(it => `${escapeHtml(it.materialName)} (${qty(it.quantity)} ${escapeHtml(it.unit || 'pz')})`).join(', ') + (items.length > 3 ? ` y ${items.length - 3} más...` : '');
   const isReceivedOrClosed = isPendingHandover || isRejectedReceipt || isCompleted;
 
-  const statusLabel = isPendingReceipt 
-    ? '🟡 Por aceptar' 
-    : isRejectedDelivery
-    ? '🔴 Devuelto a soporte'
-    : isPendingHandover 
-    ? '🟠 Por confirmar entrega' 
-    : isRejectedReceipt
-    ? '🔴 Recepción devuelta'
-    : isReceived 
-    ? '🟢 En posesión' 
-    : '🔵 Conforme';
-
   return `
-    <article class="dispatch-card compact-card ${isPendingReceipt || isPendingHandover || isRejectedDelivery || isRejectedReceipt ? 'urgent-attention' : ''} ${isCompleted ? 'completed-card' : ''}">
+    <article class="dispatch-card compact-card ${isPendingReceipt || awaitingTechHandover || isRejectedDelivery || isRejectedReceipt ? 'urgent-attention' : ''} ${isCompleted ? 'completed-card' : ''}">
       <div class="dispatch-card-top">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span class="dispatch-folio-tag ${isReceivedOrClosed ? 'receipt' : 'delivery'}" title="${isReceivedOrClosed ? 'Folio de Recepción' : 'Folio de Entrega'}">${escapeHtml(folios.current)}</span>
           <span class="dispatch-meta-date">${dateFormatted}</span>
         </div>
-        <span class="dispatch-badge status-${escapeHtml(d.status)}">${statusLabel}</span>
+        <span class="dispatch-badge status-${escapeHtml(d.status)}">${techStatusLabel}</span>
       </div>
+
+      ${renderDispatchStepTracker(d)}
 
       ${isRejectedDelivery ? `
         <div style="margin:2px 0 0;padding:8px 10px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;font-size:12px;color:#9f1239">
@@ -1398,24 +1627,28 @@ function renderTechnicianDispatchCard(d) {
         </button>
         ${isPendingReceipt ? `
           <button class="dispatch-btn dispatch-btn-success" onclick="aceptarRecepcionTecnico('${d.id}')">
-            ${isEdited ? '✓ Confirmar recepción' : '✓ Confirmar que recibí'}
+            ${isEdited ? '✓ Firmar recepción' : '✓ Recibí el material'}
           </button>
           <button class="dispatch-btn" onclick="rechazarRecepcionTecnico('${d.id}')" style="background:#fee2e2;color:#dc2626;border:1px solid #fecdd3;font-weight:700">
-            ✕ No conforme / Devolver
+            ✕ No conforme
           </button>
         ` : ''}
         ${isReceived ? `
           <button class="dispatch-btn dispatch-btn-amber" onclick="abrirDevolucionTecnico('${d.id}')">
-            ↑ Entregar a soporte
+            ↑ Devolver a soporte
           </button>
         ` : ''}
-        ${isPendingHandover ? `
+        ${awaitingTechHandover ? `
           <button class="dispatch-btn dispatch-btn-amber" onclick="aceptarEntregaTecnico('${d.id}')">
-            ✓ Confirmar entrega a soporte
+            ✓ Firmar entrega a soporte
           </button>
           <button class="dispatch-btn" onclick="rechazarEntregaTecnico('${d.id}')" style="background:#fee2e2;color:#dc2626;border:1px solid #fecdd3;font-weight:700">
-            ✕ No conforme / Devolver
+            ✕ No conforme
           </button>
+        ` : awaitingSupportReception ? `
+          <span class="dispatch-status-inline-note">
+            ⏳ Devolución firmada · Esperando confirmación de soporte
+          </span>
         ` : ''}
       </div>
     </article>
@@ -1475,18 +1708,111 @@ function filtrarDispatches() {
   renderAdminDispatches();
 }
 
+function limpiarFiltrosDispatches() {
+  const searchEl = document.getElementById('dispatch-search');
+  const folioEl = document.getElementById('dispatch-folio-filter');
+  const techEl = document.getElementById('dispatch-tech-filter');
+  const fromEl = document.getElementById('dispatch-date-from');
+  const toEl = document.getElementById('dispatch-date-to');
+
+  if (searchEl) searchEl.value = '';
+  if (folioEl) folioEl.value = '';
+  if (techEl) techEl.value = 'all';
+  if (fromEl) fromEl.value = '';
+  if (toEl) toEl.value = '';
+
+  activeDispatchFilterStatus = 'all';
+  ['all', 'pending_receipt', 'received', 'pending_handover', 'completed'].forEach(s => {
+    document.getElementById(`chip-status-${s}`)?.classList.toggle('active', s === 'all');
+  });
+  dispatchCurrentPage = 1;
+  renderAdminDispatches();
+}
+
+function populateDispatchTechFilter(allDispatches) {
+  const selectTech = document.getElementById('dispatch-tech-filter');
+  if (!selectTech) return;
+  const previousValue = selectTech.value || 'all';
+
+  const techMap = new Map();
+  const activeTechs = (state.technicians || []).filter(t => !t.deletedAt && t.estado !== 'inactivo');
+  activeTechs.forEach(t => {
+    if (t.id) techMap.set(String(t.id), t.nombre || t.usuario || 'Técnico');
+  });
+  (allDispatches || []).forEach(d => {
+    if (d.technicianId && !techMap.has(String(d.technicianId))) {
+      const matched = activeTechs.find(t =>
+        String(t.userId || '') === String(d.technicianId) ||
+        (d.technicianName && normalizeName(t.nombre || '') === normalizeName(d.technicianName))
+      );
+      if (!matched) {
+        techMap.set(String(d.technicianId), d.technicianName || 'Técnico');
+      }
+    }
+  });
+
+  const sortedEntries = Array.from(techMap.entries()).sort((a, b) => a[1].localeCompare(b[1], 'es'));
+  const html = '<option value="all">Todos los técnicos</option>' +
+    sortedEntries.map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join('');
+  if (selectTech.innerHTML !== html) {
+    selectTech.innerHTML = html;
+  }
+  selectTech.value = techMap.has(String(previousValue)) ? previousValue : 'all';
+}
+
 function renderAdminDispatches() {
   const all = getAllDispatches();
-  const search = (document.getElementById('dispatch-search')?.value || '').toLowerCase().trim();
-  const folioFilter = (document.getElementById('dispatch-folio-filter')?.value || '').toLowerCase().trim();
-  const techFilter = document.getElementById('dispatch-tech-filter')?.value || 'all';
+  populateDispatchTechFilter(all);
 
-  // Conteos para chips
-  const countAll = all.length;
-  const countPendingReceipt = all.filter(d => d.status === 'pending_receipt' || d.status === 'rejected_delivery').length;
-  const countReceived = all.filter(d => d.status === 'received').length;
-  const countPendingHandover = all.filter(d => d.status === 'pending_handover' || d.status === 'rejected_receipt').length;
-  const countCompleted = all.filter(d => d.status === 'completed').length;
+  const search = (document.getElementById('dispatch-search')?.value || '').trim();
+  const folioFilter = (document.getElementById('dispatch-folio-filter')?.value || '').trim();
+  const techFilter = document.getElementById('dispatch-tech-filter')?.value || 'all';
+  const dateFrom = (document.getElementById('dispatch-date-from')?.value || '').trim();
+  const dateTo = (document.getElementById('dispatch-date-to')?.value || '').trim();
+
+  const hasSearchFilters = Boolean(search || folioFilter || techFilter !== 'all' || dateFrom || dateTo);
+  const hasAnyFilter = hasSearchFilters || activeDispatchFilterStatus !== 'all';
+
+  const clearBtn = document.getElementById('dispatch-clear-filters-btn');
+  if (clearBtn) {
+    clearBtn.disabled = !hasAnyFilter;
+    clearBtn.classList.toggle('has-active', hasAnyFilter);
+  }
+
+  // Badge global en la pestaña principal (siempre refleja pendientes totales reales)
+  const pendingAdminBadge = document.getElementById('admin-badge-pending');
+  if (pendingAdminBadge) {
+    const totalPendingAll = all.filter(d =>
+      d.status === 'pending_receipt' || d.status === 'rejected_delivery' ||
+      d.status === 'pending_handover' || d.status === 'rejected_receipt'
+    ).length;
+    pendingAdminBadge.textContent = totalPendingAll;
+    pendingAdminBadge.style.display = totalPendingAll > 0 ? 'inline-block' : 'none';
+  }
+
+  const selectedTech = techFilter !== 'all'
+    ? (state.technicians || []).find(t => String(t.id) === String(techFilter) || String(t.userId || '') === String(techFilter))
+    : null;
+
+  // 1. Filtrar primero por fecha, técnico, folio y texto para que los chips reflejen el subconjunto buscado
+  const baseFiltered = all.filter(d => {
+    const matchesTech = techFilter === 'all' ||
+      String(d.technicianId || '') === String(techFilter) ||
+      (selectedTech?.id && String(d.technicianId || '') === String(selectedTech.id)) ||
+      (selectedTech?.userId && String(d.technicianId || '') === String(selectedTech.userId)) ||
+      (selectedTech?.nombre && normalizeName(d.technicianName || '') === normalizeName(selectedTech.nombre));
+    if (!matchesTech) return false;
+    if (!matchesDispatchDateRange(d, dateFrom, dateTo)) return false;
+    if (!matchesDispatchTextAndFolio(d, search, folioFilter)) return false;
+    return true;
+  });
+
+  // Conteos para chips basados en los filtros activos
+  const countAll = baseFiltered.length;
+  const countPendingReceipt = baseFiltered.filter(d => d.status === 'pending_receipt' || d.status === 'rejected_delivery').length;
+  const countReceived = baseFiltered.filter(d => d.status === 'received').length;
+  const countPendingHandover = baseFiltered.filter(d => d.status === 'pending_handover' || d.status === 'rejected_receipt').length;
+  const countCompleted = baseFiltered.filter(d => d.status === 'completed').length;
 
   const setCount = (id, count) => {
     const el = document.getElementById(id);
@@ -1498,60 +1824,35 @@ function renderAdminDispatches() {
   setCount('count-status-pending_handover', countPendingHandover);
   setCount('count-status-completed', countCompleted);
 
-  const pendingAdminBadge = document.getElementById('admin-badge-pending');
-  if (pendingAdminBadge) {
-    const totalPending = countPendingReceipt + countPendingHandover;
-    pendingAdminBadge.textContent = totalPending;
-    pendingAdminBadge.style.display = totalPending > 0 ? 'inline-block' : 'none';
-  }
-
-  // Llenar select de técnicos
-  const selectTech = document.getElementById('dispatch-tech-filter');
-  if (selectTech && selectTech.options.length <= 1) {
-    const activeTechs = (state.technicians || []).filter(t => !t.deletedAt && t.estado !== 'inactivo');
-    activeTechs.forEach(t => {
-      const opt = document.createElement('option');
-      opt.value = t.id;
-      opt.textContent = t.nombre;
-      selectTech.appendChild(opt);
-    });
-  }
-
-  // Filtrar
-  const filtered = all.filter(d => {
-    let matchesStatus = activeDispatchFilterStatus === 'all';
-    if (!matchesStatus) {
-      if (activeDispatchFilterStatus === 'pending_receipt') {
-        matchesStatus = d.status === 'pending_receipt' || d.status === 'rejected_delivery';
-      } else if (activeDispatchFilterStatus === 'pending_handover') {
-        matchesStatus = d.status === 'pending_handover' || d.status === 'rejected_receipt';
-      } else {
-        matchesStatus = d.status === activeDispatchFilterStatus;
-      }
+  // 2. Aplicar filtro de estado del chip activo
+  const filtered = baseFiltered.filter(d => {
+    if (activeDispatchFilterStatus === 'all') return true;
+    if (activeDispatchFilterStatus === 'pending_receipt') {
+      return d.status === 'pending_receipt' || d.status === 'rejected_delivery';
     }
-    const matchesTech = techFilter === 'all' || d.technicianId === techFilter;
-    const folios = getDispatchFolios(d);
-    const matchesFolio = !folioFilter ||
-      folios.current.toLowerCase().includes(folioFilter) ||
-      folios.delivery.toLowerCase().includes(folioFilter) ||
-      folios.receipt.toLowerCase().includes(folioFilter) ||
-      folios.number.includes(folioFilter) ||
-      (d.id && String(d.id).toLowerCase().includes(folioFilter));
-
-    const itemsMatch = (d.items || []).some(it => (it.materialName || '').toLowerCase().includes(search));
-    const matchesSearch = !search ||
-      (d.materialName || '').toLowerCase().includes(search) ||
-      (d.technicianName || '').toLowerCase().includes(search) ||
-      (d.reference || '').toLowerCase().includes(search) ||
-      (d.notes || '').toLowerCase().includes(search) ||
-      folios.current.toLowerCase().includes(search) ||
-      folios.delivery.toLowerCase().includes(search) ||
-      folios.receipt.toLowerCase().includes(search) ||
-      folios.number.includes(search) ||
-      itemsMatch;
-
-    return matchesStatus && matchesTech && matchesFolio && matchesSearch;
+    if (activeDispatchFilterStatus === 'pending_handover') {
+      return d.status === 'pending_handover' || d.status === 'rejected_receipt';
+    }
+    return d.status === activeDispatchFilterStatus;
   });
+
+  const summaryEl = document.getElementById('dispatch-active-filters-summary');
+  if (summaryEl) {
+    if (hasAnyFilter) {
+      const parts = [];
+      if (dateFrom && dateTo) parts.push(`Del ${dateFrom} al ${dateTo}`);
+      else if (dateFrom) parts.push(`Desde ${dateFrom}`);
+      else if (dateTo) parts.push(`Hasta ${dateTo}`);
+      if (techFilter !== 'all') parts.push(`Técnico: ${selectedTech?.nombre || document.getElementById('dispatch-tech-filter')?.selectedOptions?.[0]?.textContent || ''}`);
+      if (folioFilter) parts.push(`Folio: ${folioFilter}`);
+      if (search) parts.push(`Búsqueda: "${search}"`);
+      summaryEl.style.display = 'flex';
+      summaryEl.innerHTML = `<span>Mostrando <strong>${filtered.length}</strong> de <strong>${all.length}</strong> órdenes${parts.length ? ' · ' + escapeHtml(parts.join(' · ')) : ''}</span>`;
+    } else {
+      summaryEl.style.display = 'none';
+      summaryEl.innerHTML = '';
+    }
+  }
 
   const totalFiltered = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / dispatchPageSize));
@@ -1564,7 +1865,20 @@ function renderAdminDispatches() {
 
   const grid = document.getElementById('dispatches-grid');
   const empty = document.getElementById('dispatches-empty');
-  if (empty) empty.style.display = totalFiltered ? 'none' : 'block';
+  if (empty) {
+    empty.style.display = totalFiltered ? 'none' : 'block';
+    const emptyTitle = document.getElementById('dispatches-empty-title');
+    const emptyDesc = document.getElementById('dispatches-empty-desc');
+    if (emptyTitle && emptyDesc) {
+      if (hasAnyFilter) {
+        emptyTitle.textContent = 'No hay órdenes que coincidan con los filtros';
+        emptyDesc.textContent = 'Ajusta el rango de fechas, técnico o búsqueda, o haz clic en "✕ Limpiar".';
+      } else {
+        emptyTitle.textContent = 'No se encontraron registros de entrega';
+        emptyDesc.textContent = 'Utiliza el botón “＋ Entregar material” para registrar una entrega hacia un técnico.';
+      }
+    }
+  }
   if (grid) {
     grid.innerHTML = paged.map(d => renderAdminDispatchCard(d)).join('');
   }
@@ -1619,27 +1933,22 @@ function renderDispatchesPagination(total, totalPages, startIndex, endIndex) {
 }
 
 function renderAdminDispatchCard(d) {
-  const isPendingReceipt = d.status === 'pending_receipt';
-  const isRejectedDelivery = d.status === 'rejected_delivery';
-  const isPendingHandover = d.status === 'pending_handover';
-  const isRejectedReceipt = d.status === 'rejected_receipt';
-  const isReceived = d.status === 'received';
-  const isCompleted = d.status === 'completed';
+  const meta = getDispatchFlowMeta(d);
+  const {
+    isPendingReceipt,
+    isRejectedDelivery,
+    isPendingHandover,
+    isRejectedReceipt,
+    isReceived,
+    isCompleted,
+    awaitingSupportReception,
+    awaitingTechHandover,
+    adminStatusLabel
+  } = meta;
   const isEdited = !!d.isEdited;
 
   const folios = getDispatchFolios(d);
   const dateFormatted = d.at ? new Date(d.at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : 'Reciente';
-  const statusLabel = isPendingReceipt 
-    ? '🟡 Pendiente recepción' 
-    : isRejectedDelivery
-    ? '🔴 Entrega devuelta'
-    : isPendingHandover 
-    ? '🟠 Por confirmar entrega' 
-    : isRejectedReceipt
-    ? '🔴 Recepción devuelta'
-    : isReceived 
-    ? '🟢 En posesión del técnico' 
-    : '🔵 Completado';
 
   const items = Array.isArray(d.items) && d.items.length ? d.items : [{ materialName: d.materialName, quantity: d.quantity, unit: d.unit || 'pieza' }];
   const itemsSummary = items.slice(0, 3).map(it => `${escapeHtml(it.materialName)} (${qty(it.quantity)} ${escapeHtml(it.unit || 'pz')})`).join(', ') + (items.length > 3 ? ` y ${items.length - 3} más...` : '');
@@ -1652,13 +1961,15 @@ function renderAdminDispatchCard(d) {
           <span class="dispatch-folio-tag ${isReceivedOrClosed ? 'receipt' : 'delivery'}" title="${isReceivedOrClosed ? 'Folio de Recepción' : 'Folio de Entrega'}">${escapeHtml(folios.current)}</span>
           <span class="dispatch-meta-date">${dateFormatted}</span>
         </div>
-        <span class="dispatch-badge status-${escapeHtml(d.status)}">${statusLabel}</span>
+        <span class="dispatch-badge status-${escapeHtml(d.status)}">${adminStatusLabel}</span>
       </div>
+
+      ${renderDispatchStepTracker(d)}
 
       ${isRejectedDelivery ? `
         <div style="margin:2px 0 0;padding:8px 10px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;font-size:12px;color:#9f1239">
           <b>🔴 Entrega devuelta por el técnico:</b> "${escapeHtml(d.rejectionReason || 'No conforme')}"
-          <div style="font-size:11px;color:#e11d48;margin-top:2px">Edita este envío para ajustar los materiales y re-enviar al técnico.</div>
+          <div style="font-size:11px;color:#e11d48;margin-top:2px">Edita este envío para ajustar los materiales y reenviar al técnico.</div>
         </div>
       ` : isRejectedReceipt ? `
         <div style="margin:2px 0 0;padding:8px 10px;background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;font-size:12px;color:#9f1239">
@@ -1705,12 +2016,23 @@ function renderAdminDispatchCard(d) {
         </button>
         ${isRejectedDelivery ? `
           <button type="button" class="dispatch-btn dispatch-btn-secondary" onclick="editarEnvio('${d.id}')" style="background:#fee2e2;color:#991b1b;border-color:#fca5a5;font-weight:700" title="Modificar materiales de la entrega devuelta">
-            ✎ Corregir entrega devuelta
+            ✎ Corregir entrega
           </button>
         ` : isRejectedReceipt ? `
           <button type="button" class="dispatch-btn dispatch-btn-primary" onclick="abrirRecepcion('${d.technicianId}', '${d.id}')" style="background:#ea580c;border-color:#c2410c;font-weight:700" title="Corregir cantidades de recepción devuelta">
-            ↓ Corregir recepción devuelta
+            ↓ Corregir recepción
           </button>
+        ` : awaitingSupportReception ? `
+          <button type="button" class="dispatch-btn dispatch-btn-primary" onclick="abrirRecepcion('${d.technicianId}', '${d.id}')" title="Revisar y firmar recepción del material devuelto por el técnico">
+            📥 Confirmar recepción
+          </button>
+        ` : awaitingTechHandover ? `
+          <button type="button" class="dispatch-btn dispatch-btn-secondary" onclick="abrirRecepcion('${d.technicianId}', '${d.id}')" title="Ajustar cantidades registradas en la recepción">
+            ✎ Ajustar recepción
+          </button>
+          <span class="dispatch-status-inline-note">
+            ⏳ Esperando firma del técnico
+          </span>
         ` : !isCompleted ? `
           <button type="button" class="dispatch-btn dispatch-btn-secondary" onclick="editarEnvio('${d.id}')" title="Modificar materiales de este envío">
             ✎ Editar
@@ -1720,7 +2042,7 @@ function renderAdminDispatchCard(d) {
               ↓ Recibir material
             </button>
           ` : `
-            <span style="font-size:11px;color:#b45309;font-weight:700;display:flex;align-items:center">
+            <span class="dispatch-status-inline-note">
               ⏳ Esperando recepción del técnico
             </span>
           `}
@@ -1740,12 +2062,19 @@ function verDetalleEnvio(dispatchId) {
   if (!d) return notify('Orden no encontrada', 'err');
 
   const folios = getDispatchFolios(d);
-  const isPendingReceipt = d.status === 'pending_receipt';
-  const isRejectedDelivery = d.status === 'rejected_delivery';
-  const isPendingHandover = d.status === 'pending_handover';
-  const isRejectedReceipt = d.status === 'rejected_receipt';
-  const isReceived = d.status === 'received';
-  const isCompleted = d.status === 'completed';
+  const meta = getDispatchFlowMeta(d);
+  const {
+    isPendingReceipt,
+    isRejectedDelivery,
+    isPendingHandover,
+    isRejectedReceipt,
+    isReceived,
+    isCompleted,
+    awaitingSupportReception,
+    awaitingTechHandover,
+    adminStatusLabel,
+    techStatusLabel
+  } = meta;
   const isEdited = !!d.isEdited;
   const isTechnician = normalizeRole(getCurrentUser().role) === 'tecnico';
 
@@ -1779,16 +2108,20 @@ function verDetalleEnvio(dispatchId) {
   const bodyEl = document.getElementById('dispatch-detail-modal-body');
   if (bodyEl) {
     bodyEl.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;padding:12px;border-radius:10px;border:1px solid var(--mat-border);margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;padding:12px;border-radius:10px;border:1px solid var(--mat-border);margin-bottom:12px;gap:10px;flex-wrap:wrap">
         <div>
           <div style="font-size:11px;color:var(--mat-muted);text-transform:uppercase;font-weight:800">Fecha de entrega</div>
           <div style="font-size:13px;font-weight:700;color:var(--mat-text)">${dateFormatted}</div>
         </div>
         <div>
           <span class="dispatch-badge status-${escapeHtml(d.status)}">
-            ${isPendingReceipt ? '🟡 Por aceptar' : isRejectedDelivery ? '🔴 Entrega devuelta' : isPendingHandover ? '🟠 Por confirmar entrega' : isRejectedReceipt ? '🔴 Recepción devuelta' : isReceived ? '🟢 En posesión' : '🔵 Completado'}
+            ${isTechnician ? techStatusLabel : adminStatusLabel}
           </span>
         </div>
+      </div>
+
+      <div style="margin-bottom:14px">
+        ${renderDispatchStepTracker(d)}
       </div>
 
       ${isRejectedDelivery ? `
@@ -1856,17 +2189,21 @@ function verDetalleEnvio(dispatchId) {
           ${d.returnDetails || isPendingHandover || isRejectedReceipt || isCompleted ? `
             <div>
               <span style="color:var(--mat-muted)">Recepción en Soporte:</span><br>
-              <strong>${escapeHtml(d.receivedByAdminName || d.returnDetails?.adminReceivedByName || 'Soporte')}</strong>
-              ${d.receivedAt ? `<br><small>${new Date(d.receivedAt).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })}</small>` : ''}
+              ${d.returnReceiverSignature ? `
+                <strong style="color:#047857">✓ ${escapeHtml(d.receivedByAdminName || d.returnDetails?.adminReceivedByName || 'Soporte')}</strong>
+                ${d.receivedAt ? `<br><small>${new Date(d.receivedAt).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })}</small>` : ''}
+              ` : `
+                <strong style="color:#c2410c">⏳ Pendiente confirmación de soporte</strong>
+              `}
             </div>
             <div>
-              <span style="color:var(--mat-muted)">Confirmación de Entrega:</span><br>
-              ${d.handoverAcceptedAt ? `
-                <strong style="color:#047857">✓ Confirmado por técnico (${new Date(d.handoverAcceptedAt).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })})</strong>
+              <span style="color:var(--mat-muted)">Confirmación de Devolución (Técnico):</span><br>
+              ${d.returnGiverSignature || d.handoverAcceptedAt ? `
+                <strong style="color:#047857">✓ Firmado por técnico${d.handoverAcceptedAt ? ` (${new Date(d.handoverAcceptedAt).toLocaleString('es-MX', { dateStyle:'short', timeStyle:'short' })})` : ''}</strong>
               ` : isRejectedReceipt ? `
                 <strong style="color:#dc2626">✕ Devuelto a Soporte</strong>
               ` : `
-                <strong style="color:#c2410c">⏳ Pendiente confirmación técnico</strong>
+                <strong style="color:#c2410c">⏳ Pendiente firma del técnico</strong>
               `}
             </div>
           ` : ''}
@@ -1890,9 +2227,13 @@ function verDetalleEnvio(dispatchId) {
     if (!isTechnician) {
       if (!isCompleted) {
         if (isRejectedDelivery) {
-          actionButtons += `<button class="btn bsm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:700" onclick="CM('dispatch-detail-modal');editarEnvio('${d.id}')">✎ Corregir entrega devuelta</button>`;
+          actionButtons += `<button class="btn bsm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:700" onclick="CM('dispatch-detail-modal');editarEnvio('${d.id}')">✎ Corregir entrega</button>`;
         } else if (isRejectedReceipt) {
-          actionButtons += `<button class="btn bsm" style="background:#ea580c;color:#fff;font-weight:700" onclick="CM('dispatch-detail-modal');abrirRecepcion('${d.technicianId}', '${d.id}')">↓ Corregir recepción devuelta</button>`;
+          actionButtons += `<button class="btn bsm" style="background:#ea580c;color:#fff;font-weight:700" onclick="CM('dispatch-detail-modal');abrirRecepcion('${d.technicianId}', '${d.id}')">↓ Corregir recepción</button>`;
+        } else if (awaitingSupportReception) {
+          actionButtons += `<button class="btn bsm bg2" onclick="CM('dispatch-detail-modal');abrirRecepcion('${d.technicianId}', '${d.id}')">📥 Confirmar recepción</button>`;
+        } else if (awaitingTechHandover) {
+          actionButtons += `<button class="btn bsm bgh" onclick="CM('dispatch-detail-modal');abrirRecepcion('${d.technicianId}', '${d.id}')">✎ Ajustar recepción</button>`;
         } else {
           actionButtons += `<button class="btn bsm bgh" onclick="CM('dispatch-detail-modal');editarEnvio('${d.id}')">✎ Editar envío</button>`;
           if (isReceived) {
@@ -1902,13 +2243,13 @@ function verDetalleEnvio(dispatchId) {
       }
     } else {
       if (isPendingReceipt) {
-        actionButtons += `<button class="btn bsm bg2" onclick="CM('dispatch-detail-modal');aceptarRecepcionTecnico('${d.id}')">✓ Confirmar recepción</button>`;
-        actionButtons += `<button class="btn bsm" style="background:#fee2e2;color:#dc2626;border:1px solid #fecdd3;font-weight:700" onclick="CM('dispatch-detail-modal');rechazarRecepcionTecnico('${d.id}')">✕ No conforme / Devolver</button>`;
+        actionButtons += `<button class="btn bsm bg2" onclick="CM('dispatch-detail-modal');aceptarRecepcionTecnico('${d.id}')">✓ Recibí el material</button>`;
+        actionButtons += `<button class="btn bsm" style="background:#fee2e2;color:#dc2626;border:1px solid #fecdd3;font-weight:700" onclick="CM('dispatch-detail-modal');rechazarRecepcionTecnico('${d.id}')">✕ No conforme</button>`;
       } else if (isReceived) {
-        actionButtons += `<button class="btn bsm bo2" onclick="CM('dispatch-detail-modal');abrirDevolucionTecnico('${d.id}')">↑ Entregar a soporte</button>`;
-      } else if (isPendingHandover) {
-        actionButtons += `<button class="btn bsm bo2" onclick="CM('dispatch-detail-modal');aceptarEntregaTecnico('${d.id}')">✓ Confirmar entrega a soporte</button>`;
-        actionButtons += `<button class="btn bsm" style="background:#fee2e2;color:#dc2626;border:1px solid #fecdd3;font-weight:700" onclick="CM('dispatch-detail-modal');rechazarEntregaTecnico('${d.id}')">✕ No conforme / Devolver</button>`;
+        actionButtons += `<button class="btn bsm bo2" onclick="CM('dispatch-detail-modal');abrirDevolucionTecnico('${d.id}')">↑ Devolver a soporte</button>`;
+      } else if (awaitingTechHandover) {
+        actionButtons += `<button class="btn bsm bo2" onclick="CM('dispatch-detail-modal');aceptarEntregaTecnico('${d.id}')">✓ Firmar entrega a soporte</button>`;
+        actionButtons += `<button class="btn bsm" style="background:#fee2e2;color:#dc2626;border:1px solid #fecdd3;font-weight:700" onclick="CM('dispatch-detail-modal');rechazarEntregaTecnico('${d.id}')">✕ No conforme</button>`;
       }
     }
     actionsEl.innerHTML = `
@@ -2046,7 +2387,12 @@ function removeDeliverRow(btn) {
   const list = document.getElementById('deliver-items-list');
   if (!list) return;
   if (list.children.length <= 1) {
-    return notify('La entrega debe contener al menos un material.', 'warn');
+    const row = btn.closest('.deliver-item-row');
+    const input = row?.querySelector('.deliver-row-material');
+    const qtyInput = row?.querySelector('.deliver-row-qty');
+    if (input) input.value = '';
+    if (qtyInput) qtyInput.value = '1';
+    return;
   }
   btn.closest('.deliver-item-row')?.remove();
 }
@@ -2140,7 +2486,6 @@ async function guardarEntrega() {
 
     if (!sig || !sig.signature) {
       OM('deliver-material-mo');
-      notify('Entrega cancelada: la firma de entrega es obligatoria.', 'warn');
       return;
     }
 
@@ -2192,7 +2537,6 @@ async function guardarEntrega() {
     if (saved) {
       notify(`✓ Entrega registrada y firmada para ${techDisplayName}.`);
       void loadMaterialPage();
-      abrirOficioMaterial(dispatch.id);
     }
   } catch (err) {
     console.error('Error en guardarEntrega:', err);
@@ -2253,7 +2597,12 @@ function removeEditRow(btn) {
   const list = document.getElementById('edit-items-list');
   if (!list) return;
   if (list.children.length <= 1) {
-    return notify('La entrega debe contener al menos un material.', 'warn');
+    const row = btn.closest('.deliver-item-row');
+    const input = row?.querySelector('.deliver-row-material');
+    const qtyInput = row?.querySelector('.deliver-row-qty');
+    if (input) input.value = '';
+    if (qtyInput) qtyInput.value = '1';
+    return;
   }
   btn.closest('.deliver-item-row')?.remove();
 }
@@ -2343,16 +2692,6 @@ async function guardarEdicionEnvio() {
   if (!dispatch) return notify('Envío no encontrado.', 'err');
 
   const newTech = (state.technicians || []).find(t => t.id === newTechId || t.userId === newTechId);
-
-  // BOTÓN EXTRA DE CONFIRMACIÓN OBLIGATORIO
-  const confirmed = await askConfirmation({
-    title: 'Confirmar modificación de envío',
-    message: `¿Estás seguro de modificar este envío? El técnico ${newTech?.nombre || ''} recibirá un aviso de que fue editado y deberá confirmar los materiales actualizados.`,
-    confirmText: 'Sí, guardar cambios',
-    cancelText: 'Cancelar',
-    tone: 'ok'
-  });
-  if (!confirmed) return;
 
   const currentUser = getCurrentUser();
   const now = new Date().toISOString();
@@ -2471,9 +2810,11 @@ function onReceiveTechChanged(preselectedDispatchId = '') {
   if (formFieldsEl) formFieldsEl.style.display = 'block';
 
   dispatchSelect.innerHTML = eligibleDispatches.map(d => {
+    const folios = getDispatchFolios(d);
     const dateStr = d.at ? new Date(d.at).toLocaleDateString('es-MX') : 'Reciente';
     const itemsCount = (d.items || []).length;
-    return `<option value="${d.id}">${escapeHtml(d.materialName)} (${itemsCount} art.) - Enviado ${dateStr}</option>`;
+    const statusHint = d.status === 'pending_handover' && d.returnGiverSignature && !d.returnReceiverSignature ? ' · Devolución del técnico' : '';
+    return `<option value="${d.id}">[${escapeHtml(folios.delivery)}] ${escapeHtml(d.materialName)} (${itemsCount} art.) - ${dateStr}${statusHint}</option>`;
   }).join('');
 
   if (preselectedDispatchId && eligibleDispatches.some(d => d.id === preselectedDispatchId)) {
@@ -2531,7 +2872,7 @@ function onReceiveDispatchSelected() {
       const defaultUsed = retItem != null ? Number(retItem.usedQuantity ?? 0) : (dispatch.usedQuantity != null && items.length === 1 ? Number(dispatch.usedQuantity) : 0);
 
       return `
-        <div class="receive-breakdown-card">
+        <div class="receive-breakdown-card" data-delivered="${Number(it.quantity) || 0}" data-unit="${escapeHtml(it.unit || 'pz')}">
           <div class="receive-breakdown-card-head">
             <div class="receive-breakdown-mat-info">
               <span class="receive-mat-icon">📦</span>
@@ -2540,29 +2881,55 @@ function onReceiveDispatchSelected() {
                 <div class="receive-breakdown-mat-unit">${escapeHtml(it.unit || 'pieza')}</div>
               </div>
             </div>
-            <span class="receive-delivered-badge">Entregado: <b>${qty(it.quantity)}</b> ${escapeHtml(it.unit || 'pz')}</span>
+            <div class="receive-breakdown-badges">
+              <span class="receive-delivered-badge">Entregado: <b>${qty(it.quantity)}</b> ${escapeHtml(it.unit || 'pz')}</span>
+              <span class="receive-balance-pill" id="receive-balance-${idx}"></span>
+            </div>
           </div>
           <div class="receive-breakdown-grid">
             <div class="receive-input-box good">
               <label><span>🟢</span> Buen estado</label>
-              <input type="number" class="receive-item-good" data-index="${idx}" min="0" step="0.01" value="${defaultGood}">
+              <input type="number" class="receive-item-good" data-index="${idx}" min="0" step="0.01" value="${defaultGood}" oninput="updateReceiveItemBalance(${idx})">
             </div>
             <div class="receive-input-box used">
               <label><span>🛠️</span> Utilizado</label>
-              <input type="number" class="receive-item-used" data-index="${idx}" min="0" step="0.01" value="${defaultUsed}">
+              <input type="number" class="receive-item-used" data-index="${idx}" min="0" step="0.01" value="${defaultUsed}" oninput="updateReceiveItemBalance(${idx})">
             </div>
             <div class="receive-input-box damaged">
               <label><span>⚠️</span> Dañado</label>
-              <input type="number" class="receive-item-damaged" data-index="${idx}" min="0" step="0.01" value="${defaultDamaged}">
+              <input type="number" class="receive-item-damaged" data-index="${idx}" min="0" step="0.01" value="${defaultDamaged}" oninput="updateReceiveItemBalance(${idx})">
             </div>
           </div>
         </div>
       `;
     }).join('');
+    items.forEach((_, idx) => updateReceiveItemBalance(idx));
   }
 
   document.getElementById('receive-reference').value = dispatch.reference || '';
   document.getElementById('receive-notes').value = dispatch.receiveNotes || dispatch.returnDetails?.adminNotes || '';
+}
+
+function updateReceiveItemBalance(idx) {
+  const pill = document.getElementById(`receive-balance-${idx}`);
+  if (!pill) return;
+  const card = pill.closest('.receive-breakdown-card');
+  const delivered = Number(card?.dataset?.delivered) || 0;
+  const good = Number(card?.querySelector('.receive-item-good')?.value) || 0;
+  const used = Number(card?.querySelector('.receive-item-used')?.value) || 0;
+  const damaged = Number(card?.querySelector('.receive-item-damaged')?.value) || 0;
+  const total = good + used + damaged;
+  const diff = Number((total - delivered).toFixed(2));
+  if (Math.abs(diff) <= 0.001) {
+    pill.className = 'receive-balance-pill ok';
+    pill.textContent = '✓ Cuadra';
+  } else if (diff < 0) {
+    pill.className = 'receive-balance-pill warn';
+    pill.textContent = `Faltan ${qty(Math.abs(diff))}`;
+  } else {
+    pill.className = 'receive-balance-pill over';
+    pill.textContent = `+${qty(diff)} excedente`;
+  }
 }
 
 async function guardarRecepcion() {
@@ -2602,7 +2969,6 @@ async function guardarRecepcion() {
     });
     if (!sig || !sig.signature) {
       OM('receive-material-mo');
-      notify('Recepción cancelada: la firma de recepción es obligatoria.', 'warn');
       return;
     }
 
@@ -2674,7 +3040,9 @@ async function guardarRecepcion() {
 
     const saved = await saveRecord('materialMovements', dispatch);
     if (saved) {
-      notify('✓ Recepción registrada. El técnico debe confirmar haber entregado el material en su perfil.');
+      notify(dispatch.status === 'completed'
+        ? '✓ Recepción confirmada y firmada. La orden se marcó como completada.'
+        : '✓ Recepción registrada y firmada. Pendiente confirmación del técnico.');
       void loadMaterialPage();
     }
   } catch (err) {
@@ -2757,33 +3125,38 @@ async function guardarEntregaTecnicoASoporte() {
     return notify('Indica una cantidad a devolver o utilizada.', 'err');
   }
 
-  // BOTÓN EXTRA DE CONFIRMACIÓN OBLIGATORIO
-  const confirmed = await askConfirmation({
-    title: 'Confirmar entrega a soporte',
-    message: `¿Estás seguro de registrar la entrega de este material hacia soporte? (A devolver: ${totalReturned}, Utilizado: ${totalUsed})`,
-    confirmText: 'Sí, registrar entrega',
-    cancelText: 'Cancelar',
-    tone: 'ok'
-  });
-  if (!confirmed) return;
-
   const currentUser = getCurrentUser();
   const techSignerName = currentUser.name || currentUser.username || dispatch.technicianName || 'Técnico';
 
+  CM('tech-return-material-mo');
+
   const sig = await promptDigitalSignature({
     title: 'Firma de Entrega de Material (Devolución)',
-    subtitle: 'Certificas la entrega física de los sobrantes a soporte.',
+    subtitle: `Certificas la devolución a soporte (Devuelto: ${qty(totalReturned)} · Utilizado: ${qty(totalUsed)}).`,
     signerName: techSignerName,
     role: 'Entrega (Técnico)'
   });
   if (!sig || !sig.signature) {
-    notify('Devolución cancelada: la firma es obligatoria.', 'warn');
+    OM('tech-return-material-mo');
     return;
   }
 
   const now = new Date().toISOString();
   const ref = document.getElementById('tech-return-reference')?.value.trim();
   const notes = document.getElementById('tech-return-notes')?.value.trim();
+
+  const items = Array.isArray(dispatch.items) && dispatch.items.length
+    ? dispatch.items
+    : [{ materialId: dispatch.materialId, materialName: dispatch.materialName, quantity: dispatch.quantity, unit: dispatch.unit || 'pieza' }];
+  const returnItems = items.map((it, idx) => ({
+    materialId: it.materialId || dispatch.materialId,
+    materialName: it.materialName,
+    deliveredQuantity: Number(it.quantity) || 0,
+    returnedGood: Number(returnInputs[idx]?.value) || 0,
+    returnedDamaged: 0,
+    usedQuantity: Number(usedInputs[idx]?.value) || 0,
+    unit: it.unit || 'pieza'
+  }));
 
   dispatch.status = dispatch.returnReceiverSignature ? 'completed' : 'pending_handover';
   dispatch.returnGiverSignature = sig.signature;
@@ -2796,6 +3169,15 @@ async function guardarEntregaTecnicoASoporte() {
   dispatch.handoverAcceptedAt = now;
   dispatch.handoverAcceptedBy = currentUser.id || '';
   dispatch.handoverAcceptedByName = techSignerName;
+  dispatch.returnDetails = {
+    ...(dispatch.returnDetails || {}),
+    items: returnItems,
+    reference: ref || dispatch.reference || '',
+    techNotes: notes || '',
+    techConfirmedBy: currentUser.id || '',
+    techConfirmedByName: techSignerName,
+    techConfirmedAt: now
+  };
   if (ref) dispatch.reference = ref;
   if (notes) dispatch.notes = notes;
   dispatch.receiptRejectionReason = null;
@@ -2817,13 +3199,13 @@ async function guardarEntregaTecnicoASoporte() {
     }
   }
 
-  CM('tech-return-material-mo');
   renderMaterialViews();
 
   const saved = await saveRecord('materialMovements', dispatch);
   if (saved) {
-    notify('✓ Entrega de material registrada y firmada hacia soporte.');
-    abrirOficioMaterial(dispatch.id);
+    notify(dispatch.status === 'completed'
+      ? '✓ Devolución confirmada y firmada. Orden completada.'
+      : '✓ Devolución registrada y firmada. Pendiente confirmación de soporte.');
     void loadMaterialPage();
   }
 }
@@ -2841,23 +3223,13 @@ async function aceptarRecepcionTecnico(dispatchId) {
   const currentUser = getCurrentUser();
   const techSignerName = currentUser.name || currentUser.username || dispatch.technicianName || 'Técnico';
 
-  // BOTÓN EXTRA DE CONFIRMACIÓN OBLIGATORIO
   const itemsText = Array.isArray(dispatch.items) && dispatch.items.length
     ? dispatch.items.map(i => `${i.quantity} ${i.unit} de ${i.materialName}`).join(', ')
     : `${dispatch.quantity} ${dispatch.unit} de ${dispatch.materialName}`;
 
-  const confirmed = await askConfirmation({
-    title: 'Confirmar recepción de material',
-    message: `¿Confirmas haber recibido todos los materiales y cantidades entregados por soporte? (${itemsText})`,
-    confirmText: 'Sí, confirmo recibido',
-    cancelText: 'Cancelar',
-    tone: 'ok'
-  });
-  if (!confirmed) return;
-
   const sig = await promptDigitalSignature({
     title: 'Firma de Recepción de Material',
-    subtitle: `Dibuja tu firma para certificar que recibiste el material (${itemsText}).`,
+    subtitle: `Dibuja tu firma para certificar que recibiste: ${itemsText}.`,
     signerName: techSignerName,
     role: 'Recibe (Técnico)'
   });
@@ -2894,8 +3266,7 @@ async function aceptarRecepcionTecnico(dispatchId) {
   renderMaterialViews();
   const saved = await saveRecord('materialMovements', dispatch);
   if (saved) {
-    notify('✓ Has confirmado y firmado haber recibido el material.');
-    abrirOficioMaterial(dispatch.id);
+    notify('✓ Recepción confirmada y firmada.');
     void loadMaterialPage();
   }
 }
@@ -2909,19 +3280,15 @@ async function aceptarEntregaTecnico(dispatchId) {
   const currentUser = getCurrentUser();
   const techSignerName = currentUser.name || currentUser.username || dispatch.technicianName || 'Técnico';
 
-  // BOTÓN EXTRA DE CONFIRMACIÓN OBLIGATORIO
-  const confirmed = await askConfirmation({
-    title: 'Confirmar entrega a soporte',
-    message: '¿Confirmas haber entregado el material a soporte conforme a las cantidades detalladas?',
-    confirmText: 'Sí, confirmo entrega',
-    cancelText: 'Cancelar',
-    tone: 'ok'
-  });
-  if (!confirmed) return;
+  const summaryParts = [];
+  if (Number(dispatch.returnedChange) > 0) summaryParts.push(`Devuelto: ${qty(dispatch.returnedChange)}`);
+  if (Number(dispatch.usedQuantity) > 0) summaryParts.push(`Utilizado: ${qty(dispatch.usedQuantity)}`);
+  if (Number(dispatch.returnedDamaged) > 0) summaryParts.push(`Dañado: ${qty(dispatch.returnedDamaged)}`);
+  const summarySuffix = summaryParts.length ? ` (${summaryParts.join(' · ')})` : '';
 
   const sig = await promptDigitalSignature({
     title: 'Firma de Entrega de Material (Devolución)',
-    subtitle: 'Certificas la entrega física de los sobrantes a soporte.',
+    subtitle: `Certificas la entrega física de los materiales a soporte${summarySuffix}.`,
     signerName: techSignerName,
     role: 'Entrega (Técnico)'
   });
@@ -2963,8 +3330,9 @@ async function aceptarEntregaTecnico(dispatchId) {
   renderMaterialViews();
   const saved = await saveRecord('materialMovements', dispatch);
   if (saved) {
-    notify('✓ Has confirmado y firmado la entrega del material a soporte.');
-    abrirOficioMaterial(dispatch.id);
+    notify(dispatch.status === 'completed'
+      ? '✓ Entrega confirmada y firmada. La orden se ha completado.'
+      : '✓ Entrega confirmada y firmada.');
     void loadMaterialPage();
   }
 }
@@ -3067,7 +3435,10 @@ async function rechazarEntregaTecnico(dispatchId) {
 function agregarMaterial() {
   currentMaterialId = null;
   materialPhotoData = '';
+  materialPhotoSource = '';
   document.getElementById('material-modal-title').textContent = 'Nuevo material';
+  const sub = document.getElementById('material-modal-subtitle');
+  if (sub) sub.textContent = 'Registra un artículo en el catálogo. Pega una imagen con Ctrl+V o selecciona un archivo.';
   ['mat-nombre', 'mat-desc'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('mat-cantidad').value = '0';
   document.getElementById('mat-minimo').value = '0';
@@ -3086,7 +3457,10 @@ function editarMaterial(id) {
   if (!m) return;
   currentMaterialId = id;
   materialPhotoData = m.photo || '';
+  materialPhotoSource = m.photo ? 'existing' : '';
   document.getElementById('material-modal-title').textContent = 'Editar material';
+  const sub = document.getElementById('material-modal-subtitle');
+  if (sub) sub.textContent = 'Actualiza existencias o cambia la foto pegando con Ctrl+V o seleccionando un archivo.';
   document.getElementById('mat-nombre').value = m.name;
   document.getElementById('mat-cantidad').value = m.stock;
   document.getElementById('mat-cantidad').disabled = false;
@@ -3193,25 +3567,62 @@ async function guardarMaterialConAuditoria(material, action) {
   return typeof saveRecordWithAudit === 'function' ? saveRecordWithAudit('materials', material, auditStart) : saveRecord('materials', material);
 }
 
-async function seleccionarFotoMaterial(files) {
-  const file = Array.from(files || []).find(item => /^image\//i.test(item.type));
+async function seleccionarFotoMaterial(files, options = {}) {
+  const file = Array.from(files || []).find(item => item && /^image\//i.test(item.type || ''));
   if (!file) return;
   try {
     materialPhotoData = await compressAdminDetailCompletionImage(file);
+    materialPhotoSource = options.fromClipboard ? 'clipboard' : 'file';
     renderFotoMaterial();
+    const dropzone = document.getElementById('mat-foto-dropzone');
+    if (dropzone && options.fromClipboard) {
+      dropzone.classList.remove('paste-flash');
+      void dropzone.offsetWidth;
+      dropzone.classList.add('paste-flash');
+      setTimeout(() => dropzone.classList.remove('paste-flash'), 650);
+    }
+    if (options.fromClipboard) {
+      notify('✓ Imagen pegada desde el portapapeles.');
+    }
   } catch (error) {
     notify('No se pudo procesar la fotografía.', 'err');
   }
 }
 
+function quitarFotoMaterial() {
+  materialPhotoData = '';
+  materialPhotoSource = '';
+  const fileInput = document.getElementById('mat-foto');
+  if (fileInput) fileInput.value = '';
+  renderFotoMaterial();
+}
+
 function renderFotoMaterial() {
   const preview = document.getElementById('mat-foto-preview');
   const placeholder = document.getElementById('mat-foto-placeholder');
+  const actionsBar = document.getElementById('mat-foto-preview-actions');
+  const statusText = document.getElementById('mat-foto-status-text');
+  const dropzone = document.getElementById('mat-foto-dropzone');
   if (!preview || !placeholder) return;
-  preview.hidden = !materialPhotoData;
-  placeholder.hidden = !materialPhotoData;
-  if (materialPhotoData) preview.src = materialPhotoData;
-  else preview.removeAttribute('src');
+
+  const hasPhoto = Boolean(materialPhotoData);
+  preview.hidden = !hasPhoto;
+  placeholder.hidden = hasPhoto;
+  if (actionsBar) actionsBar.hidden = !hasPhoto;
+  if (dropzone) dropzone.classList.toggle('has-photo', hasPhoto);
+
+  if (hasPhoto) {
+    preview.src = materialPhotoData;
+    if (statusText) {
+      statusText.textContent = materialPhotoSource === 'clipboard'
+        ? '✓ Imagen pegada con Ctrl+V'
+        : materialPhotoSource === 'existing'
+        ? '✓ Fotografía actual'
+        : '✓ Fotografía lista';
+    }
+  } else {
+    preview.removeAttribute('src');
+  }
 }
 
 function actualizarUnidadMaterial() {

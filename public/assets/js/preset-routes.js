@@ -1089,6 +1089,61 @@
   /**
    * Busca equipos o nodos en el state actual para vincular coordenadas
    */
+  const WIFIMEX_ORIGIN_REGEX = /wifi[\s_-]*mex/i;
+  const WIFIMEX_FALLBACK_ORIGIN = {
+    type: 'equipment',
+    equipmentId: 'eqmr9qmpr81rc',
+    name: 'WiFi-Mex',
+    lat: 17.5288335,
+    lng: -99.4977258,
+    region: ''
+  };
+
+  function findWiFiMexOrigin() {
+    const stateRef = (typeof state !== 'undefined' && state) || (typeof window !== 'undefined' && window.state) || root.state || {};
+    const equipmentList = Array.isArray(stateRef.equipment) ? stateRef.equipment : [];
+    const nodesList = Array.isArray(stateRef.nodes) ? stateRef.nodes : [];
+
+    const wmEq = equipmentList.find(e => e && !e.deletedAt && (
+      e.id === 'eqmr9qmpr81rc' ||
+      compactGeoText(e.name) === 'wifimex' ||
+      WIFIMEX_ORIGIN_REGEX.test(String(e.name || ''))
+    ));
+    if (wmEq) {
+      const lat = Number(wmEq.lat);
+      const lng = Number(wmEq.lng);
+      return {
+        type: 'equipment',
+        equipmentId: wmEq.id,
+        name: wmEq.name || 'WiFi-Mex',
+        lat: Number.isFinite(lat) && !(lat === 0 && lng === 0) ? lat : WIFIMEX_FALLBACK_ORIGIN.lat,
+        lng: Number.isFinite(lng) && !(lat === 0 && lng === 0) ? lng : WIFIMEX_FALLBACK_ORIGIN.lng,
+        region: wmEq.region || ''
+      };
+    }
+
+    const wmNode = nodesList.find(n => n && !n.deletedAt && (
+      compactGeoText(n.town || n.name) === 'wifimex' ||
+      WIFIMEX_ORIGIN_REGEX.test(String(n.town || n.name || ''))
+    ));
+    if (wmNode) {
+      const lat = Number(wmNode.lat);
+      const lng = Number(wmNode.lng);
+      return {
+        type: 'equipment',
+        equipmentId: wmNode.equipmentId || WIFIMEX_FALLBACK_ORIGIN.equipmentId,
+        nodeId: wmNode.id,
+        name: wmNode.town || wmNode.name || 'WiFi-Mex',
+        lat: Number.isFinite(lat) && !(lat === 0 && lng === 0) ? lat : WIFIMEX_FALLBACK_ORIGIN.lat,
+        lng: Number.isFinite(lng) && !(lat === 0 && lng === 0) ? lng : WIFIMEX_FALLBACK_ORIGIN.lng,
+        region: wmNode.zone || wmNode.region || ''
+      };
+    }
+
+    return { ...WIFIMEX_FALLBACK_ORIGIN };
+  }
+  root.findWiFiMexOrigin = findWiFiMexOrigin;
+
   function findSystemLocationMatch(stopName) {
     if (!stopName) return null;
     const rawClean = compactGeoText(stopName);
@@ -1102,18 +1157,8 @@
     const nodesList = Array.isArray(stateRef.nodes) ? stateRef.nodes : [];
 
     // Prioridad 0: Si es WiFi-Mex o alias de central, retornar antena WiFi-Mex
-    if (targetClean === 'wifimex' || rawClean === 'wifimex') {
-      const wm = equipmentList.find(e => !e.deletedAt && (e.id === 'eqmr9qmpr81rc' || compactGeoText(e.name) === 'wifimex'));
-      if (wm) {
-        return {
-          type: 'equipment',
-          equipmentId: wm.id,
-          name: wm.name,
-          lat: Number(wm.lat),
-          lng: Number(wm.lng),
-          region: wm.region || ''
-        };
-      }
+    if (targetClean === 'wifimex' || rawClean === 'wifimex' || WIFIMEX_ORIGIN_REGEX.test(String(stopName || ''))) {
+      return findWiFiMexOrigin();
     }
 
     // Prioridad 1: Buscar en pueblos/nodos registrados (priorizar pueblos sobre antenas)
@@ -1428,6 +1473,7 @@
         materialPlanned: '',
         assignedTechId: '',
         siteStatus: 'pendiente',
+        planJoinedAt: new Date().toISOString(),
         createdAt: new Date().toISOString()
       };
     }
@@ -1492,6 +1538,7 @@
       materialPlanned: '',
       assignedTechId: '',
       siteStatus: 'pendiente',
+      planJoinedAt: new Date().toISOString(),
       createdAt: new Date().toISOString()
     };
   }
@@ -1603,30 +1650,33 @@
       }
     });
 
-    // Enforce: todos los planes deben de comenzar en la antena como "WiFi-Mex" en lugar de Palmar
-    const wifiMexMatch = findSystemLocationMatch('WiFi-Mex');
+    // Enforce: todos los planes deben comenzar siempre en la torre/antena principal "WiFi-Mex"
+    const wifiMexMatch = findWiFiMexOrigin();
+    const nowIso = new Date().toISOString();
     const wifiMexStopObj = {
       id: (typeof gid === 'function' ? gid('p') : 'p_' + Date.now() + '_start'),
       type: 'equipment',
-      equipmentId: wifiMexMatch?.equipmentId || 'eqmr9qmpr81rc',
-      linkedNodeIds: (typeof getEquipmentLinkedNodeIds === 'function' && wifiMexMatch ? getEquipmentLinkedNodeIds(wifiMexMatch.equipmentId) : []),
+      equipmentId: wifiMexMatch.equipmentId || 'eqmr9qmpr81rc',
+      linkedNodeIds: (typeof getEquipmentLinkedNodeIds === 'function' && wifiMexMatch.equipmentId ? getEquipmentLinkedNodeIds(wifiMexMatch.equipmentId) : []),
       includeLinkedNodeDetails: false,
-      name: wifiMexMatch?.name || 'WiFi-Mex',
-      lat: Number(wifiMexMatch?.lat) || 17.5288335,
-      lng: Number(wifiMexMatch?.lng) || -99.4977258,
+      name: wifiMexMatch.name || 'WiFi-Mex',
+      lat: Number(wifiMexMatch.lat) || 17.5288335,
+      lng: Number(wifiMexMatch.lng) || -99.4977258,
       detailIds: [],
       notes: 'Salida / Base Central WiFi-Mex',
       materialPlanned: '',
       assignedTechId: '',
       siteStatus: 'pendiente',
-      createdAt: new Date().toISOString()
+      planJoinedAt: nowIso,
+      createdAt: nowIso
     };
 
     if (builtStops.length === 0) {
       builtStops.push(wifiMexStopObj);
     } else {
-      const firstStopClean = compactGeoText(builtStops[0].name || '');
-      if (firstStopClean !== 'wifimex') {
+      const firstStopName = String(builtStops[0].name || '');
+      const firstStopClean = compactGeoText(firstStopName);
+      if (firstStopClean !== 'wifimex' && !WIFIMEX_ORIGIN_REGEX.test(firstStopName)) {
         if (firstStopClean.includes('palmar')) {
           // Reemplazar El Palmar por la antena WiFi-Mex
           builtStops[0] = { ...wifiMexStopObj, id: builtStops[0].id || wifiMexStopObj.id };
@@ -1640,13 +1690,15 @@
     if (asNewPlan) {
       // Crear un nuevo plan con el nombre de la ruta o el nombre personalizado
       const planName = (quickOptions && quickOptions.customPlanName) ? quickOptions.customPlanName : route.name;
-      const selectedTechIds = (quickOptions && Array.isArray(quickOptions.selectedTechIds)) ? quickOptions.selectedTechIds : [];
+      const selectedTechIds = (quickOptions && Array.isArray(quickOptions.selectedTechIds)) ? [...new Set(quickOptions.selectedTechIds.filter(Boolean).map(String))] : [];
       const plan = {
         id: (typeof gid === 'function' ? gid('gp') : 'gp_' + Date.now()),
         name: planName,
         createdAt: new Date().toISOString(),
         assignedTechId: selectedTechIds[0] || '',
         assignedTechIds: selectedTechIds,
+        assignedAt: selectedTechIds.length ? new Date().toISOString() : '',
+        updatedAt: new Date().toISOString(),
         materialSummary: '',
         mapsUrl: route.mapsUrl || '',
         stops: builtStops
@@ -1665,14 +1717,23 @@
         const assignedSet = new Set(selectedTechIds);
         root.state.weekPlan[SHARED_ID]._generalPlans.forEach(gp => {
           if (gp && gp.id !== plan.id) {
-            if (Array.isArray(gp.assignedTechIds)) {
-              gp.assignedTechIds = gp.assignedTechIds.filter(id => !assignedSet.has(id));
-            }
-            if (assignedSet.has(gp.assignedTechId)) {
-              gp.assignedTechId = gp.assignedTechIds?.[0] || '';
+            const existingIds = [...new Set([gp.assignedTechId, ...(Array.isArray(gp.assignedTechIds) ? gp.assignedTechIds : [])].filter(Boolean).map(String))];
+            const remaining = existingIds.filter(id => !assignedSet.has(id));
+            if (remaining.length !== existingIds.length) {
+              if (typeof syncPlanAssignedMetadata === 'function') {
+                syncPlanAssignedMetadata(gp, remaining);
+              } else {
+                gp.assignedTechIds = remaining;
+                gp.assignedTechId = remaining[0] || '';
+                if (!remaining.length) gp.assignedTechName = '';
+                gp.updatedAt = new Date().toISOString();
+              }
             }
           }
         });
+      }
+      if (typeof syncPlanAssignedMetadata === 'function') {
+        syncPlanAssignedMetadata(plan, selectedTechIds);
       }
 
       root.state.weekPlan[SHARED_ID]._generalPlans.push(plan);
@@ -1733,10 +1794,20 @@
           if (quickOptions && Array.isArray(quickOptions.selectedTechIds) && quickOptions.selectedTechIds.length) {
             const currentPlan = typeof getSelectedGeneralPlan === 'function' ? getSelectedGeneralPlan() : null;
             if (currentPlan) {
-              const currentIds = new Set(Array.isArray(currentPlan.assignedTechIds) ? currentPlan.assignedTechIds : (currentPlan.assignedTechId ? [currentPlan.assignedTechId] : []));
-              quickOptions.selectedTechIds.forEach(id => currentIds.add(id));
-              currentPlan.assignedTechIds = Array.from(currentIds);
-              if (!currentPlan.assignedTechId) currentPlan.assignedTechId = currentPlan.assignedTechIds[0];
+              const currentIds = new Set(Array.isArray(currentPlan.assignedTechIds) ? currentPlan.assignedTechIds.map(String) : (currentPlan.assignedTechId ? [String(currentPlan.assignedTechId)] : []));
+              quickOptions.selectedTechIds.forEach(id => {
+                if (!id) return;
+                if (typeof unassignTechFromOtherPlans === 'function') {
+                  unassignTechFromOtherPlans(id, currentPlan.id);
+                }
+                currentIds.add(String(id));
+              });
+              if (typeof syncPlanAssignedMetadata === 'function') {
+                syncPlanAssignedMetadata(currentPlan, Array.from(currentIds));
+              } else {
+                currentPlan.assignedTechIds = Array.from(currentIds);
+                currentPlan.assignedTechId = currentPlan.assignedTechIds[0] || '';
+              }
             }
           }
 
@@ -1776,6 +1847,23 @@
         name: match ? match.name : stopName
       };
     });
+
+    // Garantizar que toda ruta inicie en la torre principal WiFi-Mex
+    const wifiMexOrigin = findWiFiMexOrigin();
+    const wifiMexPoint = {
+      lat: wifiMexOrigin.lat,
+      lng: wifiMexOrigin.lng,
+      name: wifiMexOrigin.name || 'WiFi-Mex'
+    };
+    if (!coords.length) {
+      coords.push(wifiMexPoint);
+    } else if (!WIFIMEX_ORIGIN_REGEX.test(String(coords[0].name || '')) && compactGeoText(coords[0].name || '') !== 'wifimex') {
+      if (compactGeoText(coords[0].name || '').includes('palmar')) {
+        coords[0] = wifiMexPoint;
+      } else {
+        coords.unshift(wifiMexPoint);
+      }
+    }
 
     const newRoute = {
       id: (typeof gid === 'function' ? gid('r') : 'r_' + Date.now()),

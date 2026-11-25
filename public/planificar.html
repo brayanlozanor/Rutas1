@@ -12,16 +12,16 @@
     href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Space+Mono:wght@400;700&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css?v=20261104-fullscreen-plan-v3">
-  <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20260830-responsive-colors-v3">
-  <link rel="stylesheet" href="assets/css/plan-reference.css?v=20261111-places-intel-v2">
+  <link rel="stylesheet" href="assets/css/sidebar-compact.css?v=20261124-compact-v4">
+  <link rel="stylesheet" href="assets/css/plan-reference.css?v=20261124-sidebar-v3">
   <link rel="stylesheet" href="assets/css/plan-detail-report.css?v=20260812-editor-font-v1">
   <link rel="stylesheet" href="assets/css/detail-view-toggle.css?v=20260823-completion-options-v22">
   <link rel="stylesheet" href="assets/css/plan-stop-cards.css?v=20260902-plan-status-v1">
   <link rel="stylesheet" href="assets/css/plan-stop-detail-grid.css?v=20261111-no-overlap-v1">
-  <link rel="stylesheet" href="assets/css/plan-stop-card-exact.css?v=20261111-places-intel-v2">
-  <link rel="stylesheet" href="assets/css/technician-dashboard.css?v=20261119-tech-day-map-restored-v1">
+  <link rel="stylesheet" href="assets/css/plan-stop-card-exact.css?v=20261124-stop-buttons-v3">
+  <link rel="stylesheet" href="assets/css/technician-dashboard.css?v=20261124-mobile-loader-v4">
   <link rel="stylesheet" href="assets/css/technician-view-modes.css?v=20261119-tech-day-map-restored-v1">
-  <link rel="stylesheet" href="assets/css/plan-ui-v2.css?v=20261119-tech-day-map-restored-v1">
+  <link rel="stylesheet" href="assets/css/plan-ui-v2.css?v=20261124-left-menu-v3">
   <link rel="stylesheet" href="assets/css/tower-material-modal.css?v=20261116-chat-fluidity-v1">
   <link rel="stylesheet" href="assets/css/material-dispatches.css?v=20261030-v2">
   <link rel="stylesheet" href="assets/css/preset-routes.css?v=20261116-simple-assign-v2">
@@ -81,6 +81,12 @@
               el.style.background = '#ffffff';
               el.style.backdropFilter = 'none';
               el.style.webkitBackdropFilter = 'none';
+              el.style.pointerEvents = 'none';
+              // En vista técnico nunca bloquear la pantalla si ya existe caché local
+              if (localStorage.getItem('netops_planificar_offline_snapshot_v1') || localStorage.getItem('netops_last_good_state_v1:planning')) {
+                el.classList.add('is-hidden');
+                el.style.display = 'none';
+              }
             } else {
               el.style.background = 'rgba(244, 247, 250, 0.55)';
               el.style.backdropFilter = 'blur(1.5px)';
@@ -90,6 +96,7 @@
         } catch (_) { }
 
         // Failsafe absoluto garantizado: NUNCA dejar la pantalla congelada en cargando
+        var failsafeMs = (document.documentElement.classList.contains('is-technician-env') || (window.innerWidth <= 768)) ? 1400 : 5000;
         setTimeout(function () {
           try {
             var loader = document.getElementById('plan-initial-loader');
@@ -99,7 +106,7 @@
             }
             if (typeof hideLoading === 'function') hideLoading();
           } catch (_) { }
-        }, 5000);
+        }, failsafeMs);
       })();
     </script>
     <div class="loading-card plan-initial-card">
@@ -241,29 +248,33 @@
 
         <div class="plan-shell">
           <!-- Banner de ruta asignada para celular (visible en modo técnico) -->
-          <div class="tech-plan-banner" id="tech-plan-banner" style="display:none;"></div>
+          <div class="tech-plan-banner is-loading-hidden" id="tech-plan-banner" style="display:none;"></div>
 
           <!-- Barra compacta de progreso del técnico para celular (visible en modo técnico) -->
-          <section class="tech-progress-compact" id="tech-progress-card">
+          <section class="tech-progress-compact is-loading-hidden" id="tech-progress-card">
             <div class="tech-progress-compact-row">
               <div class="tech-progress-compact-info">
                 <svg class="tech-progress-compact-svg" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M18 20V10M12 20V4M6 20v-6" />
                 </svg>
-                <span class="tech-progress-compact-label">Avance</span>
-                <strong class="tech-progress-compact-pct" id="tech-progress-percent-badge">100%</strong>
+                <span class="tech-progress-compact-label">Mi avance</span>
+                <strong class="tech-progress-compact-pct" id="tech-progress-percent-badge">0%</strong>
                 <span class="tech-progress-compact-sep">·</span>
                 <span class="tech-progress-compact-detail" id="tech-stat-detalles">0 de 0</span>
-                <span class="tech-progress-compact-sep">·</span>
-                <span class="tech-progress-compact-pueblos" id="tech-stat-pueblos">0/0 pueblos</span>
+                <span class="tech-progress-compact-pueblos" id="tech-stat-pueblos" style="display:none;">0/0</span>
               </div>
               <button type="button" class="tech-compact-summary-btn" onclick="openTechnicianProductivitySummary()"
-                title="Ver resumen del día">
+                title="Ver mi avance del día">
                 Resumen
               </button>
             </div>
             <div class="tech-progress-bar-track">
-              <div class="tech-progress-bar-fill" id="tech-progress-bar-fill" style="width: 100%"></div>
+              <div class="tech-progress-bar-fill" id="tech-progress-bar-fill" style="width: 0%"></div>
+            </div>
+            <div class="tech-progress-mini-pills" id="tech-progress-mini-pills">
+              <span class="tech-mini-pill is-done"><strong id="tech-stat-done-count">0</strong> completados</span>
+              <span class="tech-mini-pill is-pending"><strong id="tech-stat-pending-count">0</strong> pendientes</span>
+              <span class="tech-mini-pill is-nodone" id="tech-stat-nodone-pill"><strong id="tech-stat-nodone-count">0</strong> no realizados</span>
             </div>
           </section>
 
@@ -312,22 +323,22 @@
                     </svg></span><span>Eliminar</span></button>
               </div>
 
-              <!-- Menú interactivo de botones para planes y técnicos -->
+              <!-- Menú interactivo de rutas, equipo y técnicos -->
               <div class="plan-assign-menu-box" id="plan-assign-menu-box">
-                <div class="plan-assign-nav" role="tablist" aria-label="Menú de planes y técnicos">
+                <div class="plan-assign-nav" role="tablist" aria-label="Menú de rutas y técnicos">
                   <button type="button" class="plan-assign-nav-btn is-active" id="plan-tab-btn-plans"
                     onclick="switchPlanAssignTab('plans')" role="tab" aria-selected="true">
-                    <span>🗺️ Planes</span>
+                    <span class="plan-tab-title">Rutas</span>
                     <span class="plan-assign-tab-badge badge-plans" id="plan-tab-badge-plans">0</span>
                   </button>
                   <button type="button" class="plan-assign-nav-btn" id="plan-tab-btn-team"
                     onclick="switchPlanAssignTab('team')" role="tab" aria-selected="false">
-                    <span>👥 En este plan</span>
+                    <span class="plan-tab-title">Equipo</span>
                     <span class="plan-assign-tab-badge badge-team" id="plan-tab-badge-team">0</span>
                   </button>
                   <button type="button" class="plan-assign-nav-btn" id="plan-tab-btn-search"
                     onclick="switchPlanAssignTab('search')" role="tab" aria-selected="false">
-                    <span>👤 Técnicos</span>
+                    <span class="plan-tab-title">Técnicos</span>
                     <span class="plan-assign-tab-badge badge-techs" id="plan-tab-badge-total">0</span>
                   </button>
                 </div>
@@ -493,55 +504,62 @@
             <div id="plan-continuity-recommendations-banner" style="display:none !important;" aria-hidden="true"></div>
             <div id="plan-day-intel-strip" class="plan-day-intel-strip" style="display:none"></div>
             <div id="plan-days" class="plan-days">
-              <div class="day-col" id="plan-skeleton-placeholder">
-                <div class="day-head">
-                  <span>Agenda de paradas</span>
-                  <span class="day-travel-badge">Cargando paradas...</span>
+              <div class="day-col plan-desktop-loading-state" id="plan-skeleton-placeholder" role="status" aria-live="polite" aria-label="Cargando plan y paradas">
+                <div class="tech-mobile-loading-banner">
+                  <div class="tech-mobile-loading-top">
+                    <span class="tech-mobile-loader-ring" aria-hidden="true"></span>
+                    <div class="tech-mobile-loading-copy">
+                      <span class="tech-mobile-loading-pill"><i class="tech-mobile-pulse-dot" aria-hidden="true"></i>Cargando información</span>
+                      <strong>Cargando plan y paradas asignadas...</strong>
+                      <span>Obteniendo rutas, pueblos y detalles actualizados del servidor.</span>
+                    </div>
+                  </div>
+                  <div class="tech-mobile-loading-bar" aria-hidden="true"><span></span></div>
                 </div>
-                <div class="day-body">
-                  <div class="stop-card plan-placeholder-card">
-                    <div class="stop-card-main">
-                      <div class="stop-card-title-row">
-                        <strong class="stop-title">Parada en ruta</strong>
-                        <span class="badge bgn">Pendiente</span>
-                        <span class="badge bsm bgh">0/0 detalles</span>
-                      </div>
-                      <div class="stop-meta">Localidad vinculada al plan activo</div>
-                    </div>
-                    <div class="stop-actions">
-                      <span class="btn bsm bgh" style="opacity:0.7;pointer-events:none;font-size:11px;">Día
-                        asignado</span>
-                    </div>
-                  </div>
-                  <div class="plan-transit-step"
-                    style="display:flex;align-items:center;gap:6px;padding:6px 14px;color:#64748b;font-size:11px;font-weight:700;">
-                    <span>~0 min (0 km) de traslado</span>
-                  </div>
-                  <div class="stop-card plan-placeholder-card">
-                    <div class="stop-card-main">
-                      <div class="stop-card-title-row">
-                        <strong class="stop-title">Siguiente localidad</strong>
-                        <span class="badge bgn">Pendiente</span>
-                        <span class="badge bsm bgh">0/0 detalles</span>
-                      </div>
-                      <div class="stop-meta">Localidad vinculada al plan activo</div>
-                    </div>
-                    <div class="stop-actions">
-                      <span class="btn bsm bgh" style="opacity:0.7;pointer-events:none;font-size:11px;">Día
-                        asignado</span>
-                    </div>
-                  </div>
+                <div class="tech-skeleton-card" aria-hidden="true">
+                  <div class="tech-skeleton-line is-title"></div>
+                  <div class="tech-skeleton-line is-sub"></div>
+                  <div class="tech-skeleton-line is-full"></div>
+                </div>
+                <div class="tech-skeleton-card" aria-hidden="true">
+                  <div class="tech-skeleton-line is-title"></div>
+                  <div class="tech-skeleton-line is-sub"></div>
+                  <div class="tech-skeleton-line is-full"></div>
                 </div>
               </div>
 
               <!-- Esqueleto para celular (técnico) -->
               <div class="tech-skeleton-placeholder" id="tech-skeleton-placeholder">
-                <div class="plan-empty tech-skeleton-empty"
-                  style="padding:28px 16px;text-align:center;background:#fff;border-radius:18px;border:1px solid #e2eaf4;margin:8px 0;box-shadow:0 4px 14px rgba(16,38,74,0.04);">
-                  <p style="margin:0 0 12px;font-size:14px;color:#475569;font-weight:600;"
-                    id="tech-skeleton-empty-text">No tienes paradas asignadas para hoy.</p>
-                  <button type="button" class="btn bsm bg2" onclick="toggleTechnicianSummaryMode()"
-                    style="margin-top:4px;font-weight:700;">Ver todos los detalles del plan</button>
+                <div class="tech-mobile-loading-state" role="status" aria-live="polite" aria-label="Cargando ruta y detalles">
+                  <div class="tech-mobile-loading-banner">
+                    <div class="tech-mobile-loading-top">
+                      <span class="tech-mobile-loader-ring" aria-hidden="true"></span>
+                      <div class="tech-mobile-loading-copy">
+                        <span class="tech-mobile-loading-pill"><i class="tech-mobile-pulse-dot" aria-hidden="true"></i>Sincronizando datos</span>
+                        <strong>Cargando tu ruta y detalles...</strong>
+                        <span id="tech-skeleton-empty-text">Consultando tus paradas asignadas, espera un momento...</span>
+                      </div>
+                    </div>
+                    <div class="tech-mobile-loading-bar" aria-hidden="true"><span></span></div>
+                  </div>
+                  <div class="tech-skeleton-card" aria-hidden="true">
+                    <div class="tech-skeleton-line is-title"></div>
+                    <div class="tech-skeleton-line is-sub"></div>
+                    <div class="tech-skeleton-line is-full"></div>
+                    <div class="tech-skeleton-pills">
+                      <span class="tech-skeleton-pill"></span>
+                      <span class="tech-skeleton-pill"></span>
+                    </div>
+                  </div>
+                  <div class="tech-skeleton-card" aria-hidden="true">
+                    <div class="tech-skeleton-line is-title"></div>
+                    <div class="tech-skeleton-line is-sub"></div>
+                    <div class="tech-skeleton-line is-full"></div>
+                    <div class="tech-skeleton-pills">
+                      <span class="tech-skeleton-pill"></span>
+                      <span class="tech-skeleton-pill"></span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -553,16 +571,7 @@
               <strong>Mapa de hoy</strong>
               <small id="tech-day-map-date"></small>
             </div>
-            <div class="tech-map-privacy-notice" id="tech-map-privacy-notice"
-              style="margin:0 14px 10px;padding:10px 12px;border-radius:10px;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:11px;line-height:1.4;display:flex;align-items:flex-start;gap:8px;">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
-                style="flex-shrink:0;margin-top:1px;">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-              <span>Tu ubicación solo se utiliza localmente en este dispositivo para calcular la ruta y no se almacena
-                ni se usa para ningún otro fin.</span>
-            </div>
+            <div class="tech-map-privacy-notice" id="tech-map-privacy-notice" style="display:none !important;" aria-hidden="true"></div>
             <div id="tech-day-map" class="tech-day-map"></div>
             <div id="tech-locations-sheet" class="tech-map-locations-sheet" style="display:none;"></div>
           </section>
@@ -616,11 +625,13 @@
                     strip.innerHTML = daysHtml;
                   }
 
-                  var emptyText = document.getElementById('tech-skeleton-empty-text');
-                  if (emptyText) {
-                    var dayShort = now.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
-                    emptyText.textContent = 'No tienes paradas asignadas para ' + dayShort + '.';
+                  var dayShort = now.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
+                  var mapDateEl = document.getElementById('tech-day-map-date');
+                  if (mapDateEl) {
+                    mapDateEl.textContent = dayShort + ' · Cargando ubicaciones...';
                   }
+                  var dayMapCard = document.getElementById('tech-day-map-card');
+                  if (dayMapCard) dayMapCard.classList.add('is-loading');
                 }
               } catch (e) { }
             })();
@@ -1260,10 +1271,10 @@
 
   <div class="nt" id="nt"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-  <script src="assets/js/api.js?v=20261118-fast-load-and-share-v2"></script>
-  <script src="assets/js/common.js?v=20261118-fast-load-and-share-v2"></script>
-  <script src="assets/js/preset-routes.js?v=20261118-fast-load-and-share-v2"></script>
-  <script src="assets/js/planificar.js?v=20261119-tech-day-map-restored-v1"></script>
+  <script src="assets/js/api.js?v=20261124-live-sync-v4"></script>
+  <script src="assets/js/common.js?v=20261124-live-sync-v5"></script>
+  <script src="assets/js/preset-routes.js?v=20261124-wifimex-v3"></script>
+  <script src="assets/js/planificar.js?v=20261124-live-sync-v5"></script>
 </body>
 
 </html>

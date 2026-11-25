@@ -449,6 +449,93 @@
   color: #f28a00 !important
 }
 
+/* En computadora: botones claros y legibles para Pendientes y Completados de cada pueblo/antena */
+body.planificar-page:not(.plan-technician-view) .stop-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-pending,
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-completed {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 11px !important;
+  border-radius: 9px !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background-color 0.14s ease !important;
+}
+
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-pending svg,
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-completed svg {
+  width: 14px !important;
+  height: 14px !important;
+  flex: 0 0 14px !important;
+}
+
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-pending {
+  border: 1px solid #f59e0b !important;
+  background: #fffbeb !important;
+  color: #b45309 !important;
+}
+
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-pending:hover:not(:disabled),
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-pending[aria-expanded="true"] {
+  background: #f59e0b !important;
+  border-color: #d97706 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.28) !important;
+}
+
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-completed {
+  border: 1px solid #10b981 !important;
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+}
+
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-completed:hover:not(:disabled),
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-completed.active,
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-completed[aria-expanded="true"] {
+  background: #10b981 !important;
+  border-color: #059669 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.28) !important;
+}
+
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  background: rgba(15, 23, 42, 0.08);
+  color: inherit;
+}
+
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-pending[aria-expanded="true"] .stop-action-count,
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-pending:hover:not(:disabled) .stop-action-count,
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-completed.active .stop-action-count,
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-completed[aria-expanded="true"] .stop-action-count,
+body.planificar-page:not(.plan-technician-view) .stop-actions .stop-action-completed:hover:not(:disabled) .stop-action-count {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
 .planificar-page .stop-actions .btn:disabled {
   border-color: #d9e0e8 !important;
   background: #fafbfc !important;
@@ -640,8 +727,22 @@ body.planificar-page:not(.plan-technician-view) .stop-card.plan-stop-compact {
   font-size: 10px
 }
 
-.planificar-page .plan-stop-compact:not(.is-expanded)>:not(.stop-card-heading):not(.stop-detail-switches):not(.stop-state-row):not(.plan-stop-date-editor):not(.plan-stop-date) {
+.planificar-page .plan-stop-compact:not(.is-expanded)>:not(.stop-card-heading):not(.stop-detail-switches):not(.stop-state-row):not(.plan-stop-date-editor):not(.plan-stop-date):not(.stop-actions) {
   display: none !important
+}
+
+body.planificar-page:not(.plan-technician-view) .plan-stop-compact > .stop-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-top: 2px !important;
+  padding-top: 10px !important;
+  border-top: 1px solid #e2eaf3 !important;
+}
+
+body.planificar-page:not(.plan-technician-view) .plan-stop-compact > .stop-actions .stop-action-delete {
+  display: none !important;
 }
 
 .planificar-page .plan-stop-compact .stop-card-heading .stop-meta {

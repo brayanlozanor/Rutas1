@@ -1,13 +1,85 @@
-// Service Worker de WiFiMex para Notificaciones en Celular, Escritorio y Background
+// Service Worker de WiFiMex para Notificaciones en Celular, Escritorio, Background y Resiliencia Offline
 const CACHE_NAME = 'wifimex-netops-sw-v5';
+const STATIC_CACHE_NAME = 'wifimex-netops-static-v6';
+const CORE_STATIC_ASSETS = [
+  '/assets/css/style.css',
+  '/assets/css/sidebar-compact.css',
+  '/assets/css/theme-pro.css',
+  '/assets/css/login-redesign.css',
+  '/assets/js/api.js',
+  '/assets/js/common.js',
+  '/assets/js/perfil.js',
+  '/assets/brand/wifimex-logo.jpg',
+  '/assets/brand/wifimex-network-mark.svg'
+];
 let networkPushQueue = Promise.resolve();
 
+function isCacheableStaticRequest(request) {
+  if (!request || request.method !== 'GET') return false;
+  let url;
+  try {
+    url = new URL(request.url);
+  } catch (e) {
+    return false;
+  }
+  if (url.origin !== self.location.origin) return false;
+  if (url.pathname.startsWith('/api/')) return false;
+  if (url.pathname === '/version.json' || url.pathname === '/sw.js') return false;
+  if (request.mode === 'navigate') return true;
+  return /\.(?:html|css|js|svg|png|jpe?g|webp|gif|ico|woff2?|ttf|eot)$/i.test(url.pathname) || url.pathname === '/';
+}
+
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
+  event.waitUntil(
+    caches.open(STATIC_CACHE_NAME)
+      .then((cache) => Promise.all(
+        CORE_STATIC_ASSETS.map((assetUrl) => cache.add(assetUrl).catch(() => {}))
+      ))
+      .catch(() => {})
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key.startsWith('wifimex-netops-static-') && key !== STATIC_CACHE_NAME)
+          .map((key) => caches.delete(key))
+      ))
+      .catch(() => {})
+      .then(() => self.clients.claim())
+  );
+});
+
+// Estrategia Network-First con fallback a caché para assets estáticos y vistas HTML
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (!isCacheableStaticRequest(request)) return;
+
+  event.respondWith((async () => {
+    const cache = await caches.open(STATIC_CACHE_NAME);
+    try {
+      const networkResponse = await fetch(request);
+      if (networkResponse && networkResponse.ok && (networkResponse.type === 'basic' || networkResponse.type === 'cors')) {
+        cache.put(request, networkResponse.clone()).catch(() => {});
+      }
+      return networkResponse;
+    } catch (networkErr) {
+      const exactMatch = await cache.match(request);
+      if (exactMatch) return exactMatch;
+      const looseMatch = await cache.match(request, { ignoreSearch: true });
+      if (looseMatch) return looseMatch;
+      if (request.mode === 'navigate') {
+        return new Response(
+          '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin conexión · WiFiMex</title><style>body{font-family:Inter,system-ui,sans-serif;background:#f3f6fb;color:#0f172a;display:grid;place-items:center;min-height:100vh;margin:0;padding:20px}.box{max-width:420px;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:24px;text-align:center;box-shadow:0 12px 32px rgba(15,23,42,.08)}h1{font-size:18px;margin:0 0 8px}p{font-size:13px;color:#475569;margin:0 0 16px;line-height:1.5}button{background:#0b6ef3;color:#fff;border:0;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer}</style></head><body><div class="box"><h1>Sin conexión a internet</h1><p>No se pudo cargar esta pantalla porque no hay conexión y aún no estaba guardada en caché local.</p><button onclick="location.reload()">Reintentar</button></div></body></html>',
+          { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } }
+        );
+      }
+      throw networkErr;
+    }
+  })());
 });
 
 self.addEventListener('notificationclick', (event) => {

@@ -10,11 +10,15 @@ import {
   recordWorkOrderReviewExit,
   upsertWorkOrderReport,
   findLoginUser,
+  getUserProfile,
+  updateUserProfile,
+  updateUserPassword,
   deletePlans,
   deleteRecord,
   getDashboardGoal,
   setDashboardGoal,
-  ensureRelationalSchema
+  ensureRelationalSchema,
+  isRelationalSchemaReady
 } from './relational-store.js';
 
 const CORS = {
@@ -220,11 +224,18 @@ export default {
       if (request.method === 'POST' && !hasTrustedOrigin(request)) {
         return json({ok:false,success:false,error:'Origen de solicitud no permitido',errorType:'AUTORIZACION',errorCode:'ORIGIN_NOT_ALLOWED',requestId},403);
       }
-      if (url.pathname.startsWith('/api/')) {
+      const skipSchemaInit =
+        url.pathname === '/api/ping' ||
+        url.pathname === '/api/session' ||
+        url.pathname === '/api/logout' ||
+        url.pathname === '/api/sync-meta' ||
+        url.pathname.startsWith('/api/evidence/') ||
+        url.pathname.startsWith('/api/material-photo/');
+      if (!skipSchemaInit && !isRelationalSchemaReady()) {
         try {
           await ensureRelationalSchema(env);
         } catch (schemaErr) {
-          console.warn('[Worker] ensureRelationalSchema error:', schemaErr);
+          console.warn('[Worker] ensureRelationalSchema error:', schemaErr?.message || schemaErr);
         }
       }
       if (request.method === 'POST' && url.pathname === '/api/login') {
@@ -262,6 +273,38 @@ export default {
 
       if (request.method === 'GET' && url.pathname === '/api/session') {
         return json({ok:true,user:{id:session.sub,name:session.name,username:session.username,role:session.role},expiresAt:new Date(session.exp*1000).toISOString()});
+      }
+
+      if (request.method === 'GET' && url.pathname === '/api/profile') {
+        const profile = await getUserProfile(env, session.sub);
+        if (!profile) {
+          return json({ok:false,error:'Usuario no encontrado',errorType:'DATOS_INVALIDOS',errorCode:'USER_NOT_FOUND',requestId},404);
+        }
+        return json({ok:true,profile,user:profile});
+      }
+
+      if (request.method === 'POST' && url.pathname === '/api/profile') {
+        const body = await request.json();
+        const result = await updateUserProfile(env, session.sub, body || {});
+        const nextProfile = result.profile;
+        const headers = {};
+        if (nextProfile && (nextProfile.name !== session.name || nextProfile.username !== session.username)) {
+          const refreshed = await createSessionToken(env, nextProfile);
+          headers['Set-Cookie'] = sessionCookie(request, refreshed.token);
+        }
+        return json({ok:true,time:result.time,profile:nextProfile,user:nextProfile},200,headers);
+      }
+
+      if (request.method === 'POST' && url.pathname === '/api/profile/password') {
+        const body = await request.json();
+        const currentPassword = String(body?.currentPassword || '').trim();
+        const newPassword = String(body?.newPassword || '').trim();
+        const confirmPassword = body?.confirmPassword !== undefined ? String(body.confirmPassword || '').trim() : null;
+        if (confirmPassword !== null && newPassword !== confirmPassword) {
+          return json({ok:false,error:'La confirmación de contraseña no coincide.',errorType:'DATOS_INVALIDOS',errorCode:'PASSWORD_MISMATCH',requestId},400);
+        }
+        const result = await updateUserPassword(env, session.sub, currentPassword, newPassword);
+        return json({ok:true,time:result.time,message:'Contraseña actualizada correctamente.'});
       }
 
       if (request.method === 'GET' && url.pathname === '/api/data') {

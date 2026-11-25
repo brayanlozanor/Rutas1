@@ -5,6 +5,361 @@
     window.API = isLocalHost ? location.origin : (isFile ? (localStorage.getItem('netops_api_url') || 'https://netops-api.asistencias.workers.dev') : '');
 })();
 
+// ==========================================================================
+// INYECCIÓN AUTOMÁTICA DE THEME-PRO.CSS, PERFIL.JS Y PREFERENCIAS DESKTOP
+// ==========================================================================
+const NETOPS_THEME_PRO_VERSION = '20261124-theme-pro-v7';
+const NETOPS_PERFIL_JS_VERSION = '20261124-perfil-v3';
+const NETOPS_UI_PREFS_PREFIX = 'netops_user_ui_prefs_v1:';
+const NETOPS_DEFAULT_ACCENT = '#0b6ef3';
+const NETOPS_FONT_SCALE_MAP = { sm: 0.9, md: 1, lg: 1.12, xl: 1.24 };
+
+function injectThemeProAssets() {
+    if (typeof document === 'undefined' || !document.head) return;
+    if (!document.getElementById('netops-theme-pro-css')) {
+        const link = document.createElement('link');
+        link.id = 'netops-theme-pro-css';
+        link.rel = 'stylesheet';
+        link.href = `assets/css/theme-pro.css?v=${NETOPS_THEME_PRO_VERSION}`;
+        document.head.appendChild(link);
+    }
+    const page = (typeof location !== 'undefined' ? (location.pathname.split('/').pop() || '').toLowerCase() : '');
+    if (page !== 'login.html' && !document.getElementById('netops-perfil-js')) {
+        const script = document.createElement('script');
+        script.id = 'netops-perfil-js';
+        script.src = `assets/js/perfil.js?v=${NETOPS_PERFIL_JS_VERSION}`;
+        script.defer = true;
+        document.head.appendChild(script);
+    }
+}
+
+function isDesktopProfileEnabled() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return false;
+    const page = typeof getCurrentPageName === 'function' ? getCurrentPageName() : (location.pathname.split('/').pop() || '').toLowerCase();
+    if (page === 'login.html' || page === 'tecnico-ruta.html') return false;
+    if (window.innerWidth <= 768) return false;
+    const user = typeof getCurrentUser === 'function' ? getCurrentUser() : (() => {
+        try { return JSON.parse(localStorage.getItem('user') || '{}') || {}; } catch (e) { return {}; }
+    })();
+    const role = typeof normalizeRole === 'function'
+        ? normalizeRole(user?.role)
+        : String(user?.role || '').trim().toLowerCase();
+    if (role === 'tecnico' || role === 'tecnica') return false;
+    if (document.body?.classList?.contains('tech-route-body') || document.body?.classList?.contains('plan-technician-view')) return false;
+    return true;
+}
+
+function _hexToRgbTuple(hex) {
+    const clean = String(hex || '').replace('#', '');
+    if (!/^[0-9a-fA-F]{6}$/.test(clean)) return [11, 110, 243];
+    return [
+        parseInt(clean.slice(0, 2), 16),
+        parseInt(clean.slice(2, 4), 16),
+        parseInt(clean.slice(4, 6), 16)
+    ];
+}
+
+function _darkenHexColor(hex, factor = 0.84) {
+    const [r, g, b] = _hexToRgbTuple(hex);
+    const toHex = n => Math.max(0, Math.min(255, Math.round(n * factor))).toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function _mixHexColor(hex, targetHex = '#ffffff', ratio = 0.5) {
+    const [r1, g1, b1] = _hexToRgbTuple(hex);
+    const [r2, g2, b2] = _hexToRgbTuple(targetHex);
+    const t = Math.max(0, Math.min(1, Number(ratio) || 0));
+    const toHex = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+    return `#${toHex(r1 + (r2 - r1) * t)}${toHex(g1 + (g2 - g1) * t)}${toHex(b1 + (b2 - b1) * t)}`;
+}
+
+function getUserDesktopPrefs(userOverride = null) {
+    const user = userOverride || (typeof getCurrentUser === 'function' ? getCurrentUser() : (() => {
+        try { return JSON.parse(localStorage.getItem('user') || '{}') || {}; } catch (e) { return {}; }
+    })());
+    const userId = String(user?.id || user?.username || '').trim();
+    let stored = null;
+    if (userId && typeof localStorage !== 'undefined') {
+        try {
+            stored = JSON.parse(localStorage.getItem(NETOPS_UI_PREFS_PREFIX + userId) || 'null');
+        } catch (e) {}
+    }
+    const rawAccent = stored?.accent || user?.uiAccent || NETOPS_DEFAULT_ACCENT;
+    const accent = /^#[0-9a-fA-F]{6}$/.test(String(rawAccent)) ? String(rawAccent).toLowerCase() : NETOPS_DEFAULT_ACCENT;
+    const rawScale = String(stored?.fontScale || user?.uiFontScale || 'md').toLowerCase();
+    const fontScale = Object.prototype.hasOwnProperty.call(NETOPS_FONT_SCALE_MAP, rawScale) ? rawScale : 'md';
+    return {
+        accent,
+        fontScale,
+        hasLocalOverride: Boolean(stored && typeof stored === 'object')
+    };
+}
+
+function saveUserDesktopPrefs(prefs = {}, userIdOverride = '') {
+    const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+    const userId = String(userIdOverride || user?.id || user?.username || '').trim();
+    if (!userId || typeof localStorage === 'undefined') return;
+    const accent = /^#[0-9a-fA-F]{6}$/.test(String(prefs.accent || '')) ? String(prefs.accent).toLowerCase() : NETOPS_DEFAULT_ACCENT;
+    const fontScale = Object.prototype.hasOwnProperty.call(NETOPS_FONT_SCALE_MAP, String(prefs.fontScale || '')) ? String(prefs.fontScale) : 'md';
+    try {
+        localStorage.setItem(NETOPS_UI_PREFS_PREFIX + userId, JSON.stringify({
+            accent,
+            fontScale,
+            updatedAt: new Date().toISOString()
+        }));
+    } catch (e) {}
+}
+
+function resetUserDesktopPrefs(userIdOverride = '') {
+    const user = typeof getCurrentUser === 'function' ? getCurrentUser() : {};
+    const userId = String(userIdOverride || user?.id || user?.username || '').trim();
+    if (!userId || typeof localStorage === 'undefined') return;
+    try {
+        localStorage.removeItem(NETOPS_UI_PREFS_PREFIX + userId);
+    } catch (e) {}
+}
+
+function applyUserDesktopPreferences(overridePrefs = null) {
+    if (typeof document === 'undefined' || !document.documentElement) return;
+    const root = document.documentElement;
+    const themeVars = [
+        '--accent', '--accent-strong', '--accent-darker', '--accent-light', '--accent-lighter',
+        '--accent-surface', '--accent-bg', '--accent-border', '--accent-border-strong',
+        '--accent-soft', '--accent-soft-strong', '--accent-ring', '--accent-rgb',
+        '--accent-gradient', '--accent-gradient-deep', '--app-font-scale'
+    ];
+    if (!isDesktopProfileEnabled()) {
+        root.classList.remove('netops-desktop-theme');
+        delete root.dataset.fontScale;
+        delete root.dataset.hasCustomAccent;
+        themeVars.forEach(prop => {
+            root.style.removeProperty(prop);
+        });
+        return;
+    }
+    const prefs = overridePrefs
+        ? {
+            accent: /^#[0-9a-fA-F]{6}$/.test(String(overridePrefs.accent || '')) ? String(overridePrefs.accent).toLowerCase() : NETOPS_DEFAULT_ACCENT,
+            fontScale: Object.prototype.hasOwnProperty.call(NETOPS_FONT_SCALE_MAP, String(overridePrefs.fontScale || '')) ? String(overridePrefs.fontScale) : 'md'
+          }
+        : getUserDesktopPrefs();
+    const [r, g, b] = _hexToRgbTuple(prefs.accent);
+    const strong = _darkenHexColor(prefs.accent, 0.82);
+    const darker = _darkenHexColor(prefs.accent, 0.64);
+    const light = _mixHexColor(prefs.accent, '#ffffff', 0.24);
+    const lighter = _mixHexColor(prefs.accent, '#ffffff', 0.84);
+    const surface = _mixHexColor(prefs.accent, '#ffffff', 0.92);
+    const bg = _mixHexColor(prefs.accent, '#ffffff', 0.955);
+    const border = _mixHexColor(prefs.accent, '#ffffff', 0.76);
+    const borderStrong = _mixHexColor(prefs.accent, '#ffffff', 0.56);
+    const scaleNum = NETOPS_FONT_SCALE_MAP[prefs.fontScale] || 1;
+
+    root.classList.add('netops-desktop-theme');
+    root.dataset.fontScale = prefs.fontScale;
+    if (prefs.accent !== NETOPS_DEFAULT_ACCENT) {
+        root.dataset.hasCustomAccent = '1';
+    } else {
+        delete root.dataset.hasCustomAccent;
+    }
+    root.style.setProperty('--accent', prefs.accent);
+    root.style.setProperty('--accent-strong', strong);
+    root.style.setProperty('--accent-darker', darker);
+    root.style.setProperty('--accent-light', light);
+    root.style.setProperty('--accent-lighter', lighter);
+    root.style.setProperty('--accent-surface', surface);
+    root.style.setProperty('--accent-bg', bg);
+    root.style.setProperty('--accent-border', border);
+    root.style.setProperty('--accent-border-strong', borderStrong);
+    root.style.setProperty('--accent-soft', `rgba(${r}, ${g}, ${b}, 0.11)`);
+    root.style.setProperty('--accent-soft-strong', `rgba(${r}, ${g}, ${b}, 0.19)`);
+    root.style.setProperty('--accent-ring', `rgba(${r}, ${g}, ${b}, 0.26)`);
+    root.style.setProperty('--accent-rgb', `${r}, ${g}, ${b}`);
+    root.style.setProperty('--accent-gradient', `linear-gradient(135deg, ${light} 0%, ${prefs.accent} 52%, ${strong} 100%)`);
+    root.style.setProperty('--accent-gradient-deep', `linear-gradient(120deg, ${strong} 0%, ${darker} 55%, ${prefs.accent} 100%)`);
+    root.style.setProperty('--app-font-scale', String(scaleNum));
+    try {
+        window.dispatchEvent(new CustomEvent('netops:themechange', { detail: { accent: prefs.accent, fontScale: prefs.fontScale } }));
+    } catch (_) {}
+}
+
+// ==========================================================================
+// ANIMACIÓN DE CARGA SUTIL GLOBAL (Barra superior + píldora + skeleton inline)
+// ==========================================================================
+const NetopsSubtleLoader = (() => {
+    const activeTokens = new Map();
+    let seq = 0;
+    let pillTimer = null;
+
+    const PART_LABELS = {
+        operations: 'Cargando detalles...',
+        planning: 'Cargando rutas y paradas...',
+        equipment: 'Cargando antenas...',
+        nodes: 'Cargando pueblos...',
+        materials: 'Cargando inventario...',
+        audit: 'Cargando historial...',
+        people: 'Cargando usuarios...',
+        infrastructure: 'Cargando mapa...',
+        routes: 'Cargando rutas...',
+        dashboard: 'Cargando estadísticas...',
+        profile: 'Cargando perfil...',
+        sync: 'Sincronizando datos...'
+    };
+
+    const PART_CONTAINERS = {
+        operations: ['orders-table'],
+        equipment: ['antenas-grid'],
+        nodes: ['nodos-grid'],
+        materials: ['material-grid', 'dispatches-grid', 'technician-dispatches-grid'],
+        audit: ['history-list'],
+        people: ['usuarios-grid'],
+        infrastructure: ['map-card'],
+        dashboard: ['dashboard-daily-chart', 'dashboard-tech-table']
+    };
+
+    function _ensureTopBar() {
+        if (typeof document === 'undefined' || !document.body) return null;
+        let bar = document.getElementById('netops-top-progress');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'netops-top-progress';
+            bar.className = 'netops-top-progress';
+            bar.setAttribute('aria-hidden', 'true');
+            bar.innerHTML = '<span class="netops-top-progress-bar"></span>';
+            document.body.appendChild(bar);
+        }
+        return bar;
+    }
+
+    function _ensurePill() {
+        if (typeof document === 'undefined' || !document.body) return null;
+        let pill = document.getElementById('netops-subtle-loader-pill');
+        if (!pill) {
+            pill = document.createElement('div');
+            pill.id = 'netops-subtle-loader-pill';
+            pill.className = 'netops-subtle-loader-pill';
+            pill.setAttribute('role', 'status');
+            pill.setAttribute('aria-live', 'polite');
+            pill.innerHTML = '<span class="netops-subtle-spinner" aria-hidden="true"></span><span id="netops-subtle-loader-text">Cargando datos...</span>';
+            document.body.appendChild(pill);
+        }
+        return pill;
+    }
+
+    function renderInlineSkeleton(label = 'Cargando datos...', rows = 3) {
+        const count = Math.max(1, Math.min(6, Number(rows) || 3));
+        const safeLabel = typeof escapeHtml === 'function' ? escapeHtml(label) : String(label || 'Cargando datos...');
+        const items = Array.from({ length: count }, () => `
+            <div class="netops-skel-row" aria-hidden="true">
+                <div class="netops-skel-bar w-60"></div>
+                <div class="netops-skel-bar w-85"></div>
+                <div class="netops-skel-bar w-40"></div>
+            </div>`).join('');
+        return `
+            <div class="netops-inline-skeleton" data-netops-auto-skeleton="1" role="status" aria-live="polite">
+                <div class="netops-inline-skeleton-head">
+                    <span class="netops-subtle-spinner" aria-hidden="true"></span>
+                    <span>${safeLabel}</span>
+                </div>
+                ${items}
+            </div>`;
+    }
+
+    function setContainerLoading(elOrId, active, label = 'Cargando datos...', rows = 3) {
+        if (typeof document === 'undefined') return;
+        const el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+        if (!el) return;
+        if (active) {
+            const count = Number(el.dataset.netopsLoadCount || 0) + 1;
+            el.dataset.netopsLoadCount = String(count);
+            const hasContent = el.children.length > 0 && !el.querySelector('[data-netops-auto-skeleton="1"]');
+            if (hasContent) {
+                el.classList.add('is-loading-subtle');
+            } else if (!el.querySelector('[data-netops-auto-skeleton="1"]') && el.id !== 'map-card') {
+                el.innerHTML = renderInlineSkeleton(label, rows);
+            } else {
+                el.classList.add('is-loading-subtle');
+            }
+        } else {
+            const next = Math.max(0, Number(el.dataset.netopsLoadCount || 0) - 1);
+            el.dataset.netopsLoadCount = String(next);
+            if (next === 0) {
+                el.classList.remove('is-loading-subtle');
+                const autoSkel = el.querySelector('[data-netops-auto-skeleton="1"]');
+                if (autoSkel && el.children.length === 1) {
+                    autoSkel.remove();
+                }
+            }
+        }
+    }
+
+    function _hasInlineLoaderVisible() {
+        if (typeof document === 'undefined') return false;
+        const inlineEl = document.querySelector('.tech-mobile-loading-state, .netops-inline-skeleton');
+        if (!inlineEl) return false;
+        const rect = typeof inlineEl.getBoundingClientRect === 'function' ? inlineEl.getBoundingClientRect() : { width: 1, height: 1 };
+        return rect.width > 0 && rect.height > 0;
+    }
+
+    function _syncVisualState() {
+        const bar = _ensureTopBar();
+        if (pillTimer) {
+            clearTimeout(pillTimer);
+            pillTimer = null;
+        }
+        const existingPill = typeof document !== 'undefined' ? document.getElementById('netops-subtle-loader-pill') : null;
+        if (existingPill) existingPill.classList.remove('is-visible');
+        if (bar) {
+            bar.classList.toggle('is-active', activeTokens.size > 0);
+        }
+    }
+
+    function start(partOrLabel = '', { containers = null, silent = false } = {}) {
+        if (silent || typeof document === 'undefined' || !document.body) return null;
+        const key = String(partOrLabel || '').trim().toLowerCase();
+        const label = PART_LABELS[key] || (partOrLabel && !PART_LABELS[key] ? String(partOrLabel) : 'Cargando datos...');
+        const token = ++seq;
+        const targetContainers = Array.isArray(containers) ? containers : (PART_CONTAINERS[key] || []);
+        targetContainers.forEach(id => setContainerLoading(id, true, label));
+        const failSafe = setTimeout(() => end(token), 18000);
+        activeTokens.set(token, { label, containers: targetContainers, failSafe });
+        _syncVisualState();
+        return token;
+    }
+
+    function end(token) {
+        if (!token || !activeTokens.has(token)) return;
+        const entry = activeTokens.get(token);
+        if (entry?.failSafe) clearTimeout(entry.failSafe);
+        (entry?.containers || []).forEach(id => setContainerLoading(id, false));
+        activeTokens.delete(token);
+        _syncVisualState();
+    }
+
+    return { start, end, renderInlineSkeleton, setContainerLoading };
+})();
+
+if (typeof window !== 'undefined') {
+    window.NetopsSubtleLoader = NetopsSubtleLoader;
+    window.renderSubtleLoadingCard = NetopsSubtleLoader.renderInlineSkeleton;
+    window.setContainerLoading = NetopsSubtleLoader.setContainerLoading;
+    injectThemeProAssets();
+    applyUserDesktopPreferences();
+    if (!window.openProfileModal) {
+        window.openProfileModal = function openProfileModalFallback(tab = 'info') {
+            if (!isDesktopProfileEnabled()) return;
+            injectThemeProAssets();
+            const existing = document.getElementById('netops-perfil-js');
+            if (existing) {
+                existing.addEventListener('load', () => {
+                    if (typeof window.openProfileModal === 'function' && window.openProfileModal !== openProfileModalFallback) {
+                        window.openProfileModal(tab);
+                    }
+                }, { once: true });
+            }
+        };
+    }
+}
+
 const ROLE_PAGE_ACCESS = {
     soporte: new Set([
         'dashboard.html',
@@ -182,23 +537,51 @@ function openLogoutModal() {
     OM('logout-confirm-mo');
 }
 
-function notify(message, type = 'ok') {
+function notify(message, type = 'ok', options = {}) {
+    const textMsg = String(message ?? '').trim();
+    if (!textMsg) return;
     let nt = document.getElementById('nt');
-    if (!nt) {
+    if (!nt && document.body) {
         nt = document.createElement('div');
         nt.id = 'nt';
         nt.className = 'nt';
         document.body.appendChild(nt);
     }
-    nt.textContent = message;
-    nt.className = `nt show${type === 'err' ? ' err' : type === 'warn' ? ' warn' : ''}`;
-    document.body.classList.remove('notification-visible');
-    const delay = type === 'warn' ? 4500 : 3000;
-    clearTimeout(nt._hideTimer);
-    nt._hideTimer = setTimeout(() => {
-        nt.classList.remove('show');
-        document.body.classList.remove('notification-visible');
-    }, delay);
+    const useDesktopRightToast = (
+        typeof window !== 'undefined' &&
+        window.innerWidth > 768 &&
+        !document.body?.classList?.contains('tech-route-body') &&
+        typeof showRightScreenNotification === 'function'
+    );
+    if (nt) {
+        nt.textContent = textMsg;
+        nt.className = `nt show${type === 'err' ? ' err' : type === 'warn' ? ' warn' : ''}${useDesktopRightToast ? ' nt-desktop-delegated' : ''}`;
+        document.body?.classList?.remove('notification-visible');
+        const delay = type === 'warn' ? 4500 : (type === 'err' ? 5000 : 3400);
+        clearTimeout(nt._hideTimer);
+        nt._hideTimer = setTimeout(() => {
+            nt.classList.remove('show');
+            document.body?.classList?.remove('notification-visible');
+        }, delay);
+    }
+
+    if (useDesktopRightToast) {
+        const toastType = type === 'err' ? 'err' : (type === 'warn' ? 'warn' : (type === 'info' ? 'info' : 'ok'));
+        const defaultTitle = toastType === 'err'
+            ? 'Error'
+            : (toastType === 'warn' ? 'Atención' : (toastType === 'info' ? 'Aviso' : 'Confirmado'));
+        const duration = Number(options?.duration) || (toastType === 'err' ? 5500 : (toastType === 'warn' ? 5000 : 4000));
+        showRightScreenNotification({
+            title: options?.title || defaultTitle,
+            message: textMsg,
+            type: toastType,
+            url: options?.url || '',
+            duration
+        });
+        if (options?.sound !== false && typeof playSubtleUiTone === 'function') {
+            playSubtleUiTone(toastType);
+        }
+    }
 }
 
 function OM(id) {
@@ -242,6 +625,13 @@ function CM(id) {
             if (id !== 'order-chat-close-decision-mo' && id !== 'insert-physical-record-mo') {
                 modal.style.removeProperty('z-index');
             }
+        }
+    }
+    if (typeof window !== 'undefined' && window._planPendingSyncRender && typeof refreshPlanAfterSync === 'function') {
+        const stillOpen = !!document.querySelector('#plan-stop-mo.open, #plan-detail-mo.open, #plan-general-mo.open');
+        if (!stillOpen) {
+            window._planPendingSyncRender = false;
+            try { refreshPlanAfterSync(); } catch (_) {}
         }
     }
 }
@@ -1558,17 +1948,52 @@ function ensureSyncPill() {
     return;
 }
 
+const SIDEBAR_PROFILE_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>';
+const SIDEBAR_LOGOUT_ICON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>';
+
+function _buildSidebarUserInitials(name) {
+    const clean = String(name || 'US').trim();
+    const parts = clean.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return clean.slice(0, 2).toUpperCase() || 'US';
+}
+
 function hydrateTopbarUser() {
     const user = getCurrentUser();
+    const displayName = user.name || user.username || 'Sesión activa';
+    const desktopProfileAllowed = isDesktopProfileEnabled();
     document.querySelectorAll('[data-user-name]').forEach(el => {
         el.replaceChildren();
+        const avatar = document.createElement('span');
+        avatar.className = 'sidebar-user-avatar';
+        avatar.setAttribute('aria-hidden', 'true');
+        avatar.textContent = _buildSidebarUserInitials(displayName);
+        const meta = document.createElement('span');
+        meta.className = 'sidebar-user-meta';
         const name = document.createElement('strong');
         name.className = 'sidebar-user-name';
-        name.textContent = user.name || user.username || 'Sesion activa';
+        name.textContent = displayName;
         const role = document.createElement('small');
         role.className = 'sidebar-user-role';
         role.textContent = formatRoleLabel(user.role);
-        el.append(name, role);
+        meta.append(name, role);
+        el.append(avatar, meta);
+
+        if (desktopProfileAllowed) {
+            el.classList.add('is-profile-trigger');
+            el.title = 'Abrir Mi perfil';
+            if (!el.dataset.profileClickBound) {
+                el.dataset.profileClickBound = '1';
+                el.addEventListener('click', () => {
+                    if (isDesktopProfileEnabled() && typeof window.openProfileModal === 'function') {
+                        window.openProfileModal('info');
+                    }
+                });
+            }
+        } else {
+            el.classList.remove('is-profile-trigger');
+            el.removeAttribute('title');
+        }
     });
 }
 
@@ -1585,17 +2010,43 @@ function hydrateLogoLinks() {
 }
 
 const NAV_ITEMS = [
-    { href: 'dashboard.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>', label: 'Dashboard' },
-    { href: 'mapa.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>', label: 'Mapa Mikrotiks' },
-    { href: 'antenas.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M4 22h16M7 17h10M8 12h8M9 7h6M6 22l6-19 6 19"/></svg>', label: 'Antenas' },
-    { href: 'nodos.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>', label: 'Pueblos' },
-    { href: 'planificar.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="m9 16 2 2 4-4"/></svg>', label: 'Planificar' },
-    { href: 'ordenes.html?detailKind=network', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/><path d="M19 16v2a7 7 0 0 1-7 7m-2 0h-1"/></svg>', label: 'Detalles de red' },
-    { href: 'ordenes.html?detailKind=physical', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>', label: 'Detalles físicos' },
-    { href: 'material.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>', label: 'Material' },
-    { href: 'historial.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>', label: 'Historial' },
-    { href: 'tecnicos.html', adminOnly: true, icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', label: 'Usuarios' }
+    { href: 'dashboard.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1.5"/><rect width="7" height="5" x="14" y="3" rx="1.5"/><rect width="7" height="9" x="14" y="12" rx="1.5"/><rect width="7" height="5" x="3" y="16" rx="1.5"/></svg>', label: 'Dashboard' },
+    { href: 'mapa.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>', label: 'Mapa Mikrotiks' },
+    { href: 'antenas.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/></svg>', label: 'Antenas' },
+    { href: 'nodos.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>', label: 'Pueblos' },
+    { href: 'planificar.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>', label: 'Planificar' },
+    { href: 'ordenes.html?detailKind=network', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Zm0 0a9 9 0 1 1 18 0m0 0v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3Z"/><path d="M21 16v2a4 4 0 0 1-4 4h-5"/></svg>', label: 'Detalles de red' },
+    { href: 'ordenes.html?detailKind=physical', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>', label: 'Detalles físicos' },
+    { href: 'material.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>', label: 'Material' },
+    { href: 'historial.html', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>', label: 'Historial' },
+    { href: 'tecnicos.html', adminOnly: true, icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>', label: 'Usuarios' }
 ];
+
+function _buildSidebarActionsHtml() {
+    const showProfile = isDesktopProfileEnabled();
+    const profileBtn = showProfile
+        ? `<button id="sidebar-profile-btn" class="btn sbar-profile-btn" type="button" onclick="openProfileModal('info')" title="Mi perfil"><span class="sbar-btn-icon" aria-hidden="true">${SIDEBAR_PROFILE_ICON}</span><span class="sbar-btn-label">Mi perfil</span></button>`
+        : '';
+    return `
+        <div class="sbar-actions">
+            ${profileBtn}
+            <button class="btn bgh sbar-logout-btn" type="button" onclick="logout()" title="Cerrar sesión"><span class="sbar-btn-icon" aria-hidden="true">${SIDEBAR_LOGOUT_ICON}</span><span class="sbar-btn-label">Cerrar sesión</span></button>
+        </div>`;
+}
+
+function hydrateSidebarFooterActions(topbar) {
+    const sbar = topbar?.querySelector('.sbar');
+    if (!sbar) return;
+    let userPill = sbar.querySelector('[data-user-name]');
+    if (!userPill) {
+        userPill = document.createElement('div');
+        userPill.className = 'user-pill';
+        userPill.setAttribute('data-user-name', '');
+        userPill.textContent = 'Sesión activa';
+    }
+    sbar.replaceChildren(userPill);
+    sbar.insertAdjacentHTML('beforeend', _buildSidebarActionsHtml());
+}
 
 function buildNavigationHtml() {
     const isAdmin = normalizeRole(getCurrentUser()?.role) === 'administrador';
@@ -1612,8 +2063,8 @@ function ensureAppTopbar() {
             <a href="mapa.html" class="logo-link"><div class="logo">WiFi<span>Mex</span></div></a>
             <nav class="nav">${buildNavigationHtml()}</nav>
             <div class="sbar">
-                <div class="user-pill" data-user-name>Sesion activa</div>
-                <button class="btn bgh" type="button" onclick="logout()">Cerrar sesion</button>
+                <div class="user-pill" data-user-name>Sesión activa</div>
+                ${_buildSidebarActionsHtml()}
             </div>`;
         document.body.insertBefore(topbar, document.body.firstChild);
         return;
@@ -1631,9 +2082,11 @@ function ensureAppTopbar() {
     if (!topbar.querySelector('.sbar')) {
         topbar.insertAdjacentHTML('beforeend', `
             <div class="sbar">
-                <div class="user-pill" data-user-name>Sesion activa</div>
-                <button class="btn bgh" type="button" onclick="logout()">Cerrar sesion</button>
+                <div class="user-pill" data-user-name>Sesión activa</div>
+                ${_buildSidebarActionsHtml()}
             </div>`);
+    } else {
+        hydrateSidebarFooterActions(topbar);
     }
     const nav = topbar.querySelector('.nav');
     if (nav) {
@@ -1711,6 +2164,10 @@ function setupResponsiveMenu() {
     const nav = document.querySelector('.topbar .nav');
     if (!topbar || !nav) return;
     topbar.classList.add('app-sidebar');
+    if (topbar.querySelector('.sbar') && !topbar.querySelector('.sbar .sbar-actions')) {
+        hydrateSidebarFooterActions(topbar);
+        hydrateTopbarUser();
+    }
     const itemByHref = Object.fromEntries(NAV_ITEMS.map(item => [item.href, item]));
     nav.querySelectorAll('.nb').forEach(link => {
         const href = String(link.getAttribute('href') || '').trim();
@@ -2430,9 +2887,24 @@ function copyDeletionCode(id) {
 
 function initCommon() {
     const current = getCurrentPageName();
+    injectThemeProAssets();
     setupGlobalActivityFeedback();
     if (current === 'login.html') return;
     if (!checkAuth()) return;
+    applyUserDesktopPreferences();
+    if (typeof window !== 'undefined' && !window.__netopsThemeResizeBound) {
+        window.__netopsThemeResizeBound = true;
+        window.addEventListener('resize', () => {
+            debounceAction('netops-desktop-prefs-resize', () => {
+                applyUserDesktopPreferences();
+                const topbar = document.querySelector('.topbar');
+                if (topbar) {
+                    hydrateSidebarFooterActions(topbar);
+                    hydrateTopbarUser();
+                }
+            }, 180);
+        }, { passive: true });
+    }
     // La primera carga de /api/data ya valida la misma cookie y redirige en
     // caso de 401; evitar /api/session aquí ahorra una petición por pantalla.
     ensureAppTopbar();
@@ -3634,13 +4106,56 @@ function playSubtleNotificationTone() {
     };
 
     if (ctx.state === 'suspended') {
-      ctx.resume().then(play).catch(play);
+      ctx.resume().then(play).catch(() => {});
     } else {
       play();
     }
   } catch (e) {
-    console.warn('No se pudo reproducir el tono de notificación', e);
+    // Autoplay o AudioContext no disponible: ignorar con gracia
   }
+}
+
+let _lastUiToneAt = 0;
+function playSubtleUiTone(type = 'ok') {
+  try {
+    const nowMs = Date.now();
+    if (nowMs - _lastUiToneAt < 220) return;
+    _lastUiToneAt = nowMs;
+
+    const ctx = getNetopsAudioContext();
+    if (!ctx) return;
+    const vol = Math.min(0.65, (typeof getNotificationVolume === 'function' ? getNotificationVolume() : 0.65) * 0.42);
+
+    const play = () => {
+      try {
+        if (ctx.state !== 'running') return;
+        const now = ctx.currentTime;
+        const notes = type === 'err'
+          ? [392.0, 329.63]
+          : (type === 'warn' ? [523.25, 466.16] : [587.33, 880.0]);
+        notes.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          const start = now + idx * 0.065;
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, start);
+          gain.gain.setValueAtTime(0.0001, start);
+          gain.gain.linearRampToValueAtTime(0.18 * vol, start + 0.012);
+          gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.21);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(start);
+          osc.stop(start + 0.23);
+        });
+      } catch (e) {}
+    };
+
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(play).catch(() => {});
+    } else {
+      play();
+    }
+  } catch (e) {}
 }
 
 function ensureRightNotificationContainer() {
@@ -3668,10 +4183,10 @@ function showRightScreenNotification({
 } = {}) {
   const container = ensureRightNotificationContainer();
 
-  // Limitar a máximo 3 tarjetas visibles simultáneas para evitar apilamientos excesivos en pantalla
+  // Limitar a máximo 4 tarjetas visibles simultáneas apiladas limpiamente
   const existingToasts = container.querySelectorAll('.netops-right-toast:not([data-dismissing])');
-  if (existingToasts.length >= 3) {
-    for (let i = 0; i <= existingToasts.length - 3; i++) {
+  if (existingToasts.length >= 4) {
+    for (let i = 0; i <= existingToasts.length - 4; i++) {
       const oldest = existingToasts[i];
       if (oldest) {
         oldest.dataset.dismissing = '1';
@@ -3685,8 +4200,17 @@ function showRightScreenNotification({
   const toast = document.createElement('div');
   toast.className = `netops-right-toast netops-toast-${type}`;
   toast.setAttribute('role', 'alert');
+  toast.style.setProperty('--toast-duration', `${Math.max(1500, Number(duration) || 4500)}ms`);
 
   const icons = {
+    ok: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>',
+    success: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>',
+    warn: '<svg viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    warning: '<svg viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    err: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+    error: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+    info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+    network_summary: '<svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
     new_order: '<svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
     attending: '<svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
     resolved: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>',
@@ -3723,6 +4247,7 @@ function showRightScreenNotification({
       </div>
     </div>
     <button type="button" class="netops-toast-close" aria-label="Cerrar">&times;</button>
+    <div class="netops-toast-progress" aria-hidden="true"><span class="netops-toast-progress-bar"></span></div>
   `;
 
   toast.addEventListener('click', (e) => {
@@ -5180,7 +5705,8 @@ async function checkNetworkOrderNotifications() {
       detailKind: 'network',
       windowed: '1',
       limit: 30,
-      sort: 'newest'
+      sort: 'newest',
+      __backgroundPoll: true
     }, 6000);
 
     if (Array.isArray(res?.supportUsers) && res.supportUsers.length) {
@@ -6876,6 +7402,13 @@ if (typeof window !== 'undefined') {
   if (typeof renderTowerExtraPhotos === 'function') window.renderTowerExtraPhotos = renderTowerExtraPhotos;
   if (typeof TOWER_PHOTO_SLOTS !== 'undefined') window.TOWER_PHOTO_SLOTS = TOWER_PHOTO_SLOTS;
   if (typeof findOrFetchWorkOrder === 'function') window.findOrFetchWorkOrder = findOrFetchWorkOrder;
+  if (typeof applyUserDesktopPreferences === 'function') window.applyUserDesktopPreferences = applyUserDesktopPreferences;
+  if (typeof isDesktopProfileEnabled === 'function') window.isDesktopProfileEnabled = isDesktopProfileEnabled;
+  if (typeof getUserDesktopPrefs === 'function') window.getUserDesktopPrefs = getUserDesktopPrefs;
+  if (typeof saveUserDesktopPrefs === 'function') window.saveUserDesktopPrefs = saveUserDesktopPrefs;
+  if (typeof resetUserDesktopPrefs === 'function') window.resetUserDesktopPrefs = resetUserDesktopPrefs;
+  if (typeof playSubtleUiTone === 'function') window.playSubtleUiTone = playSubtleUiTone;
+  if (typeof showRightScreenNotification === 'function') window.showRightScreenNotification = showRightScreenNotification;
 }
 
 const GLOBAL_WORK_ORDERS_CACHE_KEY = 'netops_global_work_orders_cache_v1';

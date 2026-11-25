@@ -3356,6 +3356,7 @@ async function sendWOToPhysical(id) {
     createdByName: currentUser.name || currentUser.username || 'Personal',
     createdAt: now,
     updatedAt: now,
+    sourceOrderId: order.id,
     originNetworkOrderId: order.id,
     originNetworkFolio: orderFolio,
     followUps: [
@@ -3367,13 +3368,21 @@ async function sendWOToPhysical(id) {
       }
     ]
   };
+  const physicalFolio = typeof getOrderFolio === 'function' ? getOrderFolio(newPhysical) : '';
 
   state.workOrders = state.workOrders || [];
   state.workOrders.push(newPhysical);
   await saveRecord('workOrders', newPhysical);
 
   hideOrderActionForm();
-  appendOrderFollowUp(order, 'physical', 'Detalle físico registrado', `${note} · Vinculado a pueblo: ${targetPlace}`);
+  const physEvent = appendOrderFollowUp(order, 'physical', 'Detalle físico registrado', `${note} · Vinculado a pueblo: ${targetPlace}`);
+  if (physEvent) {
+    physEvent.physicalOrderId = newPhysical.id;
+    physEvent.physicalOrderFolio = physicalFolio;
+    physEvent.physicalTargetType = 'pueblo';
+    physEvent.physicalTargetName = targetPlace;
+    physEvent.sentToPhysicalAt = now;
+  }
   await saveOrderWorkflow(order, 'registró detalle físico en pueblo', `Se creó registro físico en ${targetPlace}.`);
   notify(`Detalle físico registrado exitosamente en ${targetPlace}. El caso de red permanece activo.`, 'ok');
 }
@@ -3398,18 +3407,1001 @@ function getPhysicalDerivationStatus(order) {
     }
   }
   if (!latestProp || order?.detailKind === 'physical' || order?.status === 'completada') {
-    return { pending: false, proposedBy: '', proposedByName: '', note: '', at: '' };
+    return { pending: false, proposedBy: '', proposedByName: '', note: '', at: '', proposal: null, targetType: '', targetName: '' };
   }
+  const savedProposal = (latestProp.proposal && typeof latestProp.proposal === 'object')
+    ? latestProp.proposal
+    : ((order?.physicalProposal && typeof order.physicalProposal === 'object') ? order.physicalProposal : null);
+  const targetType = (savedProposal?.targetType === 'torre' || (!savedProposal?.targetType && savedProposal?.equipmentId) || /^Torre:/i.test(String(latestProp.note || '').trim()))
+    ? 'torre'
+    : 'pueblo';
+  const targetName = targetType === 'torre'
+    ? (savedProposal?.equipmentName || '')
+    : (savedProposal?.nodeName || '');
   return {
     pending: true,
     proposedBy: latestProp.action === 'physical_proposed_soporte' ? 'soporte' : 'atencion',
     proposedByName: latestProp.byName || latestProp.user || '',
     note: latestProp.note || 'Requiere visita presencial para revisión física en sitio.',
-    at: latestProp.at || ''
+    at: latestProp.at || '',
+    proposal: savedProposal,
+    targetType,
+    targetName
   };
 }
 if (typeof window !== 'undefined') {
   window.getPhysicalDerivationStatus = getPhysicalDerivationStatus;
+}
+
+function getOrderSentToPhysicalInfo(order) {
+  const empty = {
+    sent: false,
+    at: '',
+    formattedDate: '',
+    targetType: '',
+    targetName: '',
+    physicalOrderId: '',
+    physicalOrderFolio: ''
+  };
+  if (!order) return empty;
+  const kind = typeof getOrderDetailKind === 'function' ? getOrderDetailKind(order) : (order.detailKind || 'physical');
+  if (kind !== 'network') return empty;
+
+  const followUps = Array.isArray(order.followUps) ? order.followUps : [];
+  let physFu = null;
+  for (let i = followUps.length - 1; i >= 0; i--) {
+    const act = String(followUps[i]?.action || '').toLowerCase();
+    if (act === 'physical') {
+      physFu = followUps[i];
+      break;
+    }
+  }
+
+  const linkedPhys = (typeof state !== 'undefined' && Array.isArray(state.workOrders))
+    ? state.workOrders.find(item => (
+      item && !item.deletedAt && item.detailKind === 'physical' && (
+        (item.sourceOrderId && String(item.sourceOrderId) === String(order.id)) ||
+        (item.originNetworkOrderId && String(item.originNetworkOrderId) === String(order.id))
+      )
+    ))
+    : null;
+
+  const reportSolution = String(order.technicianReport?.solution || '');
+  const hasReportPhysicalMark = /pase a detalle f[ií]sico|derivado a detalle f[ií]sico/i.test(reportSolution);
+  const hasClosedReasonMark = order.closedReason === 'physical_registered';
+
+  if (!physFu && !linkedPhys && !hasClosedReasonMark && !hasReportPhysicalMark) {
+    return empty;
+  }
+
+  const at = physFu?.sentToPhysicalAt || physFu?.at || linkedPhys?.createdAt || order.technicianReport?.completedAt || order.completedAt || '';
+  let formattedDate = '';
+  if (at) {
+    const d = new Date(at);
+    if (!Number.isNaN(d.getTime())) {
+      formattedDate = d.toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    }
+  }
+
+  const combinedText = `${physFu?.note || ''} ${reportSolution}`;
+  const targetType = physFu?.physicalTargetType
+    || (linkedPhys ? (linkedPhys.equipmentId ? 'torre' : 'pueblo') : '')
+    || (/(?:en\s+torre|vinculado\s+a\s+torre|torre:)/i.test(combinedText) ? 'torre' : (/(?:en\s+pueblo|vinculado\s+a\s+pueblo|pueblo:)/i.test(combinedText) ? 'pueblo' : ''));
+
+  let targetName = physFu?.physicalTargetName
+    || (linkedPhys ? (linkedPhys.equipmentName || linkedPhys.nodeName || '') : '');
+  if (!targetName && combinedText) {
+    const matchTarget = combinedText.match(/(?:en\s+(?:torre|pueblo)|vinculado\s+a\s+(?:torre|pueblo))\s+([^:"·\n.]+)/i);
+    if (matchTarget && matchTarget[1]) targetName = matchTarget[1].trim();
+  }
+
+  const physicalOrderId = physFu?.physicalOrderId || linkedPhys?.id || '';
+  const physicalOrderFolio = physFu?.physicalOrderFolio
+    || (linkedPhys ? (typeof getOrderFolio === 'function' ? getOrderFolio(linkedPhys) : (linkedPhys.folio || '')) : '');
+
+  return {
+    sent: true,
+    at,
+    formattedDate,
+    targetType,
+    targetName,
+    physicalOrderId,
+    physicalOrderFolio
+  };
+}
+
+function renderSentToPhysicalBadge(order, options = {}) {
+  const info = getOrderSentToPhysicalInfo(order);
+  if (!info.sent) return '';
+  const targetKindLabel = info.targetType === 'torre' ? 'Torre' : (info.targetType === 'pueblo' ? 'Pueblo' : '');
+  const targetSummary = [targetKindLabel, info.targetName].filter(Boolean).join(': ');
+  const tooltipParts = ['Enviado a detalles físicos'];
+  if (targetSummary) tooltipParts.push(targetSummary);
+  if (info.physicalOrderFolio) tooltipParts.push(`Folio ${info.physicalOrderFolio}`);
+  if (info.formattedDate) tooltipParts.push(info.formattedDate);
+  const titleAttr = orderEscape(tooltipParts.join(' · '));
+
+  const showTarget = Boolean(options.showTarget && targetSummary);
+  const showDate = options.showDate !== false && Boolean(info.formattedDate);
+
+  return `<span class="order-sent-physical-badge" title="${titleAttr}" data-sent-physical="1">`
+    + `<svg class="order-sent-physical-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`
+    + `<span>Enviado a físicos</span>`
+    + (showTarget ? `<span class="order-sent-physical-target">· ${orderEscape(targetSummary)}</span>` : '')
+    + (showDate ? `<span class="order-sent-physical-date">· ${orderEscape(info.formattedDate)}</span>` : '')
+    + `</span>`;
+}
+
+if (typeof window !== 'undefined') {
+  window.getOrderSentToPhysicalInfo = getOrderSentToPhysicalInfo;
+  window.renderSentToPhysicalBadge = renderSentToPhysicalBadge;
+}
+
+let ordenesPhysModalOrderId = '';
+let ordenesPhysModalRefreshCb = null;
+let ordenesPhysModalTargetType = 'pueblo';
+let ordenesPhysModalLookupSeq = 0;
+
+function resolveOrderAssociatedEquipment(order) {
+  if (!order) return { equipmentId: '', equipmentName: '', eq: null, linkedList: [] };
+  const activeEq = (state.equipment || []).filter(e => e && !e.deletedAt);
+  const allEq = (state.equipment || []).filter(Boolean);
+  const findEqById = id => activeEq.find(e => String(e.id) === String(id)) || allEq.find(e => String(e.id) === String(id)) || null;
+
+  const explicitId = String(order.equipmentId || '').trim();
+  if (explicitId) {
+    const eq = findEqById(explicitId);
+    const name = (eq?.name || order.equipmentName || '').trim();
+    const entry = eq || { id: explicitId, name: name || 'Torre del reporte' };
+    return {
+      equipmentId: explicitId,
+      equipmentName: name || entry.name,
+      eq: eq || null,
+      linkedList: [entry]
+    };
+  }
+
+  const registeredNode = resolveOrderRegisteredNode(order);
+  const linkedMap = new Map();
+  if (registeredNode.nodeId) {
+    if (typeof getNodeLinkedEquipment === 'function') {
+      (getNodeLinkedEquipment(registeredNode.nodeId) || []).forEach(eq => {
+        if (eq && !eq.deletedAt && eq.id) linkedMap.set(String(eq.id), eq);
+      });
+    }
+    const nd = (state.nodes || []).find(n => n && !n.deletedAt && String(n.id) === String(registeredNode.nodeId))
+      || (state.nodes || []).find(n => n && String(n.id) === String(registeredNode.nodeId));
+    if (nd?.equipmentId) {
+      const directEq = findEqById(nd.equipmentId);
+      if (directEq) linkedMap.set(String(directEq.id), directEq);
+    }
+    activeEq.forEach(eq => {
+      if (Array.isArray(eq.linkedNodeIds) && eq.linkedNodeIds.map(String).includes(String(registeredNode.nodeId))) {
+        linkedMap.set(String(eq.id), eq);
+      }
+    });
+  }
+
+  const linkedList = Array.from(linkedMap.values())
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'es'));
+  if (linkedList.length) {
+    const primary = linkedList[0];
+    return {
+      equipmentId: String(primary.id),
+      equipmentName: String(primary.name || primary.ip || 'Torre asociada').trim(),
+      eq: primary,
+      linkedList
+    };
+  }
+
+  return { equipmentId: '', equipmentName: '', eq: null, linkedList: [] };
+}
+
+function ensureInsertPhysicalRecordModal() {
+  let modal = document.getElementById('insert-physical-record-mo');
+  if (modal && modal.dataset.enhancedTargetSelector !== '2') {
+    modal.remove();
+    modal = null;
+  }
+  if (!modal) {
+    document.body.insertAdjacentHTML('beforeend', `
+      <div class="mo insert-physical-record-mo" id="insert-physical-record-mo" data-enhanced-target-selector="2" style="z-index:15000 !important;">
+        <div class="md insert-physical-record-card" style="max-width:560px;width:95%;">
+          <div class="modal-head" style="padding:12px 18px 10px;">
+            <div>
+              <h2 id="insert-phys-title" style="font-size:16px;margin:0 0 2px;">Proponer detalle físico</h2>
+              <p id="insert-phys-subtitle" style="font-size:12px;color:#64748b;margin:0;">Elige si se registrará en el pueblo o en la torre asociada del reporte</p>
+            </div>
+            <button type="button" class="wo-modal-close" aria-label="Cerrar" onclick="CM('insert-physical-record-mo')">
+              <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+          </div>
+
+          <div class="insert-phys-body" style="padding:12px 18px;display:flex;flex-direction:column;gap:10px;">
+            <div id="insert-phys-origin-info" style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;font-size:11.5px;color:#1e40af;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <span>Detalle de red: <strong id="insert-phys-origin-folio"></strong> · <span id="insert-phys-origin-client"></span></span>
+            </div>
+
+            <div id="insert-phys-agreement-notice" style="padding:8px 12px;background:#f5f3ff;border:1px solid #ddd6fe;border-left:3px solid #7c3aed;border-radius:6px;font-size:11.5px;color:#5b21b6;line-height:1.4;">
+              <strong>ℹ️ Acuerdo mutuo:</strong> Ambas partes deben estar de acuerdo. Elige si el detalle físico se registrará en el <strong>pueblo</strong> o en la <strong>torre asociada</strong> de este reporte.
+            </div>
+
+            <div class="fi" style="margin-bottom:0;">
+              <label style="font-weight:700;font-size:11.5px;color:#334155;margin-bottom:5px;display:block;">
+                ¿Dónde se registrará el detalle físico? <span style="color:#ef4444;">*</span>
+              </label>
+              <div class="insert-phys-target-toggle" role="group" aria-label="Destino del detalle físico">
+                <button type="button" id="insert-phys-target-btn-pueblo" class="insert-phys-target-btn is-active" data-target-type="pueblo" aria-pressed="true" onclick="setInsertPhysTargetType('pueblo')">
+                  <span class="insert-phys-target-btn-icon" aria-hidden="true">🏘️</span>
+                  <span class="insert-phys-target-btn-copy">
+                    <strong>Pueblo</strong>
+                    <small>Pueblo del reporte</small>
+                  </span>
+                </button>
+                <button type="button" id="insert-phys-target-btn-torre" class="insert-phys-target-btn" data-target-type="torre" aria-pressed="false" onclick="setInsertPhysTargetType('torre')">
+                  <span class="insert-phys-target-btn-icon" aria-hidden="true">🗼</span>
+                  <span class="insert-phys-target-btn-copy">
+                    <strong>Torre</strong>
+                    <small>Torre asociada al reporte</small>
+                  </span>
+                </button>
+              </div>
+              <input type="hidden" id="insert-phys-target-type" value="pueblo">
+              <input type="hidden" id="insert-phys-node" value="">
+              <input type="hidden" id="insert-phys-equipment" value="">
+            </div>
+
+            <div id="insert-phys-pueblo-group" class="insert-phys-selector-box">
+              <div class="insert-phys-selector-head">
+                <label>Pueblo de destino</label>
+                <span class="insert-phys-target-pill">🔒 Fijo del reporte</span>
+              </div>
+              <div id="insert-phys-pueblo-locked" class="insert-phys-locked-value">
+                <span aria-hidden="true">🏘️</span>
+                <strong id="insert-phys-pueblo-locked-name">Pueblo del reporte</strong>
+              </div>
+              <select id="insert-phys-node-select" class="fi-select" style="display:none;" disabled aria-hidden="true" tabindex="-1"></select>
+              <div id="insert-phys-pueblo-hint" class="insert-phys-target-hint">Mismo pueblo del reporte de red (no modificable).</div>
+            </div>
+
+            <div id="insert-phys-torre-group" class="insert-phys-selector-box" style="display:none;">
+              <div class="insert-phys-selector-head">
+                <label>Torre / Antena asociada</label>
+                <span class="insert-phys-target-pill is-tower">🔒 Fija del reporte</span>
+              </div>
+              <div id="insert-phys-torre-locked" class="insert-phys-locked-value">
+                <span aria-hidden="true">🗼</span>
+                <strong id="insert-phys-torre-locked-name">Torre asociada al reporte</strong>
+              </div>
+              <select id="insert-phys-equipment-select" class="fi-select" style="display:none;width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px;" onchange="onInsertPhysEquipmentChange()" disabled></select>
+              <div id="insert-phys-torre-hint" class="insert-phys-target-hint">Torre asociada al pueblo del reporte (no modificable).</div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" class="insert-phys-grid">
+              <div class="fi">
+                <label style="font-weight:700;font-size:11.5px;color:#334155;margin-bottom:4px;display:block;">Categoría física</label>
+                <select id="insert-phys-category" class="fi-select" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px;">
+                </select>
+              </div>
+
+              <div class="fi">
+                <label style="font-weight:700;font-size:11.5px;color:#334155;margin-bottom:4px;display:block;">Prioridad</label>
+                <select id="insert-phys-priority" class="fi-select" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px;">
+                  <option value="baja">Baja</option>
+                  <option value="media" selected>Media</option>
+                  <option value="alta">Alta</option>
+                  <option value="muy_alta">Muy alta</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="fi" style="margin-bottom:0;">
+              <label style="font-weight:700;font-size:11.5px;color:#334155;margin-bottom:4px;display:block;">
+                Falla física en sitio <span style="color:#ef4444;">*</span>
+              </label>
+              <textarea id="insert-phys-description" rows="2" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px;resize:vertical;font-family:inherit;box-sizing:border-box;" placeholder="Describe la falla física..."></textarea>
+            </div>
+          </div>
+
+          <div class="card-actions" style="display:flex;justify-content:flex-end;gap:8px;padding:10px 18px;border-top:1px solid #e2e8f0;background:#f8fafc;">
+            <button type="button" class="btn bgh bsm" onclick="CM('insert-physical-record-mo')">Cancelar</button>
+            <button type="button" class="btn net-btn-unresolvable bsm" id="insert-phys-reject-btn" style="display:none;" onclick="rejectPhysicalRecordProposalFromModal()">Rechazar</button>
+            <button type="button" class="btn bc bsm" id="insert-phys-save-btn" style="background:#7c3aed;border-color:#6d28d9;color:#fff;" onclick="saveInsertedPhysicalRecord()">
+              <span id="insert-phys-save-label">📨 Proponer detalle físico</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `);
+    modal = document.getElementById('insert-physical-record-mo');
+    if (modal && typeof modal.addEventListener === 'function') {
+      modal.addEventListener('click', event => {
+        if (event.target === modal) CM('insert-physical-record-mo');
+      });
+    }
+  }
+  if (modal) {
+    if (modal.style && typeof modal.style.setProperty === 'function') {
+      modal.style.setProperty('z-index', '18000', 'important');
+    }
+    if (modal.parentElement && typeof document !== 'undefined' && modal.parentElement === document.body && typeof document.body.appendChild === 'function') {
+      document.body.appendChild(modal);
+    }
+  }
+}
+
+function getInsertPhysSelectedTargetInfo(order) {
+  const targetType = (document.getElementById('insert-phys-target-type')?.value || ordenesPhysModalTargetType) === 'torre' ? 'torre' : 'pueblo';
+  if (targetType === 'torre') {
+    const associated = resolveOrderAssociatedEquipment(order);
+    return {
+      targetType: 'torre',
+      targetLabel: 'Torre',
+      equipmentId: associated.equipmentId,
+      equipmentName: associated.equipmentName,
+      eq: associated.eq,
+      nodeId: '',
+      nodeName: '',
+      nd: null,
+      targetPlace: associated.equipmentName || 'Sin torre asociada'
+    };
+  }
+
+  // El pueblo siempre es estrictamente el mismo del reporte (no modificable).
+  const registeredNode = resolveOrderRegisteredNode(order);
+  const nodeId = String(registeredNode.nodeId || '').trim();
+  const nd = nodeId
+    ? ((state.nodes || []).find(n => !n.deletedAt && String(n.id) === nodeId)
+      || (state.nodes || []).find(n => String(n.id) === nodeId)
+      || null)
+    : null;
+  const nodeName = (nd
+    ? (typeof getNodeLabel === 'function' ? getNodeLabel(nd) : (nd.name || nd.town || nd.nodeCode || ''))
+    : (registeredNode.nodeName || order?.nodeName || 'Pueblo registrado')).trim();
+  return {
+    targetType: 'pueblo',
+    targetLabel: 'Pueblo',
+    equipmentId: '',
+    equipmentName: '',
+    eq: null,
+    nodeId,
+    nodeName,
+    nd,
+    targetPlace: nodeName || 'Pueblo registrado'
+  };
+}
+
+function updateInsertPhysDynamicNotice() {
+  const order = (state.workOrders || []).find(item => item.id === ordenesPhysModalOrderId && !item.deletedAt);
+  const physStatus = order ? getPhysicalDerivationStatus(order) : { pending: false };
+  const target = getInsertPhysSelectedTargetInfo(order);
+  const noticeEl = document.getElementById('insert-phys-agreement-notice');
+  const subtitleEl = document.getElementById('insert-phys-subtitle');
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+  const isAdmin = userHasRole('administrador', 'admin');
+  const placeLabel = target.targetType === 'torre'
+    ? (target.equipmentName ? `la torre ${target.equipmentName}` : 'la torre seleccionada')
+    : `el pueblo ${target.nodeName || 'seleccionado'}`;
+
+  if (physStatus.pending) {
+    const canConfirm = physStatus.proposedBy === 'soporte' ? (isAtencion || isAdmin) : (isSoporte || isAdmin);
+    if (noticeEl) {
+      if (canConfirm) {
+        noticeEl.innerHTML = `<strong>🤝 Acuerdo mutuo:</strong> ${orderEscape(physStatus.proposedByName || 'La contraparte')} propuso registrar este detalle físico en <strong>${orderEscape(placeLabel)}</strong> y cerrar este reporte de red.`;
+      } else {
+        noticeEl.innerHTML = `<strong>⏳ Esperando acuerdo:</strong> Propuesta enviada a la contraparte para registrar en <strong>${orderEscape(placeLabel)}</strong>.`;
+      }
+    }
+    return;
+  }
+
+  if (subtitleEl) {
+    subtitleEl.textContent = target.targetType === 'torre'
+      ? (isAdmin ? 'Registro directo en torre / antena' : 'Registro en torre · Requiere acuerdo mutuo')
+      : (isAdmin ? 'Registro directo en pueblo / comunidad' : 'Registro en pueblo · Requiere acuerdo mutuo');
+  }
+  if (noticeEl) {
+    noticeEl.innerHTML = isAdmin
+      ? `<strong>🔧 Registro directo:</strong> Se registrará el detalle físico en <strong>${orderEscape(placeLabel)}</strong> y se cerrará este reporte de red.`
+      : `<strong>ℹ️ Acuerdo mutuo:</strong> Ambas partes deben estar de acuerdo. Al confirmarse, se guardará en <strong>${orderEscape(placeLabel)}</strong> y se cerrará el reporte de red.`;
+  }
+}
+
+function setInsertPhysTargetType(targetType, options = {}) {
+  const normalized = targetType === 'torre' ? 'torre' : 'pueblo';
+  ordenesPhysModalTargetType = normalized;
+
+  const hiddenType = document.getElementById('insert-phys-target-type');
+  if (hiddenType) hiddenType.value = normalized;
+
+  const btnPueblo = document.getElementById('insert-phys-target-btn-pueblo');
+  const btnTorre = document.getElementById('insert-phys-target-btn-torre');
+  if (btnPueblo) {
+    btnPueblo.classList.toggle('is-active', normalized === 'pueblo');
+    btnPueblo.setAttribute('aria-pressed', normalized === 'pueblo' ? 'true' : 'false');
+  }
+  if (btnTorre) {
+    btnTorre.classList.toggle('is-active', normalized === 'torre');
+    btnTorre.setAttribute('aria-pressed', normalized === 'torre' ? 'true' : 'false');
+  }
+
+  const puebloGroup = document.getElementById('insert-phys-pueblo-group');
+  const torreGroup = document.getElementById('insert-phys-torre-group');
+  if (puebloGroup) puebloGroup.style.display = normalized === 'pueblo' ? 'flex' : 'none';
+  if (torreGroup) torreGroup.style.display = normalized === 'torre' ? 'flex' : 'none';
+
+  const nodeHidden = document.getElementById('insert-phys-node');
+  const eqHidden = document.getElementById('insert-phys-equipment');
+  const nodeSelect = document.getElementById('insert-phys-node-select');
+  const eqSelect = document.getElementById('insert-phys-equipment-select');
+  if (normalized === 'torre') {
+    if (eqHidden) eqHidden.value = eqSelect?.value || '';
+    if (nodeHidden) nodeHidden.value = '';
+  } else {
+    if (nodeHidden) nodeHidden.value = nodeSelect?.value || '';
+    if (eqHidden) eqHidden.value = '';
+  }
+
+  if (!options.silent) {
+    updateInsertPhysDynamicNotice();
+  }
+}
+
+function populateInsertPhysNodeSelect(order) {
+  const select = document.getElementById('insert-phys-node-select');
+  const lockedBox = document.getElementById('insert-phys-pueblo-locked');
+  const lockedName = document.getElementById('insert-phys-pueblo-locked-name');
+  const registeredNode = resolveOrderRegisteredNode(order);
+  const regId = String(registeredNode.nodeId || '').trim();
+  const regNodeObj = regId
+    ? ((state.nodes || []).find(n => !n.deletedAt && String(n.id) === regId)
+      || (state.nodes || []).find(n => String(n.id) === regId)
+      || null)
+    : null;
+  const label = regNodeObj
+    ? (typeof getNodeLabel === 'function' ? getNodeLabel(regNodeObj) : (regNodeObj.name || regNodeObj.town || regNodeObj.id))
+    : (registeredNode.nodeName || order?.nodeName || 'Sin pueblo registrado');
+  const zoneTxt = regNodeObj?.zone ? ` (${getZoneLabel(regNodeObj.zone)})` : '';
+  const hasNode = Boolean(regId || (registeredNode.nodeName && registeredNode.nodeName !== 'Pueblo registrado'));
+
+  if (select) {
+    select.innerHTML = `<option value="${orderEscape(regId)}" data-label="${orderEscape(label)}">${orderEscape(label)}${orderEscape(zoneTxt)}</option>`;
+    select.value = regId;
+    select.disabled = true;
+    if (select.style) select.style.display = 'none';
+  }
+  if (lockedName) {
+    lockedName.textContent = `${label}${zoneTxt}`;
+  }
+  if (lockedBox && lockedBox.classList) {
+    lockedBox.classList.toggle('is-missing', !hasNode);
+  }
+
+  const nodeHidden = document.getElementById('insert-phys-node');
+  if (nodeHidden && ordenesPhysModalTargetType === 'pueblo') {
+    nodeHidden.value = regId;
+  }
+
+  const hintEl = document.getElementById('insert-phys-pueblo-hint');
+  if (hintEl) {
+    hintEl.textContent = hasNode
+      ? 'Mismo pueblo del reporte de red (no modificable).'
+      : 'Este reporte no tiene un pueblo registrado.';
+  }
+}
+
+function populateInsertPhysEquipmentSelect(order, _preferredEquipmentId = '', _filterText = '', options = {}) {
+  const select = document.getElementById('insert-phys-equipment-select');
+  const lockedBox = document.getElementById('insert-phys-torre-locked');
+  const lockedName = document.getElementById('insert-phys-torre-locked-name');
+  const associated = resolveOrderAssociatedEquipment(order);
+  const isLoading = Boolean(options.loading);
+
+  const selectedEq = associated.eq || (associated.linkedList || [])[0] || null;
+  const selectedId = selectedEq ? String(selectedEq.id) : associated.equipmentId;
+  const selectedLabel = selectedEq
+    ? String(selectedEq.name || selectedEq.ip || 'Torre asociada').trim()
+    : (associated.equipmentName || '');
+  const selectedMeta = selectedEq
+    ? [selectedEq.ip, getZoneLabel(selectedEq.region)].filter(Boolean).join(' · ')
+    : '';
+
+  if (select) {
+    if (selectedId) {
+      select.innerHTML = `<option value="${orderEscape(selectedId)}" data-label="${orderEscape(selectedLabel)}">${orderEscape(selectedLabel)}${selectedMeta ? ' — ' + orderEscape(selectedMeta) : ''}</option>`;
+      select.value = selectedId;
+    } else {
+      select.innerHTML = '<option value="">Sin torre asociada</option>';
+      select.value = '';
+    }
+    select.disabled = true;
+    if (select.style) select.style.display = 'none';
+  }
+
+  if (lockedBox) {
+    if (lockedBox.style) lockedBox.style.display = 'flex';
+    if (lockedBox.classList) lockedBox.classList.toggle('is-missing', !selectedId && !isLoading);
+  }
+  if (lockedName) {
+    if (selectedId) {
+      lockedName.textContent = selectedMeta ? `${selectedLabel} (${selectedMeta})` : selectedLabel;
+    } else {
+      lockedName.textContent = isLoading ? 'Buscando torre asociada al reporte...' : 'Sin torre asociada a este reporte';
+    }
+  }
+
+  const eqHidden = document.getElementById('insert-phys-equipment');
+  if (eqHidden && ordenesPhysModalTargetType === 'torre') {
+    eqHidden.value = selectedId || '';
+  }
+
+  const hintEl = document.getElementById('insert-phys-torre-hint');
+  if (hintEl) {
+    if (selectedId) {
+      hintEl.textContent = 'Misma torre asociada al reporte (no modificable).';
+    } else if (isLoading) {
+      hintEl.textContent = 'Consultando torre vinculada al pueblo del reporte...';
+    } else {
+      hintEl.textContent = 'Este reporte / pueblo no tiene una torre vinculada; regístralo en el pueblo del reporte.';
+    }
+  }
+}
+
+async function loadInsertPhysRemoteTargets(order, _preferredNodeId = '', preferredEquipmentId = '') {
+  if (typeof fetchDataPage !== 'function') return;
+  const seq = ++ordenesPhysModalLookupSeq;
+  const registeredNode = resolveOrderRegisteredNode(order);
+  const tasks = [];
+
+  if (registeredNode.nodeId) {
+    tasks.push(
+      fetchDataPage('equipment', { nodeIds: registeredNode.nodeId, paged: '1', windowed: '1', limit: 30, offset: 0 })
+        .then(data => mergeOrderLookupRecords('equipment', data?.equipment))
+        .catch(() => {})
+    );
+    if (!(state.nodes || []).some(n => String(n.id) === String(registeredNode.nodeId))) {
+      tasks.push(
+        fetchDataPage('nodes', { id: registeredNode.nodeId, limit: 1 })
+          .then(data => mergeOrderLookupRecords('nodes', data?.nodes))
+          .catch(() => {})
+      );
+    }
+  }
+  const explicitEqId = String(order?.equipmentId || preferredEquipmentId || '').trim();
+  if (explicitEqId && !(state.equipment || []).some(e => String(e.id) === explicitEqId)) {
+    tasks.push(
+      fetchDataPage('equipment', { id: explicitEqId, limit: 1 })
+        .then(data => mergeOrderLookupRecords('equipment', data?.equipment))
+        .catch(() => {})
+    );
+  }
+
+  if (!tasks.length) return;
+  const initialAssociated = resolveOrderAssociatedEquipment(order);
+  if (!initialAssociated.equipmentId) {
+    populateInsertPhysEquipmentSelect(order, preferredEquipmentId, '', { loading: true });
+  }
+  await Promise.all(tasks);
+  if (seq !== ordenesPhysModalLookupSeq || ordenesPhysModalOrderId !== order?.id) return;
+
+  populateInsertPhysNodeSelect(order);
+  populateInsertPhysEquipmentSelect(order, preferredEquipmentId, '', { loading: false });
+  setInsertPhysTargetType(ordenesPhysModalTargetType, { silent: true });
+  updateInsertPhysDynamicNotice();
+}
+
+async function filterInsertPhysTargetOptions() {
+  // Pueblo y torre están fijos al reporte de origen; no se permite filtrar otros destinos.
+}
+
+function onInsertPhysEquipmentChange() {
+  const select = document.getElementById('insert-phys-equipment-select');
+  const eqHidden = document.getElementById('insert-phys-equipment');
+  if (eqHidden && select) eqHidden.value = select.value || '';
+  updateInsertPhysDynamicNotice();
+}
+
+function onInsertPhysNodeChange() {
+  const select = document.getElementById('insert-phys-node-select');
+  const nodeHidden = document.getElementById('insert-phys-node');
+  if (nodeHidden && select) nodeHidden.value = select.value || '';
+  updateInsertPhysDynamicNotice();
+}
+
+async function rejectPhysicalRecordProposalFromModal() {
+  const orderId = ordenesPhysModalOrderId;
+  CM('insert-physical-record-mo');
+  if (typeof rejectSendNetworkToPhysical === 'function') {
+    return rejectSendNetworkToPhysical(orderId);
+  }
+}
+
+function openInsertPhysicalRecordModal(orderId, refreshCallback) {
+  const order = (state.workOrders || []).find(item => item.id === orderId && !item.deletedAt);
+  if (!order) return notify('No se encontró el detalle de red.', 'err');
+
+  ordenesPhysModalOrderId = orderId;
+  ordenesPhysModalRefreshCb = typeof refreshCallback === 'function' ? refreshCallback : null;
+
+  ensureInsertPhysicalRecordModal();
+
+  const folio = typeof getOrderFolio === 'function' ? getOrderFolio(order) : (order.folio || order.id);
+  const folioEl = document.getElementById('insert-phys-origin-folio');
+  if (folioEl) folioEl.textContent = folio;
+
+  const clientEl = document.getElementById('insert-phys-origin-client');
+  if (clientEl) clientEl.textContent = order.clientName || order.title || 'Reporte de red';
+
+  const catSelect = document.getElementById('insert-phys-category');
+  const categories = (typeof orderCategoriesForKind === 'function' ? orderCategoriesForKind('physical') : null)
+    || (typeof detailCategoriesForKind === 'function' ? detailCategoriesForKind('physical') : null)
+    || [
+      ['alineacion_antena', 'Alineación de antena'],
+      ['antena_desconectada', 'Antena desconectada'],
+      ['antena_quemada', 'Equipo quemado'],
+      ['antena_inalambrica', 'Antena inalámbrica'],
+      ['reubicacion_antena', 'Reubicación de antena'],
+      ['resurtir_antena', 'Resurtir antena'],
+      ['solicitud_respaldo', 'Solicitud de respaldo'],
+      ['instalacion', 'Nueva instalación'],
+      ['otro', 'Otro']
+    ];
+  if (catSelect) {
+    catSelect.innerHTML = categories.map(([catId, catLabel]) => `<option value="${orderEscape(catId)}">${orderEscape(catLabel)}</option>`).join('');
+  }
+
+  const physStatus = getPhysicalDerivationStatus(order);
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+  const isAdmin = userHasRole('administrador', 'admin');
+
+  const titleEl = document.getElementById('insert-phys-title');
+  const subtitleEl = document.getElementById('insert-phys-subtitle');
+  const noticeEl = document.getElementById('insert-phys-agreement-notice');
+  const saveBtn = document.getElementById('insert-phys-save-btn');
+  const saveLabel = document.getElementById('insert-phys-save-label');
+  const rejectBtn = document.getElementById('insert-phys-reject-btn');
+  const prioritySelect = document.getElementById('insert-phys-priority');
+  const descText = document.getElementById('insert-phys-description');
+  const registeredNode = resolveOrderRegisteredNode(order);
+
+  const prop = physStatus.proposal || order.physicalProposal || {};
+  const initialTargetType = physStatus.pending
+    ? ((prop.targetType === 'torre' || (!prop.targetType && prop.equipmentId) || physStatus.targetType === 'torre') ? 'torre' : 'pueblo')
+    : ((order.equipmentId && !registeredNode.nodeId) ? 'torre' : 'pueblo');
+  const preferredNodeId = physStatus.pending ? (prop.nodeId || registeredNode.nodeId || '') : (registeredNode.nodeId || '');
+  const preferredEquipmentId = physStatus.pending ? (prop.equipmentId || '') : (order.equipmentId || '');
+
+  populateInsertPhysNodeSelect(order, preferredNodeId, '');
+  populateInsertPhysEquipmentSelect(order, preferredEquipmentId, '');
+  setInsertPhysTargetType(initialTargetType, { silent: true });
+
+  const canEditFields = !physStatus.pending || (physStatus.proposedBy === 'soporte' ? (isAtencion || isAdmin) : (isSoporte || isAdmin));
+  ['insert-phys-target-btn-pueblo', 'insert-phys-target-btn-torre', 'insert-phys-category', 'insert-phys-priority', 'insert-phys-description'].forEach(elId => {
+    const el = document.getElementById(elId);
+    if (el) el.disabled = !canEditFields;
+  });
+  const lockedNodeSel = document.getElementById('insert-phys-node-select');
+  if (lockedNodeSel) lockedNodeSel.disabled = true;
+  const lockedEqSel = document.getElementById('insert-phys-equipment-select');
+  if (lockedEqSel) lockedEqSel.disabled = true;
+
+  if (physStatus.pending) {
+    const canConfirm = physStatus.proposedBy === 'soporte' ? (isAtencion || isAdmin) : (isSoporte || isAdmin);
+    if (catSelect) catSelect.value = prop.category || 'otro';
+    if (prioritySelect) prioritySelect.value = prop.priority || order.priority || 'media';
+    const rawDesc = prop.description || physStatus.note || '';
+    const cleanDesc = typeof extractCleanPhysicalDescription === 'function' ? extractCleanPhysicalDescription(rawDesc) : rawDesc;
+    if (descText) descText.value = cleanDesc;
+
+    if (canConfirm) {
+      if (titleEl) titleEl.textContent = 'Confirmar acuerdo: Detalle físico';
+      if (subtitleEl) subtitleEl.textContent = `Propuesta de ${physStatus.proposedByName || (physStatus.proposedBy === 'soporte' ? 'Soporte técnico' : 'Atención a clientes')}`;
+      if (noticeEl) {
+        noticeEl.style.display = 'block';
+        noticeEl.style.background = '#fef3c7';
+        noticeEl.style.borderColor = '#fde68a';
+        noticeEl.style.borderLeftColor = '#f59e0b';
+        noticeEl.style.color = '#92400e';
+      }
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.style.display = 'inline-flex';
+        saveBtn.style.background = '#059669';
+        saveBtn.style.borderColor = '#047857';
+      }
+      if (saveLabel) saveLabel.textContent = '✅ Confirmar y cerrar reporte';
+      if (rejectBtn) rejectBtn.style.display = 'inline-flex';
+    } else {
+      if (titleEl) titleEl.textContent = 'Propuesta enviada (Espera de acuerdo)';
+      if (subtitleEl) subtitleEl.textContent = `Esperando confirmación de ${physStatus.proposedBy === 'soporte' ? 'Atención a clientes' : 'Soporte técnico'}`;
+      if (noticeEl) {
+        noticeEl.style.display = 'block';
+        noticeEl.style.background = '#eff6ff';
+        noticeEl.style.borderColor = '#bfdbfe';
+        noticeEl.style.borderLeftColor = '#3b82f6';
+        noticeEl.style.color = '#1e40af';
+      }
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.style.display = 'inline-flex';
+        saveBtn.style.background = '#94a3b8';
+        saveBtn.style.borderColor = '#64748b';
+      }
+      if (saveLabel) saveLabel.textContent = '⏳ Esperando acuerdo';
+      if (rejectBtn) rejectBtn.style.display = 'none';
+    }
+  } else {
+    if (prioritySelect) prioritySelect.value = order.priority || 'media';
+    if (descText) descText.value = '';
+    if (titleEl) titleEl.textContent = isAdmin ? 'Registrar detalle físico' : 'Proponer detalle físico';
+    if (noticeEl) {
+      noticeEl.style.display = 'block';
+      noticeEl.style.background = '#f5f3ff';
+      noticeEl.style.borderColor = '#ddd6fe';
+      noticeEl.style.borderLeftColor = '#7c3aed';
+      noticeEl.style.color = '#5b21b6';
+    }
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.style.display = 'inline-flex';
+      saveBtn.style.background = '#7c3aed';
+      saveBtn.style.borderColor = '#6d28d9';
+    }
+    if (saveLabel) saveLabel.textContent = isAdmin ? '🔧 Confirmar y registrar' : '📨 Proponer detalle físico';
+    if (rejectBtn) rejectBtn.style.display = 'none';
+  }
+
+  updateInsertPhysDynamicNotice();
+  OM('insert-physical-record-mo');
+  void loadInsertPhysRemoteTargets(order, preferredNodeId, preferredEquipmentId);
+  setTimeout(() => descText?.focus(), 80);
+}
+
+async function saveInsertedPhysicalRecord() {
+  const orderId = ordenesPhysModalOrderId;
+  const order = (state.workOrders || []).find(item => item.id === orderId && !item.deletedAt);
+
+  const target = getInsertPhysSelectedTargetInfo(order);
+  const isTower = target.targetType === 'torre';
+
+  if (isTower && !target.equipmentId) {
+    notify('Este reporte no tiene una torre asociada para registrar el detalle físico.', 'warn');
+    return;
+  }
+  if (!isTower && !target.nodeId && !target.nodeName) {
+    notify('Este reporte no tiene un pueblo registrado para el detalle físico.', 'warn');
+    return;
+  }
+
+  const category = document.getElementById('insert-phys-category')?.value || 'otro';
+  const priority = document.getElementById('insert-phys-priority')?.value || 'media';
+  const rawDescription = document.getElementById('insert-phys-description')?.value.trim() || '';
+  const description = typeof extractCleanPhysicalDescription === 'function' ? extractCleanPhysicalDescription(rawDescription) : rawDescription;
+
+  if (!description) {
+    notify('Por favor escribe la descripción o falla física del registro.', 'warn');
+    document.getElementById('insert-phys-description')?.focus();
+    return;
+  }
+
+  const categoryLabel = typeof orderCategoryLabel === 'function' ? orderCategoryLabel(category) : category;
+  const physStatus = order ? getPhysicalDerivationStatus(order) : { pending: false };
+  const currentUser = getCurrentUser();
+  const isSoporte = userHasRole('soporte');
+  const isAtencion = userHasRole('atencion_clientes');
+  const isAdmin = userHasRole('administrador', 'admin');
+  const now = new Date().toISOString();
+  const orderFolio = order ? (typeof getOrderFolio === 'function' ? getOrderFolio(order) : (order.folio || order.id)) : '';
+
+  const isAgreementConfirmation = physStatus.pending && (physStatus.proposedBy === 'soporte' ? (isAtencion || isAdmin) : (isSoporte || isAdmin));
+  const isDirectAdminRegistration = !physStatus.pending && isAdmin;
+
+  const destinationLine = isTower ? `• Destino (Torre): ${target.equipmentName}` : `• Destino (Pueblo): ${target.nodeName}`;
+  const destinationPhrase = isTower ? `torre ${target.equipmentName}` : `pueblo ${target.nodeName}`;
+
+  if (isAgreementConfirmation || isDirectAdminRegistration) {
+    if (typeof askConfirmation === 'function') {
+      const propBy = physStatus.proposedByName ? `\n• Propuesto por: ${physStatus.proposedByName}` : '';
+      const confirmed = await askConfirmation({
+        title: isDirectAdminRegistration ? '¿Registrar detalle físico y cerrar reporte?' : '¿Confirmar acuerdo y registrar detalle físico?',
+        message: `${destinationLine}\n• Categoría: ${categoryLabel}\n• Falla: ${description}${propBy}\n\nSe registrará en ${isTower ? 'la torre elegida' : 'el pueblo elegido'} y se cerrará este reporte de red.`,
+        confirmText: 'Confirmar y cerrar reporte',
+        cancelText: 'Cancelar',
+        tone: 'ok'
+      });
+      if (!confirmed) return;
+    }
+
+    const eq = target.eq;
+    const nd = target.nd;
+    const newPhysical = {
+      id: typeof generateId === 'function' ? generateId() : ('ph_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+      detailKind: 'physical',
+      category,
+      title: description.length > 80 ? (description.slice(0, 77) + '...') : description,
+      description,
+      priority,
+      visitType: isTower ? 'torre' : 'comunidad',
+      equipmentId: isTower ? target.equipmentId : '',
+      equipmentName: isTower ? target.equipmentName : '',
+      nodeId: isTower ? '' : (target.nodeId || ''),
+      nodeCode: isTower ? '' : (nd?.nodeCode || order?.nodeCode || ''),
+      nodeName: isTower ? '' : target.nodeName,
+      town: isTower ? '' : (nd?.town || order?.town || ''),
+      region: isTower
+        ? (eq?.region || eq?.zone || order?.region || '')
+        : (nd?.zone || nd?.region || order?.region || ''),
+      detailLocation: isTower
+        ? (eq?.location || eq?.name || target.equipmentName)
+        : (nd?.location || order?.detailLocation || target.nodeName),
+      lat: isTower
+        ? (eq?.lat ?? '')
+        : (nd?.lat ?? order?.lat ?? ''),
+      lng: isTower
+        ? (eq?.lng ?? '')
+        : (nd?.lng ?? order?.lng ?? ''),
+      clientName: '',
+      clientPhone: '',
+      assignedUserId: '', // No se asigna a nadie para resolver
+      assignedUserName: '',
+      status: 'pendiente',
+      createdById: currentUser.id || '',
+      createdByName: currentUser.name || currentUser.username || 'Personal',
+      createdAt: now,
+      updatedAt: now,
+      sourceOrderId: order ? order.id : '',
+      originNetworkOrderId: order ? order.id : '',
+      originNetworkFolio: orderFolio,
+      followUps: [
+        {
+          action: 'physical_record_created',
+          user: currentUser.name || currentUser.username || 'Sistema',
+          at: now,
+          note: orderFolio
+            ? `Registro físico creado en ${destinationPhrase} desde reporte de red ${orderFolio}`
+            : `Registro físico creado en ${destinationPhrase}`
+        }
+      ]
+    };
+    const physicalFolio = typeof getOrderFolio === 'function' ? getOrderFolio(newPhysical) : '';
+
+    state.workOrders = state.workOrders || [];
+    state.workOrders.push(newPhysical);
+    const physSaved = await saveRecord('workOrders', newPhysical);
+    if (physSaved === false) {
+      state.workOrders = state.workOrders.filter(item => item.id !== newPhysical.id);
+      notify('No se pudo guardar el detalle físico. Intente nuevamente.', 'err');
+      return;
+    }
+
+    if (order) {
+      order.status = 'completada';
+      order.completedAt = now;
+      order.closedReason = 'physical_registered';
+      order.reviewOpenedAt = '';
+      order.reviewOpenedById = '';
+      order.reviewOpenedByName = '';
+      order.reviewOpenedByUsername = '';
+      order.technicianReport = {
+        ...(order.technicianReport || {}),
+        result: 'completada',
+        solution: `Concluido por pase a detalle físico en ${destinationPhrase}: ${description}`,
+        completedAt: now
+      };
+      if (typeof appendSharedNetworkFollowUp === 'function') {
+        appendSharedNetworkFollowUp(
+          order,
+          'physical',
+          `Enviado a Detalle Físico (${target.targetLabel})`,
+          `Registrado en ${destinationPhrase}: "${description}". Reporte de red cerrado.`
+        );
+        const lastFu = Array.isArray(order.followUps) && order.followUps.length ? order.followUps[order.followUps.length - 1] : null;
+        if (lastFu) {
+          lastFu.physicalOrderId = newPhysical.id;
+          lastFu.physicalOrderFolio = physicalFolio;
+          lastFu.physicalTargetType = target.targetType;
+          lastFu.physicalTargetName = target.targetPlace;
+          lastFu.sentToPhysicalAt = now;
+        }
+      }
+      delete order.physicalProposal;
+      order.updatedAt = now;
+      order.updatedById = currentUser.id || '';
+      setUpdatedAudit(order, `registró detalle físico en ${destinationPhrase} y cerró reporte de red`);
+      await saveRecord('workOrders', order);
+      try {
+        if (typeof broadcastNetworkOrderChange === 'function') {
+          broadcastNetworkOrderChange(order, 'sent_to_physical');
+        }
+      } catch (e) { }
+      updateOrderChatLive(order);
+    }
+
+    CM('insert-physical-record-mo');
+    renderWOs();
+    if (typeof renderAntennaDetailList === 'function') renderAntennaDetailList();
+    if (typeof renderNodeDetailList === 'function') renderNodeDetailList();
+    if (typeof ordenesPhysModalRefreshCb === 'function') {
+      try { ordenesPhysModalRefreshCb(); } catch (e) { }
+    }
+
+    notify(`Detalle físico registrado en ${destinationPhrase} y reporte de red cerrado.`, 'ok');
+  } else {
+    if (typeof askConfirmation === 'function') {
+      const confirmed = await askConfirmation({
+        title: '¿Enviar propuesta de detalle físico?',
+        message: `${destinationLine}\n• Categoría: ${categoryLabel}\n• Falla: ${description}\n\nSe enviará a la contraparte para su acuerdo mutuo.`,
+        confirmText: 'Enviar propuesta',
+        cancelText: 'Cancelar',
+        tone: 'primary'
+      });
+      if (!confirmed) return;
+    }
+
+    if (order) {
+      const proposedBy = (isSoporte && !isAtencion) ? 'soporte' : (isAtencion ? 'atencion' : (isNetworkSupportToAttention(order) ? 'soporte' : 'atencion'));
+      const roleLabel = proposedBy === 'soporte' ? 'Soporte técnico' : 'Atención a clientes';
+
+      const proposalPayload = {
+        targetType: target.targetType,
+        equipmentId: isTower ? target.equipmentId : '',
+        equipmentName: isTower ? target.equipmentName : '',
+        nodeId: isTower ? '' : target.nodeId,
+        nodeName: isTower ? '' : target.nodeName,
+        category,
+        priority,
+        description,
+        proposedBy,
+        proposedByName: currentUser.name || currentUser.username || roleLabel,
+        at: now
+      };
+      order.physicalProposal = proposalPayload;
+      if (typeof appendSharedNetworkFollowUp === 'function') {
+        appendSharedNetworkFollowUp(
+          order,
+          `physical_proposed_${proposedBy}`,
+          `Pase a Detalles Físicos (${target.targetLabel}) propuesto por ${roleLabel}`,
+          `${target.targetLabel}: ${target.targetPlace} · Categoría: ${categoryLabel} · Falla: ${description}`
+        );
+        const lastFu = Array.isArray(order.followUps) && order.followUps.length ? order.followUps[order.followUps.length - 1] : null;
+        if (lastFu) {
+          lastFu.proposal = { ...proposalPayload };
+        }
+      }
+      order.updatedAt = now;
+      order.updatedById = currentUser.id || '';
+      setUpdatedAudit(order, `propuso derivar detalle de red a físico en ${destinationPhrase}`);
+      await saveRecord('workOrders', order);
+      try {
+        if (typeof broadcastNetworkOrderChange === 'function') {
+          broadcastNetworkOrderChange(order, 'physical_proposed', { proposedBy });
+        }
+      } catch (e) { }
+      updateOrderChatLive(order);
+    }
+
+    CM('insert-physical-record-mo');
+    renderWOs();
+    if (typeof ordenesPhysModalRefreshCb === 'function') {
+      try { ordenesPhysModalRefreshCb(); } catch (e) { }
+    }
+
+    notify(`Propuesta enviada al chat (${target.targetLabel}: ${target.targetPlace}). Se requiere acuerdo de la contraparte.`, 'ok');
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.ensureInsertPhysicalRecordModal = ensureInsertPhysicalRecordModal;
+  window.setInsertPhysTargetType = setInsertPhysTargetType;
+  window.filterInsertPhysTargetOptions = filterInsertPhysTargetOptions;
+  window.onInsertPhysEquipmentChange = onInsertPhysEquipmentChange;
+  window.onInsertPhysNodeChange = onInsertPhysNodeChange;
+  window.rejectPhysicalRecordProposalFromModal = rejectPhysicalRecordProposalFromModal;
+  window.openInsertPhysicalRecordModal = openInsertPhysicalRecordModal;
+  window.saveInsertedPhysicalRecord = saveInsertedPhysicalRecord;
 }
 
 async function promptSendNetworkToPhysical(id) {
@@ -3504,28 +4496,67 @@ async function confirmSendNetworkToPhysical(id) {
     return notify('La otra parte involucrada debe confirmar el acuerdo para enviar a Detalles Físicos.', 'warn');
   }
 
-  const prop = order.physicalProposal || {};
+  const prop = physStatus.proposal || order.physicalProposal || {};
+  const isTower = prop.targetType === 'torre' || (!prop.targetType && Boolean(prop.equipmentId)) || physStatus.targetType === 'torre';
   const registeredNode = typeof resolveOrderRegisteredNode === 'function'
     ? resolveOrderRegisteredNode(order)
     : { nodeId: order.nodeId || '', nodeName: order.nodeName || 'Pueblo registrado' };
-  const nodeId = registeredNode.nodeId || prop.nodeId || order.nodeId || '';
-  const nodeName = registeredNode.nodeName || prop.nodeName || order.nodeName || 'Pueblo registrado';
-  const equipmentId = ''; // Forzosamente en el pueblo
-  const equipmentName = '';
+
+  const associatedEq = typeof resolveOrderAssociatedEquipment === 'function'
+    ? resolveOrderAssociatedEquipment(order)
+    : { equipmentId: String(order.equipmentId || '').trim(), equipmentName: order.equipmentName || '', eq: null, linkedList: [] };
+
+  let equipmentId = '';
+  let eq = null;
+  if (isTower) {
+    const propEqId = String(prop.equipmentId || '').trim();
+    const allowedFromLinked = (associatedEq.linkedList || []).find(item => String(item.id) === propEqId);
+    if (allowedFromLinked) {
+      equipmentId = String(allowedFromLinked.id);
+      eq = allowedFromLinked;
+    } else {
+      equipmentId = associatedEq.equipmentId || propEqId;
+      eq = associatedEq.eq || (equipmentId
+        ? ((state.equipment || []).find(e => !e.deletedAt && String(e.id) === equipmentId)
+          || (state.equipment || []).find(e => String(e.id) === equipmentId)
+          || null)
+        : null);
+    }
+    if (equipmentId && !eq && typeof fetchDataPage === 'function') {
+      try {
+        const eqData = await fetchDataPage('equipment', { id: equipmentId, limit: 1 });
+        mergeOrderLookupRecords('equipment', eqData?.equipment);
+        eq = (state.equipment || []).find(e => String(e.id) === equipmentId) || null;
+      } catch (e) { }
+    }
+  }
+  const equipmentName = isTower ? (eq?.name || associatedEq.equipmentName || prop.equipmentName || 'Torre asociada') : '';
+
+  const nodeId = isTower ? '' : String(registeredNode.nodeId || order.nodeId || '').trim();
+  const nd = (!isTower && nodeId)
+    ? ((state.nodes || []).find(n => !n.deletedAt && String(n.id) === nodeId)
+      || (state.nodes || []).find(n => String(n.id) === nodeId)
+      || null)
+    : null;
+  const nodeName = isTower
+    ? ''
+    : ((nd && typeof getNodeLabel === 'function' ? getNodeLabel(nd) : '') || registeredNode.nodeName || order.nodeName || 'Pueblo registrado');
+
+  const targetType = isTower ? 'torre' : 'pueblo';
+  const targetLabel = isTower ? 'Torre' : 'Pueblo';
+  const targetPlace = isTower ? equipmentName : nodeName;
+  const destinationPhrase = isTower ? `torre ${equipmentName}` : `pueblo ${nodeName}`;
   const category = prop.category || 'otro';
   const priority = prop.priority || order.priority || 'media';
   const rawDescription = prop.description || physStatus.note || order.description || order.title || 'Revisión física en sitio';
   const description = typeof extractCleanPhysicalDescription === 'function' ? extractCleanPhysicalDescription(rawDescription) : rawDescription;
-
-  const nd = (state.nodes || []).find(n => String(n.id) === String(nodeId));
-  const targetPlace = nodeName;
   const categoryLabel = typeof orderCategoryLabel === 'function' ? orderCategoryLabel(category) : category;
 
   const folio = getOrderFolio(order);
   const propBy = physStatus.proposedByName ? `\n• Propuesto por: ${physStatus.proposedByName}` : '';
   const confirmed = await askConfirmation({
     title: '¿Confirmar acuerdo y registrar detalle físico?',
-    message: `• Pueblo: ${nodeName}\n• Falla: ${description}${propBy}\n\nSe registrará en el pueblo y se cerrará este reporte de red.`,
+    message: `• Destino (${targetLabel}): ${targetPlace}\n• Categoría: ${categoryLabel}\n• Falla: ${description}${propBy}\n\nSe registrará en ${isTower ? 'la torre elegida' : 'el pueblo elegido'} y se cerrará este reporte de red.`,
     confirmText: 'Confirmar y cerrar reporte',
     cancelText: 'Cancelar',
     tone: 'ok'
@@ -3543,15 +4574,21 @@ async function confirmSendNetworkToPhysical(id) {
     title: description.length > 80 ? (description.slice(0, 77) + '...') : description,
     description: description,
     priority: priority,
-    visitType: 'comunidad',
-    equipmentId: '',
-    equipmentName: '',
-    nodeId: nodeId || '',
-    nodeName: nodeName,
-    region: nd?.region || order.region || '',
-    detailLocation: nd?.location || order.detailLocation || nodeName,
-    lat: nd?.lat || order.lat || '',
-    lng: nd?.lng || order.lng || '',
+    visitType: isTower ? 'torre' : 'comunidad',
+    equipmentId: isTower ? equipmentId : '',
+    equipmentName: isTower ? equipmentName : '',
+    nodeId: isTower ? '' : nodeId,
+    nodeCode: isTower ? '' : (nd?.nodeCode || order.nodeCode || ''),
+    nodeName: isTower ? '' : nodeName,
+    town: isTower ? '' : (nd?.town || order.town || ''),
+    region: isTower
+      ? (eq?.region || eq?.zone || order.region || '')
+      : (nd?.zone || nd?.region || order.region || ''),
+    detailLocation: isTower
+      ? (eq?.location || eq?.name || equipmentName)
+      : (nd?.location || order.detailLocation || nodeName),
+    lat: isTower ? (eq?.lat ?? '') : (nd?.lat ?? order.lat ?? ''),
+    lng: isTower ? (eq?.lng ?? '') : (nd?.lng ?? order.lng ?? ''),
     clientName: '',
     clientPhone: '',
     assignedUserId: '', // No se asigna a nadie para resolver
@@ -3561,6 +4598,7 @@ async function confirmSendNetworkToPhysical(id) {
     createdByName: userName,
     createdAt: now,
     updatedAt: now,
+    sourceOrderId: order.id,
     originNetworkOrderId: order.id,
     originNetworkFolio: folio,
     followUps: [
@@ -3568,14 +4606,20 @@ async function confirmSendNetworkToPhysical(id) {
         action: 'physical_record_created',
         user: userName,
         at: now,
-        note: `Registro físico creado por acuerdo mutuo en pueblo ${nodeName} desde reporte de red ${folio}`
+        note: `Registro físico creado por acuerdo mutuo en ${destinationPhrase} desde reporte de red ${folio}`
       }
     ]
   };
+  const physicalFolio = typeof getOrderFolio === 'function' ? getOrderFolio(newPhysical) : '';
 
   state.workOrders = state.workOrders || [];
   state.workOrders.push(newPhysical);
-  await saveRecord('workOrders', newPhysical);
+  const physSaved = await saveRecord('workOrders', newPhysical);
+  if (physSaved === false) {
+    state.workOrders = state.workOrders.filter(item => item.id !== newPhysical.id);
+    notify('No se pudo guardar el detalle físico. Intente nuevamente.', 'err');
+    return;
+  }
 
   // Cerrar el reporte de red original
   order.status = 'completada';
@@ -3590,18 +4634,26 @@ async function confirmSendNetworkToPhysical(id) {
   order.technicianReport = {
     ...(order.technicianReport || {}),
     result: 'completada',
-    solution: `Concluido por pase a detalle físico acordado por ambas partes en ${targetPlace}: ${description}`,
+    solution: `Concluido por pase a detalle físico acordado por ambas partes en ${destinationPhrase}: ${description}`,
     completedAt: now
   };
 
   appendSharedNetworkFollowUp(
     order,
     'physical',
-    'Derivado a Detalle Físico por acuerdo mutuo',
-    `Acuerdo mutuo completado. Registrado en ${targetPlace}: "${description}". Reporte de red cerrado.`
+    `Enviado a Detalle Físico (${targetLabel}) por acuerdo mutuo`,
+    `Acuerdo mutuo completado. Registrado en ${destinationPhrase}: "${description}". Reporte de red cerrado.`
   );
+  const lastFu = Array.isArray(order.followUps) && order.followUps.length ? order.followUps[order.followUps.length - 1] : null;
+  if (lastFu) {
+    lastFu.physicalOrderId = newPhysical.id;
+    lastFu.physicalOrderFolio = physicalFolio;
+    lastFu.physicalTargetType = targetType;
+    lastFu.physicalTargetName = targetPlace;
+    lastFu.sentToPhysicalAt = now;
+  }
   delete order.physicalProposal;
-  setUpdatedAudit(order, 'confirmó acuerdo mutuo y cerró detalle de red con registro físico');
+  setUpdatedAudit(order, `confirmó acuerdo mutuo y cerró detalle de red con registro físico en ${destinationPhrase}`);
 
   const saved = await saveRecord('workOrders', order);
   if (!saved) {
@@ -3622,7 +4674,7 @@ async function confirmSendNetworkToPhysical(id) {
     CM('order-tech-report-mo');
   }
 
-  notify(`Acuerdo completado: Detalle físico registrado en ${targetPlace} y reporte de red ${folio} cerrado.`, 'ok');
+  notify(`Acuerdo completado: Detalle físico registrado en ${destinationPhrase} y reporte de red ${folio} cerrado.`, 'ok');
   await loadOrderPage();
 }
 
@@ -4001,27 +5053,30 @@ function getOrderChatStatusBadgeHtml(order) {
   const isCompleted = order.status === 'completada';
   const closureStatus = getOrderClosureStatus(order);
   const physStatus = getPhysicalDerivationStatus(order);
+  const sentPhysicalInfo = getOrderSentToPhysicalInfo(order);
+  const sentPhysicalBadge = sentPhysicalInfo.sent ? renderSentToPhysicalBadge(order, { showTarget: true }) : '';
   const isSentToAttention = isNetworkSupportToAttention(order);
 
   if (isCompleted) {
-    return '<span class="closure-badge completed">Caso concluido por ambas partes</span>';
+    return `${sentPhysicalBadge}<span class="closure-badge completed">${sentPhysicalInfo.sent ? 'Caso concluido' : 'Caso concluido por ambas partes'}</span>`;
   }
   if (order.status === 'no_realizado') {
-    return `<span class="closure-badge waiting" style="background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;">No realizable · Espera a ${isSentToAttention ? 'Soporte' : 'Atención'}</span>`;
+    return `${sentPhysicalBadge}<span class="closure-badge waiting" style="background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;">No realizable · Espera a ${isSentToAttention ? 'Soporte' : 'Atención'}</span>`;
   }
   if (physStatus.pending) {
-    return `<span class="closure-badge waiting" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;">Pase a Físicos propuesto · Espera acuerdo</span>`;
+    const targetHint = physStatus.targetType === 'torre' ? ' (Torre)' : (physStatus.targetType === 'pueblo' ? ' (Pueblo)' : '');
+    return `${sentPhysicalBadge}<span class="closure-badge waiting" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;">Pase a Físicos${targetHint} propuesto · Espera acuerdo</span>`;
   }
   if (isSentToAttention) {
     if (closureStatus.attentionConfirmed || order.status === 'resuelto_soporte') {
-      return '<span class="closure-badge waiting">Atención envió a concluir · Espera a Soporte</span>';
+      return `${sentPhysicalBadge}<span class="closure-badge waiting">Atención envió a concluir · Espera a Soporte</span>`;
     }
-    return '<span class="closure-badge" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">En proceso por Atención a clientes</span>';
+    return `${sentPhysicalBadge}<span class="closure-badge" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">En proceso por Atención a clientes</span>`;
   }
   if (closureStatus.supportConfirmed || order.status === 'resuelto_soporte') {
-    return '<span class="closure-badge waiting">Soporte propuso cierre · Espera a Atención</span>';
+    return `${sentPhysicalBadge}<span class="closure-badge waiting">Soporte propuso cierre · Espera a Atención</span>`;
   }
-  return '<span class="closure-badge" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">Conversación activa</span>';
+  return `${sentPhysicalBadge}<span class="closure-badge" style="background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;">Conversación activa</span>`;
 }
 
 function renderOrderChatComposerInnerHtml(order) {
@@ -4292,6 +5347,7 @@ function renderOrderFooterActions(order) {
 
   const closureStatus = getOrderClosureStatus(order);
   const physStatus = getPhysicalDerivationStatus(order);
+  const sentPhysicalInfo = getOrderSentToPhysicalInfo(order);
   const canDeclareUnres = canRoleDeclareUnresolvable(order);
   const canConfirmUnres = canRoleConfirmUnresolvable(order);
 
@@ -4299,9 +5355,12 @@ function renderOrderFooterActions(order) {
   if (!isCompleted) {
     if (physStatus.pending) {
       const canConfirmPhys = physStatus.proposedBy === 'soporte' ? (isAtencion || isAdmin) : (isSoporte || isAdmin);
+      const targetHint = physStatus.targetType === 'torre'
+        ? (physStatus.targetName ? ` · Torre: ${physStatus.targetName}` : ' · Torre')
+        : (physStatus.targetName ? ` · Pueblo: ${physStatus.targetName}` : ' · Pueblo');
       if (canConfirmPhys) {
         physicalActionHtml = `
-          <button type="button" class="btn net-btn-physical net-btn-physical-confirm" onclick="confirmSendNetworkToPhysical('${order.id}')" title="Confirmar acuerdo para enviar a Detalles Físicos">
+          <button type="button" class="btn net-btn-physical net-btn-physical-confirm" onclick="confirmSendNetworkToPhysical('${order.id}')" title="Confirmar acuerdo para enviar a Detalles Físicos (${orderEscape(physStatus.targetType === 'torre' ? 'Torre' : 'Pueblo')})">
             <svg class="btn-action-svg" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Aceptar pase a Físicos
           </button>
           <button type="button" class="btn net-btn-unresolvable" onclick="rejectSendNetworkToPhysical('${order.id}')" title="Mantener este caso en Detalles de Red">
@@ -4310,12 +5369,12 @@ function renderOrderFooterActions(order) {
         `;
       } else {
         physicalActionHtml = `
-          <span class="closure-badge waiting" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;">Pase a Físicos propuesto · Espera acuerdo</span>
+          <span class="closure-badge waiting" style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;">Pase a Físicos propuesto${orderEscape(targetHint)} · Espera acuerdo</span>
         `;
       }
     } else {
       physicalActionHtml = `
-        <button type="button" class="btn net-btn-physical" onclick="openInsertPhysicalRecordModal('${order.id}')" title="Registrar un detalle físico en el pueblo vinculado a este caso">
+        <button type="button" class="btn net-btn-physical" onclick="openInsertPhysicalRecordModal('${order.id}')" title="Proponer o registrar un detalle físico en pueblo o torre vinculado a este caso">
           <svg class="btn-action-svg" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Registrar detalle físico
         </button>
       `;
@@ -4334,6 +5393,7 @@ function renderOrderFooterActions(order) {
   let closureButtonsHtml = '';
   if (isCompleted) {
     closureButtonsHtml = `
+      ${sentPhysicalInfo.sent ? renderSentToPhysicalBadge(order, { showTarget: true }) : ''}
       <span class="closure-badge completed">Concluido por ambas partes</span>
       ${canReopen ? `
         <button type="button" class="btn order-reopen-action" style="min-height:34px;padding:0 14px;font-size:12px;font-weight:800;gap:6px;" onclick="reopenCompletedWO('${order.id}')" title="Reabrir detalle para nueva atención">
@@ -4777,6 +5837,18 @@ function updateOrderChatLive(updatedOrder) {
       const statusMeta = getOrderStatusMeta(targetOrder);
       essentialStatusEl.className = `order-report-status ${targetOrder.status === 'completada' ? 'is-completed' : (targetOrder.status === 'resuelto_soporte' ? 'is-resolving' : (targetOrder.status === 'devuelto_soporte' ? 'is-returned' : (targetOrder.status === 'no_realizado' ? 'is-failed' : 'is-pending')))}`;
       essentialStatusEl.textContent = statusMeta.label;
+      const statusWrap = essentialStatusEl.parentElement;
+      if (statusWrap) {
+        statusWrap.querySelectorAll('.order-sent-physical-badge').forEach(el => el.remove());
+        const sentHtml = renderSentToPhysicalBadge(targetOrder, { showTarget: true });
+        if (sentHtml) essentialStatusEl.insertAdjacentHTML('afterend', sentHtml);
+      }
+    }
+    const headMetaP = modal.querySelector('.order-report-head-main p');
+    if (headMetaP) {
+      headMetaP.querySelectorAll('.order-sent-physical-badge').forEach(el => el.remove());
+      const headSentHtml = renderSentToPhysicalBadge(targetOrder, { compact: true });
+      if (headSentHtml) headMetaP.insertAdjacentHTML('beforeend', headSentHtml);
     }
 
     const essentialItems = modal.querySelectorAll('.order-report-essential-bar .essential-bar-item');
@@ -5090,6 +6162,7 @@ async function openOrderTechnicianReport(orderId) {
   card.classList.toggle('is-completed-report', completed);
 
   let bodyContent = '';
+  const sentPhysicalInfo = order.detailKind === 'network' ? getOrderSentToPhysicalInfo(order) : { sent: false };
   if (order.detailKind === 'network') {
     // REGLA DE DETALLES DE RED:
     // El chat va al frente de inmediato con el seguimiento adjunto como eventos resaltados.
@@ -5108,6 +6181,7 @@ async function openOrderTechnicianReport(orderId) {
         <div class="essential-bar-item">
           <small>ESTADO</small>
           <span class="order-report-status ${order.status === 'completada' ? 'is-completed' : (order.status === 'resuelto_soporte' ? 'is-resolving' : (order.status === 'devuelto_soporte' ? 'is-returned' : (order.status === 'no_realizado' ? 'is-failed' : 'is-pending')))}">${orderEscape(reportStatus)}</span>
+          ${sentPhysicalInfo.sent ? renderSentToPhysicalBadge(order, { showTarget: true }) : ''}
         </div>
         <div class="essential-bar-item">
           <small>ASIGNADO A</small>
@@ -5160,6 +6234,7 @@ async function openOrderTechnicianReport(orderId) {
             ${orderReportField('work', 'Tipo de trabajo', getOrderDisplayType(order))}
             ${orderReportField('flag', 'Prioridad', pl(order.priority || 'media'))}
             ${orderReportField('tag', 'Categoría', orderCategoryLabel(getOrderCategory(order)))}
+            ${sentPhysicalInfo.sent ? orderReportField('work', 'Enviado a físicos', `${renderSentToPhysicalBadge(order, { showTarget: true })}${sentPhysicalInfo.physicalOrderFolio ? ` <span style="font-size:11px;color:#475569;font-weight:700;margin-left:4px;">(${orderEscape(sentPhysicalInfo.physicalOrderFolio)})</span>` : ''}`, { raw: true }) : ''}
       ${order.equipmentId ? orderReportField('work', 'Torre / Antena', `<button type="button" class="btn bsm bg2" onclick="openTowerMaterialModal('${order.equipmentId}')" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 10px;margin-top:2px;">🗼 Ver material de torre</button>`, { raw: true }) : ''}
           </div>
           <section class="order-report-block order-report-request"><span class="order-report-field-icon">${orderReportIcon('clipboard')}</span><div><small>Detalle solicitado</small><p>${orderEscape(requestedDetail)}</p></div></section>
@@ -5245,7 +6320,7 @@ async function openOrderTechnicianReport(orderId) {
     : (completed ? 'Reporte del técnico' : 'Detalle de la orden');
   const headerIcon = orderReportIcon(order.detailKind === 'physical' ? 'work' : 'clipboard');
 
-  card.innerHTML = `<div class="modal-head order-report-head"><div class="order-report-head-main"><span class="order-report-title-icon">${headerIcon}</span><div><h2>${modalHeaderTitle}</h2><p>${orderReportIcon('pin')}<span>${orderEscape(getOrderPlace(order))}</span><em>${orderEscape(getOrderFolio(order))}</em>${order.detailKind === 'network' && reopenCount > 0 ? `<span class="order-reopened-badge" style="margin-left:6px;" title="${reopenTitle}"><svg class="order-reopened-icon" viewBox="0 0 24 24"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> ${reopenLabel}</span>` : ''}</p></div></div><button type="button" class="order-report-close" aria-label="Cerrar" onclick="requestCloseOrderReport()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+  card.innerHTML = `<div class="modal-head order-report-head"><div class="order-report-head-main"><span class="order-report-title-icon">${headerIcon}</span><div><h2>${modalHeaderTitle}</h2><p>${orderReportIcon('pin')}<span>${orderEscape(getOrderPlace(order))}</span><em>${orderEscape(getOrderFolio(order))}</em>${order.detailKind === 'network' && reopenCount > 0 ? `<span class="order-reopened-badge" style="margin-left:6px;" title="${reopenTitle}"><svg class="order-reopened-icon" viewBox="0 0 24 24"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> ${reopenLabel}</span>` : ''}${sentPhysicalInfo.sent ? renderSentToPhysicalBadge(order, { compact: true }) : ''}</p></div></div><button type="button" class="order-report-close" aria-label="Cerrar" onclick="requestCloseOrderReport()"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
     ${bodyContent}`;
   OM('order-tech-report-mo');
 
@@ -5424,6 +6499,7 @@ function renderWOs() {
     }
 
     const isNetworkRow = w.detailKind === 'network';
+    const sentPhysicalBadgeHtml = isNetworkRow ? renderSentToPhysicalBadge(w, { compact: true }) : '';
     const trClasses = [
       rowIsDoneVisual ? 'order-row-done' : (w.detailKind === 'physical' ? 'order-row-open' : ''),
       selectedOrderRowId === String(w.id) ? 'order-row-selected' : '',
@@ -5479,6 +6555,7 @@ function renderWOs() {
                 <td data-label="Estado">
                   <div class="order-state-cell">
                     <span class="order-status-badge ${rowStatus.className}">${orderEscape(rowStatus.label)}</span>
+                    ${sentPhysicalBadgeHtml}
                     ${isNetworkRow && pendingAction.requiresMyAction ? `<button type="button" class="order-action-needed-pill is-${pendingAction.kind || 'action'}-pill" onclick="event.stopPropagation();selectOrderRow('${w.id}');openOrderTechnicianReport('${w.id}')" title="Se requiere tu confirmación en este detalle">${orderEscape(pendingAction.badge)}</button>` : (isNetworkRow && pendingAction.waitingOther ? `<span class="order-waiting-other-pill is-${pendingAction.kind || 'waiting'}-pill">${orderEscape(pendingAction.badge)}</span>` : '')}
                   </div>
                 </td>

@@ -317,6 +317,15 @@ async function syncUserColumns(env) {
     if (!columns.has('color')) {
       await run(env, 'ALTER TABLE users ADD COLUMN color TEXT');
     }
+    if (!columns.has('email')) {
+      await run(env, 'ALTER TABLE users ADD COLUMN email TEXT');
+    }
+    if (!columns.has('ui_accent')) {
+      await run(env, 'ALTER TABLE users ADD COLUMN ui_accent TEXT');
+    }
+    if (!columns.has('ui_font_scale')) {
+      await run(env, 'ALTER TABLE users ADD COLUMN ui_font_scale TEXT');
+    }
     // Liberar usernames de usuarios eliminados históricamente para evitar bloqueos por UNIQUE constraint
     await run(env, "UPDATE users SET username = username || '__deleted_' || id WHERE deleted_at IS NOT NULL AND username NOT LIKE '%__deleted_%'");
   } catch (e) {
@@ -373,17 +382,28 @@ async function ensurePerformanceIndices(env) {
     'CREATE INDEX IF NOT EXISTS idx_wo_net_creator ON work_orders(created_by, status) WHERE deleted_at IS NULL AND detail_kind = \'network\'',
     'CREATE INDEX IF NOT EXISTS idx_wo_net_node_eq ON work_orders(node_id, equipment_id, status) WHERE deleted_at IS NULL AND detail_kind = \'network\''
   ];
+  try {
+    await batchChunks(env, stmts.map(sql => env.DB.prepare(sql)), 30);
+    return;
+  } catch (_) {
+    // Respaldo individual si alguna tabla opcional aún no existe en entornos antiguos
+  }
   for (const sql of stmts) {
     try {
       await run(env, sql);
-    } catch (e) {
+    } catch (_) {
       // Ignorar si los índices o tablas aún no existen
     }
   }
 }
 
-let schemaEnsuredPromise = null;
+const RELATIONAL_SCHEMA_VERSION = 'v3.9-fast-20261124';
+const RELATIONAL_SCHEMA_KEY = 'relational_schema_version';
 let schemaEnsured = false;
+
+export function isRelationalSchemaReady() {
+  return schemaEnsured;
+}
 
 let equipmentColumnsEnsured = false;
 async function ensureEquipmentColumns(env) {
@@ -423,27 +443,47 @@ async function ensureEquipmentColumns(env) {
 }
 
 export async function ensureRelationalSchema(env) {
+  // Nunca compartir una Promise de D1 entre peticiones concurrentes en Cloudflare Workers:
+  // compartir I/O entre distintos requests provoca el error de runtime
+  // "Cannot perform I/O on behalf of a different request".
   if (schemaEnsured) return;
-  if (schemaEnsuredPromise) return schemaEnsuredPromise;
-  schemaEnsuredPromise = (async () => {
-    try {
-      await run(env, `CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value_json TEXT, updated_at TEXT)`);
-    } catch (e) {
-      // Ignore if table exists or concurrency
+  try {
+    const versionRow = await first(env, 'SELECT value_json FROM app_settings WHERE key=?', [RELATIONAL_SCHEMA_KEY]);
+    const stamped = parseJson(versionRow?.value_json, null);
+    if (stamped && stamped.version === RELATIONAL_SCHEMA_VERSION) {
+      schemaEnsured = true;
+      equipmentColumnsEnsured = true;
+      workOrderRelationRecoveryChecked = true;
+      return;
     }
-    await syncWorkOrderColumns(env).catch(e => console.warn('[ensureRelationalSchema] work_orders:', e));
-    await syncUserColumns(env).catch(e => console.warn('[ensureRelationalSchema] users:', e));
-    await syncMaterialInventorySchema(env).catch(e => console.warn('[ensureRelationalSchema] materials:', e));
-    await ensureEquipmentColumns(env).catch(e => console.warn('[ensureRelationalSchema] equipment:', e));
-    await ensurePlansColumns(env).catch(e => console.warn('[ensureRelationalSchema] plans:', e));
-    await ensurePerformanceIndices(env).catch(e => console.warn('[ensureRelationalSchema] indices:', e));
-    await ensureWorkOrderRelationRecovery(env).catch(e => console.warn('[ensureRelationalSchema] recovery:', e));
-    schemaEnsured = true;
-  })().catch(err => {
-    schemaEnsuredPromise = null;
-    throw err;
-  });
-  return schemaEnsuredPromise;
+  } catch (_) {
+    // app_settings aún no existe o necesita inicialización
+  }
+
+  try {
+    await run(env, `CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value_json TEXT, updated_at TEXT)`);
+  } catch (_) {
+    // Ignorar si ya existe o hay concurrencia
+  }
+  await Promise.all([
+    syncWorkOrderColumns(env).catch(e => console.warn('[ensureRelationalSchema] work_orders:', e)),
+    syncUserColumns(env).catch(e => console.warn('[ensureRelationalSchema] users:', e)),
+    syncMaterialInventorySchema(env).catch(e => console.warn('[ensureRelationalSchema] materials:', e)),
+    ensureEquipmentColumns(env).catch(e => console.warn('[ensureRelationalSchema] equipment:', e)),
+    ensurePlansColumns(env).catch(e => console.warn('[ensureRelationalSchema] plans:', e))
+  ]);
+  await ensurePerformanceIndices(env).catch(e => console.warn('[ensureRelationalSchema] indices:', e));
+  await ensureWorkOrderRelationRecovery(env).catch(e => console.warn('[ensureRelationalSchema] recovery:', e));
+  try {
+    await run(
+      env,
+      `INSERT INTO app_settings(key,value_json,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at`,
+      [RELATIONAL_SCHEMA_KEY, JSON.stringify({ version: RELATIONAL_SCHEMA_VERSION }), new Date().toISOString()]
+    );
+  } catch (_) {
+    // No bloquear la respuesta si falla el sellado concurrente
+  }
+  schemaEnsured = true;
 }
 
 async function batchChunks(env, statements, size = 80) {
@@ -578,6 +618,28 @@ async function resolveValidTechnicianId(env, candidateId) {
     const byLegacy = await first(env, 'SELECT id FROM technicians WHERE lower(username_legacy) = lower(?) OR lower(name) = lower(?)', [cleanUser, id]);
     if (byLegacy?.id) return byLegacy.id;
   }
+  // Si el ID corresponde a un usuario real que aún no tiene fila espejo en technicians,
+  // crearla automáticamente para no perder jamás asignaciones de equipo al guardar en D1.
+  const userRow = await first(
+    env,
+    'SELECT id, name, username, phone, active, status FROM users WHERE (id = ? OR lower(username) = lower(?)) AND deleted_at IS NULL',
+    [id, cleanUser || id]
+  );
+  if (userRow?.id) {
+    const mirrorId = `tech-${userRow.id}`;
+    try {
+      await run(
+        env,
+        'INSERT OR IGNORE INTO technicians(id, user_id, name, username_legacy, phone, active, status, created_at) VALUES(?,?,?,?,?,?,?,?)',
+        [mirrorId, userRow.id, userRow.name || userRow.username || 'Técnico', userRow.username || '', userRow.phone || '', userRow.active ?? 1, userRow.status || 'activo', new Date().toISOString()]
+      );
+      const created = await first(env, 'SELECT id FROM technicians WHERE id = ? OR user_id = ?', [mirrorId, userRow.id]);
+      if (created?.id) return created.id;
+    } catch (_) {
+      const retry = await first(env, 'SELECT id FROM technicians WHERE user_id = ?', [userRow.id]);
+      if (retry?.id) return retry.id;
+    }
+  }
   return null;
 }
 
@@ -596,7 +658,12 @@ async function resolveValidNodeId(env, candidateId) {
 }
 
 async function getUserMap(env) {
-  const rows = await all(env, `SELECT u.id,u.name,u.username,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id`);
+  let rows;
+  try {
+    rows = await all(env, `SELECT u.id,u.name,u.username,COALESCE(u.color,'') AS color,u.active,u.deleted_at,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id`);
+  } catch (_) {
+    rows = await all(env, `SELECT u.id,u.name,u.username,'' AS color,u.active,u.deleted_at,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id`);
+  }
   return new Map(rows.map(row => [row.id, row]));
 }
 
@@ -604,9 +671,9 @@ async function getLatestAuditMap(env, targetIds = null) {
   const ids = Array.isArray(targetIds) ? targetIds.filter(Boolean) : null;
   if (ids && !ids.length) return new Map();
   if (ids && ids.length > D1_IN_CHUNK_SIZE) {
+    const chunks = await Promise.all(chunkValues(ids).map(idsChunk => getLatestAuditMap(env, idsChunk)));
     const combined = new Map();
-    for (const idsChunk of chunkValues(ids)) {
-      const chunk = await getLatestAuditMap(env, idsChunk);
+    for (const chunk of chunks) {
       for (const [targetId, row] of chunk) combined.set(targetId, row);
     }
     return combined;
@@ -858,14 +925,19 @@ async function loadPlanningMapCatalog(env) {
 async function loadReportsAndEvidence(env, workOrderIds = null) {
   const ids = Array.isArray(workOrderIds) ? workOrderIds.filter(Boolean) : null;
   if (ids && !ids.length) return new Map();
-  const reports=[];
-  const evidence=[];
-  const idChunks=ids?chunkValues(ids):[null];
-  for(const idsChunk of idChunks){
-    const filter=idsChunk?` WHERE work_order_id IN (${idsChunk.map(()=>'?').join(',')})`:'';
-    reports.push(...await all(env,`SELECT * FROM work_order_reports${filter}`,idsChunk||[]));
-    evidence.push(...await all(env,`SELECT id,work_order_id,created_at FROM work_order_evidence${filter} ORDER BY created_at,id`,idsChunk||[]));
-  }
+  const idChunks = ids ? chunkValues(ids) : [null];
+  const [reportChunks, evidenceChunks] = await Promise.all([
+    Promise.all(idChunks.map(idsChunk => {
+      const filter = idsChunk ? ` WHERE work_order_id IN (${idsChunk.map(() => '?').join(',')})` : '';
+      return all(env, `SELECT * FROM work_order_reports${filter}`, idsChunk || []);
+    })),
+    Promise.all(idChunks.map(idsChunk => {
+      const filter = idsChunk ? ` WHERE work_order_id IN (${idsChunk.map(() => '?').join(',')})` : '';
+      return all(env, `SELECT id,work_order_id,created_at FROM work_order_evidence${filter} ORDER BY created_at,id`, idsChunk || []);
+    }))
+  ]);
+  const reports = reportChunks.flat();
+  const evidence = evidenceChunks.flat();
   // La columna storage_key puede contener la foto completa como data URL.
   // Para armar la lista solo necesitamos metadatos; no cargamos las imagenes
   // (decenas de MB) en cada GET /api/data.
@@ -934,7 +1006,11 @@ function workOrderQuery(page = {}) {
   const binds = [];
   if (page?.openOnly === '1') {
     clauses.push('w.deleted_at IS NULL');
-    clauses.push("COALESCE(w.status,'pendiente') NOT IN ('completada','no_realizado','eliminada')");
+    if (page?.includeNoRealizado === '1') {
+      clauses.push("COALESCE(w.status,'pendiente') NOT IN ('completada','eliminada')");
+    } else {
+      clauses.push("COALESCE(w.status,'pendiente') NOT IN ('completada','no_realizado','eliminada')");
+    }
   } else if (page?.windowed === '1'||page?.scoped==='1') {
     clauses.push('w.deleted_at IS NULL');
   }
@@ -1108,14 +1184,19 @@ async function loadWorkOrders(env, ctx, page = null) {
   const ids = rows.map(row => row.id);
   if (!ids.length) return [];
   const isAdminStats = page?.adminStats === '1';
-  if (!ctx.audit) ctx.audit = isAdminStats ? new Map() : await getLatestAuditMap(env,ids);
-  const materials=[];
-  if (!isAdminStats && page?.detailKind !== 'network') {
-    for(const idsChunk of chunkValues(ids)){
-      const placeholders=idsChunk.map(()=>'?').join(',');
-      materials.push(...await all(env,`SELECT * FROM work_order_materials WHERE work_order_id IN (${placeholders}) ORDER BY work_order_id,id`,idsChunk));
-    }
-  }
+  const needMaterials = !isAdminStats && page?.detailKind !== 'network';
+  const [auditMap, materialChunks, reports] = await Promise.all([
+    ctx.audit ? Promise.resolve(ctx.audit) : (isAdminStats ? Promise.resolve(new Map()) : getLatestAuditMap(env, ids)),
+    needMaterials
+      ? Promise.all(chunkValues(ids).map(idsChunk => {
+          const placeholders = idsChunk.map(() => '?').join(',');
+          return all(env, `SELECT * FROM work_order_materials WHERE work_order_id IN (${placeholders}) ORDER BY work_order_id,id`, idsChunk);
+        }))
+      : Promise.resolve([]),
+    isAdminStats ? Promise.resolve(new Map()) : loadReportsAndEvidence(env, ids)
+  ]);
+  if (!ctx.audit) ctx.audit = auditMap;
+  const materials = materialChunks.flat();
   const matsBy = new Map();
   for (const row of materials) {
     const list = matsBy.get(row.work_order_id) || [];
@@ -1123,7 +1204,6 @@ async function loadWorkOrders(env, ctx, page = null) {
     list.push(raw || { id:row.material_id||'', name:row.material_name_legacy||'', quantity:row.quantity ?? 0, unit:row.unit_legacy||'' });
     matsBy.set(row.work_order_id, list);
   }
-  const reports = isAdminStats ? new Map() : await loadReportsAndEvidence(env, ids);
   return rows.map(row => {
     const isInstallation = isInstallationCategory(row.category);
     const out = {
@@ -1593,13 +1673,18 @@ async function loadWeekPlan(env,page={}) {
       if (!Array.isArray(scope._generalPlans)) scope._generalPlans=[];
       const planAssignments = assignmentByPlan.get(plan.id) || [];
       const assignment = planAssignments[0];
+      const latestAssignedAt = planAssignments.reduce((max, item) => {
+        const at = String(item?.assigned_at || '');
+        return at > max ? at : max;
+      }, '');
+      const assignedTechIds = [...new Set(planAssignments.map(item => item.technician_id).filter(Boolean))];
       scope._generalPlans.push({
         id:plan.id,
         name:plan.name,
         stops:planStops,
-        assignedTechId:assignment?.technician_id || '',
-        assignedTechIds:planAssignments.map(item=>item.technician_id),
-        assignedAt:assignment?.assigned_at || '',
+        assignedTechId:assignedTechIds[0] || '',
+        assignedTechIds,
+        assignedAt:latestAssignedAt || assignment?.assigned_at || '',
         scheduledDate:plan.scheduled_date || '',
         ...(plan.created_at?{createdAt:plan.created_at}:{})
       });
@@ -1739,72 +1824,79 @@ export async function loadStatePart(env, part, page = {}) {
     return {equipment,nodes,materials,routes};
   }
   if (part === 'operations') {
-    await ensureRelationalSchema(env).catch(() => {});
-    await ensureWorkOrderRelationRecovery(env).catch(() => {});
-    const usersMap = await getUserMap(env);
-    const workOrders=await loadWorkOrders(env,{users:usersMap,audit:null},page);
-    const placeNodes=page?.includeMapCatalog==='1'
-      ? (await all(env,"SELECT id,node_code,town FROM nodes WHERE deleted_at IS NULL ORDER BY rowid")).map(row=>({id:row.id,nodeCode:row.node_code||'',town:row.town||''}))
-      : [];
-    const visibleIds=new Set(workOrders.map(order=>order.id));
-    const deletionRequests=(page?.windowed==='1'||page?.scoped==='1')?(await loadDeletionRequests(env)).filter(request=>visibleIds.has(request.targetId)||visibleIds.has(request.detailId)):[];
-    const query=workOrderQuery(page);
+    if (!schemaEnsured) await ensureRelationalSchema(env).catch(() => {});
+    const requestedSingleId = nullableText(page?.id);
+    const isWindowed = page?.windowed === '1';
+    const isScoped = page?.scoped === '1';
+    const query = workOrderQuery(page);
+    const needsZoneJoin = query.where.includes('z.');
+    const totalJoin = needsZoneJoin ? ' LEFT JOIN zones z ON z.id=w.zone_id' : '';
+    const statsDetailKind = page?.detailKind === 'network' ? 'network' : 'physical';
+    const excludedStatsCategories = statsDetailKind === 'physical' ? PHYSICAL_STATS_EXCLUDED_CATEGORIES : [];
+    const statsCategoryClause = excludedStatsCategories.length ? ` AND lower(COALESCE(category,'')) NOT IN (${excludedStatsCategories.map(() => '?').join(',')})` : '';
+    const creatorKindClause = statsDetailKind === 'network' ? " AND w.detail_kind = 'network'" : (page?.detailKind === 'physical' ? " AND (w.detail_kind = 'physical' OR w.detail_kind IS NULL)" : '');
 
-    const safeUsersQuery = async (roles) => {
+    const usersMap = await getUserMap(env);
+    const activeUsers = [...usersMap.values()].filter(u => !u.deleted_at && (u.active === null || u.active === undefined || Number(u.active) === 1));
+    const sortByName = (a, b) => String(a.name || a.username || '').toLowerCase().localeCompare(String(b.name || b.username || '').toLowerCase());
+    const mappedSupportUsers = activeUsers
+      .filter(u => ['administrador', 'admin', 'soporte'].includes(String(u.role || '').toLowerCase()))
+      .sort(sortByName)
+      .map(user => ({ id: user.id, name: user.name || user.username || 'Soporte', username: user.username, color: user.color || '', role: normalizeRole(user.role) }));
+    const mappedAttentionUsers = activeUsers
+      .filter(u => ['atencion_clientes', 'atencion'].includes(String(u.role || '').toLowerCase()))
+      .sort(sortByName)
+      .map(user => ({ id: user.id, name: user.name || user.username || 'Atención', username: user.username, color: user.color || '', role: normalizeRole(user.role) }));
+
+    const fetchCreators = async () => {
+      if (!isWindowed) return [];
       try {
-        return await all(env, `SELECT u.id,u.name,u.username,COALESCE(u.color,'') AS color,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN (${roles.map(()=>'?').join(',')}) ORDER BY lower(u.name),lower(u.username)`, roles);
+        return await all(env, `SELECT DISTINCT u.id,u.name,u.username,COALESCE(u.color,'') AS color FROM work_orders w JOIN users u ON u.id=w.created_by JOIN roles r ON r.id=u.role_id WHERE w.deleted_at IS NULL${creatorKindClause} AND r.code IN ('administrador','admin','soporte','atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`);
       } catch (_) {
         try {
-          return await all(env, `SELECT u.id,u.name,u.username,'' AS color,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE u.deleted_at IS NULL AND (u.active IS NULL OR u.active=1) AND r.code IN (${roles.map(()=>'?').join(',')}) ORDER BY lower(u.name),lower(u.username)`, roles);
+          return await all(env, `SELECT DISTINCT u.id,u.name,u.username,'' AS color FROM work_orders w JOIN users u ON u.id=w.created_by JOIN roles r ON r.id=u.role_id WHERE w.deleted_at IS NULL${creatorKindClause} AND r.code IN ('administrador','admin','soporte','atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`);
         } catch (__) {
           return [];
         }
       }
     };
 
-    const [supportUsers, attentionUsers] = await Promise.all([
-      safeUsersQuery(['administrador','admin','soporte']),
-      safeUsersQuery(['atencion_clientes','atencion'])
+    const [workOrders, placeNodeRows, rawDeletionRequests, creatorRows, totalRow, statsRow] = await Promise.all([
+      loadWorkOrders(env, { users: usersMap, audit: null }, page),
+      page?.includeMapCatalog === '1'
+        ? all(env, "SELECT id,node_code,town FROM nodes WHERE deleted_at IS NULL ORDER BY rowid")
+        : Promise.resolve([]),
+      (isWindowed || isScoped) ? loadDeletionRequests(env) : Promise.resolve([]),
+      fetchCreators(),
+      requestedSingleId
+        ? Promise.resolve(null)
+        : first(env, `SELECT COUNT(*) AS total FROM work_orders w${totalJoin}${query.where}`, query.binds),
+      !isWindowed
+        ? Promise.resolve(null)
+        : (statsDetailKind === 'network'
+            ? first(env, `SELECT COUNT(*) AS total, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND NOT (status='resuelto_soporte') THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND priority IN ('muy_alta','alta') THEN 1 ELSE 0 END) AS critical, SUM(CASE WHEN status='completada' OR status='resuelto_soporte' THEN 1 ELSE 0 END) AS done FROM work_orders WHERE deleted_at IS NULL AND detail_kind = 'network'`)
+            : first(env, `SELECT COUNT(*) AS total, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND priority IN ('muy_alta','alta') THEN 1 ELSE 0 END) AS critical, SUM(CASE WHEN status='completada' THEN 1 ELSE 0 END) AS done FROM work_orders WHERE deleted_at IS NULL AND (detail_kind = 'physical' OR detail_kind IS NULL)${statsCategoryClause}`, excludedStatsCategories))
     ]);
-    const mappedSupportUsers = supportUsers.map(user=>({id:user.id,name:user.name||user.username||'Soporte',username:user.username,color:user.color||'',role:normalizeRole(user.role)}));
-    const mappedAttentionUsers = attentionUsers.map(user=>({id:user.id,name:user.name||user.username||'Atención',username:user.username,color:user.color||'',role:normalizeRole(user.role)}));
-    const needsZoneJoin = query.where.includes('z.');
-    const totalJoin = needsZoneJoin ? ' LEFT JOIN zones z ON z.id=w.zone_id' : '';
-    if (page?.windowed !== '1') {
-      const totalRow=await first(env,`SELECT COUNT(*) AS total FROM work_orders w${totalJoin}${query.where}`,query.binds);
-      return {workOrders,deletionRequests,total:Number(totalRow?.total)||0,supportUsers:mappedSupportUsers,attentionUsers:mappedAttentionUsers};
-    }
-    const statsDetailKind=page?.detailKind==='network'?'network':'physical';
-    const excludedStatsCategories=statsDetailKind==='physical'?PHYSICAL_STATS_EXCLUDED_CATEGORIES:[];
-    const statsCategoryClause=excludedStatsCategories.length?` AND lower(COALESCE(category,'')) NOT IN (${excludedStatsCategories.map(()=>'?').join(',')})`:'';
-    
-    let creatorRows = [];
-    const creatorKindClause = statsDetailKind === 'network' ? " AND w.detail_kind = 'network'" : (page?.detailKind === 'physical' ? " AND (w.detail_kind = 'physical' OR w.detail_kind IS NULL)" : "");
-    try {
-      creatorRows = await all(env, `SELECT DISTINCT u.id,u.name,u.username,COALESCE(u.color,'') AS color FROM work_orders w JOIN users u ON u.id=w.created_by JOIN roles r ON r.id=u.role_id WHERE w.deleted_at IS NULL${creatorKindClause} AND r.code IN ('administrador','admin','soporte','atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`);
-    } catch (_) {
-      try {
-        creatorRows = await all(env, `SELECT DISTINCT u.id,u.name,u.username,'' AS color FROM work_orders w JOIN users u ON u.id=w.created_by JOIN roles r ON r.id=u.role_id WHERE w.deleted_at IS NULL${creatorKindClause} AND r.code IN ('administrador','admin','soporte','atencion_clientes','atencion') ORDER BY lower(u.name),lower(u.username)`);
-      } catch (__) {
-        creatorRows = [];
-      }
-    }
 
-    const [totalRow,statsRow]=await Promise.all([
-      first(env,`SELECT COUNT(*) AS total FROM work_orders w${totalJoin}${query.where}`,query.binds),
-      statsDetailKind === 'network'
-        ? first(env,`SELECT COUNT(*) AS total, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND NOT (status='resuelto_soporte') THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND priority IN ('muy_alta','alta') THEN 1 ELSE 0 END) AS critical, SUM(CASE WHEN status='completada' OR status='resuelto_soporte' THEN 1 ELSE 0 END) AS done FROM work_orders WHERE deleted_at IS NULL AND detail_kind = 'network'`)
-        : first(env,`SELECT COUNT(*) AS total, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') THEN 1 ELSE 0 END) AS pending, SUM(CASE WHEN COALESCE(status,'pendiente') NOT IN ('completada','no_realizado') AND priority IN ('muy_alta','alta') THEN 1 ELSE 0 END) AS critical, SUM(CASE WHEN status='completada' THEN 1 ELSE 0 END) AS done FROM work_orders WHERE deleted_at IS NULL AND (detail_kind = 'physical' OR detail_kind IS NULL)${statsCategoryClause}`, excludedStatsCategories)
-    ]);
+    const placeNodes = (placeNodeRows || []).map(row => ({ id: row.id, nodeCode: row.node_code || '', town: row.town || '' }));
+    const visibleIds = new Set(workOrders.map(order => order.id));
+    const deletionRequests = (isWindowed || isScoped)
+      ? rawDeletionRequests.filter(request => visibleIds.has(request.targetId) || visibleIds.has(request.detailId))
+      : [];
+    const totalCount = requestedSingleId ? workOrders.length : (Number(totalRow?.total) || 0);
+
+    if (!isWindowed) {
+      return { workOrders, deletionRequests, total: totalCount, supportUsers: mappedSupportUsers, attentionUsers: mappedAttentionUsers };
+    }
     return {
       workOrders,
       deletionRequests,
-      total:Number(totalRow?.total)||0,
-      stats:{total:Number(statsRow?.total)||0,pending:Number(statsRow?.pending)||0,critical:Number(statsRow?.critical)||0,done:Number(statsRow?.done)||0},
-      creators:creatorRows.map(user=>({id:user.id,name:user.name||user.username||'Usuario',color:user.color||''})),
-      supportUsers:mappedSupportUsers,
-      attentionUsers:mappedAttentionUsers,
-      ...(placeNodes.length?{nodes:placeNodes}:{})
+      total: totalCount,
+      stats: { total: Number(statsRow?.total) || 0, pending: Number(statsRow?.pending) || 0, critical: Number(statsRow?.critical) || 0, done: Number(statsRow?.done) || 0 },
+      creators: creatorRows.map(user => ({ id: user.id, name: user.name || user.username || 'Usuario', color: user.color || '' })),
+      supportUsers: mappedSupportUsers,
+      attentionUsers: mappedAttentionUsers,
+      ...(placeNodes.length ? { nodes: placeNodes } : {})
     };
   }
   if (part === 'people') {
@@ -1835,8 +1927,8 @@ export async function loadStatePart(env, part, page = {}) {
   }
   if (part === 'planning') {
     const includeMapCatalog=page?.includeMapCatalog==='1';
-    const [weekPlan,prepChecked,syncMeta,mapCatalog] = await Promise.all([
-      loadWeekPlan(env,page),getAppSetting(env,'prepChecked',{}),getAppSetting(env,'syncMeta',{}),includeMapCatalog?loadPlanningMapCatalog(env):Promise.resolve(null)
+    const [weekPlan,prepChecked,syncMeta,mapCatalog,usersMap] = await Promise.all([
+      loadWeekPlan(env,page),getAppSetting(env,'prepChecked',{}),getAppSetting(env,'syncMeta',{}),includeMapCatalog?loadPlanningMapCatalog(env):Promise.resolve(null),getUserMap(env)
     ]);
     const scopes=Object.values(weekPlan||{});
     const stops=[];
@@ -1844,21 +1936,41 @@ export async function loadStatePart(env, part, page = {}) {
     const equipmentIds=[...new Set(stops.map(stop=>stop.equipmentId).filter(Boolean))];
     const nodeIds=[...new Set(stops.map(stop=>stop.nodeId).filter(Boolean))];
     const detailIds=[...new Set(stops.flatMap(stop=>stop.detailIds||[]).filter(Boolean))];
-    const usersMap=await getUserMap(env);const ctx={users:usersMap,audit:null};
-    const equipment=mapCatalog?.equipment||[];
-    if(!mapCatalog)for(const idsChunk of chunkValues(equipmentIds))equipment.push(...await loadEquipment(env,ctx,{paged:'1',limit:'100',equipmentIds:idsChunk.join(',')}));
-    const nodes=mapCatalog?.nodes||[];
-    if(!mapCatalog)for(const idsChunk of chunkValues(nodeIds))nodes.push(...await loadNodes(env,ctx,{paged:'1',limit:'100',nodeIds:idsChunk.join(',')}));
+    const ctx={users:usersMap,audit:null};
+    const [eqChunks, nodeChunks] = await Promise.all([
+      mapCatalog ? Promise.resolve([]) : Promise.all(chunkValues(equipmentIds).map(idsChunk => loadEquipment(env,ctx,{paged:'1',limit:'100',equipmentIds:idsChunk.join(',')}))),
+      mapCatalog ? Promise.resolve([]) : Promise.all(chunkValues(nodeIds).map(idsChunk => loadNodes(env,ctx,{paged:'1',limit:'100',nodeIds:idsChunk.join(',')})))
+    ]);
+    const equipment=mapCatalog?.equipment||eqChunks.flat();
+    const nodes=mapCatalog?.nodes||nodeChunks.flat();
+    const nodeIdsForOrders = new Set(nodeIds);
+    const normPlanText = v => String(v || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+    if (nodes.length) {
+      const nodeByName = new Map();
+      for (const n of nodes) {
+        if (!n || n.deletedAt) continue;
+        const k1 = normPlanText(n.name);
+        const k2 = normPlanText(n.town);
+        if (k1 && !nodeByName.has(k1)) nodeByName.set(k1, n.id);
+        if (k2 && !nodeByName.has(k2)) nodeByName.set(k2, n.id);
+      }
+      for (const stop of stops) {
+        if (!stop || stop.deletedAt || stop.nodeId || stop.equipmentId) continue;
+        const matchId = nodeByName.get(normPlanText(stop.name)) || nodeByName.get(normPlanText(stop.town));
+        if (matchId) nodeIdsForOrders.add(matchId);
+      }
+    }
+    const allNodeIdsForOrders = [...nodeIdsForOrders];
     const workOrdersById=new Map();
     const appendWorkOrders=rows=>rows.forEach(order=>workOrdersById.set(order.id,order));
     const workOrderTasks = [
       ...chunkValues(detailIds).map(idsChunk => loadAllWorkOrderPages(env,usersMap,{workOrderIds:idsChunk.join(',')})),
-      ...chunkValues(equipmentIds).map(idsChunk => loadAllWorkOrderPages(env,usersMap,{equipmentIds:idsChunk.join(','),openOnly:'1'})),
-      ...chunkValues(nodeIds).map(idsChunk => loadAllWorkOrderPages(env,usersMap,{nodeIds:idsChunk.join(','),openOnly:'1'}))
+      ...chunkValues(equipmentIds).map(idsChunk => loadAllWorkOrderPages(env,usersMap,{equipmentIds:idsChunk.join(','),openOnly:'1',includeNoRealizado:'1'})),
+      ...chunkValues(allNodeIdsForOrders).map(idsChunk => loadAllWorkOrderPages(env,usersMap,{nodeIds:idsChunk.join(','),openOnly:'1',includeNoRealizado:'1'}))
     ];
     const viewerId = nullableText(page?.viewerId);
     if (viewerId) {
-      workOrderTasks.push(loadAllWorkOrderPages(env,usersMap,{assignee:viewerId}));
+      workOrderTasks.push(loadAllWorkOrderPages(env,usersMap,{assignee:viewerId,openOnly:'1',includeNoRealizado:'1'}));
     }
     const [woBatches, rawDeletionRequests, materialMovements, technicians, userRows] = await Promise.all([
       Promise.all(workOrderTasks),
@@ -2341,28 +2453,45 @@ async function replaceWeekPlanUnsafe(env,weekPlan) {
       planStatements.push(env.DB.prepare('INSERT OR REPLACE INTO plans(id,name,scope_type,scope_key,day_key,technician_id,status,scheduled_date,created_at,legacy_source) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(planId,`Legacy ${scopeKey} ${day}`,scopeKey==='__shared__'?'shared':'technician',scopeKey,day,resolvedScopeTechId,'activo',null,null,'weekPlan array'));
       stops.forEach((stop,i)=>stopRecords.push(planStopSqlRecord(planId,stop,i)));
     }
+    const seenScopeGeneralPlanIds = new Set();
     for (const plan of Array.isArray(scope._generalPlans)?scope._generalPlans:[]) {
       const planId=plan.id||generatedId('gp');
+      if (seenScopeGeneralPlanIds.has(planId)) {
+        throw new Error(`Plan duplicado en weekPlan: ${planId}`);
+      }
+      seenScopeGeneralPlanIds.add(planId);
       if (seenPlanIds.has(planId)) continue;
       seenPlanIds.add(planId);
       planStatements.push(env.DB.prepare('INSERT OR REPLACE INTO plans(id,name,scope_type,scope_key,day_key,technician_id,status,scheduled_date,created_at,legacy_source) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(planId,text(plan.name,'Plan general'),scopeKey==='__shared__'?'shared':'technician',scopeKey,'general',resolvedScopeTechId,'activo',plan.scheduledDate??null,plan.createdAt??null,'weekPlan _generalPlans'));
-      const assignedTechIds = [...new Set([plan.assignedTechId, ...(Array.isArray(plan.assignedTechIds) ? plan.assignedTechIds : [])].filter(Boolean))];
+      const rawAssignedIds = Array.isArray(plan.assignedTechIds)
+        ? [...new Set([...plan.assignedTechIds, ...(plan.assignedTechIds.length === 0 && !plan.explicitlyUnassigned && plan.assignedTechId ? [plan.assignedTechId] : [])].filter(Boolean))]
+        : [...new Set([plan.assignedTechId].filter(Boolean))];
       const seenAssignedTechs = new Set();
-      for (const techId of assignedTechIds) {
+      const stampAt = plan.assignedAt || plan.updatedAt || new Date().toISOString();
+      for (const techId of rawAssignedIds) {
         const validTechId = await resolveValidTechnicianId(env, techId);
         if (validTechId && !seenAssignedTechs.has(validTechId)) {
           seenAssignedTechs.add(validTechId);
-          assignmentStatements.push(env.DB.prepare('INSERT OR REPLACE INTO plan_assignments(id,plan_id,technician_id,assigned_at) VALUES(?,?,?,?)').bind(`pa-${planId}-${validTechId}`,planId,validTechId,plan.assignedAt??new Date().toISOString()));
+          assignmentStatements.push(env.DB.prepare('INSERT OR REPLACE INTO plan_assignments(id,plan_id,technician_id,assigned_at) VALUES(?,?,?,?)').bind(`pa-${planId}-${validTechId}`,planId,validTechId,stampAt));
         }
       }
       (Array.isArray(plan.stops)?plan.stops:[]).forEach((stop,i)=>stopRecords.push(planStopSqlRecord(planId,stop,i)));
     }
   }
-  // La validacion termina antes de borrar el plan vigente. Asi un payload
-  // inconsistente no puede dejar la agenda vacia.
-  await run(env,'DELETE FROM plans');
-  if (planStatements.length) await batchChunks(env,planStatements);
-  if (assignmentStatements.length) await batchChunks(env,assignmentStatements);
+  // Ejecutar DELETE FROM plans + INSERT plans + INSERT plan_assignments de forma atómica
+  // dentro del mismo lote D1 para evitar ventanas donde una consulta concurrente vea
+  // asignaciones vacías y desasigne técnicos del equipo.
+  const coreStatements = [
+    env.DB.prepare('DELETE FROM plans'),
+    ...planStatements,
+    ...assignmentStatements
+  ];
+  if (coreStatements.length <= 100) {
+    await env.DB.batch(coreStatements);
+  } else {
+    await env.DB.batch([env.DB.prepare('DELETE FROM plans'), ...planStatements]);
+    if (assignmentStatements.length) await batchChunks(env, assignmentStatements);
+  }
   const stopStatements=[];
   const linkStatements=[];
   for (const item of stopRecords) {
@@ -2445,7 +2574,7 @@ export async function applyChanges(env,changes) {
 }
 
 function recordTime(item) {
-  const fields=['deletedAt','updatedAt','lastActionAt','completedAt','createdAt'];
+  const fields=['deletedAt','updatedAt','assignedAt','lastActionAt','completedAt','createdAt'];
   return fields.reduce((max,key)=>{ const t=Date.parse(item?.[key]||''); return Number.isFinite(t)?Math.max(max,t):max; },0);
 }
 function mergeRecords(remote,incoming) {
@@ -2486,7 +2615,20 @@ function mergePlanObject(remote,local) {
     if (key==='_generalPlans') {
       const r=Array.isArray(remote?.[key])?remote[key]:[]; const l=Array.isArray(local?.[key])?local[key]:[];
       const plans=mergeRecordsKeepIncomingOrder(r,l);
-      out[key]=plans.map(p=>{ const rp=r.find(x=>x.id===p.id)||{}; const lp=l.find(x=>x.id===p.id)||{}; return {...p,stops:mergeRecordsKeepIncomingOrder(rp.stops,lp.stops)}; });
+      out[key]=plans.map(p=>{
+        const rp=r.find(x=>x.id===p.id)||{};
+        const lp=l.find(x=>x.id===p.id)||{};
+        const mergedPlan={...p,stops:mergeRecordsKeepIncomingOrder(rp.stops,lp.stops)};
+        if (lp && lp.id && recordTime(lp) >= recordTime(rp)) {
+          if (Array.isArray(lp.assignedTechIds)) {
+            const cleanIds = [...new Set(lp.assignedTechIds.filter(Boolean).map(String))];
+            mergedPlan.assignedTechIds = cleanIds;
+            mergedPlan.assignedTechId = cleanIds[0] || '';
+            mergedPlan.explicitlyUnassigned = cleanIds.length === 0;
+          }
+        }
+        return mergedPlan;
+      });
     } else if (Array.isArray(remote?.[key])||Array.isArray(local?.[key])) out[key]=mergeRecordsKeepIncomingOrder(remote?.[key],local?.[key]);
   }
   return out;
@@ -2603,8 +2745,280 @@ export async function upsertWorkOrderReport(env,incomingWorkOrder) {
   return {record:stateOrder,time};
 }
 
+const ALLOWED_UI_FONT_SCALES = new Set(['sm', 'md', 'lg', 'xl']);
+
+function sanitizeUiAccent(value) {
+  const raw = text(value).trim();
+  if (!raw) return '';
+  return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw.toLowerCase() : '';
+}
+
+function sanitizeUiFontScale(value) {
+  const raw = text(value, 'md').trim().toLowerCase();
+  return ALLOWED_UI_FONT_SCALES.has(raw) ? raw : 'md';
+}
+
+async function queryUserProfileRow(env, whereSql, bindVal) {
+  try {
+    return await first(
+      env,
+      `SELECT u.id,u.name,u.username,u.phone,u.email,u.color,u.ui_accent,u.ui_font_scale,u.notes,u.status,u.active,u.deleted_at,u.updated_at,u.password_legacy,u.password_hash,r.code AS role
+       FROM users u JOIN roles r ON r.id=u.role_id WHERE ${whereSql} LIMIT 1`,
+      [bindVal]
+    );
+  } catch (err) {
+    // Fallback si la tabla aún no tiene columnas opcionales (email/ui_accent/ui_font_scale)
+    return await first(
+      env,
+      `SELECT u.id,u.name,u.username,u.phone,u.color,u.notes,u.status,u.active,u.deleted_at,u.updated_at,u.password_legacy,u.password_hash,r.code AS role
+       FROM users u JOIN roles r ON r.id=u.role_id WHERE ${whereSql} LIMIT 1`,
+      [bindVal]
+    );
+  }
+}
+
+function formatSafeUserProfile(row, zones = []) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    username: row.username || '',
+    role: normalizeRole(row.role),
+    status: row.status || 'activo',
+    phone: row.phone || '',
+    email: row.email || '',
+    color: row.color || '',
+    uiAccent: sanitizeUiAccent(row.ui_accent),
+    uiFontScale: sanitizeUiFontScale(row.ui_font_scale),
+    notes: row.notes || '',
+    zones: Array.isArray(zones) ? zones : [],
+    updatedAt: row.updated_at || ''
+  };
+}
+
+export async function getUserProfile(env, userId) {
+  const cleanId = text(userId).trim();
+  if (!cleanId) return null;
+  const row = await queryUserProfileRow(env, 'u.id=?', cleanId);
+  if (!row || row.deleted_at || row.active === 0) return null;
+  let zones = [];
+  try {
+    const zoneRows = await all(
+      env,
+      `SELECT z.code FROM user_zones uz JOIN zones z ON z.id=uz.zone_id WHERE uz.user_id=?`,
+      [cleanId]
+    );
+    zones = (zoneRows || []).map(z => z.code).filter(Boolean);
+  } catch (e) {}
+  return formatSafeUserProfile(row, zones);
+}
+
+export async function updateUserProfile(env, userId, payload = {}) {
+  const cleanId = text(userId).trim();
+  if (!cleanId) {
+    const err = new Error('Sesión de usuario inválida');
+    err.status = 401;
+    err.code = 'UNAUTHORIZED';
+    err.syncType = 'AUTENTICACION';
+    throw err;
+  }
+  await syncUserColumns(env);
+  const current = await queryUserProfileRow(env, 'u.id=?', cleanId);
+  if (!current || current.deleted_at || current.active === 0) {
+    const err = new Error('Usuario no encontrado o inactivo');
+    err.status = 404;
+    err.code = 'USER_NOT_FOUND';
+    err.syncType = 'DATOS_INVALIDOS';
+    throw err;
+  }
+
+  const nextName = Object.prototype.hasOwnProperty.call(payload, 'name')
+    ? text(payload.name).trim()
+    : text(current.name).trim();
+  if (!nextName || nextName.length > 120) {
+    const err = new Error('El nombre es obligatorio y debe tener máximo 120 caracteres.');
+    err.status = 400;
+    err.code = 'INVALID_NAME';
+    err.syncType = 'DATOS_INVALIDOS';
+    throw err;
+  }
+
+  const nextUsername = Object.prototype.hasOwnProperty.call(payload, 'username')
+    ? text(payload.username).trim().replace(/^@+/, '').trim()
+    : text(current.username).trim();
+  if (!nextUsername || nextUsername.length < 2 || nextUsername.length > 60 || /\s/.test(nextUsername)) {
+    const err = new Error('El nombre de usuario debe tener entre 2 y 60 caracteres sin espacios.');
+    err.status = 400;
+    err.code = 'INVALID_USERNAME';
+    err.syncType = 'DATOS_INVALIDOS';
+    throw err;
+  }
+
+  if (nextUsername.toLowerCase() !== text(current.username).trim().toLowerCase()) {
+    const collision = await first(
+      env,
+      'SELECT id, name, deleted_at FROM users WHERE lower(username) = lower(?) AND id <> ?',
+      [nextUsername, cleanId]
+    );
+    if (collision) {
+      if (collision.deleted_at) {
+        await run(env, "UPDATE users SET username = username || '__deleted_' || id WHERE id = ?", [collision.id]);
+      } else {
+        const err = new Error(`El nombre de usuario "${nextUsername}" ya está en uso. Por favor elige otro.`);
+        err.status = 400;
+        err.code = 'USERNAME_ALREADY_EXISTS';
+        err.syncType = 'DATOS_INVALIDOS';
+        throw err;
+      }
+    }
+  }
+
+  const nextPhone = Object.prototype.hasOwnProperty.call(payload, 'phone')
+    ? text(payload.phone).trim().slice(0, 40)
+    : text(current.phone).trim();
+
+  const nextEmail = Object.prototype.hasOwnProperty.call(payload, 'email')
+    ? text(payload.email).trim().slice(0, 120)
+    : text(current.email).trim();
+  if (nextEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+    const err = new Error('El correo electrónico no tiene un formato válido.');
+    err.status = 400;
+    err.code = 'INVALID_EMAIL';
+    err.syncType = 'DATOS_INVALIDOS';
+    throw err;
+  }
+
+  const nextUiAccent = Object.prototype.hasOwnProperty.call(payload, 'uiAccent')
+    ? sanitizeUiAccent(payload.uiAccent)
+    : sanitizeUiAccent(current.ui_accent);
+  if (Object.prototype.hasOwnProperty.call(payload, 'uiAccent') && text(payload.uiAccent).trim() && !nextUiAccent) {
+    const err = new Error('El color principal debe ser un código hexadecimal válido (ejemplo: #0b6ef3).');
+    err.status = 400;
+    err.code = 'INVALID_ACCENT_COLOR';
+    err.syncType = 'DATOS_INVALIDOS';
+    throw err;
+  }
+
+  const nextUiFontScale = Object.prototype.hasOwnProperty.call(payload, 'uiFontScale')
+    ? sanitizeUiFontScale(payload.uiFontScale)
+    : sanitizeUiFontScale(current.ui_font_scale);
+
+  const now = new Date().toISOString();
+  await run(
+    env,
+    `UPDATE users SET name=?, username=?, phone=?, email=?, ui_accent=?, ui_font_scale=?, updated_at=?, updated_by=? WHERE id=?`,
+    [nextName, nextUsername, nextPhone, nextEmail || null, nextUiAccent || null, nextUiFontScale, now, cleanId, cleanId]
+  );
+
+  try {
+    await run(
+      env,
+      `UPDATE technicians SET name=?, phone=?, username_legacy=? WHERE user_id=?`,
+      [nextName, nextPhone, nextUsername, cleanId]
+    );
+  } catch (e) {}
+
+  try {
+    await upsertAudit(env, {
+      id: generatedId('au'),
+      action: 'actualizó su perfil',
+      at: now,
+      byId: cleanId,
+      byName: nextName,
+      byUsername: nextUsername,
+      byRole: normalizeRole(current.role),
+      targetId: cleanId,
+      targetName: nextName,
+      targetType: 'usuario'
+    });
+  } catch (e) {}
+
+  const time = await touchSync(env);
+  const profile = await getUserProfile(env, cleanId);
+  return { profile, time };
+}
+
+export async function updateUserPassword(env, userId, currentPassword, newPassword) {
+  const cleanId = text(userId).trim();
+  if (!cleanId) {
+    const err = new Error('Sesión de usuario inválida');
+    err.status = 401;
+    err.code = 'UNAUTHORIZED';
+    err.syncType = 'AUTENTICACION';
+    throw err;
+  }
+  const suppliedCurrent = text(currentPassword).trim();
+  const suppliedNew = text(newPassword).trim();
+
+  if (!suppliedCurrent) {
+    const err = new Error('Ingresa tu contraseña actual.');
+    err.status = 400;
+    err.code = 'MISSING_CURRENT_PASSWORD';
+    err.syncType = 'DATOS_INVALIDOS';
+    throw err;
+  }
+  if (!suppliedNew || suppliedNew.length < 6 || suppliedNew.length > 128) {
+    const err = new Error('La nueva contraseña debe tener entre 6 y 128 caracteres.');
+    err.status = 400;
+    err.code = 'WEAK_PASSWORD';
+    err.syncType = 'DATOS_INVALIDOS';
+    throw err;
+  }
+
+  const row = await first(
+    env,
+    `SELECT u.id,u.name,u.username,u.password_legacy,u.password_hash,u.status,u.active,u.deleted_at,r.code AS role
+     FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=? LIMIT 1`,
+    [cleanId]
+  );
+  if (!row || row.deleted_at || row.active === 0) {
+    const err = new Error('Usuario no encontrado o inactivo');
+    err.status = 404;
+    err.code = 'USER_NOT_FOUND';
+    err.syncType = 'DATOS_INVALIDOS';
+    throw err;
+  }
+
+  let valid = row.password_hash ? await verifyPassword(suppliedCurrent, row.password_hash) : false;
+  if (!row.password_hash && text(row.password_legacy).trim() === suppliedCurrent) {
+    valid = true;
+  }
+  if (!valid) {
+    const err = new Error('La contraseña actual es incorrecta.');
+    err.status = 400;
+    err.code = 'INVALID_CURRENT_PASSWORD';
+    err.syncType = 'DATOS_INVALIDOS';
+    throw err;
+  }
+
+  const now = new Date().toISOString();
+  const nextHash = await hashPassword(suppliedNew);
+  await run(
+    env,
+    'UPDATE users SET password_hash=?, password_legacy=NULL, updated_at=?, updated_by=? WHERE id=?',
+    [nextHash, now, cleanId, cleanId]
+  );
+
+  try {
+    await upsertAudit(env, {
+      id: generatedId('au'),
+      action: 'cambió su contraseña',
+      at: now,
+      byId: cleanId,
+      byName: row.name || row.username,
+      byUsername: row.username || '',
+      byRole: normalizeRole(row.role),
+      targetId: cleanId,
+      targetName: row.name || row.username,
+      targetType: 'usuario'
+    });
+  } catch (e) {}
+
+  const time = await touchSync(env);
+  return { ok: true, time };
+}
+
 export async function findLoginUser(env,username,password) {
-  const row=await first(env, `SELECT u.id,u.name,u.username,u.password_legacy,u.password_hash,u.status,u.active,u.deleted_at,r.code AS role FROM users u JOIN roles r ON r.id=u.role_id WHERE lower(u.username)=lower(?) LIMIT 1`, [username]);
+  const row=await queryUserProfileRow(env, 'lower(u.username)=lower(?)', username);
   if (!row || row.deleted_at || row.active===0 || text(row.status,'activo').toLowerCase()==='inactivo') return null;
   const supplied = text(password).trim();
   let valid = row.password_hash ? await verifyPassword(supplied,row.password_hash) : false;
@@ -2613,7 +3027,18 @@ export async function findLoginUser(env,username,password) {
     await run(env,'UPDATE users SET password_hash=?,password_legacy=NULL,updated_at=? WHERE id=?',[await hashPassword(supplied),new Date().toISOString(),row.id]);
   }
   if (!valid) return null;
-  return {id:row.id,name:row.name,username:row.username,role:normalizeRole(row.role),status:row.status||'activo'};
+  return {
+    id: row.id,
+    name: row.name,
+    username: row.username,
+    role: normalizeRole(row.role),
+    status: row.status || 'activo',
+    phone: row.phone || '',
+    email: row.email || '',
+    color: row.color || '',
+    uiAccent: sanitizeUiAccent(row.ui_accent),
+    uiFontScale: sanitizeUiFontScale(row.ui_font_scale)
+  };
 }
 
 export { LIST_KEYS };

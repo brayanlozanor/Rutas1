@@ -8,12 +8,12 @@
   body.planificar-page:not(.plan-technician-view) .plan-kpi-bar,
   body.planificar-page:not(.plan-technician-view) .plan-calendar{flex:0 0 auto!important}
 
-  body.planificar-page:not(.plan-technician-view) .plan-shell{box-sizing:border-box!important;display:grid!important;min-height:0!important;flex:1 1 auto!important;grid-template-columns:240px minmax(480px,1fr) minmax(330px,390px)!important;align-items:stretch!important;overflow:hidden!important;padding-bottom:16px!important}
+  body.planificar-page:not(.plan-technician-view) .plan-shell{box-sizing:border-box!important;display:grid!important;min-height:0!important;flex:1 1 auto!important;grid-template-columns:330px minmax(450px,1fr) minmax(300px,355px)!important;align-items:stretch!important;overflow:hidden!important;padding-bottom:16px!important}
   body.planificar-page:not(.plan-technician-view) .plan-sidebar,
   body.planificar-page:not(.plan-technician-view) .plan-board,
   body.planificar-page:not(.plan-technician-view) .plan-map-panel{box-sizing:border-box!important;height:100%!important;min-height:0!important}
 
-  body.planificar-page:not(.plan-technician-view) .plan-sidebar{position:static!important;overflow:hidden!important}
+  body.planificar-page:not(.plan-technician-view) .plan-sidebar{position:static!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain!important;scrollbar-width:thin!important;scrollbar-color:#b7c8d9 transparent!important}
   body.planificar-page:not(.plan-technician-view) .plan-board{display:flex!important;flex-direction:column!important;overflow:hidden!important}
   body.planificar-page:not(.plan-technician-view) .plan-board>.sh,
   body.planificar-page:not(.plan-technician-view) .plan-command-bar{flex:0 0 auto!important}

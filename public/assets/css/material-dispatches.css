@@ -2716,6 +2716,488 @@ html[data-role="tecnico"] .role-admin-only {
 }
 
 /* ==========================================================================
+   MODAL DE CATÁLOGO (AGREGAR / EDITAR MATERIAL) - ESPACIOSO + CTRL+V IMAGEN
+   ========================================================================== */
+#material-mo .md.material-catalog-modal {
+  width: min(680px, calc(100vw - 32px));
+  max-width: 680px;
+  padding: 26px 28px 24px;
+  border-radius: 18px;
+}
+
+.material-catalog-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.material-catalog-form-body .fi {
+  margin-bottom: 0;
+}
+
+.material-catalog-form-body .row2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.material-photo-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.material-photo-label-row label {
+  margin: 0;
+}
+
+.material-photo-label-row b {
+  color: #d82442;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.material-photo-paste-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.material-photo-paste-badge kbd,
+.material-photo-upload-sub kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-family: "Space Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
+}
+
+.material-photo-dropzone-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#material-mo .material-photo-upload {
+  min-height: 188px !important;
+  padding: 16px;
+  border-radius: 14px !important;
+  transition: border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+#material-mo .material-photo-upload.drag-over {
+  border-color: #0284c7 !important;
+  background: #e0f2fe !important;
+  box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.14);
+}
+
+#material-mo .material-photo-upload.paste-flash {
+  border-color: #059669 !important;
+  background: #ecfdf5 !important;
+  box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.18);
+}
+
+#material-mo .material-photo-upload.has-photo {
+  padding: 10px;
+  background: #f8fafc !important;
+  border-style: solid !important;
+  border-color: #cbd5e1 !important;
+}
+
+#material-mo .material-photo-upload img {
+  width: 100%;
+  height: auto;
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #f1f5f9;
+}
+
+.material-photo-placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.material-photo-placeholder-content[hidden] {
+  display: none !important;
+}
+
+.material-photo-upload-icon {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.material-photo-upload-title {
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  color: #0369a1;
+}
+
+.material-photo-upload-sub {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: #64748b;
+}
+
+.material-photo-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.material-photo-preview-actions[hidden] {
+  display: none !important;
+}
+
+.material-photo-status-pill {
+  font-size: 12px;
+  font-weight: 700;
+  color: #047857;
+}
+
+.material-photo-action-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.material-photo-remove-btn {
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+  border: 1px solid #fecaca !important;
+  font-weight: 700 !important;
+}
+
+.material-photo-remove-btn:hover {
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+}
+
+.material-photo-paste-hint {
+  display: block;
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#material-mo .material-catalog-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin: 20px -28px -24px;
+  padding: 14px 28px 20px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* ==========================================================================
+   FILTROS DE ENTREGAS Y RECEPCIONES (RANGO DE FECHAS + TEXTO + LIMPIAR)
+   ========================================================================== */
+.dispatches-header-actions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.dispatches-filters-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid var(--mat-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.dispatch-filter-search {
+  flex: 1 1 220px;
+  min-width: 200px;
+}
+
+.dispatch-filter-folio {
+  flex: 0 1 165px;
+  min-width: 145px;
+}
+
+.dispatches-filters-group .dispatches-select-filter {
+  flex: 0 1 185px;
+  min-width: 165px;
+  height: 42px;
+}
+
+.dispatch-date-range-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.dispatch-date-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 42px;
+  padding: 0 10px;
+  background: #f8fafc;
+  border: 1px solid var(--mat-border);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--mat-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dispatch-date-field:focus-within {
+  border-color: var(--mat-primary);
+  background: #ffffff;
+}
+
+.dispatch-date-field input[type="date"] {
+  border: none;
+  background: transparent;
+  color: var(--mat-text);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 0;
+  outline: none;
+  cursor: pointer;
+}
+
+.dispatch-clear-filters-btn {
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--mat-border);
+  background: #f8fafc;
+  color: var(--mat-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.dispatch-clear-filters-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.dispatch-clear-filters-btn.has-active {
+  background: #fff1f2;
+  color: #be123c;
+  border-color: #fecdd3;
+}
+
+.dispatch-clear-filters-btn.has-active:hover {
+  background: #ffe4e6;
+  border-color: #fda4af;
+}
+
+.dispatch-active-filters-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #334155;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 6px 12px;
+}
+
+.tech-dispatches-filters {
+  margin: 12px 0 16px;
+}
+
+/* ==========================================================================
+   INDICADOR VISUAL DE PASOS (ENTREGADO -> RECIBIDO -> DEVOLUCIÓN -> CERRADO)
+   ========================================================================== */
+.dispatch-step-tracker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 6px 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+}
+
+.dispatch-step-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dispatch-step-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 800;
+  flex-shrink: 0;
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.dispatch-step-item.done {
+  color: #047857;
+}
+
+.dispatch-step-item.done .dispatch-step-dot {
+  background: #10b981;
+  color: #ffffff;
+}
+
+.dispatch-step-item.current {
+  color: #b45309;
+}
+
+.dispatch-step-item.current .dispatch-step-dot {
+  background: #f59e0b;
+  color: #ffffff;
+}
+
+.dispatch-step-item.current.rejected {
+  color: #be123c;
+}
+
+.dispatch-step-item.current.rejected .dispatch-step-dot {
+  background: #e11d48;
+  color: #ffffff;
+}
+
+.dispatch-status-inline-note {
+  font-size: 11.5px;
+  color: #b45309;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 7px;
+}
+
+/* Balance en vivo en modal de recepción */
+.receive-breakdown-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.receive-balance-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.receive-balance-pill.ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.receive-balance-pill.warn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.receive-balance-pill.over {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+@media (max-width: 768px) {
+  .material-catalog-form-body .row2 {
+    grid-template-columns: 1fr;
+  }
+
+  #material-mo .material-catalog-modal-actions {
+    margin: 16px -12px -16px;
+    padding: 12px;
+  }
+
+  .dispatch-date-range-group {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .dispatch-date-field {
+    width: 100%;
+    justify-content: space-between;
+    box-sizing: border-box;
+  }
+
+  .dispatch-date-field input[type="date"] {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .dispatch-clear-filters-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dispatch-step-tracker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+}
+
+/* ==========================================================================
    ESTILOS DE IMPRESIÓN OFICIAL (WINDOW.PRINT)
    ========================================================================== */
 @media print {

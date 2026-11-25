@@ -216,7 +216,7 @@ body.planificar-page:not(.plan-technician-view) .plan-calendar-head-actions .btn
   body.planificar-page:not(.plan-technician-view) .plan-shell {
     box-sizing: border-box!important;
     display: grid!important;
-    grid-template-columns: 255px minmax(360px, 1fr) minmax(330px, 440px)!important;
+    grid-template-columns: 330px minmax(420px, 1fr) minmax(290px, 360px)!important;
     grid-template-areas: "sidebar board map"!important;
     grid-template-rows: minmax(0, 1fr)!important;
     gap: 14px!important;
